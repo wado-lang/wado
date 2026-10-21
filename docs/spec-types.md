@@ -1202,7 +1202,6 @@ variant Nested<T> {
 }
 ```
 
-<<<<<<< HEAD
 A generic function is refused the same way where it calls itself, directly or
 through other calls, at an argument built over its own parameter:
 `walk::<String>` would need `walk::<&String>`, which would need
@@ -1218,8 +1217,7 @@ fn walk<S: AsStrSlice>(n: i32, s: S) -> i32 {
     return walk(n - 1, &s);
 }
 ```
-||||||| dab3348a8d5
-=======
+
 ## Affine Types
 
 An affine type is move-only: a value of it is used at most once. An affine
@@ -1444,7 +1442,6 @@ test {
 ```
 
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
->>>>>>> origin/main
 
 ## Generic Type Inference
 

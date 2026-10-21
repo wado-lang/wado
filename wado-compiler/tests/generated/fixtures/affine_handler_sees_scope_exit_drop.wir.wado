@@ -237,7 +237,8 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
         "affine_handler_sees_scope_exit_drop.wado/$effect_dispatch__core:prelude/types.wado/Future<i32>__drop"($moved_6);
     }
     if @unlikely(ref.is_null(tx) == 0) {
-        "core:rt/panic"(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever"), 77);
+        let $mv_field_1: ref Array<u8>;
+        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever")), 77);
         unreachable;
     }
     if ref.is_null(rx) == 0 {
@@ -252,11 +253,11 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     }
     start_26 = $local_4.used;
     $local_4.used = new_used_25;
-    builtin::array_copy<u8>($local_4.repr, start_26, global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0, 0, 6);
+    builtin::array_copy<u8>(local.tee $mv_field_1($local_4.repr), start_26, global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0, 0, 6);
     new_used_25 = local.tee start_26(c_0.drops) < 0;
     start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_26); select i64(x < 0_i64, 0_i64 - x, x)));
     if new_used_25 {
-        if @unlikely(local.tee new_used_25($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+        if @unlikely(local.tee new_used_25($local_4.used + 1) > builtin::array_len($mv_field_1)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_25);
         }

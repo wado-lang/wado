@@ -110,15 +110,9 @@ global global:stream_cm_stdin_read.wado::$const_obj_3: ref Array<u8> = array.new
 global global:stream_cm_stdin_read.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100, 32);
 
 fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
-<<<<<<< HEAD
-    let $load_4: ref Array<u8>;
-    let stdin_stream: i32;
-||||||| dab3348a8d5
-    let stdin_stream: i32;
-=======
+    let $load_5: ref Array<u8>;
     let stdin_stream: ref null "core:prelude//$Resource";
     let _done: ref null "core:prelude//$Resource";
->>>>>>> origin/main
     let total: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
@@ -135,33 +129,13 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_20);
     }
-<<<<<<< HEAD
-    start_25 = $local_3.used;
-    $local_3.used = stdin_stream;
-    builtin::array_copy<u8>(local.tee $load_4($local_3.repr), start_25, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
-    start_25 = total < 0;
-||||||| dab3348a8d5
-    start_25 = $local_3.used;
-    $local_3.used = stdin_stream;
-    builtin::array_copy<u8>($local_3.repr, start_25, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
-    start_25 = total < 0;
-=======
     start_21 = $local_3.used;
     $local_3.used = new_used_20;
-    builtin::array_copy<u8>($local_3.repr, start_21, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_5($local_3.repr), start_21, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
     start_21 = total < 0;
->>>>>>> origin/main
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(total); select i64(x < 0_i64, 0_i64 - x, x)));
-<<<<<<< HEAD
-    if start_25 {
-        if @unlikely(local.tee start_25($local_3.used + 1) > builtin::array_len($load_4)) {
-||||||| dab3348a8d5
-    if start_25 {
-        if @unlikely(local.tee start_25($local_3.used + 1) > builtin::array_len($local_3.repr)) {
-=======
     if start_21 {
-        if @unlikely(local.tee start_21($local_3.used + 1) > builtin::array_len($local_3.repr)) {
->>>>>>> origin/main
+        if @unlikely(local.tee start_21($local_3.used + 1) > builtin::array_len($load_5)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_21);
         }
@@ -174,22 +148,10 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_20);
     }
-<<<<<<< HEAD
-    start_25 = $local_3.used;
-    $local_3.used = stdin_stream;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4($local_3.repr), start_25, x, total);
-    if @unlikely(local.tee total($local_3.used + 6) > builtin::array_len($load_4)) {
-||||||| dab3348a8d5
-    start_25 = $local_3.used;
-    $local_3.used = stdin_stream;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_25, x, total);
-    if @unlikely(local.tee total($local_3.used + 6) > builtin::array_len($local_3.repr)) {
-=======
     start_21 = $local_3.used;
     $local_3.used = new_used_20;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_21, x, total);
-    if @unlikely(local.tee total($local_3.used + 6) > builtin::array_len($local_3.repr)) {
->>>>>>> origin/main
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_5($local_3.repr), start_21, x, total);
+    if @unlikely(local.tee total($local_3.used + 6) > builtin::array_len($load_5)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, total);
     }

@@ -1070,8 +1070,8 @@ fn "core:prelude/traits.wado/affine_inspect_by_reference.wado/Holder^core:prelud
         break $inline_count_digits_u64_base_55: select i32((new_used_25 - (start_26 * 4)) != 0, (local.tee start_26(local.tee new_used_25(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_135))) / 4) + 1) + ((new_used_25 ^ 4) >> 31), start_26);
     };
     new_used_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, start_26);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, new_used_25, val_i64_135, start_26, 4, 15, 0);
-    if @unlikely(local.tee start_26(f.used + 2) > builtin::array_len(f.repr)) {
+    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee $load_3(f.repr), new_used_25, val_i64_135, start_26, 4, 15, 0);
+    if @unlikely(local.tee start_26(f.used + 2) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_26);
     }
@@ -1095,8 +1095,8 @@ fn "core:prelude/traits.wado/affine_inspect_by_reference.wado/Holder^core:prelud
     new_used_25 = $mv$self$n < 0;
     $mv$self$n = "core:prelude/primitive.wado/count_digits_u64"(local.tee val_i64_135(val_i64_135 = builtin::i64_extend_i32_s($mv$self$n); select i64(val_i64_135 < 0_i64, 0_i64 - val_i64_135, val_i64_135)));
     new_used_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, new_used_25, $mv$self$n);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, new_used_25, val_i64_135, $mv$self$n);
-    if @unlikely(local.tee $mv$self$n(f.used + 2) > builtin::array_len(f.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(f.repr), new_used_25, val_i64_135, $mv$self$n);
+    if @unlikely(local.tee $mv$self$n(f.used + 2) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$self$n);
     }

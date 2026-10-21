@@ -836,7 +836,8 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
             } {
                 found_newdir = 1;
                 if v_58.discriminant == 2 {
-                    "core:cli/println"(array.new_data<u8>("read_directory: test_newdir is Directory (correct)"), 50);
+                    let $mv_field_48: ref Array<u8>;
+                    "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("read_directory: test_newdir is Directory (correct)")), 50);
                 }
             }
             continue l32;
@@ -845,51 +846,35 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(self_46 = _done; _done = ref.null none; self_46.value);
     "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"(self_46 = $load_2; $load_2 = ref.null none; self_46.value);
     if $load_0 {
-        "core:cli/println"(array.new_data<u8>("read_directory: found alpha.txt"), 31);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("read_directory: found alpha.txt")), 31);
     } else {
-        "core:cli/eprintln"(array.new_data<u8>("read_directory: missing alpha.txt"), 33);
+        "core:cli/eprintln"(local.tee $mv_field_48(array.new_data<u8>("read_directory: missing alpha.txt")), 33);
     }
     if found_nested {
-        "core:cli/println"(array.new_data<u8>("read_directory: found nested"), 28);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("read_directory: found nested")), 28);
     } else {
-        "core:cli/eprintln"(array.new_data<u8>("read_directory: missing nested"), 30);
+        "core:cli/eprintln"(local.tee $mv_field_48(array.new_data<u8>("read_directory: missing nested")), 30);
     }
     if found_newdir {
-        "core:cli/println"(array.new_data<u8>("read_directory: found test_newdir"), 33);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("read_directory: found test_newdir")), 33);
     } else {
-        "core:cli/eprintln"(array.new_data<u8>("read_directory: missing test_newdir"), 35);
+        "core:cli/eprintln"(local.tee $mv_field_48(array.new_data<u8>("read_directory: missing test_newdir")), 35);
     }
     if entry_count == 3 {
-        "core:cli/println"(array.new_data<u8>("read_directory: entry count is exactly 3 (correct)"), 50);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("read_directory: entry count is exactly 3 (correct)")), 50);
     } else {
         $vc_payload_1_108 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
         if @unlikely(local.tee found_newdir(0 + 41) > builtin::array_len($vc_payload_1_108.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($vc_payload_1_108, found_newdir);
         }
-<<<<<<< HEAD
-        found_nested = $mv_arg_35.used;
-        $mv_arg_35.used = found_newdir;
-        builtin::array_copy<u8>(local.tee b_423($mv_arg_35.repr), found_nested, global:wasi_filesystem_dir_ops.wado::$const_obj_11, 0, 41);
-||||||| dab3348a8d5
-        found_nested = $mv_arg_35.used;
-        $mv_arg_35.used = found_newdir;
-        builtin::array_copy<u8>($mv_arg_35.repr, found_nested, global:wasi_filesystem_dir_ops.wado::$const_obj_11, 0, 41);
-=======
         found_nested = $vc_payload_1_108.used;
         $vc_payload_1_108.used = found_newdir;
-        builtin::array_copy<u8>($vc_payload_1_108.repr, found_nested, global:wasi_filesystem_dir_ops.wado::$const_obj_6, 0, 41);
->>>>>>> origin/main
+        builtin::array_copy<u8>(local.tee $mv_field_48($vc_payload_1_108.repr), found_nested, global:wasi_filesystem_dir_ops.wado::$const_obj_6, 0, 41);
         found_nested = entry_count < 0;
         entry_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(entry_count); select i64(x < 0_i64, 0_i64 - x, x)));
         if found_nested {
-<<<<<<< HEAD
-            if @unlikely(local.tee found_nested($mv_arg_35.used + 1) > builtin::array_len(b_423)) {
-||||||| dab3348a8d5
-            if @unlikely(local.tee found_nested($mv_arg_35.used + 1) > builtin::array_len($mv_arg_35.repr)) {
-=======
-            if @unlikely(local.tee found_nested($vc_payload_1_108.used + 1) > builtin::array_len($vc_payload_1_108.repr)) {
->>>>>>> origin/main
+            if @unlikely(local.tee found_nested($vc_payload_1_108.used + 1) > builtin::array_len($mv_field_48)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($vc_payload_1_108, found_nested);
             }
@@ -912,20 +897,20 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     } else {
         ref.as_non_null("wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_40)));
     }))) {
-        "core:cli/println"(array.new_data<u8>("remove_directory_at: succeeded"), 30);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("remove_directory_at: succeeded")), 30);
     } else {
-        "core:cli/eprintln"(array.new_data<u8>("remove_directory_at: failed"), 27);
+        "core:cli/eprintln"(local.tee $mv_field_48(array.new_data<u8>("remove_directory_at: failed")), 27);
     }
     if ref.is_null(local.tee v_40((if ref.is_null(local.tee v_40("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_dir_ops.wado/$cm_binding__Descriptor_remove_directory_at"($moved_21, global:wasi_filesystem_dir_ops.wado::$const_obj_4)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         v_40;
     } else {
         ref.as_non_null("wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_40)));
     }))) == 0 {
-        "core:cli/println"(array.new_data<u8>("remove_directory_at: already removed (correct)"), 46);
+        "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("remove_directory_at: already removed (correct)")), 46);
     } else {
-        "core:cli/eprintln"(array.new_data<u8>("remove_directory_at: should have failed"), 39);
+        "core:cli/eprintln"(local.tee $mv_field_48(array.new_data<u8>("remove_directory_at: should have failed")), 39);
     }
-    "core:cli/println"(array.new_data<u8>("all dir_ops tests passed"), 24);
+    "core:cli/println"(local.tee $mv_field_48(array.new_data<u8>("all dir_ops tests passed")), 24);
     if ref.is_null(_done) == 0 {
         "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(_done.value);
     }
@@ -2789,7 +2774,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                 continue l403;
             };
         };
-        self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_48: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_48 $mv$content$used == 0;
             if @unlikely(local.tee $match_scrut_0(self_9.used + $mv$content$used) > builtin::array_len(self_9.repr)) {
@@ -2823,7 +2807,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                 continue l408;
             };
         };
-        self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_55: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_55 $mv$content$used == 0;
             if @unlikely(local.tee $match_scrut_0(self_9.used + $mv$content$used) > builtin::array_len(self_9.repr)) {
@@ -2983,34 +2966,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         new_used_26 = self_21.used;
         self_21.used = $load_2;
         self_21 = self.buf;
-<<<<<<< HEAD
         $load_2 = self.fill;
         i_221 = 0;
-        b342: block {
-            l343: loop {
-                break_if b342 i_221 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
-                i_221 = i_221 + 1;
-                continue l343;
-||||||| dab3348a8d5
-        $load_0 = self.fill;
-        new_used_26 = 0;
-        b342: block {
-            l343: loop {
-                break_if b342 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
-                new_used_26 = new_used_26 + 1;
-                continue l343;
-=======
-        $load_0 = self.fill;
-        new_used_26 = 0;
         b437: block {
             l438: loop {
-                break_if b437 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
-                new_used_26 = new_used_26 + 1;
+                break_if b437 i_221 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
+                i_221 = i_221 + 1;
                 continue l438;
->>>>>>> origin/main
             };
         };
         return new_used_26;
@@ -3018,34 +2981,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         start_27 = sign_len / 2;
         new_used_26 = sign_len - start_27;
         self_21 = self.buf;
-<<<<<<< HEAD
         i_221 = self.fill;
         $load_2 = 0;
-        b345: block {
-            l346: loop {
-                break_if b345 $load_2 >= start_27;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
-                $load_2 = $load_2 + 1;
-                continue l346;
-||||||| dab3348a8d5
-        new_used_26 = self.fill;
-        $load_0 = 0;
-        b345: block {
-            l346: loop {
-                break_if b345 $load_0 >= start_27;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
-                continue l346;
-=======
-        new_used_26 = self.fill;
-        $load_0 = 0;
         b440: block {
             l441: loop {
-                break_if b440 $load_0 >= start_27;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
+                break_if b440 $load_2 >= start_27;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
+                $load_2 = $load_2 + 1;
                 continue l441;
->>>>>>> origin/main
             };
         };
         if is_negative {
@@ -3085,67 +3028,27 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         i_221 = self_21.used;
         self_21.used = start_27;
         self_21 = self.buf;
-<<<<<<< HEAD
         start_27 = self.fill;
         $load_2 = 0;
-        b354: block {
-            l355: loop {
-                break_if b354 $load_2 >= new_used_26;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
-                $load_2 = $load_2 + 1;
-                continue l355;
-||||||| dab3348a8d5
-        new_used_26 = self.fill;
-        $load_0 = 0;
-        b354: block {
-            l355: loop {
-                break_if b354 $load_0 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
-                continue l355;
-=======
-        new_used_26 = self.fill;
-        $load_0 = 0;
         b449: block {
             l450: loop {
-                break_if b449 $load_0 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
+                break_if b449 $load_2 >= new_used_26;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
+                $load_2 = $load_2 + 1;
                 continue l450;
->>>>>>> origin/main
             };
         };
         return i_221;
     } else {
         self_21 = self.buf;
-<<<<<<< HEAD
         i_221 = self.fill;
         start_27 = 0;
-        b356: block {
-            l357: loop {
-                break_if b356 start_27 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
-                start_27 = start_27 + 1;
-                continue l357;
-||||||| dab3348a8d5
-        start_27 = self.fill;
-        new_used_26 = 0;
-        b356: block {
-            l357: loop {
-                break_if b356 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
-                new_used_26 = new_used_26 + 1;
-                continue l357;
-=======
-        start_27 = self.fill;
-        new_used_26 = 0;
         b451: block {
             l452: loop {
-                break_if b451 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
-                new_used_26 = new_used_26 + 1;
+                break_if b451 start_27 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
+                start_27 = start_27 + 1;
                 continue l452;
->>>>>>> origin/main
             };
         };
         if is_negative {

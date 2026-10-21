@@ -146,7 +146,6 @@ impl Monomorphization {
         self.run(flat);
     }
 
-<<<<<<< HEAD
     /// The error refusing a template whose instances never end, with the
     /// module declaring it.
     pub fn expanding_recursion(&self) -> Option<(ModuleSource, Diagnostic)> {
@@ -158,11 +157,8 @@ impl Monomorphization {
         Some((template.module_source.clone(), error.into()))
     }
 
-||||||| dab3348a8d5
-=======
     /// Instantiate, then elaborate the new instances' drops, until the drop
     /// glue that elaborating adds calls no template left to instantiate.
->>>>>>> origin/main
     fn run(&mut self, flat: &mut FlatPackage) {
         loop {
             self.instantiate(flat);

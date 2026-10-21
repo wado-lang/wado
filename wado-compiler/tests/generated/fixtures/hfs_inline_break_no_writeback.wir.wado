@@ -88,45 +88,19 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     let s: ref "hfs_inline_break_no_writeback.wado//Scanner";
     let count: i32;
     let x: i64;
-<<<<<<< HEAD
-    let $hfs_pos_440: i32;
-||||||| dab3348a8d5
-    let start_79: i32;
-    let $hfs_pos_440: i32;
-=======
-    let start_65: i32;
     let $hfs_pos_426: i32;
->>>>>>> origin/main
     s = struct.new "hfs_inline_break_no_writeback.wado//Scanner" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  a  b  c  "), used: 11 }, pos: 0 };
     count = 0;
     $hfs_pos_426 = 0;
     b0: block {
         l1: loop {
-<<<<<<< HEAD
-            break_if b0 $hfs_pos_440 >= local.tee $load_1(local.tee $load_0(s.data).used);
-||||||| dab3348a8d5
-            break_if b0 $hfs_pos_440 >= s.data.used;
-=======
-            break_if b0 $hfs_pos_426 >= s.data.used;
->>>>>>> origin/main
+            break_if b0 $hfs_pos_426 >= local.tee $load_1(local.tee $load_0(s.data).used);
             "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(s);
             if $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: block -> i32 {
-<<<<<<< HEAD
-                if local.tee $hfs_pos_440(s.pos) >= $load_1 {
-||||||| dab3348a8d5
-                if local.tee $hfs_pos_440(s.pos) >= local.tee $load_3(s.data).used {
-=======
-                if local.tee $hfs_pos_426(s.pos) >= local.tee $load_3(s.data).used {
->>>>>>> origin/main
+                if local.tee $hfs_pos_426(s.pos) >= $load_1 {
                     break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: -1;
                 }
-<<<<<<< HEAD
-                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_0.repr, $hfs_pos_440);
-||||||| dab3348a8d5
-                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_3.repr, $hfs_pos_440);
-=======
-                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_3.repr, $hfs_pos_426);
->>>>>>> origin/main
+                break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: builtin::array_get_value<u8>($load_0.repr, $hfs_pos_426);
             } >= 0 {
                 count = count + 1;
                 $hfs_pos_426 = $hfs_pos_426 + 1;
@@ -136,91 +110,27 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
             continue l1;
         };
     };
-<<<<<<< HEAD
     $load_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $load_1 = count < 0;
-||||||| dab3348a8d5
-    $load_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $hfs_pos_440 = count < 0;
-=======
-    $load_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $hfs_pos_426 = count < 0;
->>>>>>> origin/main
     count = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(count); select i64(x < 0_i64, 0_i64 - x, x)));
-<<<<<<< HEAD
     if $load_1 {
         if @unlikely(local.tee $load_1(0 + 1) > builtin::array_len($load_0.repr)) {
-||||||| dab3348a8d5
-    if $hfs_pos_440 {
-        if @unlikely(local.tee $hfs_pos_440(0 + 1) > builtin::array_len($load_3.repr)) {
-=======
-    if $hfs_pos_426 {
-        if @unlikely(local.tee $hfs_pos_426(0 + 1) > builtin::array_len($load_3.repr)) {
->>>>>>> origin/main
             cold_path;
-<<<<<<< HEAD
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $load_1);
-||||||| dab3348a8d5
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_3, $hfs_pos_440);
-=======
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_3, $hfs_pos_426);
->>>>>>> origin/main
         }
-<<<<<<< HEAD
-        $hfs_pos_440 = $load_0.used;
+        $hfs_pos_426 = $load_0.used;
         $load_0.used = $load_1;
-        builtin::array_set_u8($load_0.repr, $hfs_pos_440, 45);
-||||||| dab3348a8d5
-        start_79 = $load_3.used;
-        $load_3.used = $hfs_pos_440;
-        builtin::array_set_u8($load_3.repr, start_79, 45);
-=======
-        start_65 = $load_3.used;
-        $load_3.used = $hfs_pos_426;
-        builtin::array_set_u8($load_3.repr, start_65, 45);
->>>>>>> origin/main
+        builtin::array_set_u8($load_0.repr, $hfs_pos_426, 45);
     } else {
     }
-<<<<<<< HEAD
-    if @unlikely(local.tee $hfs_pos_440($load_0.used + count) > builtin::array_len($load_0.repr)) {
-||||||| dab3348a8d5
-    if @unlikely(local.tee start_79($load_3.used + count) > builtin::array_len($load_3.repr)) {
-=======
-    if @unlikely(local.tee start_65($load_3.used + count) > builtin::array_len($load_3.repr)) {
->>>>>>> origin/main
+    if @unlikely(local.tee $hfs_pos_426($load_0.used + count) > builtin::array_len($load_0.repr)) {
         cold_path;
-<<<<<<< HEAD
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_440);
-||||||| dab3348a8d5
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_3, start_79);
-=======
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_3, start_65);
->>>>>>> origin/main
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_426);
     }
-<<<<<<< HEAD
     $load_1 = $load_0.used;
-    $load_0.used = $hfs_pos_440;
+    $load_0.used = $hfs_pos_426;
     "core:prelude/primitive.wado/write_decimal_digits"($load_0.repr, $load_1, x, count);
-    count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    count = "hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream"(count);
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_1, $load_0.repr, $load_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(count);
-||||||| dab3348a8d5
-    $hfs_pos_440 = $load_3.used;
-    $load_3.used = start_79;
-    "core:prelude/primitive.wado/write_decimal_digits"($load_3.repr, $hfs_pos_440, x, count);
-    count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_pos_440 = builtin::i32_wrap_i64(x >> 32_i64);
-    count = "hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream"(count);
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_pos_440, $load_3.repr, $load_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(count);
-=======
-    $hfs_pos_426 = $load_3.used;
-    $load_3.used = start_65;
-    "core:prelude/primitive.wado/write_decimal_digits"($load_3.repr, $hfs_pos_426, x, count);
-    "core:cli/println"($load_3.repr, $load_3.used);
->>>>>>> origin/main
+    "core:cli/println"($load_0.repr, $load_0.used);
 }
 
 fn "hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
