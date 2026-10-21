@@ -182,9 +182,7 @@ fn parse_response(response: &str) -> (u16, String) {
         .unwrap_or_else(|| panic!("could not parse status from: {status_line}"));
 
     let (head, body) = response.split_once("\r\n\r\n").unwrap_or((response, ""));
-    let chunked = head
-        .to_lowercase()
-        .contains("transfer-encoding: chunked");
+    let chunked = head.to_lowercase().contains("transfer-encoding: chunked");
     let body = if chunked {
         decode_chunked(body)
     } else {
@@ -199,7 +197,9 @@ fn parse_response(response: &str) -> (u16, String) {
 fn decode_chunked(mut wire: &str) -> String {
     let mut payload = String::new();
     while let Some((size_line, rest)) = wire.split_once("\r\n") {
-        let size_hex = size_line.split_once(';').map_or(size_line, |(size, _)| size);
+        let size_hex = size_line
+            .split_once(';')
+            .map_or(size_line, |(size, _)| size);
         let size = usize::from_str_radix(size_hex.trim(), 16)
             .unwrap_or_else(|_| panic!("bad chunk size line: {size_line:?}"));
         if size == 0 {

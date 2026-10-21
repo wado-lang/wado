@@ -217,8 +217,6 @@ impl WasiState {
         builder.args(args);
         grant_host_network(&mut builder);
         let mut ctx = builder.build();
-        // The clone shares the open directories: each preopen's
-        // `cap_std::fs::Dir` sits behind an `Arc`.
         *ctx.filesystem() = preopens.0.clone();
         Self {
             ctx,
