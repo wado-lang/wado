@@ -998,8 +998,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<sp
                 continue l89;
             };
         };
-        "core:prelude/traits.wado/spec_reflection_enum_flags.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(payload, f.buf);
-        if @unlikely(local.tee start_17(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
+        "core:prelude/traits.wado/spec_reflection_enum_flags.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(payload, local.tee self_4(f.buf));
+        if @unlikely(local.tee start_17(self_4.used + 1) > builtin::array_len(self_4.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, start_17);
         }
@@ -1053,8 +1053,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<sp
     start_17 = self_4.used;
     self_4.used = new_used_16;
     builtin::array_copy<u8>(self_4.repr, start_17, global:core:prelude/traits.wado::$const_obj_118, 0, 1);
-    "core:prelude/traits.wado/spec_reflection_enum_flags.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(payload, f.buf);
-    if @unlikely(local.tee payload(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
+    "core:prelude/traits.wado/spec_reflection_enum_flags.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(payload, local.tee self_4(f.buf));
+    if @unlikely(local.tee payload(self_4.used + 1) > builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, payload);
     }
@@ -1593,23 +1593,23 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<spec_reflection_enum_flags.wado/Perm>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: i32;
+    let $load_1: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<spec_reflection_enum_flags.wado/Perm>,()>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<spec_reflection_enum_flags.wado/Perm>,spec_reflection_enum_flags.wado/Perm>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/Option<spec_reflection_enum_flags.wado/Perm>^core:prelude/traits.wado/ReflectVariant::members"();
-    if self.discriminant == 0 {
+    if local.tee $load_0(self.discriminant) == 0 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, $mv$$tuple_0$0.case_name);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, $mv$$tuple_0$0.case_name);
     }
-    if self.discriminant == 1 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, $mv$$tuple_0$1.case_name);
+    if $load_0 == 1 {
+        $load_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_9(f.buf), $load_1);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee $load_1(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s_9, $mv$$tuple_0$1.case_name);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<spec_reflection_enum_flags.wado/Perm>$sroa[payload.value]"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<u32>$u32$sroa[v.value]"(self, 1), f);
     }
 }

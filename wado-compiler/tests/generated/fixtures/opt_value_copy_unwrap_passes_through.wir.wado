@@ -95,7 +95,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:opt_value_copy_unwrap_passes_through.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
-    let $load_5: ref Array<u8>;
+    let $load_1: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let elements: ref "Array<core:prelude/string.wado/String>";
     let used: i32;
@@ -110,14 +110,14 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     is_negative = local.tee used(local.tee self_20($sroa_o_value_87.axes).used) < 0;
     used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, used);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, used);
-    if @unlikely(local.tee used($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1($local_2.repr), is_negative, x, used);
+    if @unlikely(local.tee used($local_2.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, used);
     }
     is_negative = $local_2.used;
     $local_2.used = used;
-    builtin::array_copy<u8>(local.tee $load_5($local_2.repr), is_negative, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_4, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_1($local_2.repr), is_negative, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_4, 0, 1);
     is_negative = local.tee self_20($sroa_o_value_87.axes).used;
     if @unlikely(0 >= is_negative) {
         cold_path;
@@ -127,7 +127,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     other_45 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, 0);
     $inline_core_prelude_string_wado_String__internal_push_string_23: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_23 local.tee is_negative(other_45.used) == 0;
-        if @unlikely(local.tee used($local_2.used + is_negative) > builtin::array_len($load_5)) {
+        if @unlikely(local.tee used($local_2.used + is_negative) > builtin::array_len($load_1)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, used);
         }

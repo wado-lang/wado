@@ -2619,9 +2619,9 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
     let $sroa_$iter_2_start_135: i32;
     let $licm_repr_139: ref Array<f32>;
     let $licm_repr_140: ref Array<f32>;
-    let $licm_used_141: i32;
-    let $licm_used_142: i32;
-    let $licm_arith_146: i32;
+    let $licm_used_144: i32;
+    let $licm_used_145: i32;
+    let $licm_arith_148: i32;
     self.calls = self.calls + 1;
     $load_1 = $mv$a$extents.used;
     if @unlikely(1 >= $load_1) {
@@ -2642,31 +2642,31 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
     $sroa_$iter_0_start_127 = 0;
     $licm_repr_139 = local.tee elements_73($mv$a$data.repr);
     $licm_repr_140 = local.tee $load_6($mv$b$data.repr);
+    $licm_used_144 = $mv$a$data.used;
+    $licm_used_145 = $mv$b$data.used;
     b280: block {
         l281: loop {
             break_if b280 $sroa_$iter_0_start_127 >= $load_1;
             $sroa_$iter_0_start_127 = local.tee current_78($sroa_$iter_0_start_127) + 1;
             $sroa_$iter_1_start_131 = 0;
-            $licm_arith_146 = current_78 * inner;
+            $licm_arith_148 = current_78 * inner;
             b282: block {
                 l283: loop {
                     break_if b282 $sroa_$iter_1_start_131 >= $v1_31;
                     $sroa_$iter_1_start_131 = local.tee current_85($sroa_$iter_1_start_131) + 1;
                     sum = 0_f32;
                     $sroa_$iter_2_start_135 = 0;
-                    $licm_used_141 = $mv$a$data.used;
-                    $licm_used_142 = $mv$b$data.used;
                     b284: block {
                         l285: loop {
                             break_if b284 $sroa_$iter_2_start_135 >= inner;
                             $sroa_$iter_2_start_135 = local.tee current_92($sroa_$iter_2_start_135) + 1;
-                            sum = sum + (if @unlikely(local.tee $contract_arg_3($licm_arith_146 + current_92) >=u $licm_used_141) {
+                            sum = sum + ($contract_arg_3 = $licm_arith_148 + current_92; if @unlikely(((0 <= $contract_arg_3) & ($contract_arg_3 < $licm_used_144)) == 0) {
                                 cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_3, $licm_used_141, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
+                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_3, $licm_used_144, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
                                 unreachable;
-                            }; builtin::array_get_value<f32>($licm_repr_139, $contract_arg_3) * if @unlikely(local.tee $contract_arg_4((current_92 * $v1_31) + current_85) >=u $licm_used_142) {
+                            }; builtin::array_get_value<f32>($licm_repr_139, $contract_arg_3) * $contract_arg_4 = (current_92 * $v1_31) + current_85; if @unlikely(((0 <= $contract_arg_4) & ($contract_arg_4 < $licm_used_145)) == 0) {
                                 cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_4, $licm_used_142, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
+                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_4, $licm_used_145, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
                                 unreachable;
                             }; builtin::array_get_value<f32>($licm_repr_140, $contract_arg_4));
                             continue l285;

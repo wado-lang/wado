@@ -16,7 +16,9 @@ pub use instance_patterns::lower_instance_patterns;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
+use crate::elaborator::TypeError;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -142,6 +144,17 @@ impl Monomorphization {
     /// Instantiate what the bodies added since the last run reach.
     pub fn resume(&mut self, flat: &mut FlatPackage) {
         self.run(flat);
+    }
+
+    /// The error refusing a template whose instances never end, with the
+    /// module declaring it.
+    pub fn expanding_recursion(&self) -> Option<(ModuleSource, Diagnostic)> {
+        let template = self.monomorphizer.expanding.as_ref()?;
+        let error = TypeError::ExpandingRecursion {
+            name: template.name.clone(),
+            span: template.span,
+        };
+        Some((template.module_source.clone(), error.into()))
     }
 
     /// Instantiate, then elaborate the new instances' drops, until the drop

@@ -520,7 +520,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
     };
     f_40 = f.buf;
     "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(global:core:prelude/traits.wado::$const_obj_42, f_40);
-    if @unlikely(local.tee start_60(local.tee f_40(f.buf).used + 2) > builtin::array_len(f_40.repr)) {
+    if @unlikely(local.tee start_60(f_40.used + 2) > builtin::array_len(f_40.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, start_60);
     }
@@ -534,7 +534,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, new_used_59, f_40.repr, f_40.used, v);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_40(f.buf).repr, new_used_59, x, v);
-    if @unlikely(local.tee v(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
+    if @unlikely(local.tee v(f_40.used + 1) > builtin::array_len(f_40.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, v);
     }
@@ -1068,25 +1068,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
 }
 
 fn "core:prelude/traits.wado/bound_trait_argument_is_a_parameter.wado/Counter^core:prelude/traits.wado/Inspect::inspect$sroa[self.n]"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let field_6: ref "core:prelude/traits.wado//StructField<bound_trait_argument_is_a_parameter.wado/Counter,i32>";
-    let self_12: ref "core:prelude/string.wado//String";
-    let other_15: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bound_trait_argument_is_a_parameter.wado/Counter,[i32]>$sroa[v.n]"(self, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<bound_trait_argument_is_a_parameter.wado/Counter>$sroa[f.buf]"(f.buf);
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<bound_trait_argument_is_a_parameter.wado/Counter>$sroa[f.buf]"(local.tee $load_1(f.buf));
     field_6 = "bound_trait_argument_is_a_parameter.wado/bound_trait_argument_is_a_parameter.wado/Counter^core:prelude/traits.wado/ReflectStruct::members"().0;
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_15(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }), self_12);
-    self_12 = field_6.field_name;
-    other_15 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_12, other_15);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_15);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(field_6.field_name, $load_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $load_1);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), other_15);
+    $load_1 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }, $load_1);
 }
 
 export fn "bound_trait_argument_is_a_parameter.wado/$cm_export__$test_0_a_static_call_through_a_parameterized_bound" as "$test_0_a_static_call_through_a_parameterized_bound"

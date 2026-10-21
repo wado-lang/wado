@@ -557,15 +557,15 @@ condition: char::is_scalar_value(value)
     builtin::array_copy<u8>($load_2, start_11, $sroa_s_repr_67, 0, 7);
     value = "core:prelude/primitive.wado/count_digits_u64"(local.tee value_50(builtin::i64_extend_i32_u(value)));
     start_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, 0, value);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_11, value_50, value);
-    $sroa_s_repr_67 = array.new_fixed<u8>(10);
-    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_s_repr_67($local_2.repr), start_11, value_50, value);
+    $load_2 = array.new_fixed<u8>(10);
+    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($sroa_s_repr_67)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, value);
     }
     start_11 = $local_2.used;
     $local_2.used = value;
-    builtin::array_copy<u8>($local_2.repr, start_11, $sroa_s_repr_67, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_11, $load_2, 0, 1);
     "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
@@ -1736,14 +1736,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/traits.wado/spec_traits_parse_decls.wado/BadFlag^core:prelude/traits.wado/Inspect::inspect$dae[self]"(f) {
-    let self_17: ref "core:prelude/string.wado//String";
+    let $load_2: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<spec_traits_parse_decls.wado/BadFlag,[]>$sroa[f.buf]$dae[v]"(f.buf);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_traits_parse_decls.wado/BadFlag>$sroa[f.buf]"(f.buf);
-    self_17 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 125), used: 2 }, self_17);
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_traits_parse_decls.wado/BadFlag>$sroa[f.buf]"(local.tee $load_2(f.buf));
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 125), used: 2 }, $load_2);
 }
 
 fn "spec_traits_parse_decls.wado/spec_traits_parse_decls.wado/$Closure_0::$call$dae[self]"(c) {

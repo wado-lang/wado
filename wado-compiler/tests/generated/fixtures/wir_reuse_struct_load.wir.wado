@@ -41,7 +41,7 @@ type "functype//wir_reuse_struct_load.wado/width_and_offset" = fn(ref "wir_reuse
 
 type "functype//wir_reuse_struct_load.wado/shift" = fn(ref "wir_reuse_struct_load.wado//Cursor") -> i32;  // TypeId(14)
 
-type "functype//wir_reuse_struct_load.wado/opaque" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wir_reuse_struct_load.wado/stretch" = fn(ref "wir_reuse_struct_load.wado//Span", i32) -> i32;  // TypeId(15)
 
 type "functype//wir_reuse_struct_load.wado/around_call" = fn(ref "wir_reuse_struct_load.wado//Cursor") -> i32;  // TypeId(16)
 
@@ -112,13 +112,15 @@ fn "wir_reuse_struct_load.wado/shift"(c) {
     return a + $load_0.start;
 }
 
-fn "wir_reuse_struct_load.wado/opaque"(n) {
+fn "wir_reuse_struct_load.wado/stretch"(s, n) {
+    s.end = s.end + n;
     return n;
 }
 
 fn "wir_reuse_struct_load.wado/around_call"(c) {
-    c.pos = "wir_reuse_struct_load.wado/opaque"(c.span.end);
-    return c.pos + c.span.end;
+    let $load_0: ref "wir_reuse_struct_load.wado//Span";
+    c.pos = "wir_reuse_struct_load.wado/stretch"(local.tee $load_0(c.span), $load_0.end);
+    return c.pos + $load_0.end;
 }
 
 fn "wir_reuse_struct_load.wado/guarded"(c, i) {

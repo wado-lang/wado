@@ -1,0 +1,72 @@
+// An or-pattern arm whose alternatives bind nothing lowers its body once:
+// integer constants fold into a set of plain values, and strings and other
+// constants become one guard. Lowered once per alternative, nested matches
+// multiply: Gale's generated lookahead DFAs, four matches deep over a hundred
+// `TK_*` constants each, took the compiler past 30 GB.
+use { println, Stdout } from "core:cli";
+
+global A: i32 = 10;
+global B: i32 = 20;
+global C: i32 = 30;
+global S: String = "a";
+
+#[inline(never)]
+fn hit_const(n: i32) -> i32 {
+    return n + 1;
+}
+
+#[inline(never)]
+fn hit_str(n: i32) -> i32 {
+    return n + 2;
+}
+
+#[inline(never)]
+fn by_const(x: i32, y: i32) -> i32 {
+    match x {
+        A | B | C => {
+            match y {
+                A | B | C => {
+                    return hit_const(x + y);
+                },
+                _ => {},
+            };
+        },
+        _ => {},
+    };
+    return 0;
+}
+
+#[inline(never)]
+fn by_str(x: String, y: String) -> i32 {
+    match x {
+        S | "b" | "c" => {
+            match y {
+                S | "b" | "c" => {
+                    return hit_str(x.len() + y.len());
+                },
+                _ => {},
+            };
+        },
+        _ => {},
+    };
+    return 0;
+}
+
+export fn run() with Stdout {
+    println(`${by_const(builtin::black_box(20), builtin::black_box(30))}`);
+    println(`${by_const(builtin::black_box(20), builtin::black_box(31))}`);
+    println(`${by_const(builtin::black_box(11), builtin::black_box(30))}`);
+    println(`${by_str(builtin::black_box("c"), builtin::black_box("b"))}`);
+    println(`${by_str(builtin::black_box("c"), builtin::black_box("d"))}`);
+    println(`${by_str(builtin::black_box("dd"), builtin::black_box("a"))}`);
+}
+
+__DATA__
+{
+    "stdout": "51\n0\n0\n4\n0\n0\n",
+    "only_opt": ["O0"],
+    "wat_lines": [
+        { "contains": ["call $match_or_pattern_nested_body_once.wado/hit_const"], "count": 1 },
+        { "contains": ["call $match_or_pattern_nested_body_once.wado/hit_str"], "count": 1 }
+    ]
+}

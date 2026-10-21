@@ -138,6 +138,15 @@ fn render_multi_alt(out: &mut String, m: &MultiAltRule, analysis: &GrammarAnalys
             }
         },
     }
+    let dispatched = match m.dispatch {
+        Direct(d) => d.branches.iter_ref().map(|b| b.alt_index).collect(),
+        Tournament(t) => t.alts,
+    };
+    for let i of 0..<m.alts.len() {
+        if !dispatched.contains(&i) {
+            out.push_str(`  alt ${i} subsumed: an earlier alternative matches all it does, so it is never taken\n`);
+        }
+    }
 }
 
 fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule, analysis: &GrammarAnalysis) {
@@ -468,6 +477,7 @@ fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
         UnsupportedAction => "unsupported-action",
         HighlightQuery => "highlight-query",
         FragmentEntry => "fragment-entry",
+        SimulatorRequired => "simulator-required",
     };
 }
 

@@ -17,7 +17,15 @@ use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCall
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleCaptures } from "./parser_plan.wado";
-use { body_names_unwired_base, body_needs_no_translator, join_gate_conds, pred_fn_name } from "./gate_conditions.wado";
+use {
+    PredicateSite,
+    body_names_unwired_base,
+    body_needs_no_translator,
+    gate_condition_for,
+    join_gate_conds,
+    pred_fn_name,
+    scan_gate_condition_for,
+} from "./gate_conditions.wado";
 use { HashMap } from "core:collections";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
@@ -509,33 +517,78 @@ fn current_rule_is_multi_alt(ctx: &EmitContext) -> bool {
     return ctx.current_rule().alternatives.len() > 1;
 }
 
-/// The gates an ATN-routed decision disables alternatives by: each gated alt of
-/// `amb_alts` with its condition, as the parse or a scan can evaluate it.
+/// The predicates an ATN-routed decision among `amb_alts` evaluates before it
+/// predicts: each one's action id, which labels its edge in the simulator, and
+/// its condition as the parse or a scan can evaluate it. ANTLR4 evaluates every
+/// predicate prediction meets before any token or action (`doc/predicates.md`,
+/// "Finding Visible Predicates"): an alternative's own, and those at the left
+/// edge of the rules it opens with. One on a callee's alternative guards that
+/// path alone, which the labelled edge says. A predicate the site cannot
+/// evaluate is left out, and its path stays open.
 pub fn atn_decision_gates(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
-    ctx: &EmitContext,
+    ctx: &mut EmitContext,
     in_scan: bool,
 ) -> List<[i32, String]> {
     let mut gates: List<[i32, String]> = [];
     if !ctx.settings.emit_actions {
         return gates;
     }
+    let own = ctx.predicate_site();
+    let mut visible: List<[AltAction, PredicateSite]> = [];
+    let mut visited: List<String> = [];
     for let idx of amb_alts {
-        if in_scan {
-            let cond = ctx.alt_scan_gate_conditions(&alts[*idx]);
-            if !cond.is_empty() {
-                gates.push([*idx, cond]);
-            }
-            continue;
+        for let a of &alts[*idx].left_edge_predicates() {
+            visible.push([*a, own]);
         }
-        for let a of &alts[*idx].actions {
-            if let Some(cond) = ctx.gate_condition(a) {
-                gates.push([*idx, cond]);
+        invoked_left_edge_predicates(&alts[*idx], ctx, &mut visited, &mut visible);
+    }
+    for let [a, site] of &visible {
+        let cond = if in_scan {
+            scan_gate_condition_for(a, &ctx.settings, &ctx.analysis, site);
+        } else {
+            gate_condition_for(a, &ctx.settings, &ctx.analysis, site);
+        };
+        if let Some(c) = cond {
+            if !in_scan {
+                need_predicate_fn(a, ctx);
             }
+            gates.push([a.source.action_id, c]);
         }
     }
     return gates;
+}
+
+/// `Alternative::left_edge_predicates` of every alternative of the rule `alt` opens with,
+/// and so on down the rules those open with, each beside the site it renders
+/// in. A callee's value channel is not in scope at the decision.
+fn invoked_left_edge_predicates(
+    alt: &Alternative,
+    ctx: &EmitContext,
+    visited: &mut List<String>,
+    out: &mut List<[AltAction, PredicateSite]>,
+) {
+    if alt.opens_with_action() {
+        return;
+    }
+    let Some(RuleRef(r)) = alt.elements.first() else {
+        return;
+    };
+    if visited.contains_str(&r.name) {
+        return;
+    }
+    visited.push(r.name);
+    let Some(callee) = ctx.analysis.find_rule(&r.name) else {
+        return;
+    };
+    let site = PredicateSite { rule_index: ctx.analysis.rule_index_of(&r.name), vals_in_scope: false };
+    for let calt of &callee.alternatives {
+        for let a of &calt.left_edge_predicates() {
+            out.push([*a, site]);
+        }
+        invoked_left_edge_predicates(calt, ctx, visited, out);
+    }
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
@@ -598,8 +651,8 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
 /// gates a node nested under a `Dispatch` too). A node is gated when it either
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
-/// through the runtime ATN — where a false gate drops its alts from the viable
-/// set the simulator finds (`disabled_alts`) instead.
+/// through the runtime ATN — where the simulator closes the edges of the false
+/// predicates it is handed (`false_preds`) instead.
 fn collect_gated_ambiguous_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
@@ -628,7 +681,7 @@ fn collect_gated_ambiguous_alts(
 }
 
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
-/// gateable predicate — so its gate alts feed the simulator's `disabled_alts`
+/// gateable predicate — so its predicates feed the simulator's `false_preds`
 /// rather than an inline dispatch chain.
 fn ambiguous_group_atn_predicate_gated(
     a: &AmbiguousNode,

@@ -1797,7 +1797,7 @@ fn "core:rt/inspect_handle"(f, $mv$name$repr, $mv$name$used, handle, class, stri
         };
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee result(f.buf).repr, start_59, x_105, $mv$name$used);
         if f.alternate {
-            if @unlikely(local.tee $mv$name$used(local.tee result(f.buf).used + 1) > builtin::array_len(result.repr)) {
+            if @unlikely(local.tee $mv$name$used(result.used + 1) > builtin::array_len(result.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $mv$name$used);
             }
@@ -3471,25 +3471,25 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<spec_components_type_patterns.wado/Node>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: i32;
+    let $load_1: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<spec_components_type_patterns.wado/Node>,()>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<spec_components_type_patterns.wado/Node>,spec_components_type_patterns.wado/Node>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/Option<spec_components_type_patterns.wado/Node>^core:prelude/traits.wado/ReflectVariant::members"();
-    if self.discriminant == 0 {
+    if local.tee $load_0(self.discriminant) == 0 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
         s_9 = $mv$$tuple_0$0.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
     }
-    if self.discriminant == 1 {
+    if $load_0 == 1 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
         s_9 = $mv$$tuple_0$1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<spec_components_type_patterns.wado/Node>"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<spec_components_type_patterns.wado/Node>$spec_components_type_patterns.wado/Node$sroa[v.value]"(self, 1), f);
     }
 }

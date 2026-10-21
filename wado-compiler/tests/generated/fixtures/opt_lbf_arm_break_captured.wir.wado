@@ -86,6 +86,7 @@ global global:opt_lbf_arm_break_captured.wado::$const_obj_5: ref Array<u8> = arr
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
+    let $load_2: ref Array<u8>;
     let r: ref "core:prelude/types.wado//Option<i32>";
     let $local_4: ref "core:prelude/string.wado//String";
     let start_18: i32;
@@ -108,11 +109,11 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
             }
             start_18 = $local_4.used;
             $local_4.used = m;
-            builtin::array_copy<u8>($local_4.repr, start_18, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
+            builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_18, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
             start_18 = n < 0;
             n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
             if start_18 {
-                if @unlikely(local.tee start_18($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+                if @unlikely(local.tee start_18($local_4.used + 1) > builtin::array_len($load_2)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_18);
                 }

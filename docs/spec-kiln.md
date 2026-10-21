@@ -130,7 +130,8 @@ point of the same package, such as a command line, can read the same struct.
 is published like any type an export reaches
 ([Published Types](./spec-components.md#published-types)): it is declared
 `export`, and so is every type its fields name. Every field is `pub`, since a
-WIT record shows them all. Gale declares two:
+WIT record shows them all. Gale declares three, one of them an `enum` it
+re-exports with `export use`:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
@@ -144,6 +145,9 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
+    /// Which decisions the parser asks the runtime ATN simulator. "Choosing the
+    /// simulator" in the README lists the modes.
+    pub atn: AtnMode = AtnMode::Auto,
 }
 ```
 
@@ -156,7 +160,11 @@ runs, so a typo or a type mismatch is reported on the offending key.
   error.
 - A default is a literal, and a list or map field takes a `[…]` or
   `{ k: v, … }` one.
-- An `enum` option is written as its case name in a string.
+- An `enum` option is written as its case's Component Model name in a string,
+  so `AtnMode::Never` is `"never"` and a case `HighContrast` is
+  `"high-contrast"`. That is the name the generator's WIT gives the case, so a
+  generator takes the same values whether it is named by its source or by its
+  component.
 - A `TreeMap<String, V>` option is written as an object whose keys are the
   author's own. The generator receives it sorted by key.
 
@@ -591,18 +599,19 @@ record source-span {
   carried, and a byte range in it.
 - Every diagnostic is reported, whether the run then succeeds or fails.
 
-Gale relays the diagnostics of its own analysis:
+Gale relays the diagnostics of its own analysis, and collects its errors to
+fail the run with:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
 for let d of &generated.diagnostics {
     if let Some(level) = diagnostic_level(&d.kind) {
-        KilnHost::emit_diagnostic(KilnDiagnostic {
-            level: kiln_level(level),
-            span: null,
-            message: `gale: ${d.owner.label()}: ${d.message}`,
-        });
+        let message = `gale: ${d.owner.label()}: ${d.message}`;
+        if level matches { Error } {
+            refusals.push(message);
+        }
+        KilnHost::emit_diagnostic(KilnDiagnostic { level: kiln_level(level), span: null, message });
     }
 }
 ```

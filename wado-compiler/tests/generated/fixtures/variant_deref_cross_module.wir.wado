@@ -300,7 +300,7 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
             $array_clone_i_7 = $array_clone_i_7 + 1;
             continue l6;
         };
-    }; $array_clone_dst_5, used: v_3.used } };
+    }; $array_clone_dst_5, used: $load_2 } };
 }
 
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"(v) {
@@ -341,7 +341,7 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l13;
             };
-        }; $array_clone_dst_2, used: $vc_payload_4.used } };
+        }; $array_clone_dst_2, used: $load_1 } };
     } else {
         $vc_payload_5 = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(v).payload_0;
         struct.new "./sub/variant_deref_helper.wado//Elem::Label" { discriminant: 5, payload_0: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"($vc_payload_5)) };
@@ -349,6 +349,7 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
 }
 
 fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
+    let $load_26: i32;
     let name_2: ref "core:prelude/string.wado//String";
     let alts: ref "core:prelude//List<./sub/variant_deref_helper.wado/Alt>";
     let n_25: i32;
@@ -422,9 +423,9 @@ fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
                     struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name_2.repr; new_used_29 = name_2.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_29)), 0, $array_clone_src_1, 0, new_used_29); $array_clone_dst_2, used: new_used_29 };
                 }));
                 v_71 = v_68.elements;
-                v_71 = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_71.repr; let $array_clone_len_6: i32; $array_clone_len_6 = v_71.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_len_6); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
+                v_71 = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_71.repr; $load_26 = v_71.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($load_26); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
                     l26: loop {
-                        break_if $array_clone_deep_prefix $array_clone_i_7 >= $array_clone_len_6;
+                        break_if $array_clone_deep_prefix $array_clone_i_7 >= $load_26;
                         $array_clone_elem_8 = builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_src_4, $array_clone_i_7);
                         builtin::array_set<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_dst_5, $array_clone_i_7, (if ref.is_null($array_clone_elem_8) -> ref null "./sub/variant_deref_helper.wado//Elem" {
                             $array_clone_elem_8;
@@ -434,7 +435,7 @@ fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
                         $array_clone_i_7 = $array_clone_i_7 + 1;
                         continue l26;
                     };
-                }; $array_clone_dst_5, used: v_71.used };
+                }; $array_clone_dst_5, used: $load_26 };
                 start_30 = start_30 + 1;
                 "variant_deref_cross_module.wado/process_all$sroa[alt.elements]"(v_71, out);
                 continue l24;

@@ -38,13 +38,29 @@ diverge.
 
 ### Bugs in ANTLR4 itself
 
-Gale does not reproduce a bug in ANTLR4. When an upstream bug report shows
-the jar's answer to be wrong, Gale's test pins the corrected answer and says
-which report it follows. Everywhere else the jar's answer is the expected one.
+Gale does not reproduce a bug in ANTLR4. The jar's answer is wrong where an
+upstream bug report shows it, or where the jar contradicts itself. Gale's test
+then pins the corrected answer and says why. Everywhere else the jar's answer
+is the expected one.
 
 Upstream parse-bug reports triaged so far are pinned in
 `tests/driver_cst_antlr4_issues_test.wado`, one issue number per test. The jar
 answers every one of them correctly, so none of them departs from it yet.
+
+Where Gale departs from the jar:
+
+- **A wildcard and a kind past the vocabulary.** A lexer's numeric
+  `-> type(N)` can give a token a kind that no rule declares. The jar's parser
+  matches such a token with `.` and `~X`: `r : . X EOF ;` parses `q x` as
+  `(r q x)`. Its prediction, though, matches a wildcard against the vocabulary
+  alone. So wherever the token decides between alternatives, the jar reports
+  no viable alternative, even for one that would match it. Gale predicts the
+  way it matches: `.` and `~X` take any kind but EOF. Each table the generator
+  builds over the vocabulary has to agree. The lookahead DFA and the LR loop
+  table leave such a kind to the simulator, and a sync set a wildcard
+  contributed to admits it. Pinned by "a wildcard takes a kind past the
+  grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
+  the grammar's" in `src/atn_sim_test.wado`. No upstream report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
 
@@ -439,9 +455,9 @@ Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
 in `regen-oracle.sh`:
 
-- split lexer/parser grammars — `antlr4-oracle.sh` takes one `.g4`, so
-  RustParser and TypeScriptParser have no reachable token vocabulary
-  (their lexers do oracle on their own, see below);
+- split lexer/parser grammars — `regen-oracle.sh` hands the oracle one
+  `.g4`. The oracle itself takes the pair through `--lexer`, which is how
+  the TypeScript comparison below runs;
 - grammars that emit whitespace as tree tokens (css3's `ws`) — their
   trees are whitespace-sensitive, so css3 stays pinned by parse-success
   (`driver_cst_css3_test`), not tree equality.
@@ -474,6 +490,21 @@ its answer of `ID` is still wrong. Agreement is evidence about the
 stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
+
+#### Comparing a whole TypeScript file
+
+TypeScript has both twins in `tests/grammars/java/`, so the jar parses a
+whole file under the specification Gale runs. `tools/typescript_tree.wado`
+prints Gale's tree for the same file, and `tools/tree_diff.wado` lists where
+the two disagree. A line diff of the printed trees counts one misplaced
+subtree as many hunks, so the tool compares rule spans over the tokens and
+reports each divergence once, with the outermost rule each side built there.
+
+`mise run oracle-gale-typescript [file.ts]` runs all three, on the
+benchmark input when no file is named, and installs the Java the jar needs.
+It fails where the trees disagree, so a script can gate on it.
+`scripts/oracle-typescript.sh` holds the commands and keeps both trees under
+`target/oracle-typescript/`.
 
 #### The Unicode properties are not oracled
 
@@ -538,12 +569,19 @@ in CI as `#[TODO]`. The generated parser is shared with Stage A
 
 ## Prediction & codegen design
 
-Gale generates recursive-descent parsers with no backtracking on the accept
-path — parser or lexer. Alternatives are disambiguated by static k-token
-lookahead; a decision static prediction cannot resolve routes to the runtime
-ATN simulator (next section), never a try-fail-retry loop. Only the repeat-exit
-probe rewinds, and it decides nothing — it re-parses a failed element to
-record where the error is.
+Gale generates recursive-descent parsers that decide by prediction rather than
+by trying an alternative and retrying another. Alternatives are disambiguated by
+static k-token lookahead, and a decision static prediction cannot resolve routes
+to the runtime ATN simulator (next section). The reason is speed: settling a
+decision by trial usually costs more than predicting it. A backtrack that
+replaces more expensive work, such as a scan ahead followed by a second parse,
+is allowed when a benchmark shows it is faster. A scan-guarded loop is one: it
+parses the iteration under `speculating` and rewinds it if it fails
+(`gen_rep_speculative_iteration`). That parse decides as the scan did only
+because the scan makes the parse's choice (next section), and only in a parser
+that runs no action or predicate, since `speculating` skips both. The repeat-exit probe also
+rewinds, but it decides nothing: it re-parses a failed element to record where
+the error is.
 
 ### Multi-alt dispatch — prediction, then a longest-match tournament
 
@@ -554,6 +592,11 @@ parse's choice: a scan that chose differently would accept an input the parse
 rejects, or the reverse. So only how each side reads a token and commits
 differs.
 
+An alternative whose language an earlier one contains is never a candidate
+(`alt_subsumption`): wherever it matches, the earlier one matches too, and
+ANTLR4 resolves that ambiguity to the earlier one. SQLite's
+`simple_select_stmt` is `factored_select_stmt` without its compound loop.
+
 Where the tree gives up, every candidate is scanned from the same start and
 the greatest successful end wins. A scan-length tie resolves to the lowest
 grammar alternative — ANTLR4's ambiguity resolution (SQLite's single-table
@@ -563,8 +606,8 @@ when alts share a prefix and tie on static length (`'mut'? IDENT` vs
 `path '(' … ')'` on `N(n)`). An `EOF` the alt matches counts toward its length
 only where the grammar writes no `EOF` after the rule. In a start rule `s : u | t ; t : A EOF ;`, `t` matches what `u` cannot and wins. Under `prog : stmt* EOF`, a `stmt` ending in `EOF` ties with one ending just before it, and the
 first wins. An alt whose suffix is unscannable at a
-tournament site is a codegen-time panic; the fix is to file an issue, never
-to add backtracking.
+tournament site is a codegen-time panic; the fix is to file an issue, not to
+settle the decision by trial.
 
 Emit reaches that tournament by two routes. The SLL prediction tree may
 give up (`Ambiguous`), or it may resolve the decision into a token cascade
@@ -1046,13 +1089,24 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. A caller's scan of such a
    rule asks the simulator too, with the parse's caller stack
-   (`Parser.atn`), so the scan ends where the parse will. Every other
-   multi-alt ambiguity keeps the tournament, whose longest-match matches
-   ANTLR4 across the corpus. Regression fixtures:
+   (`Parser.atn`), so the scan ends where the parse will. In a grammar that
+   carries the simulator, every other ambiguity the prediction tree gives up
+   on goes to it as well (`ambiguity_routes`). The tournament picks the
+   longest scan, and ANTLR4 the lowest alternative the rest of the input
+   admits. The simulator disables an alternative whose predicate is false,
+   including one the alternative reaches at the left edge of a rule it opens
+   with: ANTLR4 finds those visible at the decision (`doc/predicates.md`).
+   A left-recursive rule whose atom choice reaches the simulator is routed as
+   in 1, in any grammar: its static loop would take a suffix the full context
+   gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).
+   Regression fixtures:
    `tests/grammars/ll_longest_vs_context.g4`, `ll_at_end_nullable_gap.g4` and
    `ll_opaque_at_end_context.g4` (routed to the simulator),
    `ll_at_end_follow_disjoint.g4` and `ll_opaque_at_end_gap.g4` (stay on the
-   tournament), `ll_optional_non_greedy_multi.g4`.
+   tournament), `ll_optional_non_greedy_multi.g4`, and the tests in
+   `codegen_test.wado` "a predicate at the left edge of an invoked rule gates
+   an ATN-routed decision" and "a call after a prefix operand is the prefix's
+   own when only it can take one".
 4. A **group whose nullable alternative competes** with another for the
    tokens that follow the group (see "A nullable alternative is admitted by
    what follows the group" above).
@@ -1066,14 +1120,20 @@ the compiled fast path:**
    the body takes. The tests are in `codegen_test.wado`
    (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
    rest of the input can match").
+6. A **greedy `?` whose entry the caller's FOLLOW gates**, in a rule that
+   asks the simulator anyway (`optional_asks_simulator`). The gate reads that
+   FOLLOW without the call stack, and a caller that passes none leaves it
+   entering wherever the body scans. TypeScript's `new E(a)` gave `(a)` to
+   the operand's `identifierName singleExpression?`, which the stack says the
+   `new` still owes as its arguments. Same test as 3.
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
+in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
 narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
-SQLite's `name+?`). A prediction per occurrence
-costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
-corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
+SQLite's `name+?`). Before the simulator cached its predictions, a prediction
+per occurrence cost a full closure over the grammar, which took SQLite's
+DDL-heavy benchmark corpus to 155 times as long per parse; neither gating it behind the ambiguous
 lookahead nor bounding the lookahead recovers that. The two are also coupled —
 entering `type_name?` is only right if `name+?` can then take the second name,
 so landing one alone turns an accepted input into an error. The measurements and
@@ -1082,6 +1142,13 @@ the levers that would make them affordable are in [`perf.md`](./perf.md).
 The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
+
+These sites are the default, `atn: "auto"`. The `atn` generator option moves
+the line, as "Choosing the simulator" in the [README](./README.md) states.
+`"always"` adds every group decision and every `?` `*` `+` whose body and
+continuation can start on one token (`repeat_contested`), the two sites above
+included. `"never"` leaves 3 and 6 to the tournament and the continuation scan,
+and refuses a grammar that holds 1, 2, 4 or 5.
 
 ### Known approximation gaps
 
@@ -1098,20 +1165,16 @@ left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 continuation falls back to the complete simulator rather than guess. The
 mechanism and the full edge list live with the ATN runtime module.
 
-Two enter edges sharing a first lookahead token are settled without it. The
-loop decision tests one token against each continuation's FIRST set and takes
-the first edge admitting it, so it reports such alternatives in grammar order
-rather than by which one matches — strictly weaker than the second-token
-sub-dispatch the static LR path applies to the same question. The simulator is
-there for the enter-or-exit verdict, which needs full context; which member of
-the group to enter does not, and is re-taken from the scan twins by longest
-match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`. A suffix
-that can start with a `.` or `~X` joins no group. Where it and another suffix
-both admit the token, the simulator decides between them with full context, as
-ANTLR4 does: `expr 'd' 'd'` does not take the `d` only `expr .` can complete, and
-the earlier of two suffixes that both reach the end wins
-(`lr_open_ended_rule_suffix.g4`, `lr_complement_op.g4`). The longest scan would
-answer both wrongly.
+The loop decision tests one token against each continuation's FIRST set. Where
+one enter edge admits it, that edge is the answer. Where two do, the simulator
+decides between them with full context, as ANTLR4 does: the lowest suffix the
+rest of the input admits. Fixture: `lr_atn_shared_op.g4` (`not like` against
+`not in`). A scan of the suffixes would answer three shapes wrongly:
+`expr 'd' 'd'` does not take the `d` only `expr .` can complete, the earlier of
+two suffixes that both reach the end wins (`lr_open_ended_rule_suffix.g4`,
+`lr_complement_op.g4`), and Rust's `x < <T as Tr>::C` takes `shl` because the
+predicate in `shl : LT {this.NextLT()}? LT` follows a token, which prediction
+does not see (`driver_cst_rust_test`).
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator
@@ -1120,8 +1183,10 @@ so every continuation the caller's enter reaches, the callee's reached as well,
 and the callee's all died. So the verdict is recorded for each such caller in
 turn, and a caller with an operator of its own asks the simulator itself.
 
-Which gaps stay static is a cost decision as much as a correctness one — one
-prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
+Which gaps stay static is a cost decision as much as a correctness one. The
+simulator keeps each prediction for the program's life, as ANTLR4's DFA does,
+so a later parse reuses what an earlier one computed, but a first parse still
+pays a full closure per new question; see [`perf.md`](./perf.md).
 
 ## Lexer ATN — rules one pass cannot decide
 
@@ -1247,7 +1312,8 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 | `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                 |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                            |
 | `scripts/antlr4-oracle.sh`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `~/.cache/gale/`. Run at extract time only — CI does not need it.   |
-| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper: the `--super` answers, and that `--probe-super` never yields pinnable output. Needs java.                |
+| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.  |
+| `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                             |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4-oracle.sh --super`. |
 
 ### Triage states (`status.toml`)

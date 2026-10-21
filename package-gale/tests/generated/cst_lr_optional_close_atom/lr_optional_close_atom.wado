@@ -1024,7 +1024,7 @@ internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
 }
 
 internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
+    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
@@ -1726,7 +1726,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
     } else if kind == TK_LIT_LPAREN {
         pos = start + 1;
         try_1: {
-            pos = scan_expr(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)), 0);
+            pos = scan_expr(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)), 0);
             if pos < 0 { break try_1; }
             if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
                 pos += 1;
@@ -1799,7 +1799,7 @@ fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && _kind_set_0(p.peek_kind()) {
         p.site = 0;
-        _parse_expr(p, follow_then(FOLLOW_MASK_0, 8, follow));
+        _parse_expr(p, follow_then(FOLLOW_MASK_1, 8, follow));
         p.expect(TK_LIT_SEMI, &SYNC_0, false);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
@@ -1827,7 +1827,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 1;
-        _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)));
+        _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
         if p.peek_kind() == TK_LIT_RPAREN && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
             p.take();
         }
@@ -1959,6 +1959,6 @@ global EXPECTED_1: List<i32> = [TK_Identifier, TK_LIT_LPAREN];
 global SYNC_2: List<i32> = [384];
 
 global FOLLOW_SETS: List<List<i32>> = [[16], [64]];
-global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
+global FOLLOW_MASK_1: i64 = 1;
+global FOLLOW_MASK_2: i64 = 2;
 

@@ -59,12 +59,15 @@ pub fn generate() {}
     assert_eq!(desc.fields[0].default, Some(CanonicalValue::None));
 }
 
+/// A case is spelled by its Component Model name, as a generator described by
+/// WIT spells it, so naming one generator by its source or by its component
+/// takes the same option values.
 #[test]
 fn descriptor_enum_field_extracts_variants() {
     let source = r"
 export enum Style {
     Rpc,
-    Oneway,
+    OneWay,
 }
 
 export struct Options {
@@ -80,13 +83,13 @@ pub fn generate() {}
     match &desc.fields[0].ty {
         OptionsType::Enum { name, variants } => {
             assert_eq!(name, "Style");
-            assert_eq!(variants, &["Rpc".to_string(), "Oneway".to_string()]);
+            assert_eq!(variants, &["rpc".to_string(), "one-way".to_string()]);
         }
         other => panic!("expected Enum, got {other:?}"),
     }
     assert_eq!(
         desc.fields[0].default,
-        Some(CanonicalValue::Enum("Rpc".to_string()))
+        Some(CanonicalValue::Enum("rpc".to_string()))
     );
 }
 

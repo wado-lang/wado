@@ -5591,17 +5591,19 @@ fn "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/
 
 fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, run_start, i, b) {
     let $load_0: i32;
+    let $load_1: ref Array<u8>;
+    let $v1: bool;
     "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::slice$unchecked"(s, run_start, $load_0 = s.used; if @unlikely((((0 <= run_start) & (run_start <= i)) & (i <= $load_0)) == 0) {
         cold_path;
         "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report0"(run_start, i, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
-    }; if @unlikely((if local.tee $load_0("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, $load_0, run_start)) -> i32 {
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, s.used, i);
+    }; if @unlikely(local.tee $load_0((if local.tee $v1("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(local.tee $load_1(s.repr), $load_0, run_start)) -> i32 {
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"($load_1, $load_0, i);
     } else {
         0;
-    }) == 0) {
+    })) == 0) {
         cold_path;
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($load_0, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($v1, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
     }; i), buf);
     if b == 34 {
@@ -10242,14 +10244,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$uncheck
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self.repr, self.start, self.end, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_3 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_3);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 }, $load_3);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {

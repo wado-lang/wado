@@ -602,6 +602,7 @@ condition: walk_bare([true, 7]) == \"true;7;\"
 }
 
 fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar.wado/walk_bare<[bool,i32]>"($mv$a$0, $mv$a$1) {
+    let $load_11: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
@@ -641,8 +642,8 @@ fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar
     start_41 = $mv$a$1 < 0;
     $mv$a$1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$a$1); select i64(x < 0_i64, 0_i64 - x, x)));
     start_41 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_41, $mv$a$1);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_41, x, $mv$a$1);
-    if @unlikely(local.tee $mv$a$1($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_11($local_3.repr), start_41, x, $mv$a$1);
+    if @unlikely(local.tee $mv$a$1($local_3.used + 1) > builtin::array_len($load_11)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $mv$a$1);
     }
@@ -653,6 +654,7 @@ fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar
 }
 
 fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar.wado/walk_trailing<[bool,core:prelude/string.wado/String]>"($mv$a$0, $mv$a$1) {
+    let $load_22: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
@@ -709,8 +711,8 @@ fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar
         builtin::array_copy<u8>($local_3.repr, $mv$a$0, s.repr, 0, start_58);
     };
     start_58 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_58, 0_i64, 1);
-    if @unlikely(local.tee start_58($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_22($local_3.repr), start_58, 0_i64, 1);
+    if @unlikely(local.tee start_58($local_3.used + 1) > builtin::array_len($load_22)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_58);
     }
@@ -721,6 +723,7 @@ fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar
 }
 
 fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar.wado/walk_trailing<[bool]>"(a) {
+    let $load_12: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
@@ -759,8 +762,8 @@ fn "variadic_for_of_spread_after_scalar.wado/variadic_for_of_spread_after_scalar
         builtin::array_copy<u8>($local_3.repr, start_55, s.repr, 0, start_41);
     };
     start_41 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_41, 0_i64, 1);
-    if @unlikely(local.tee start_41($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_12($local_3.repr), start_41, 0_i64, 1);
+    if @unlikely(local.tee start_41($local_3.used + 1) > builtin::array_len($load_12)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_41);
     }

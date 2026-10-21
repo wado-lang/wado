@@ -134,38 +134,37 @@ global global:core:prelude/format.wado::$const_obj_14: ref Array<u8> = array.new
 global global:core:prelude/format.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
 
 fn "ref_equality_through_ref_impl.wado/$test_0_a_reference_to_a_string_equals_the_string_it_names"() {
+    let $load_0: ref Array<u8>;
     let r: ref "core:prelude/string.wado//String";
     let other_12: ref "core:prelude/string.wado//String";
-    let repr_22: ref Array<u8>;
     let repr_54: ref Array<u8>;
     r = global:ref_equality_through_ref_impl.wado::$const_obj_11;
     other_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("float"), used: 5 };
-    repr_22 = r.repr;
+    $load_0 = r.repr;
     if @unlikely(local.tee $mv_field_3(block -> bool {
         let $mv_field_3: i32;
         $mv_field_3 = r.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(repr_22, 0, $mv_field_3, other_12.repr, 5);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"($load_0, 0, $mv_field_3, other_12.repr, 5);
     }) == 0) {
         cold_path;
         "ref_equality_through_ref_impl.wado/$test_0_a_reference_to_a_string_equals_the_string_it_names$cold2"(r);
         unreachable;
     }
-    if @unlikely(local.tee $mv_field_3(other_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double"), used: 6 }; repr_22 = r.repr; block -> bool {
+    if @unlikely(local.tee $mv_field_3(other_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double"), used: 6 }; block -> bool {
         $mv_field_3 = r.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(repr_22, 0, $mv_field_3, other_12.repr, 6);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"($load_0, 0, $mv_field_3, other_12.repr, 6);
     } == 0) == 0) {
         cold_path;
         "ref_equality_through_ref_impl.wado/$test_0_a_reference_to_a_string_equals_the_string_it_names$cold1"(r);
         unreachable;
     }
-    repr_22 = r.repr;
     if @unlikely(local.tee $mv_field_3($inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_0: block -> bool {
         repr_54 = global:ref_equality_through_ref_impl.wado::$const_obj_10;
         $mv_field_3 = 0;
         b5: block {
             l6: loop {
                 break_if b5 $mv_field_3 >= 5;
-                if builtin::array_get_value<u8>(repr_22, $mv_field_3) != builtin::array_get_value<u8>(repr_54, $mv_field_3) {
+                if builtin::array_get_value<u8>($load_0, $mv_field_3) != builtin::array_get_value<u8>(repr_54, $mv_field_3) {
                     break $inline_core_prelude_string_wado_StrSlice__eq_str__core_prelude_string_wado_String__spec0_0: 0;
                 }
                 $mv_field_3 = $mv_field_3 + 1;

@@ -952,6 +952,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
 }
 
 fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id,s.buf]"(self, s) {
+    let $load_4: ref Array<u8>;
     let new_used_28: i32;
     let start_29: i32;
     let x: i64;
@@ -966,8 +967,8 @@ fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize:
     start_29 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_29, self);
-    "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_29, x, self);
-    if @unlikely(local.tee self(s.used + 1) > builtin::array_len(s.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(s.repr), start_29, x, self);
+    if @unlikely(local.tee self(s.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, self);
     }

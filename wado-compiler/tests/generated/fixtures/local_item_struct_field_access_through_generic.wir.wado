@@ -674,7 +674,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<l
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_27, f_9.repr, f_9.used, $mv$v$x);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_126, $mv$v$x);
-    if @unlikely(local.tee $mv$v$x(local.tee f_9(f.buf).used + 1) > builtin::array_len(f_9.repr)) {
+    if @unlikely(local.tee $mv$v$x(f_9.used + 1) > builtin::array_len(f_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_9, $mv$v$x);
     }
@@ -732,7 +732,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<l
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_27, f_9.repr, f_9.used, $mv$v$y);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_126, $mv$v$y);
-    if @unlikely(local.tee $mv$v$y(local.tee f_9(f.buf).used + 1) > builtin::array_len(f_9.repr)) {
+    if @unlikely(local.tee $mv$v$y(f_9.used + 1) > builtin::array_len(f_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_9, $mv$v$y);
     }
@@ -1330,7 +1330,7 @@ fn "core:prelude/traits.wado/local_item_struct_field_access_through_generic.wado
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_26, f_8.repr, f_8.used, $mv$self$x);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_119, $mv$self$x);
-    if @unlikely(local.tee $mv$self$x(local.tee f_8(f.buf).used + 2) > builtin::array_len(f_8.repr)) {
+    if @unlikely(local.tee $mv$self$x(f_8.used + 2) > builtin::array_len(f_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, $mv$self$x);
     }
@@ -1358,7 +1358,7 @@ fn "core:prelude/traits.wado/local_item_struct_field_access_through_generic.wado
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_26, f_8.repr, f_8.used, $mv$self$y);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_119, $mv$self$y);
-    if @unlikely(local.tee $mv$self$y(local.tee f_8(f.buf).used + 2) > builtin::array_len(f_8.repr)) {
+    if @unlikely(local.tee $mv$self$y(f_8.used + 2) > builtin::array_len(f_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, $mv$self$y);
     }
@@ -1381,25 +1381,24 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<local_item_struct_field_access_through_generic.wado/Point@37>,()>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<local_item_struct_field_access_through_generic.wado/Point@37>,local_item_struct_field_access_through_generic.wado/Point@37>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/Option<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/ReflectVariant::members"();
     if ref.is_null(self) {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_0(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_0);
         s_9 = $mv$$tuple_0$0.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_0, s_9);
     }
     if ref.is_null(self) == 0 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_0(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_0);
         s_9 = $mv$$tuple_0$1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_0, s_9);
         let $mv_arg_1: ref "local_item_struct_field_access_through_generic.wado//Point@37";
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<local_item_struct_field_access_through_generic.wado/Point@37>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<local_item_struct_field_access_through_generic.wado/Point@37>$local_item_struct_field_access_through_generic.wado/Point@37$sroa[v.value]"(self, 1)).x, $mv_arg_1.y, f);
     }

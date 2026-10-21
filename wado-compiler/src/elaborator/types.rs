@@ -476,7 +476,9 @@ pub enum TypeError {
     },
 
     /// A declaration whose instances name ever larger instances of
-    /// themselves: see [`super::tysys::TypeSystem::expanding_decls`].
+    /// themselves: a struct or variant, see
+    /// [`super::tysys::TypeSystem::expanding_decls`], or a generic function,
+    /// which monomorphization refuses.
     ExpandingRecursion {
         name: String,
         span: Span,

@@ -326,6 +326,16 @@ impl GrammarAnalysis {
         return self.token_kinds.names_of(ids);
     }
 
+    /// Whether `ids` holds every kind but EOF, as a wildcard or `~X` adds, and
+    /// so the kinds past the grammar's too.
+    pub fn holds_every_kind(&self, ids: &List<i32>) -> bool {
+        return ids.iter_ref().filter(|id| *id != self.eof_kind).count() == self.token_kind_count() - 1;
+    }
+
+    pub fn token_kind_count(&self) -> i32 {
+        return self.token_kinds.len();
+    }
+
     /// The `TK_*` name of kind `id`.
     pub fn token_name(&self, id: i32) -> String {
         return self.token_kinds.name_of(id);

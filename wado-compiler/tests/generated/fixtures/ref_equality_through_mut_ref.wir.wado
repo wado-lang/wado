@@ -141,24 +141,24 @@ global global:core:prelude/format.wado::$const_obj_13: ref Array<u8> = array.new
 global global:core:prelude/primitive.wado::$const_obj_49: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "ref_equality_through_mut_ref.wado/$cm_export__$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names"() {
+    let $load_0: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let other_9: ref "core:prelude/string.wado//String";
-    let repr_15: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     other_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-    repr_15 = s.repr;
+    $load_0 = s.repr;
     if @unlikely(local.tee $mv_field_3(block -> bool {
         let $mv_field_3: i32;
         $mv_field_3 = s.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(repr_15, 0, $mv_field_3, other_9.repr, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"($load_0, 0, $mv_field_3, other_9.repr, 1);
     }) == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold1"(s);
         unreachable;
     }
-    if @unlikely(local.tee $mv_field_3(other_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }; repr_15 = s.repr; block -> bool {
+    if @unlikely(local.tee $mv_field_3(other_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }; block -> bool {
         $mv_field_3 = s.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(repr_15, 0, $mv_field_3, other_9.repr, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"($load_0, 0, $mv_field_3, other_9.repr, 1);
     } == 0) == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold0"(s);

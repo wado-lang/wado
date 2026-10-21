@@ -828,6 +828,7 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "serde_json_treemap.wado/$test_0_treemap_serialize_string_keys"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -840,19 +841,19 @@ fn "serde_json_treemap.wado/$test_0_treemap_serialize_string_keys"() {
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice"), used: 5 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_20, 30);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_20, 30);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 30);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 30);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 98), used: 3 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_20, 25);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_20, 25);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 25);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 25);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -929,27 +930,34 @@ condition: s == `\\{\"alice\":30,\"bob\":25\\}`
 }
 
 fn "serde_json_treemap.wado/$test_1_treemap_roundtrip"() {
-    let $load_20: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_9: ref Array<i32>;
+    let $load_10: ref "Array<core:prelude/string.wado/String>";
+    let $load_11: ref Array<i32>;
+    let $load_12: ref Array<i32>;
+    let $load_14: i32;
+    let $load_16: ref Array<i32>;
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let key_21: ref "core:prelude/string.wado//String";
     let existing_23: i32;
+    let e_43: i32;
     let repr_62: ref Array<u8>;
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7: block {
         key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_23, 1);
+        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_23, 1);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_21, 1);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_21, 1);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10: block {
         key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
-        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_23, 2);
+        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_23, 2);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_21, 2);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_21, 2);
     };
     let $mv$json_r$1: ref null "core:prelude/string.wado//String";
     let $mv$json_r$2: ref null "core:serde//SerializeError";
@@ -962,25 +970,25 @@ fn "serde_json_treemap.wado/$test_1_treemap_roundtrip"() {
         if @likely(existing_23 == 0) {
             map = ref.as_non_null($mv$parsed_r$1);
             key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-            if @unlikely(local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(map.log, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_21.repr, 1)) < 0) {
+            if @unlikely(local.tee e_43("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $load_0(map.log), local.tee $load_9(map.slots), local.tee $load_10(map.nkeys), local.tee $load_11(map.kids), local.tee $load_12(map.lens), local.tee existing_23(map.root), local.tee $load_14(map.height), key_21.repr, 1)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_21);
                 unreachable;
             }
-            if @unlikely(local.tee existing_23(builtin::array_get_value<i32>(local.tee $load_20(map.log).values, existing_23)) != 1) {
+            if @unlikely(local.tee e_43(builtin::array_get_value<i32>(local.tee $load_16($load_0.values), e_43)) != 1) {
                 cold_path;
-                "serde_json_treemap.wado/$test_1_treemap_roundtrip$cold1"(existing_23);
+                "serde_json_treemap.wado/$test_1_treemap_roundtrip$cold1"(e_43);
                 unreachable;
             }
             key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
-            if @unlikely(local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_20, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_21.repr, 1)) < 0) {
+            if @unlikely(local.tee $load_14("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_0, $load_9, $load_10, $load_11, $load_12, existing_23, $load_14, key_21.repr, 1)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_21);
                 unreachable;
             }
-            if @unlikely(local.tee existing_23(builtin::array_get_value<i32>(map.log.values, existing_23)) != 2) {
+            if @unlikely(local.tee $load_14(builtin::array_get_value<i32>($load_16, $load_14)) != 2) {
                 cold_path;
-                "serde_json_treemap.wado/$test_1_treemap_roundtrip$cold0"(existing_23);
+                "serde_json_treemap.wado/$test_1_treemap_roundtrip$cold0"($load_14);
                 unreachable;
             }
         } else {
@@ -1181,6 +1189,7 @@ condition: json == `\\{\\}`
 }
 
 fn "serde_json_treemap.wado/$test_4_treemap_single_entry"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -1193,11 +1202,11 @@ fn "serde_json_treemap.wado/$test_4_treemap_single_entry"() {
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 108, 121), used: 4 };
-        if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing, 42);
+        if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing, 42);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 42);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 42);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1274,6 +1283,7 @@ condition: s == `\\{\"only\":42\\}`
 }
 
 fn "serde_json_treemap.wado/$test_5_treemap_with_string_values"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let $local_5: ref "core:prelude/string.wado//String";
     let value_16: ref "core:prelude/string.wado//String";
@@ -1287,20 +1297,20 @@ fn "serde_json_treemap.wado/$test_5_treemap_with_string_values"() {
     value_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("greeting"), used: 8 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude/string.wado//String">(map.log.values, existing_20, value_16);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude/string.wado//String">($load_0.values, existing_20, value_16);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::push"(map.log, key_18, value_16);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::push"($load_0, key_18, value_16);
     };
     value_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("goodbye"), used: 7 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_10: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("farewell"), used: 8 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude/string.wado//String">(map.log.values, existing_20, value_16);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude/string.wado//String">($load_0.values, existing_20, value_16);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::push"(map.log, key_18, value_16);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::push"($load_0, key_18, value_16);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1377,6 +1387,7 @@ condition: s == `\\{\"greeting\":\"hello\",\"farewell\":\"goodbye\"\\}`
 }
 
 fn "serde_json_treemap.wado/$test_6_treemap_with_bool_values"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,bool>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -1389,19 +1400,19 @@ fn "serde_json_treemap.wado/$test_6_treemap_with_bool_values"() {
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,bool>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<bool>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_bool___insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("enabled"), used: 7 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<bool>(map.log.values, existing_20, 1);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<bool>($load_0.values, existing_20, 1);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_bool___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,bool>::push"(map.log, key_18, 1);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,bool>::push"($load_0, key_18, 1);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_bool___insert_10: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("debug"), used: 5 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<bool>(map.log.values, existing_20, 0);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<bool>($load_0.values, existing_20, 0);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_bool___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,bool>::push"(map.log, key_18, 0);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,bool>::push"($load_0, key_18, 0);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1478,6 +1489,7 @@ condition: s == `\\{\"enabled\":true,\"debug\":false\\}`
 }
 
 fn "serde_json_treemap.wado/$test_7_treemap_with_nested_array_values"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -1492,20 +1504,20 @@ fn "serde_json_treemap.wado/$test_7_treemap_with_nested_array_values"() {
     value_16 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_list_wado_List_i32____insert_8: block {
         key_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("scores"), used: 6 };
-        if local.tee existing_22("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::place"(map, key_20, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude//List<i32>">(map.log.values, existing_22, value_16);
+        if local.tee existing_22("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::place"(map, key_20, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude//List<i32>">($load_0.values, existing_22, value_16);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_list_wado_List_i32____insert_8;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::push"(map.log, key_20, value_16);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::push"($load_0, key_20, value_16);
     };
     value_16 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_list_wado_List_i32____insert_12: block {
         key_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 100, 115), used: 3 };
-        if local.tee existing_22("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::place"(map, key_20, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude//List<i32>">(map.log.values, existing_22, value_16);
+        if local.tee existing_22("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::place"(map, key_20, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude//List<i32>">($load_0.values, existing_22, value_16);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_list_wado_List_i32____insert_12;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::push"(map.log, key_20, value_16);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::push"($load_0, key_20, value_16);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1582,6 +1594,7 @@ condition: s == `\\{\"scores\":[10,20,30],\"ids\":[1,2]\\}`
 }
 
 fn "serde_json_treemap.wado/$test_8_treemap_with_option_values"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -1596,19 +1609,19 @@ fn "serde_json_treemap.wado/$test_8_treemap_with_option_values"() {
     value_16 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 42 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_types_wado_Option_i32____insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("present"), used: 7 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude/types.wado//Option<i32>">(map.log.values, existing_20, value_16);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude/types.wado//Option<i32>">($load_0.values, existing_20, value_16);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_types_wado_Option_i32____insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::push"(map.log, key_18, value_16);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::push"($load_0, key_18, value_16);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_types_wado_Option_i32____insert_10: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("absent"), used: 6 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<ref "core:prelude/types.wado//Option<i32>">(map.log.values, existing_20, global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<ref "core:prelude/types.wado//Option<i32>">($load_0.values, existing_20, global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_types_wado_Option_i32____insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::push"(map.log, key_18, global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::push"($load_0, key_18, global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1685,27 +1698,34 @@ condition: s == `\\{\"present\":42,\"absent\":null\\}`
 }
 
 fn "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars"() {
-    let $load_20: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_9: ref Array<i32>;
+    let $load_10: ref "Array<core:prelude/string.wado/String>";
+    let $load_11: ref Array<i32>;
+    let $load_12: ref Array<i32>;
+    let $load_14: i32;
+    let $load_16: ref Array<i32>;
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let key_21: ref "core:prelude/string.wado//String";
     let existing_23: i32;
+    let e_43: i32;
     let repr_62: ref Array<u8>;
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7: block {
         key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("key with spaces"), used: 15 };
-        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_23, 1);
+        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_23, 1);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_21, 1);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_21, 1);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10: block {
         key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("key\"with\"quotes"), used: 15 };
-        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_23, 2);
+        if local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_21, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_23, 2);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_21, 2);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_21, 2);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1718,25 +1738,25 @@ fn "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars"() {
         if @likely(existing_23 == 0) {
             map = ref.as_non_null($mv$parsed_r$1);
             key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("key with spaces"), used: 15 };
-            if @unlikely(local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(map.log, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_21.repr, 15)) < 0) {
+            if @unlikely(local.tee e_43("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $load_0(map.log), local.tee $load_9(map.slots), local.tee $load_10(map.nkeys), local.tee $load_11(map.kids), local.tee $load_12(map.lens), local.tee existing_23(map.root), local.tee $load_14(map.height), key_21.repr, 15)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_21);
                 unreachable;
             }
-            if @unlikely(local.tee existing_23(builtin::array_get_value<i32>(local.tee $load_20(map.log).values, existing_23)) != 1) {
+            if @unlikely(local.tee e_43(builtin::array_get_value<i32>(local.tee $load_16($load_0.values), e_43)) != 1) {
                 cold_path;
-                "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars$cold1"(existing_23);
+                "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars$cold1"(e_43);
                 unreachable;
             }
             key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("key\"with\"quotes"), used: 15 };
-            if @unlikely(local.tee existing_23("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_20, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_21.repr, 15)) < 0) {
+            if @unlikely(local.tee $load_14("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_0, $load_9, $load_10, $load_11, $load_12, existing_23, $load_14, key_21.repr, 15)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_21);
                 unreachable;
             }
-            if @unlikely(local.tee existing_23(builtin::array_get_value<i32>(map.log.values, existing_23)) != 2) {
+            if @unlikely(local.tee $load_14(builtin::array_get_value<i32>($load_16, $load_14)) != 2) {
                 cold_path;
-                "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars$cold0"(existing_23);
+                "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars$cold0"($load_14);
                 unreachable;
             }
         } else {
@@ -1752,6 +1772,7 @@ fn "serde_json_treemap.wado/$test_9_treemap_keys_with_special_chars"() {
 }
 
 fn "serde_json_treemap.wado/$test_10_treemap_preserves_insertion_order"() {
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $v1: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -1764,27 +1785,27 @@ fn "serde_json_treemap.wado/$test_10_treemap_preserves_insertion_order"() {
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_20, 3);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_20, 3);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_7;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 3);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 3);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_20, 1);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_20, 1);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_10;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 1);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 1);
     };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_13: block {
         key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
-        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, map.log.count)) >= 0 {
-            builtin::array_set<i32>(map.log.values, existing_20, 2);
+        if local.tee existing_20("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, key_18, local.tee $load_0(map.log).count)) >= 0 {
+            builtin::array_set<i32>($load_0.values, existing_20, 2);
             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_13;
         }
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"(map.log, key_18, 2);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::push"($load_0, key_18, 2);
     };
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
@@ -1862,6 +1883,12 @@ condition: s == `\\{\"c\":3,\"a\":1,\"b\":2\\}`
 
 fn "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip"() {
     let $load_2: ref Array<u8>;
+    let $load_11: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_24: ref Array<i32>;
+    let $load_25: ref "Array<core:prelude/string.wado/String>";
+    let $load_26: ref Array<i32>;
+    let $load_27: ref Array<i32>;
+    let $load_31: ref Array<i32>;
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let i_1: i32;
     let $local_12: ref "core:prelude/string.wado//String";
@@ -1873,7 +1900,6 @@ fn "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip"() {
     let pair: i32;
     let tens: i32;
     let existing: i32;
-    let self_96: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let e_99: i32;
     let b: i32;
     let new_used_160: i32;
@@ -1997,19 +2023,19 @@ fn "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip"() {
             }
             start_232 = i_1;
             $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_21: block {
-                if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, $local_12, map.log.count)) >= 0 {
-                    builtin::array_set<i32>(map.log.values, existing, start_232);
+                if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, $local_12, local.tee $load_11(map.log).count)) >= 0 {
+                    builtin::array_set<i32>($load_11.values, existing, start_232);
                     break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_21;
                 }
-                if @unlikely(local.tee e_99(local.tee self_96(map.log).count) == builtin::array_len(self_96.keys)) {
+                if @unlikely(local.tee e_99($load_11.count) == builtin::array_len($load_11.keys)) {
                     cold_path;
-                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"(self_96, b = e_99 * 2; select i32(4 > b, 4, b));
+                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_11, b = e_99 * 2; select i32(4 > b, 4, b));
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(self_96.keys, e_99, $local_12);
-                builtin::array_set<i32>(self_96.values, e_99, start_232);
-                builtin::array_set<bool>(self_96.alive, e_99, 1);
-                self_96.count = e_99 + 1;
-                self_96.size = self_96.size + 1;
+                builtin::array_set<ref "core:prelude/string.wado//String">($load_11.keys, e_99, $local_12);
+                builtin::array_set<i32>($load_11.values, e_99, start_232);
+                builtin::array_set<bool>($load_11.alive, e_99, 1);
+                $load_11.count = e_99 + 1;
+                $load_11.size = $load_11.size + 1;
             };
             i_1 = i_1 + 1;
             continue l87;
@@ -2024,31 +2050,31 @@ fn "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip"() {
         let $mv$parsed_r$2: ref null "core:serde//DeserializeError";
         multivalue_bind [b, $mv$parsed_r$1, $mv$parsed_r$2] = (b = $local_12.used; "core:json/core/json/from_bytes<core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]"($load_2, 0, b));
         if @likely(b == 0) {
-            if @unlikely(local.tee b(local.tee self_96(local.tee map(ref.as_non_null($mv$parsed_r$1)).log).size) != 10) {
+            if @unlikely(local.tee b(local.tee $load_11(local.tee map(ref.as_non_null($mv$parsed_r$1)).log).size) != 10) {
                 cold_path;
                 "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip$cold2"(b);
                 unreachable;
             }
             $local_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 121, 48), used: 4 };
-            if @unlikely(local.tee b("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self_96, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, $local_12.repr, 4)) < 0) {
+            if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_11, local.tee $load_24(map.slots), local.tee $load_25(map.nkeys), local.tee $load_26(map.kids), local.tee $load_27(map.lens), local.tee b(map.root), local.tee e_99(map.height), $local_12.repr, 4)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"($local_12);
                 unreachable;
             }
-            if @unlikely((local.tee b(builtin::array_get_value<i32>(local.tee self_96(map.log).values, b)) == 0) == 0) {
+            if @unlikely((local.tee existing(builtin::array_get_value<i32>(local.tee $load_31($load_11.values), existing)) == 0) == 0) {
                 cold_path;
-                "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip$cold1"(b);
+                "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip$cold1"(existing);
                 unreachable;
             }
             $local_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 121, 57), used: 4 };
-            if @unlikely(local.tee b("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self_96, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, $local_12.repr, 4)) < 0) {
+            if @unlikely(local.tee e_99("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_11, $load_24, $load_25, $load_26, $load_27, b, e_99, $local_12.repr, 4)) < 0) {
                 cold_path;
                 "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"($local_12);
                 unreachable;
             }
-            if @unlikely(local.tee b(builtin::array_get_value<i32>(map.log.values, b)) != 9) {
+            if @unlikely(local.tee e_99(builtin::array_get_value<i32>($load_31, e_99)) != 9) {
                 cold_path;
-                "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip$cold0"(b);
+                "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip$cold0"(e_99);
                 unreachable;
             }
         } else {
@@ -2064,9 +2090,16 @@ fn "serde_json_treemap.wado/$test_11_treemap_many_entries_roundtrip"() {
 }
 
 fn "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order"() {
-    let $load_8: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_0: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_1: ref Array<i32>;
+    let $load_2: ref "Array<core:prelude/string.wado/String>";
+    let $load_3: ref Array<i32>;
+    let $load_4: ref Array<i32>;
+    let $load_6: i32;
+    let $load_8: ref Array<i32>;
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let key_22: ref "core:prelude/string.wado//String";
+    let e_24: i32;
     let repr_50: ref Array<u8>;
     repr_50 = global:serde_json_treemap.wado::$const_obj_27;
     let $mv$r$0: i32;
@@ -2076,41 +2109,41 @@ fn "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order"() {
     if @likely($mv$r$0 == 0) {
         map = ref.as_non_null($mv$r$1);
         key_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-        if @unlikely(local.tee $mv$r$0("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(map.log, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_22.repr, 1)) < 0) {
+        if @unlikely(local.tee e_24("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $load_0(map.log), local.tee $load_1(map.slots), local.tee $load_2(map.nkeys), local.tee $load_3(map.kids), local.tee $load_4(map.lens), local.tee $mv$r$0(map.root), local.tee $load_6(map.height), key_22.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_22);
             unreachable;
         }
-        if @unlikely(local.tee $mv$r$0(builtin::array_get_value<i32>(local.tee $load_8(map.log).values, $mv$r$0)) != 1) {
+        if @unlikely(local.tee e_24(builtin::array_get_value<i32>(local.tee $load_8($load_0.values), e_24)) != 1) {
             cold_path;
-            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold3"($mv$r$0);
+            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold3"(e_24);
             unreachable;
         }
         key_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
-        if @unlikely(local.tee $mv$r$0("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_8, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_22.repr, 1)) < 0) {
+        if @unlikely(local.tee e_24("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_0, $load_1, $load_2, $load_3, $load_4, $mv$r$0, $load_6, key_22.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_22);
             unreachable;
         }
-        if @unlikely(local.tee $mv$r$0(builtin::array_get_value<i32>(local.tee $load_8(map.log).values, $mv$r$0)) != 2) {
+        if @unlikely(local.tee e_24(builtin::array_get_value<i32>($load_8, e_24)) != 2) {
             cold_path;
-            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold2"($mv$r$0);
+            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold2"(e_24);
             unreachable;
         }
         key_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
-        if @unlikely(local.tee $mv$r$0("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_8, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, key_22.repr, 1)) < 0) {
+        if @unlikely(local.tee $load_6("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_0, $load_1, $load_2, $load_3, $load_4, $mv$r$0, $load_6, key_22.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(key_22);
             unreachable;
         }
-        if @unlikely(local.tee $mv$r$0(builtin::array_get_value<i32>(local.tee $load_8(map.log).values, $mv$r$0)) != 3) {
+        if @unlikely(local.tee $load_6(builtin::array_get_value<i32>($load_8, $load_6)) != 3) {
             cold_path;
-            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold1"($mv$r$0);
+            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold1"($load_6);
             unreachable;
         }
-        if @unlikely(local.tee $mv$r$0($load_8.size) != 3) {
+        if @unlikely(local.tee $load_6($load_0.size) != 3) {
             cold_path;
-            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold0"($mv$r$0);
+            "serde_json_treemap.wado/$test_12_treemap_deserialize_from_any_key_order$cold0"($load_6);
             unreachable;
         }
     } else {
@@ -3994,17 +4027,19 @@ fn "core:json/core/json/from_bytes<core:collections/treemap.wado/TreeMap<core:pr
 
 fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, run_start, i, b) {
     let $load_0: i32;
+    let $load_1: ref Array<u8>;
+    let $v1: bool;
     "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::slice$unchecked"(s, run_start, $load_0 = s.used; if @unlikely((((0 <= run_start) & (run_start <= i)) & (i <= $load_0)) == 0) {
         cold_path;
         "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report0"(run_start, i, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
-    }; if @unlikely((if local.tee $load_0("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, $load_0, run_start)) -> i32 {
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, s.used, i);
+    }; if @unlikely(local.tee $load_0((if local.tee $v1("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(local.tee $load_1(s.repr), $load_0, run_start)) -> i32 {
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"($load_1, $load_0, i);
     } else {
         0;
-    }) == 0) {
+    })) == 0) {
         cold_path;
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($load_0, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($v1, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
     }; i), buf);
     if b == 34 {
@@ -7331,14 +7366,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$uncheck
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self.repr, self.start, self.end, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_3 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_3);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 }, $load_3);
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next"(self) {
@@ -8151,6 +8183,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d) {
     let $load_7: i32;
+    let $load_8: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let result: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let val: i32;
     let $match_16: ref null "core:prelude/string.wado//String";
@@ -8163,7 +8196,6 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     let $local_4_78: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let other: ref "core:prelude/string.wado//String";
-    let self_93: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let e: i32;
     let b: i32;
     let $match_scrut_0: ref "core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>";
@@ -8234,18 +8266,18 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                 $thread_$inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_decoded_10: block {
                     if @unlikely($inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___try_insert_12: block -> bool {
                         other = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $local_4_78.repr; $load_7 = $local_4_78.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_7)), 0, $array_clone_src_1, 0, $load_7); $array_clone_dst_2, used: $load_7 };
-                        if "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(result, other, result.log.count) >= 0 {
+                        if "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(result, other, local.tee $load_8(result.log).count) >= 0 {
                             break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___try_insert_12: 0;
                         }
-                        if @unlikely(local.tee e(local.tee self_93(result.log).count) == builtin::array_len(self_93.keys)) {
+                        if @unlikely(local.tee e($load_8.count) == builtin::array_len($load_8.keys)) {
                             cold_path;
-                            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"(self_93, b = e * 2; select i32(4 > b, 4, b));
+                            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_8, b = e * 2; select i32(4 > b, 4, b));
                         }
-                        builtin::array_set<ref "core:prelude/string.wado//String">(self_93.keys, e, other);
-                        builtin::array_set<i32>(self_93.values, e, val);
-                        builtin::array_set<bool>(self_93.alive, e, 1);
-                        self_93.count = e + 1;
-                        self_93.size = self_93.size + 1;
+                        builtin::array_set<ref "core:prelude/string.wado//String">($load_8.keys, e, other);
+                        builtin::array_set<i32>($load_8.values, e, val);
+                        builtin::array_set<bool>($load_8.alive, e, 1);
+                        $load_8.count = e + 1;
+                        $load_8.size = $load_8.size + 1;
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___try_insert_12: 1;
                     } == 0) {
                         cold_path;
@@ -8493,6 +8525,8 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child"(self, p, i, leaf) {
+    let $load_2: ref Array<i32>;
+    let $load_3: ref Array<i32>;
     let $load_4: ref Array<i32>;
     let $load_5: ref "Array<core:prelude/string.wado/String>";
     let c: i32;
@@ -8502,9 +8536,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if local.tee n(self.nodes) == builtin::array_len(self.lens) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, n, 0);
+    builtin::array_set<i32>(local.tee $load_2(self.lens), n, 0);
     self.nodes = n + 1;
-    cb = local.tee c(builtin::array_get_value<i32>(self.kids, (p * 32) + i)) * 31;
+    cb = local.tee c(builtin::array_get_value<i32>(local.tee $load_3(self.kids), (p * 32) + i)) * 31;
     builtin::array_copy<i32>(local.tee $load_4(self.slots), n * 31, $load_4, (cb + 15) + 1, 15);
     $load_5 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -8528,14 +8562,13 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     if leaf == 0 {
-        builtin::array_copy<i32>(local.tee $load_4(self.kids), n * 32, $load_4, ((c * 32) + 15) + 1, 16);
+        builtin::array_copy<i32>($load_3, n * 32, $load_3, ((c * 32) + 15) + 1, 16);
     }
-    builtin::array_set<i32>(local.tee $load_4(self.lens), c, 15);
-    builtin::array_set<i32>($load_4, n, 15);
+    builtin::array_set<i32>($load_2, c, 15);
+    builtin::array_set<i32>($load_2, n, 15);
     c = p * 31;
-    leaf = builtin::array_get_value<i32>($load_4, p);
-    builtin::array_copy<i32>(local.tee $load_4(self.slots), (c + i) + 1, $load_4, c + i, leaf - i);
-    $load_5 = self.nkeys;
+    leaf = builtin::array_get_value<i32>($load_2, p);
+    builtin::array_copy<i32>($load_4, (c + i) + 1, $load_4, c + i, leaf - i);
     $builtin_arg_4 = (c + i) + 1;
     $builtin_arg_2 = c + i;
     let $builtin_arg_12: i32;
@@ -8556,25 +8589,26 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     $builtin_arg_12 = c + i;
-    $builtin_arg_4 = builtin::array_get_value<i32>(local.tee $load_4(self.slots), cb + 15);
+    $builtin_arg_4 = builtin::array_get_value<i32>($load_4, cb + 15);
     builtin::array_set<i32>($load_4, $builtin_arg_12, $builtin_arg_4);
     c = c + i;
-    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $load_5(self.nkeys), cb + 15)).used;
+    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_5, cb + 15)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_15: ref Array<u8>; $array_clone_src_15 = v.repr; let $array_clone_dst_16: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_16(builtin::array_new<u8>(cb)), 0, $array_clone_src_15, 0, cb); $array_clone_dst_16, used: cb };
     builtin::array_set<ref "core:prelude/string.wado//String">($load_5, c, v);
     c = p * 32;
-    builtin::array_copy<i32>(local.tee $load_4(self.kids), (c + i) + 2, $load_4, (c + i) + 1, leaf - i);
-    builtin::array_set<i32>($load_4, (c + i) + 1, n);
-    builtin::array_set<i32>(self.lens, p, leaf + 1);
+    builtin::array_copy<i32>($load_3, (c + i) + 2, $load_3, (c + i) + 1, leaf - i);
+    builtin::array_set<i32>($load_3, (c + i) + 1, n);
+    builtin::array_set<i32>($load_2, p, leaf + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_slot"(self, n, pos, e, key) {
+    let $load_0: ref Array<i32>;
     let $load_1: ref Array<i32>;
     let $load_2: ref "Array<core:prelude/string.wado/String>";
     let base: i32;
     let len_6: i32;
     base = n * 31;
-    len_6 = builtin::array_get_value<i32>(self.lens, n);
+    len_6 = builtin::array_get_value<i32>(local.tee $load_0(self.lens), n);
     builtin::array_copy<i32>(local.tee $load_1(self.slots), (base + pos) + 1, $load_1, base + pos, len_6 - pos);
     $load_2 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -8599,12 +8633,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
             continue l938;
         };
     };
-    builtin::array_set<i32>(self.slots, base + pos, e);
+    builtin::array_set<i32>($load_1, base + pos, e);
     pos = base + pos;
     base = key.used;
     key = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = key.repr; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>(base)), 0, $array_clone_src_8, 0, base); $array_clone_dst_9, used: base };
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.nkeys, pos, key);
-    builtin::array_set<i32>(self.lens, n, len_6 + 1);
+    builtin::array_set<ref "core:prelude/string.wado//String">($load_2, pos, key);
+    builtin::array_set<i32>($load_0, n, len_6 + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::make_root_room"(self) {
@@ -8620,15 +8654,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if builtin::array_get_value<i32>(local.tee $load_4(self.lens), $load_0) < 31 {
         return;
     }
-    if local.tee $load_0(self.nodes) == builtin::array_len($load_4) {
+    if local.tee n_3(self.nodes) == builtin::array_len($load_4) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, $load_0, 0);
-    self.nodes = $load_0 + 1;
-    builtin::array_set<i32>(self.kids, $load_0 * 32, self.root);
-    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child"(self, $load_0, 0, self.height == 0);
-    self.root = $load_0;
-    self.height = self.height + 1;
+    builtin::array_set<i32>(self.lens, n_3, 0);
+    self.nodes = n_3 + 1;
+    builtin::array_set<i32>(self.kids, n_3 * 32, $load_0);
+    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child"(self, n_3, 0, local.tee $load_0(self.height) == 0);
+    self.root = n_3;
+    self.height = $load_0 + 1;
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"(self, cap) {
@@ -8735,6 +8769,8 @@ fn "core:json/core:json/JsonMapAccess^core:serde/DeserializeMap::next_key<core:p
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split_child"(self, p, i, leaf) {
+    let $load_2: ref Array<i32>;
+    let $load_3: ref Array<i32>;
     let $load_4: ref Array<i32>;
     let $load_5: ref "Array<core:prelude/string.wado/String>";
     let c: i32;
@@ -8744,9 +8780,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if local.tee n(self.nodes) == builtin::array_len(self.lens) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, n, 0);
+    builtin::array_set<i32>(local.tee $load_2(self.lens), n, 0);
     self.nodes = n + 1;
-    cb = local.tee c(builtin::array_get_value<i32>(self.kids, (p * 32) + i)) * 31;
+    cb = local.tee c(builtin::array_get_value<i32>(local.tee $load_3(self.kids), (p * 32) + i)) * 31;
     builtin::array_copy<i32>(local.tee $load_4(self.slots), n * 31, $load_4, (cb + 15) + 1, 15);
     $load_5 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -8770,14 +8806,13 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     if leaf == 0 {
-        builtin::array_copy<i32>(local.tee $load_4(self.kids), n * 32, $load_4, ((c * 32) + 15) + 1, 16);
+        builtin::array_copy<i32>($load_3, n * 32, $load_3, ((c * 32) + 15) + 1, 16);
     }
-    builtin::array_set<i32>(local.tee $load_4(self.lens), c, 15);
-    builtin::array_set<i32>($load_4, n, 15);
+    builtin::array_set<i32>($load_2, c, 15);
+    builtin::array_set<i32>($load_2, n, 15);
     c = p * 31;
-    leaf = builtin::array_get_value<i32>($load_4, p);
-    builtin::array_copy<i32>(local.tee $load_4(self.slots), (c + i) + 1, $load_4, c + i, leaf - i);
-    $load_5 = self.nkeys;
+    leaf = builtin::array_get_value<i32>($load_2, p);
+    builtin::array_copy<i32>($load_4, (c + i) + 1, $load_4, c + i, leaf - i);
     $builtin_arg_4 = (c + i) + 1;
     $builtin_arg_2 = c + i;
     let $builtin_arg_12: i32;
@@ -8798,25 +8833,26 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     $builtin_arg_12 = c + i;
-    $builtin_arg_4 = builtin::array_get_value<i32>(local.tee $load_4(self.slots), cb + 15);
+    $builtin_arg_4 = builtin::array_get_value<i32>($load_4, cb + 15);
     builtin::array_set<i32>($load_4, $builtin_arg_12, $builtin_arg_4);
     c = c + i;
-    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $load_5(self.nkeys), cb + 15)).used;
+    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_5, cb + 15)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_15: ref Array<u8>; $array_clone_src_15 = v.repr; let $array_clone_dst_16: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_16(builtin::array_new<u8>(cb)), 0, $array_clone_src_15, 0, cb); $array_clone_dst_16, used: cb };
     builtin::array_set<ref "core:prelude/string.wado//String">($load_5, c, v);
     c = p * 32;
-    builtin::array_copy<i32>(local.tee $load_4(self.kids), (c + i) + 2, $load_4, (c + i) + 1, leaf - i);
-    builtin::array_set<i32>($load_4, (c + i) + 1, n);
-    builtin::array_set<i32>(self.lens, p, leaf + 1);
+    builtin::array_copy<i32>($load_3, (c + i) + 2, $load_3, (c + i) + 1, leaf - i);
+    builtin::array_set<i32>($load_3, (c + i) + 1, n);
+    builtin::array_set<i32>($load_2, p, leaf + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert_slot"(self, n, pos, e, key) {
+    let $load_0: ref Array<i32>;
     let $load_1: ref Array<i32>;
     let $load_2: ref "Array<core:prelude/string.wado/String>";
     let base: i32;
     let len_6: i32;
     base = n * 31;
-    len_6 = builtin::array_get_value<i32>(self.lens, n);
+    len_6 = builtin::array_get_value<i32>(local.tee $load_0(self.lens), n);
     builtin::array_copy<i32>(local.tee $load_1(self.slots), (base + pos) + 1, $load_1, base + pos, len_6 - pos);
     $load_2 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -8841,12 +8877,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
             continue l963;
         };
     };
-    builtin::array_set<i32>(self.slots, base + pos, e);
+    builtin::array_set<i32>($load_1, base + pos, e);
     pos = base + pos;
     base = key.used;
     key = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = key.repr; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>(base)), 0, $array_clone_src_8, 0, base); $array_clone_dst_9, used: base };
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.nkeys, pos, key);
-    builtin::array_set<i32>(self.lens, n, len_6 + 1);
+    builtin::array_set<ref "core:prelude/string.wado//String">($load_2, pos, key);
+    builtin::array_set<i32>($load_0, n, len_6 + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::make_root_room"(self) {
@@ -8862,15 +8898,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if builtin::array_get_value<i32>(local.tee $load_4(self.lens), $load_0) < 31 {
         return;
     }
-    if local.tee $load_0(self.nodes) == builtin::array_len($load_4) {
+    if local.tee n_3(self.nodes) == builtin::array_len($load_4) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, $load_0, 0);
-    self.nodes = $load_0 + 1;
-    builtin::array_set<i32>(self.kids, $load_0 * 32, self.root);
-    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split_child"(self, $load_0, 0, self.height == 0);
-    self.root = $load_0;
-    self.height = self.height + 1;
+    builtin::array_set<i32>(self.lens, n_3, 0);
+    self.nodes = n_3 + 1;
+    builtin::array_set<i32>(self.kids, n_3 * 32, $load_0);
+    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split_child"(self, n_3, 0, local.tee $load_0(self.height) == 0);
+    self.root = n_3;
+    self.height = $load_0 + 1;
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"(self, cap) {
@@ -8922,6 +8958,8 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::split_child"(self, p, i, leaf) {
+    let $load_2: ref Array<i32>;
+    let $load_3: ref Array<i32>;
     let $load_4: ref Array<i32>;
     let $load_5: ref "Array<core:prelude/string.wado/String>";
     let c: i32;
@@ -8931,9 +8969,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if local.tee n(self.nodes) == builtin::array_len(self.lens) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, n, 0);
+    builtin::array_set<i32>(local.tee $load_2(self.lens), n, 0);
     self.nodes = n + 1;
-    cb = local.tee c(builtin::array_get_value<i32>(self.kids, (p * 32) + i)) * 31;
+    cb = local.tee c(builtin::array_get_value<i32>(local.tee $load_3(self.kids), (p * 32) + i)) * 31;
     builtin::array_copy<i32>(local.tee $load_4(self.slots), n * 31, $load_4, (cb + 15) + 1, 15);
     $load_5 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -8957,14 +8995,13 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     if leaf == 0 {
-        builtin::array_copy<i32>(local.tee $load_4(self.kids), n * 32, $load_4, ((c * 32) + 15) + 1, 16);
+        builtin::array_copy<i32>($load_3, n * 32, $load_3, ((c * 32) + 15) + 1, 16);
     }
-    builtin::array_set<i32>(local.tee $load_4(self.lens), c, 15);
-    builtin::array_set<i32>($load_4, n, 15);
+    builtin::array_set<i32>($load_2, c, 15);
+    builtin::array_set<i32>($load_2, n, 15);
     c = p * 31;
-    leaf = builtin::array_get_value<i32>($load_4, p);
-    builtin::array_copy<i32>(local.tee $load_4(self.slots), (c + i) + 1, $load_4, c + i, leaf - i);
-    $load_5 = self.nkeys;
+    leaf = builtin::array_get_value<i32>($load_2, p);
+    builtin::array_copy<i32>($load_4, (c + i) + 1, $load_4, c + i, leaf - i);
     $builtin_arg_4 = (c + i) + 1;
     $builtin_arg_2 = c + i;
     let $builtin_arg_12: i32;
@@ -8985,25 +9022,26 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     $builtin_arg_12 = c + i;
-    $builtin_arg_4 = builtin::array_get_value<i32>(local.tee $load_4(self.slots), cb + 15);
+    $builtin_arg_4 = builtin::array_get_value<i32>($load_4, cb + 15);
     builtin::array_set<i32>($load_4, $builtin_arg_12, $builtin_arg_4);
     c = c + i;
-    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $load_5(self.nkeys), cb + 15)).used;
+    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_5, cb + 15)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_15: ref Array<u8>; $array_clone_src_15 = v.repr; let $array_clone_dst_16: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_16(builtin::array_new<u8>(cb)), 0, $array_clone_src_15, 0, cb); $array_clone_dst_16, used: cb };
     builtin::array_set<ref "core:prelude/string.wado//String">($load_5, c, v);
     c = p * 32;
-    builtin::array_copy<i32>(local.tee $load_4(self.kids), (c + i) + 2, $load_4, (c + i) + 1, leaf - i);
-    builtin::array_set<i32>($load_4, (c + i) + 1, n);
-    builtin::array_set<i32>(self.lens, p, leaf + 1);
+    builtin::array_copy<i32>($load_3, (c + i) + 2, $load_3, (c + i) + 1, leaf - i);
+    builtin::array_set<i32>($load_3, (c + i) + 1, n);
+    builtin::array_set<i32>($load_2, p, leaf + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::insert_slot"(self, n, pos, e, key) {
+    let $load_0: ref Array<i32>;
     let $load_1: ref Array<i32>;
     let $load_2: ref "Array<core:prelude/string.wado/String>";
     let base: i32;
     let len_6: i32;
     base = n * 31;
-    len_6 = builtin::array_get_value<i32>(self.lens, n);
+    len_6 = builtin::array_get_value<i32>(local.tee $load_0(self.lens), n);
     builtin::array_copy<i32>(local.tee $load_1(self.slots), (base + pos) + 1, $load_1, base + pos, len_6 - pos);
     $load_2 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -9028,12 +9066,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
             continue l979;
         };
     };
-    builtin::array_set<i32>(self.slots, base + pos, e);
+    builtin::array_set<i32>($load_1, base + pos, e);
     pos = base + pos;
     base = key.used;
     key = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = key.repr; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>(base)), 0, $array_clone_src_8, 0, base); $array_clone_dst_9, used: base };
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.nkeys, pos, key);
-    builtin::array_set<i32>(self.lens, n, len_6 + 1);
+    builtin::array_set<ref "core:prelude/string.wado//String">($load_2, pos, key);
+    builtin::array_set<i32>($load_0, n, len_6 + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::make_root_room"(self) {
@@ -9049,15 +9087,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if builtin::array_get_value<i32>(local.tee $load_4(self.lens), $load_0) < 31 {
         return;
     }
-    if local.tee $load_0(self.nodes) == builtin::array_len($load_4) {
+    if local.tee n_3(self.nodes) == builtin::array_len($load_4) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, $load_0, 0);
-    self.nodes = $load_0 + 1;
-    builtin::array_set<i32>(self.kids, $load_0 * 32, self.root);
-    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::split_child"(self, $load_0, 0, self.height == 0);
-    self.root = $load_0;
-    self.height = self.height + 1;
+    builtin::array_set<i32>(self.lens, n_3, 0);
+    self.nodes = n_3 + 1;
+    builtin::array_set<i32>(self.kids, n_3 * 32, $load_0);
+    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,bool>::split_child"(self, n_3, 0, local.tee $load_0(self.height) == 0);
+    self.root = n_3;
+    self.height = $load_0 + 1;
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,bool>::grow"(self, cap) {
@@ -9093,6 +9131,8 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::split_child"(self, p, i, leaf) {
+    let $load_2: ref Array<i32>;
+    let $load_3: ref Array<i32>;
     let $load_4: ref Array<i32>;
     let $load_5: ref "Array<core:prelude/string.wado/String>";
     let c: i32;
@@ -9102,9 +9142,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if local.tee n(self.nodes) == builtin::array_len(self.lens) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, n, 0);
+    builtin::array_set<i32>(local.tee $load_2(self.lens), n, 0);
     self.nodes = n + 1;
-    cb = local.tee c(builtin::array_get_value<i32>(self.kids, (p * 32) + i)) * 31;
+    cb = local.tee c(builtin::array_get_value<i32>(local.tee $load_3(self.kids), (p * 32) + i)) * 31;
     builtin::array_copy<i32>(local.tee $load_4(self.slots), n * 31, $load_4, (cb + 15) + 1, 15);
     $load_5 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -9128,14 +9168,13 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     if leaf == 0 {
-        builtin::array_copy<i32>(local.tee $load_4(self.kids), n * 32, $load_4, ((c * 32) + 15) + 1, 16);
+        builtin::array_copy<i32>($load_3, n * 32, $load_3, ((c * 32) + 15) + 1, 16);
     }
-    builtin::array_set<i32>(local.tee $load_4(self.lens), c, 15);
-    builtin::array_set<i32>($load_4, n, 15);
+    builtin::array_set<i32>($load_2, c, 15);
+    builtin::array_set<i32>($load_2, n, 15);
     c = p * 31;
-    leaf = builtin::array_get_value<i32>($load_4, p);
-    builtin::array_copy<i32>(local.tee $load_4(self.slots), (c + i) + 1, $load_4, c + i, leaf - i);
-    $load_5 = self.nkeys;
+    leaf = builtin::array_get_value<i32>($load_2, p);
+    builtin::array_copy<i32>($load_4, (c + i) + 1, $load_4, c + i, leaf - i);
     $builtin_arg_4 = (c + i) + 1;
     $builtin_arg_2 = c + i;
     let $builtin_arg_12: i32;
@@ -9156,25 +9195,26 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     $builtin_arg_12 = c + i;
-    $builtin_arg_4 = builtin::array_get_value<i32>(local.tee $load_4(self.slots), cb + 15);
+    $builtin_arg_4 = builtin::array_get_value<i32>($load_4, cb + 15);
     builtin::array_set<i32>($load_4, $builtin_arg_12, $builtin_arg_4);
     c = c + i;
-    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $load_5(self.nkeys), cb + 15)).used;
+    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_5, cb + 15)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_15: ref Array<u8>; $array_clone_src_15 = v.repr; let $array_clone_dst_16: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_16(builtin::array_new<u8>(cb)), 0, $array_clone_src_15, 0, cb); $array_clone_dst_16, used: cb };
     builtin::array_set<ref "core:prelude/string.wado//String">($load_5, c, v);
     c = p * 32;
-    builtin::array_copy<i32>(local.tee $load_4(self.kids), (c + i) + 2, $load_4, (c + i) + 1, leaf - i);
-    builtin::array_set<i32>($load_4, (c + i) + 1, n);
-    builtin::array_set<i32>(self.lens, p, leaf + 1);
+    builtin::array_copy<i32>($load_3, (c + i) + 2, $load_3, (c + i) + 1, leaf - i);
+    builtin::array_set<i32>($load_3, (c + i) + 1, n);
+    builtin::array_set<i32>($load_2, p, leaf + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::insert_slot"(self, n, pos, e, key) {
+    let $load_0: ref Array<i32>;
     let $load_1: ref Array<i32>;
     let $load_2: ref "Array<core:prelude/string.wado/String>";
     let base: i32;
     let len_6: i32;
     base = n * 31;
-    len_6 = builtin::array_get_value<i32>(self.lens, n);
+    len_6 = builtin::array_get_value<i32>(local.tee $load_0(self.lens), n);
     builtin::array_copy<i32>(local.tee $load_1(self.slots), (base + pos) + 1, $load_1, base + pos, len_6 - pos);
     $load_2 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -9199,12 +9239,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
             continue l993;
         };
     };
-    builtin::array_set<i32>(self.slots, base + pos, e);
+    builtin::array_set<i32>($load_1, base + pos, e);
     pos = base + pos;
     base = key.used;
     key = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = key.repr; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>(base)), 0, $array_clone_src_8, 0, base); $array_clone_dst_9, used: base };
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.nkeys, pos, key);
-    builtin::array_set<i32>(self.lens, n, len_6 + 1);
+    builtin::array_set<ref "core:prelude/string.wado//String">($load_2, pos, key);
+    builtin::array_set<i32>($load_0, n, len_6 + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::make_root_room"(self) {
@@ -9220,15 +9260,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if builtin::array_get_value<i32>(local.tee $load_4(self.lens), $load_0) < 31 {
         return;
     }
-    if local.tee $load_0(self.nodes) == builtin::array_len($load_4) {
+    if local.tee n_3(self.nodes) == builtin::array_len($load_4) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, $load_0, 0);
-    self.nodes = $load_0 + 1;
-    builtin::array_set<i32>(self.kids, $load_0 * 32, self.root);
-    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::split_child"(self, $load_0, 0, self.height == 0);
-    self.root = $load_0;
-    self.height = self.height + 1;
+    builtin::array_set<i32>(self.lens, n_3, 0);
+    self.nodes = n_3 + 1;
+    builtin::array_set<i32>(self.kids, n_3 * 32, $load_0);
+    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::split_child"(self, n_3, 0, local.tee $load_0(self.height) == 0);
+    self.root = n_3;
+    self.height = $load_0 + 1;
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::grow"(self, cap) {
@@ -9283,6 +9323,8 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::split_child"(self, p, i, leaf) {
+    let $load_2: ref Array<i32>;
+    let $load_3: ref Array<i32>;
     let $load_4: ref Array<i32>;
     let $load_5: ref "Array<core:prelude/string.wado/String>";
     let c: i32;
@@ -9292,9 +9334,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if local.tee n(self.nodes) == builtin::array_len(self.lens) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, n, 0);
+    builtin::array_set<i32>(local.tee $load_2(self.lens), n, 0);
     self.nodes = n + 1;
-    cb = local.tee c(builtin::array_get_value<i32>(self.kids, (p * 32) + i)) * 31;
+    cb = local.tee c(builtin::array_get_value<i32>(local.tee $load_3(self.kids), (p * 32) + i)) * 31;
     builtin::array_copy<i32>(local.tee $load_4(self.slots), n * 31, $load_4, (cb + 15) + 1, 15);
     $load_5 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -9318,14 +9360,13 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     if leaf == 0 {
-        builtin::array_copy<i32>(local.tee $load_4(self.kids), n * 32, $load_4, ((c * 32) + 15) + 1, 16);
+        builtin::array_copy<i32>($load_3, n * 32, $load_3, ((c * 32) + 15) + 1, 16);
     }
-    builtin::array_set<i32>(local.tee $load_4(self.lens), c, 15);
-    builtin::array_set<i32>($load_4, n, 15);
+    builtin::array_set<i32>($load_2, c, 15);
+    builtin::array_set<i32>($load_2, n, 15);
     c = p * 31;
-    leaf = builtin::array_get_value<i32>($load_4, p);
-    builtin::array_copy<i32>(local.tee $load_4(self.slots), (c + i) + 1, $load_4, c + i, leaf - i);
-    $load_5 = self.nkeys;
+    leaf = builtin::array_get_value<i32>($load_2, p);
+    builtin::array_copy<i32>($load_4, (c + i) + 1, $load_4, c + i, leaf - i);
     $builtin_arg_4 = (c + i) + 1;
     $builtin_arg_2 = c + i;
     let $builtin_arg_12: i32;
@@ -9346,25 +9387,26 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
         };
     };
     $builtin_arg_12 = c + i;
-    $builtin_arg_4 = builtin::array_get_value<i32>(local.tee $load_4(self.slots), cb + 15);
+    $builtin_arg_4 = builtin::array_get_value<i32>($load_4, cb + 15);
     builtin::array_set<i32>($load_4, $builtin_arg_12, $builtin_arg_4);
     c = c + i;
-    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $load_5(self.nkeys), cb + 15)).used;
+    cb = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_5, cb + 15)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_15: ref Array<u8>; $array_clone_src_15 = v.repr; let $array_clone_dst_16: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_16(builtin::array_new<u8>(cb)), 0, $array_clone_src_15, 0, cb); $array_clone_dst_16, used: cb };
     builtin::array_set<ref "core:prelude/string.wado//String">($load_5, c, v);
     c = p * 32;
-    builtin::array_copy<i32>(local.tee $load_4(self.kids), (c + i) + 2, $load_4, (c + i) + 1, leaf - i);
-    builtin::array_set<i32>($load_4, (c + i) + 1, n);
-    builtin::array_set<i32>(self.lens, p, leaf + 1);
+    builtin::array_copy<i32>($load_3, (c + i) + 2, $load_3, (c + i) + 1, leaf - i);
+    builtin::array_set<i32>($load_3, (c + i) + 1, n);
+    builtin::array_set<i32>($load_2, p, leaf + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::insert_slot"(self, n, pos, e, key) {
+    let $load_0: ref Array<i32>;
     let $load_1: ref Array<i32>;
     let $load_2: ref "Array<core:prelude/string.wado/String>";
     let base: i32;
     let len_6: i32;
     base = n * 31;
-    len_6 = builtin::array_get_value<i32>(self.lens, n);
+    len_6 = builtin::array_get_value<i32>(local.tee $load_0(self.lens), n);
     builtin::array_copy<i32>(local.tee $load_1(self.slots), (base + pos) + 1, $load_1, base + pos, len_6 - pos);
     $load_2 = self.nkeys;
     let $builtin_arg_2: i32;
@@ -9389,12 +9431,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
             continue l1009;
         };
     };
-    builtin::array_set<i32>(self.slots, base + pos, e);
+    builtin::array_set<i32>($load_1, base + pos, e);
     pos = base + pos;
     base = key.used;
     key = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = key.repr; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>(base)), 0, $array_clone_src_8, 0, base); $array_clone_dst_9, used: base };
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.nkeys, pos, key);
-    builtin::array_set<i32>(self.lens, n, len_6 + 1);
+    builtin::array_set<ref "core:prelude/string.wado//String">($load_2, pos, key);
+    builtin::array_set<i32>($load_0, n, len_6 + 1);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::make_root_room"(self) {
@@ -9410,15 +9452,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     if builtin::array_get_value<i32>(local.tee $load_4(self.lens), $load_0) < 31 {
         return;
     }
-    if local.tee $load_0(self.nodes) == builtin::array_len($load_4) {
+    if local.tee n_3(self.nodes) == builtin::array_len($load_4) {
         "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::grow_nodes"(self);
     }
-    builtin::array_set<i32>(self.lens, $load_0, 0);
-    self.nodes = $load_0 + 1;
-    builtin::array_set<i32>(self.kids, $load_0 * 32, self.root);
-    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::split_child"(self, $load_0, 0, self.height == 0);
-    self.root = $load_0;
-    self.height = self.height + 1;
+    builtin::array_set<i32>(self.lens, n_3, 0);
+    self.nodes = n_3 + 1;
+    builtin::array_set<i32>(self.kids, n_3 * 32, $load_0);
+    "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::split_child"(self, n_3, 0, local.tee $load_0(self.height) == 0);
+    self.root = n_3;
+    self.height = $load_0 + 1;
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>::grow"(self, cap) {

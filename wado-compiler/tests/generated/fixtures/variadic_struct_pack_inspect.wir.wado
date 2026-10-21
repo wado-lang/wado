@@ -1715,6 +1715,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 }
 
 fn "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(self, f) {
+    let $load_5: ref Array<u8>;
     let new_used_19: i32;
     let start_20: i32;
     let x: i64;
@@ -1730,9 +1731,9 @@ fn "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect
     new_used_19 = local.tee start_20(self.0) < 0;
     start_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_20); select i64(x < 0_i64, 0_i64 - x, x)));
     new_used_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, new_used_19, start_20);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, new_used_19, x, start_20);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_5(f.repr), new_used_19, x, start_20);
     start_20 = self.1;
-    if @unlikely(local.tee new_used_19(f.used + 2) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee new_used_19(f.used + 2) > builtin::array_len($load_5)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_19);
     }

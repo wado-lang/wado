@@ -2687,8 +2687,8 @@ fn "core:prelude/primitive.wado/char::from_u32$contract_report0"(value, $site) {
     builtin::array_copy<u8>($load_2, start_52, global:core:prelude/primitive.wado::$const_obj_29, 0, 7);
     value = "core:prelude/primitive.wado/count_digits_u64"(local.tee value_62(builtin::i64_extend_i32_u(value)));
     start_52 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, 0, value);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_52, value_62, value);
-    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2($local_2.repr), start_52, value_62, value);
+    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, value);
     }
@@ -2861,8 +2861,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::truncate$contract_
     start_52 = byte_len < 0;
     byte_len = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(byte_len); select i64(x < 0_i64, 0_i64 - x, x)));
     start_52 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_12, start_52, byte_len);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_12.repr, start_52, x, byte_len);
-    if @unlikely(local.tee byte_len($local_12.used + 1) > builtin::array_len($local_12.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2($local_12.repr), start_52, x, byte_len);
+    if @unlikely(local.tee byte_len($local_12.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, byte_len);
     }
@@ -4571,13 +4571,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap"(self, by
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::remove$unchecked"(self, byte_index) {
-    let $load_2: ref Array<u8>;
+    let $load_0: ref Array<u8>;
     let $av_18: i32;
     let $mv$$pattern_temp_0$0: u32;
     let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(self.repr, byte_index);
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(local.tee $load_0(self.repr), byte_index);
     $av_18 = self.used;
-    builtin::array_copy<u8>(local.tee $load_2(self.repr), byte_index, $load_2, byte_index + $mv$$pattern_temp_0$1, ($av_18 - byte_index) - $mv$$pattern_temp_0$1);
+    builtin::array_copy<u8>($load_0, byte_index, $load_0, byte_index + $mv$$pattern_temp_0$1, ($av_18 - byte_index) - $mv$$pattern_temp_0$1);
     self.used = $av_18 - $mv$$pattern_temp_0$1;
     if @unlikely((if $mv$$pattern_temp_0$0 <u 55296 -> i32 {
         1;
@@ -5537,14 +5537,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/slice.wa
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_0: ref "core:prelude/string.wado//String";
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteList"), used: 8 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_0 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_0);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteList"), used: 8 }, $load_0);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -5577,14 +5574,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$uncheck
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self.repr, self.start, self.end, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_3 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_3);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 }, $load_3);
 }
 
 fn "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {

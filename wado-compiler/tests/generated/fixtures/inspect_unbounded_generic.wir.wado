@@ -1016,7 +1016,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_17, self_4.repr, self_4.used, new_used_16);
         };
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_4(f.buf).repr, start_17, x_49, new_used_16);
-        if @unlikely(local.tee new_used_16(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
+        if @unlikely(local.tee new_used_16(self_4.used + 1) > builtin::array_len(self_4.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, new_used_16);
         }
@@ -1077,7 +1077,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_17, self_4.repr, self_4.used, payload);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_4(f.buf).repr, start_17, x_49, payload);
-    if @unlikely(local.tee payload(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee payload(self_4.used + 1) > builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, payload);
     }
@@ -1164,7 +1164,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<i
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, f_7.repr, f_7.used, 1);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_7(f.buf).repr, start_25, 9_i64, 1);
-    if @unlikely(local.tee start_25(local.tee f_7(f.buf).used + 1) > builtin::array_len(f_7.repr)) {
+    if @unlikely(local.tee start_25(f_7.used + 1) > builtin::array_len(f_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_7, start_25);
     }
@@ -1213,6 +1213,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<i
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(payload, f) {
+    let $load_4: ref Array<u8>;
     let new_used_115: i32;
     let start_116: i32;
     let x_128: i64;
@@ -1226,8 +1227,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_116 = payload < 0;
     payload = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s(payload); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
     start_116 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, start_116, payload);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, start_116, x_128, payload);
-    if @unlikely(local.tee payload(f.used + 1) > builtin::array_len(f.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(f.repr), start_116, x_128, payload);
+    if @unlikely(local.tee payload(f.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, payload);
     }
@@ -1865,7 +1866,7 @@ fn "core:prelude/traits.wado/inspect_unbounded_generic.wado/P^core:prelude/trait
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, f_6.repr, f_6.used, 1);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_6(f.buf).repr, start_24, 9_i64, 1);
-    if @unlikely(local.tee start_24(local.tee f_6(f.buf).used + 2) > builtin::array_len(f_6.repr)) {
+    if @unlikely(local.tee start_24(f_6.used + 2) > builtin::array_len(f_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_6, start_24);
     }

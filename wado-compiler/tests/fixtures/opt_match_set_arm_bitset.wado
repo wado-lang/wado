@@ -1,0 +1,41 @@
+// A match with one set arm and a wildcard tests membership with a mask, as a
+// `matches` over the same set does, whatever the arms yield. A parser's
+// lookahead is this shape: `match token { FIRST_OF_X => return alt, _ => {} }`.
+
+fn follows(t: i32) -> i32 {
+    match t {
+        1 | 5..=8 | 10..=23 | 31 | 38 | 44 | 76 | 101..=102 | 117 => {
+            return 5;
+        },
+        _ => {},
+    };
+    return 0;
+}
+
+fn label(t: i32) -> String {
+    return match t {
+        0 | 3..=4 | 153..=158 => "end",
+        _ => "more",
+    };
+}
+
+export fn run() {
+    assert follows(builtin::black_box(1)) == 5;
+    assert follows(builtin::black_box(7)) == 5;
+    assert follows(builtin::black_box(117)) == 5;
+    assert follows(builtin::black_box(9)) == 0;
+    assert follows(builtin::black_box(0)) == 0;
+    assert follows(builtin::black_box(118)) == 0;
+    assert follows(builtin::black_box(-3)) == 0;
+    assert label(builtin::black_box(0)) == "end";
+    assert label(builtin::black_box(155)) == "end";
+    assert label(builtin::black_box(2)) == "more";
+    assert label(builtin::black_box(159)) == "more";
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["select u64($bitset_offset"],
+    "wir_not_expect:O2": ["br_table", " >= 10) & ("]
+}

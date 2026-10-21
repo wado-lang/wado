@@ -1202,6 +1202,22 @@ variant Nested<T> {
 }
 ```
 
+A generic function is refused the same way where it calls itself, directly or
+through other calls, at an argument built over its own parameter:
+`walk::<String>` would need `walk::<&String>`, which would need
+`walk::<&&String>`, without end.
+
+<!-- {"fixture":"expanding_recursion_function_refused.wado"} -->
+
+```wado
+fn walk<S: AsStrSlice>(n: i32, s: S) -> i32 {
+    if n == 0 {
+        return s.len();
+    }
+    return walk(n - 1, &s);
+}
+```
+
 ## Affine Types
 
 An affine type is move-only: a value of it is used at most once. An affine

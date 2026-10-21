@@ -69,6 +69,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:template_string_names_prelude_format.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(110, 61);
 
 fn "template_string_names_prelude_format.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let n_0: i32;
     let $local_1: ref "core:prelude/string.wado//String";
     let new_used_14: i32;
@@ -82,11 +83,11 @@ fn "template_string_names_prelude_format.wado/run"() with Stdout {
     }
     start_15 = $local_1.used;
     $local_1.used = new_used_14;
-    builtin::array_copy<u8>($local_1.repr, start_15, global:template_string_names_prelude_format.wado::$const_obj_3, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_15, global:template_string_names_prelude_format.wado::$const_obj_3, 0, 2);
     start_15 = local.tee n_0(n_0 * 2) < 0;
     n_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s(n_0); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
     if start_15 {
-        if @unlikely(local.tee start_15($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+        if @unlikely(local.tee start_15($local_1.used + 1) > builtin::array_len($load_2)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_15);
         }

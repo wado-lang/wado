@@ -1,0 +1,280 @@
+//! Which alternatives of a decision an earlier one subsumes. Whatever the later
+//! alternative matches, the earlier one matches too, in the same context, so
+//! ANTLR4, which resolves an ambiguity to the lowest alternative, never takes
+//! the later one. SQLite's `simple_select_stmt` is `factored_select_stmt`
+//! without its compound loop, and `select_stmt` is `factored_select_stmt` over
+//! a copy of `select_core`: a tournament that still scanned them scanned the
+//! statement three times to pick the one it would have picked anyway.
+//!
+//! The test is structural and conservative. An alternative subsumes another
+//! where its elements embed the other's, each element containing its partner
+//! and every element left over able to match nothing. A predicate can refuse
+//! what its alternative matches, so an alternative carrying an action is
+//! compared with nothing. A left-recursive rule's self-references take a
+//! precedence its body does not show, so its body is never unfolded, and a
+//! call to it equals only another call to it.
+
+use { Alternative, Element, RepeatKind } from "./ir.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { rule_is_left_recursive } from "./lr_util.wado";
+
+/// How deep a comparison unfolds a rule against an element that is not one.
+/// Real grammars nest a handful of levels before reaching a token; past this
+/// the comparison answers "not subsumed", which only keeps a candidate.
+global UNFOLD_LIMIT: i32 = 16;
+
+/// Per slot of `alt_of`, whether an alternative with a lower index subsumes it.
+/// `ranked` says the alternatives are a left-recursive rule's own, whose
+/// self-references each take their alternative's precedence, so none is.
+pub fn subsumed_alts(
+    alt_of: &List<i32>,
+    alts: &List<Alternative>,
+    ranked: bool,
+    analysis: &mut GrammarAnalysis,
+) -> List<bool> {
+    let mut out: List<bool> = [];
+    if ranked {
+        for let _ of alt_of {
+            out.push(false);
+        }
+        return out;
+    }
+    for let b of alt_of {
+        let mut subsumed = false;
+        for let a of alt_of {
+            if *a < *b && alt_contains(&alts[*a], &alts[*b], analysis, &mut [], 0) {
+                subsumed = true;
+                break;
+            }
+        }
+        out.push(subsumed);
+    }
+    return out;
+}
+
+fn alt_contains(
+    a: &Alternative,
+    b: &Alternative,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    return a.actions.is_empty()
+        && b.actions.is_empty()
+        && seq_contains(&a.elements, 0, &b.elements, 0, analysis, assumed, depth);
+}
+
+/// Whether `a[i..]` matches everything `b[j..]` does: each of `b`'s elements
+/// paired, in order, with one of `a`'s that contains it, and each of `a`'s left
+/// unpaired able to match nothing.
+fn seq_contains(
+    a: &List<Element>,
+    i: i32,
+    b: &List<Element>,
+    j: i32,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    if j == b.len() {
+        for let k of i..<a.len() {
+            if !skippable(&a[k]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if i == a.len() {
+        return false;
+    }
+    if elem_contains(&a[i], &b[j], analysis, assumed, depth)
+        && seq_contains(a, i + 1, b, j + 1, analysis, assumed, depth) {
+        return true;
+    }
+    return skippable(&a[i]) && seq_contains(a, i + 1, b, j, analysis, assumed, depth);
+}
+
+fn skippable(e: &Element) -> bool {
+    return peel(e) matches { Repeat(r) && r.kind matches { Star | Optional } };
+}
+
+fn peel(e: &Element) -> &Element {
+    let mut cur = e;
+    while let Label(l) = cur {
+        cur = &l.element;
+    }
+    return cur;
+}
+
+/// Whether `a` repeats at least as often as `b` can: `?` within `?` or `*`,
+/// `+` within `+` or `*`, `*` within `*`.
+fn count_within(b: RepeatKind, a: RepeatKind) -> bool {
+    return match a {
+        Star => true,
+        Plus => b matches { Plus },
+        Optional => b matches { Optional },
+    };
+}
+
+fn elem_contains(
+    a: &Element,
+    b: &Element,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    let a = peel(a);
+    let b = peel(b);
+    if let Repeat(ra) = a {
+        if let Repeat(rb) = b {
+            return count_within(rb.kind, ra.kind) && elem_contains(&ra.element, &rb.element, analysis, assumed, depth);
+        }
+        return elem_contains(&ra.element, b, analysis, assumed, depth);
+    }
+    if b matches { Repeat(_) } {
+        return false;
+    }
+    if let Group(ga) = a && let Group(gb) = b {
+        for let bt of &gb.alternatives {
+            if !any_alt_contains(&ga.alternatives, bt, analysis, assumed, depth) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if let Group(gb) = b {
+        return contains_every_alt(&Alternative::new([*a]), &gb.alternatives, analysis, assumed, depth);
+    }
+    return match a {
+        Group(ga) => any_alt_contains(&ga.alternatives, &Alternative::new([*b]), analysis, assumed, depth),
+        RuleRef(ra) && ra.arg_action matches { Some(_) } => false,
+        RuleRef(ra) => match b {
+            RuleRef(rb) && rb.arg_action matches { Some(_) } => false,
+            RuleRef(rb) => rule_contains(&ra.name, &rb.name, analysis, assumed),
+            _ => unfolded_contains(&ra.name, b, analysis, assumed, depth),
+        },
+        TokenRef(_) | Literal(_) => match b {
+            TokenRef(_) | Literal(_) => analysis.terminal_kind(a) == analysis.terminal_kind(b),
+            RuleRef(rb) && rb.arg_action matches { None } => unfolded_contained(a, &rb.name, analysis, assumed, depth),
+            _ => false,
+        },
+        _ => false,
+    };
+}
+
+/// Whether rule `ra` matches everything rule `rb` does. A pair already being
+/// compared is assumed to hold: the comparison is a simulation, and a string
+/// `rb` derives is matched by induction on the derivation.
+fn rule_contains<S: AsStrSlice, S1: AsStrSlice>(
+    ra: S,
+    rb: S1,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+) -> bool {
+    if ra.to_string() == rb.to_string() {
+        return true;
+    }
+    let Some(alts_a) = comparable_alts(ra, analysis) else {
+        return false;
+    };
+    let Some(alts_b) = comparable_alts(rb, analysis) else {
+        return false;
+    };
+    let pair = [
+        ra.to_string(),
+        rb.to_string(),
+    ];
+    if assumed.contains(&pair) {
+        return true;
+    }
+    assumed.push(pair);
+    let mut holds = true;
+    for let bt of alts_b {
+        if !any_alt_contains(alts_a, bt, analysis, assumed, 0) {
+            holds = false;
+            break;
+        }
+    }
+    assumed.pop();
+    return holds;
+}
+
+/// Whether rule `ra` matches everything the element `b` does, by its
+/// alternatives.
+fn unfolded_contains<S: AsStrSlice>(
+    ra: S,
+    b: &Element,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    if depth >= UNFOLD_LIMIT {
+        return false;
+    }
+    let Some(alts_a) = comparable_alts(ra, analysis) else {
+        return false;
+    };
+    return any_alt_contains(alts_a, &Alternative::new([*b]), analysis, assumed, depth + 1);
+}
+
+/// Whether the element `a` matches everything rule `rb` does, alternative by
+/// alternative.
+fn unfolded_contained<S: AsStrSlice>(
+    a: &Element,
+    rb: S,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    if depth >= UNFOLD_LIMIT {
+        return false;
+    }
+    let Some(alts_b) = comparable_alts(rb, analysis) else {
+        return false;
+    };
+    return contains_every_alt(&Alternative::new([*a]), alts_b, analysis, assumed, depth + 1);
+}
+
+/// Whether one of `alts_a` contains `b`.
+fn any_alt_contains(
+    alts_a: &List<Alternative>,
+    b: &Alternative,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    for let at of alts_a {
+        if alt_contains(at, b, analysis, assumed, depth) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether `a` contains every one of `alts_b`.
+fn contains_every_alt(
+    a: &Alternative,
+    alts_b: &List<Alternative>,
+    analysis: &mut GrammarAnalysis,
+    assumed: &mut List<[String, String]>,
+    depth: i32,
+) -> bool {
+    for let bt of alts_b {
+        if !alt_contains(a, bt, analysis, assumed, depth) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The alternatives of a rule the comparison may read: none for a
+/// left-recursive one, whose self-references take a precedence they do not show.
+fn comparable_alts<S: AsStrSlice>(name: S, analysis: &GrammarAnalysis) -> Option<&List<Alternative>> {
+    let Some(rule) = analysis.find_rule(name) else {
+        return null;
+    };
+    if rule_is_left_recursive(rule) {
+        return null;
+    }
+    return Option::Some(&rule.alternatives);
+}

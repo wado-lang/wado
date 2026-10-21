@@ -362,7 +362,7 @@ fn "contract_trait_effect_param.wado/contract_trait_effect_param.wado/Twice^cont
     start_64 = n < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_64 {
-        if @unlikely(local.tee start_64($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+        if @unlikely(local.tee start_64($local_4.used + 1) > builtin::array_len($load_2)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_64);
         }
@@ -383,8 +383,8 @@ fn "contract_trait_effect_param.wado/contract_trait_effect_param.wado/Twice^cont
     }
     start_64 = $local_4.used;
     $local_4.used = start_69;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, start_64, x, n);
-    if @unlikely(local.tee n($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2($local_4.repr), start_64, x, n);
+    if @unlikely(local.tee n($local_4.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, n);
     }

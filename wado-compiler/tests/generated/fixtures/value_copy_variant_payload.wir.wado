@@ -2496,33 +2496,32 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
 }
 
 fn "core:prelude/traits.wado/value_copy_variant_payload.wado/Wrapper^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let new_used_48: i32;
     let start_49: i32;
     let $sroa_other_repr_70: ref Array<u8>;
     if ref.is_null(self) == 0 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper"), used: 7 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_0(f.buf), s_9);
         $sroa_other_repr_70 = array.new_fixed<u8>(58, 58);
-        if @unlikely(local.tee new_used_48(s_9.used + 2) > builtin::array_len(s_9.repr)) {
+        if @unlikely(local.tee new_used_48($load_0.used + 2) > builtin::array_len($load_0.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_9, new_used_48);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, new_used_48);
         }
-        start_49 = s_9.used;
-        s_9.used = new_used_48;
-        builtin::array_copy<u8>(s_9.repr, start_49, $sroa_other_repr_70, 0, 2);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(68, 97, 116, 97), used: 4 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
+        start_49 = $load_0.used;
+        $load_0.used = new_used_48;
+        builtin::array_copy<u8>($load_0.repr, start_49, $sroa_other_repr_70, 0, 2);
+        $load_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(68, 97, 116, 97), used: 4 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, $load_0);
         if @unlikely(ref.is_null(self) != 0) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<i32>>"(ref.as_non_null(self), f);
     }
     if ref.is_null(self) {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper"), used: 7 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
-        s_9 = f.buf;
+        $load_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper"), used: 7 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_9(f.buf), $load_0);
         $sroa_other_repr_70 = array.new_fixed<u8>(58, 58);
         if @unlikely(local.tee start_49(s_9.used + 2) > builtin::array_len(s_9.repr)) {
             cold_path;

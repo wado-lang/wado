@@ -588,6 +588,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(payload, f) {
+    let $load_4: ref Array<u8>;
     let new_used_115: i32;
     let start_116: i32;
     let x_128: i64;
@@ -601,8 +602,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_116 = payload < 0;
     payload = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s(payload); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
     start_116 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, start_116, payload);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, start_116, x_128, payload);
-    if @unlikely(local.tee payload(f.used + 1) > builtin::array_len(f.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(f.repr), start_116, x_128, payload);
+    if @unlikely(local.tee payload(f.used + 1) > builtin::array_len($load_4)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, payload);
     }
@@ -929,8 +930,8 @@ fn "core:prelude/traits.wado/inspect_ref_over_generic_pointee.wado/Box<i32>^core
     start_25 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     start_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, start_25, self);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, start_25, x, self);
-    if @unlikely(local.tee self(f.used + 2) > builtin::array_len(f.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(f.repr), start_25, x, self);
+    if @unlikely(local.tee self(f.used + 2) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
     }

@@ -6,7 +6,10 @@ use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
 use sqlite from "../../tests/grammars/SQLite.g4"
     with {
-        generator: { module: "../../src/generator.wado" },
+        generator: {
+            module: "../../src/generator.wado",
+            options: { atn: "never" },
+        },
     };
 
 global INPUT: String = #include_str("../../../benchmark/sqlite_parse/queries.sql");

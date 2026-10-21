@@ -647,6 +647,7 @@ fn "spec_reflection_struct.wado/$cm_export__$test_5_a_generic_struct_substitutes
 }
 
 fn "spec_reflection_struct.wado/spec_reflection_struct.wado/values<spec_reflection_struct.wado/Pair<f64>,[f64,i32]>"($mv$v$left, $mv$v$right) {
+    let $load_9: ref Array<u8>;
     let out_1: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let new_used_30: i32;
@@ -677,8 +678,8 @@ fn "spec_reflection_struct.wado/spec_reflection_struct.wado/values<spec_reflecti
     start_31 = $mv$v$right < 0;
     $mv$v$right = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$v$right); select i64(x < 0_i64, 0_i64 - x, x)));
     start_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_31, $mv$v$right);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_31, x, $mv$v$right);
-    if @unlikely(local.tee $mv$v$right($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_9($local_3.repr), start_31, x, $mv$v$right);
+    if @unlikely(local.tee $mv$v$right($local_3.used + 1) > builtin::array_len($load_9)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $mv$v$right);
     }
@@ -699,6 +700,7 @@ fn "spec_reflection_struct.wado/spec_reflection_struct.wado/values<spec_reflecti
 }
 
 fn "spec_reflection_struct.wado/spec_reflection_struct.wado/values<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,[core:prelude/string.wado/String,i32]>"($mv$v$left, $mv$v$right) {
+    let $load_11: ref Array<u8>;
     let out_1: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let new_used_28: i32;
@@ -728,8 +730,8 @@ fn "spec_reflection_struct.wado/spec_reflection_struct.wado/values<spec_reflecti
     start_29 = $mv$v$right < 0;
     $mv$v$right = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$v$right); select i64(x < 0_i64, 0_i64 - x, x)));
     start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_29, $mv$v$right);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_29, x, $mv$v$right);
-    if @unlikely(local.tee $mv$v$right($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_11($local_3.repr), start_29, x, $mv$v$right);
+    if @unlikely(local.tee $mv$v$right($local_3.used + 1) > builtin::array_len($load_11)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $mv$v$right);
     }
@@ -2181,8 +2183,8 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<spec_reflection_struct.wado/Pair<f64>,[f64,i32]>"($mv$v$left, $mv$v$right, f) {
+    let $load_2: ref "core:prelude/string.wado//String";
     let self_11: ref "core:prelude/string.wado//String";
-    let self_12: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<f64>,f64>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<f64>,i32>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<f64>^core:prelude/traits.wado/ReflectStruct::members"();
@@ -2190,29 +2192,27 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     self_11 = $mv$$tuple_0$0.field_name;
-    self_12 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_11, self_12);
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_12);
+    $load_2 = f.buf;
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_11, $load_2);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), $load_2);
     "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"($mv$v$left, f);
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), self_12);
+    $load_2 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), $load_2);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_12 = $mv$$tuple_0$1.field_name;
+    $load_2 = $mv$$tuple_0$1.field_name;
     self_11 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_12, self_11);
-    self_11 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_11);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($load_2, self_11);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $load_2(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_11);
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"($mv$v$right, f);
     self_11 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), self_11);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $load_2(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), self_11);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(125), used: 1 });
     return;
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,[core:prelude/string.wado/String,i32]>"($mv$v$left, $mv$v$right, f) {
+    let $load_2: ref "core:prelude/string.wado//String";
     let self_11: ref "core:prelude/string.wado//String";
-    let self_12: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,core:prelude/string.wado/String>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,i32>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/ReflectStruct::members"();
@@ -2220,22 +2220,20 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     self_11 = $mv$$tuple_0$0.field_name;
-    self_12 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_11, self_12);
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_12);
+    $load_2 = f.buf;
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_11, $load_2);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_11(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), $load_2);
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, $mv$v$left.repr, $mv$v$left.used);
     $mv$v$left = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), $mv$v$left);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $load_2(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), $mv$v$left);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     $mv$v$left = $mv$$tuple_0$1.field_name;
-    self_12 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$v$left, self_12);
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $mv$v$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_12);
+    $load_2 = f.buf;
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$v$left, $load_2);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $mv$v$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), $load_2);
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"($mv$v$right, f);
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $mv$v$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), self_12);
+    $load_2 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $mv$v$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 }), $load_2);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(125), used: 1 });
     return;
 }
@@ -3671,34 +3669,26 @@ fn "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<core:prelude/st
 }
 
 fn "core:prelude/traits.wado/spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"($mv$self$left, $mv$self$right, f) {
-    let self_13: ref "core:prelude/string.wado//String";
-    let other_16: ref "core:prelude/string.wado//String";
+    let $load_1: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,[core:prelude/string.wado/String,i32]>"($mv$self$left, $mv$self$right, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>>$sroa[f.buf]"(f.buf);
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>>$sroa[f.buf]"(local.tee $load_1(f.buf));
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,core:prelude/string.wado/String>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>,i32>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/ReflectStruct::members"();
-    self_13 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_16(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }), self_13);
-    self_13 = $mv$$tuple_0$0.field_name;
-    other_16 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_13, other_16);
-    other_16 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_13(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_16);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$$tuple_0$0.field_name, $load_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $load_1);
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, $mv$self$left.repr, $mv$self$left.used);
     $mv$self$left = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_16(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), $mv$self$left);
-    $mv$self$left = $mv$$tuple_0$1.field_name;
-    other_16 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$self$left, other_16);
-    other_16 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $mv$self$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_16);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $load_1(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), $mv$self$left);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(local.tee $load_1($mv$$tuple_0$1.field_name), $mv$self$left);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $load_1(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), $mv$self$left);
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"($mv$self$right, f);
-    other_16 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $mv$self$left(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), other_16);
+    $mv$self$left = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $load_1(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), $mv$self$left);
 }
 
 fn "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<f64>^core:prelude/traits.wado/ReflectStruct::members"() {
@@ -3706,34 +3696,26 @@ fn "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<f64>^core:prelu
 }
 
 fn "core:prelude/traits.wado/spec_reflection_struct.wado/Pair<f64>^core:prelude/traits.wado/Inspect::inspect"($mv$self$left, $mv$self$right, f) {
-    let self_13: ref "core:prelude/string.wado//String";
-    let other_16: ref "core:prelude/string.wado//String";
+    let $load_1: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<spec_reflection_struct.wado/Pair<f64>,[f64,i32]>"($mv$self$left, $mv$self$right, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_reflection_struct.wado/Pair<f64>>$sroa[f.buf]"(f.buf);
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_reflection_struct.wado/Pair<f64>>$sroa[f.buf]"(local.tee $load_1(f.buf));
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<f64>,f64>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//StructField<spec_reflection_struct.wado/Pair<f64>,i32>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "spec_reflection_struct.wado/spec_reflection_struct.wado/Pair<f64>^core:prelude/traits.wado/ReflectStruct::members"();
-    self_13 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_16(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }), self_13);
-    self_13 = $mv$$tuple_0$0.field_name;
-    other_16 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_13, other_16);
-    other_16 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_13(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_16);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$$tuple_0$0.field_name, $load_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $load_1);
     "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"($mv$self$left, f);
-    other_16 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_13(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), other_16);
-    other_16 = $mv$$tuple_0$1.field_name;
-    self_13 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(other_16, self_13);
-    self_13 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_16(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), self_13);
+    $load_1 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$$tuple_0$1.field_name, $load_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $load_1);
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"($mv$self$right, f);
-    self_13 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_16(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), self_13);
+    $load_1 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }, $load_1);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf]"(self, at, n, c) {

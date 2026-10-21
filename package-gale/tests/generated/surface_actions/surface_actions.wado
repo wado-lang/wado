@@ -1029,7 +1029,7 @@ internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
 }
 
 internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
+    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 

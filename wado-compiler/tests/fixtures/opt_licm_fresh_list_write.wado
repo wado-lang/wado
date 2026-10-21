@@ -1,0 +1,27 @@
+// LICM hoists `xs.len()` out of a loop that pushes onto a list the function
+// built. The push writes `used` of a `List<i32>` each iteration, but the
+// heap frame keeps that fresh list apart from the parameter, so the write
+// cannot reach `xs.used` and its bounds check moves out with it.
+
+fn starts(xs: &List<i32>) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut i = 0; i < xs.len(); i += 1 {
+        if xs[i] == 0 {
+            out.push(i);
+        }
+    }
+    return out;
+}
+
+export fn run() {
+    let xs: List<i32> = builtin::black_box([0, 1, 0, 2, 0]);
+    let out = starts(&xs);
+    assert out.len() == 3 && out[0] == 0 && out[1] == 2 && out[2] == 4;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "starts",
+    "wir_expect:O2": ["$licm_used"]
+}

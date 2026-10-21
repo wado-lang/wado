@@ -1524,13 +1524,12 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
             if p.peek_kind() == TK_LIT_x {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
-                let _rec_spec = p.speculating;
+                let _rec_outer = p.speculating;
                 p.speculating = true;
                 p.site = 0;
                 _parse_item(p);
-                p.speculating = _rec_spec;
-                p.recovering = _rec_sav;
+                p.speculating = _rec_outer;
+                p.recovering = false;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }

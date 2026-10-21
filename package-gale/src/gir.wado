@@ -39,6 +39,7 @@
 use { Level } from "core:log";
 use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
+use { sets_overlap } from "./token_kinds.wado";
 
 // ==========================================================================
 // Top-level
@@ -231,13 +232,17 @@ pub variant DiagnosticKind {
     /// A `fragment_entries` option names a parser rule that does not exist. The
     /// name is skipped; other entries still apply.
     FragmentEntry,
+    /// Under `atn: "never"`, a decision only the runtime ATN simulator makes.
+    /// No parser is built from such a grammar.
+    SimulatorRequired,
 }
 
 /// The level a build reports `kind` at, or `null` for one it does not report.
 ///
-/// `Warn` means the parser an author gets is not the one the grammar describes.
-/// `OverlapTournament` is sound and usually intended, so it is `Info`: it fires
-/// on most real grammars, and a default run stays quiet.
+/// `Error` means no parser is built, and `Warn` that the parser an author gets
+/// is not the one the grammar describes. `OverlapTournament` is sound and
+/// usually intended, so it is `Info`: it fires on most real grammars, and a
+/// default run stays quiet.
 ///
 /// `OptionalScanGuardFallback` describes a shape, not a mistake — every `e?`
 /// whose body leads with a rule reference resolves that way, and most cannot be
@@ -248,6 +253,7 @@ pub fn diagnostic_level(kind: &DiagnosticKind) -> Option<Level> {
         OptionalScanGuardFallback => null,
         OverlapTournament => Option::Some(Level::Info),
         UnsupportedAction | HighlightQuery | FragmentEntry => Option::Some(Level::Warn),
+        SimulatorRequired => Option::Some(Level::Error),
     };
 }
 
@@ -525,6 +531,16 @@ pub fn admits_kinds(admits: &Admits) -> List<i32> {
     };
 }
 
+/// Whether a token the test admits can also start `kinds`. An untestable arm is
+/// decided by no token, so it shares none.
+pub fn admits_overlap(admits: &Admits, kinds: &List<i32>) -> bool {
+    return match admits {
+        Everything(_) => !kinds.is_empty(),
+        Kinds(own) => sets_overlap(own, kinds),
+        Untestable => false,
+    };
+}
+
 /// A set that narrows, for a caller that has already ruled out empty. The two
 /// readings of an empty set are `admits_or_everything` and
 /// `admits_or_untestable`; construct through one of the three, never the
@@ -565,6 +581,9 @@ pub variant AltClass {
     /// as these tokens, of which it may have none (`( A | | B )`).
     /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)`.
     Nullable(List<i32>),
+    /// Never taken: an earlier alternative of the decision matches whatever
+    /// this one does (`alt_subsumption`), and the decision belongs to it.
+    Subsumed,
 }
 
 pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
@@ -592,6 +611,7 @@ pub fn alt_class_first_set(c: &AltClass) -> List<i32> {
         Selects(tokens) => *tokens,
         Nullable(tokens) => *tokens,
         OpenEnded(tokens) => *tokens,
+        Subsumed => [],
     };
 }
 
@@ -709,8 +729,9 @@ pub struct TokenOp {
     /// Pre-dedup base name (the surface element's `field_name`).
     /// Drives emit's per-leaf `dedup_name(&dedup_base, name_counts)`
     /// sync so siblings that still walk surface IR (e.g. the LR-suffix
-    /// emit in `gen_lr_fn`) observe the count lower produced. For non-rebound leaves it matches the
-    /// surface element's base name (so `dedup_base == field` when the
+    /// emit in `gen_lr_fn`) observe the count lower produced. For
+    /// non-rebound leaves it matches the surface element's base name
+    /// (so `dedup_base == field` when the
     /// leaf was the first occurrence in its alt). For label-rebound
     /// leaves (`name = ID` lowered to `Op::Token { field: "name",
     /// dedup_base: "name" }`) it carries the rebound label's base —
@@ -737,21 +758,13 @@ pub struct LiteralOp {
 
 /// How a `RuleCall` supplies the runtime FOLLOW continuation to the
 /// callee, replacing the per-(rule, mask) `__follow_<id>` variant
-/// selection. Exactly one of four forms:
-///
-/// - `NoFollow` — non-repair call: emit passes nothing, the callee's
-///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
-/// - `Forward` — the callee sits at THIS rule's tail, so its
-///   continuation is whatever the current rule was itself called with;
-///   emit forwards the current function's `follow` argument unchanged.
-/// - `Mask(id)` — the local suffix already fills the depth the gate reads,
-///   so it is the whole continuation; emit passes `&FOLLOW_MASK_<id>`.
-/// - `Combined(id)` — a shorter local suffix precedes what the current rule
-///   was called with; emit prepends `FOLLOW_MASK_<id>` to the forwarded
-///   `follow` (see the variant doc below).
-/// - `AltMask(exit)` — a caller loop's next iteration, or what follows the loop.
+/// selection.
 pub variant FollowArg {
+    /// Non-repair call: emit passes nothing, and the callee's defaulted
+    /// unknown continuation disables its tail-greedy gate.
     NoFollow,
+    /// The callee sits at this rule's tail, so its continuation is whatever
+    /// the current rule was itself called with; emit forwards `follow`.
     Forward,
     /// `Forward` past a local suffix that can match nothing. Gating on the
     /// suffix would yield a token the caller may take none of, so the gate reads
@@ -779,6 +792,10 @@ pub variant FollowArg {
     /// holding both in sequence asserts the loop's first token at a depth the
     /// other reading does not have it.
     AltMask(CallerLoop),
+    /// `AltMask` for a loop whose body has several alternatives: no single
+    /// prefix reads the next iteration, so it is an open reading that starts
+    /// with `loop_mask`'s one position, the body's first kinds.
+    OpenLoop(CallerLoop),
 }
 
 /// The two readings of a caller loop's continuation.
@@ -1014,6 +1031,10 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// The simulator decides whether each iteration enters: a non-greedy
+    /// loop's exit no lookahead locates, or, under `atn: "always"`, any
+    /// Repeat whose body and continuation can start on one token.
+    pub atn_decides: bool = false,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],
@@ -1317,6 +1338,10 @@ pub struct ScanRepeatElement {
     pub gate_caller_follow: bool,
     /// Mirrors `RepeatOp.non_greedy`.
     pub non_greedy: bool,
+    /// Mirror `RepeatOp`'s, so a non-greedy loop the two tokens decide enters
+    /// on the same ones on both sides.
+    pub caller_follow_second: List<i32> = [],
+    pub body_second_position_first: List<i32> = [],
     /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
     /// against what the parse consumes.
@@ -1325,7 +1350,8 @@ pub struct ScanRepeatElement {
     pub probe_asks_caller: bool = false,
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
-    /// Mirrors `RepeatOp.atn_asked_kinds`.
+    /// Mirrors `RepeatOp.atn_decides` and `RepeatOp.atn_asked_kinds`.
+    pub atn_decides: bool = false,
     pub atn_asked_kinds: List<i32> = [],
     pub probe_viable: List<i32> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on

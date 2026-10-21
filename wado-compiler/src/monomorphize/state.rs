@@ -130,6 +130,29 @@ pub(super) struct Monomorphizer {
     /// Template local slots an unrolled copy already holds; shared, since a
     /// nested unroll competes for the same slots. Cleared per instantiation.
     pub unrolled_local_claims: RefCell<IndexSet<u32>>,
+    /// The first template asked for at type arguments nested past
+    /// [`MAX_INSTANCE_TYPE_DEPTH`] or grown past [`MAX_INSTANCE_TYPE_SIZE`],
+    /// which is left uninstantiated.
+    pub expanding: Option<ExpandingTemplate>,
+}
+
+/// How deep an instance's type arguments may nest. A template calling itself
+/// at a type built over its own type parameter (`walk(&s)` inside
+/// `walk<S>`) asks for one level more at every instance, and no program
+/// written to terminate nests this deep.
+pub(super) const MAX_INSTANCE_TYPE_DEPTH: usize = 64;
+/// How many types an instance's type argument may hold, a shared one once per
+/// use. A template calling itself at a type holding its own parameter twice
+/// (`walk([s, s])`) doubles it at every instance, and its name with it, so the
+/// depth bound alone is reached only after the names outgrow memory. The
+/// largest a benchmark asks for holds 127.
+pub(super) const MAX_INSTANCE_TYPE_SIZE: usize = 4096;
+
+/// A template whose instances never end, as the diagnostic names it.
+pub(super) struct ExpandingTemplate {
+    pub module_source: ModuleSource,
+    pub name: String,
+    pub span: Span,
 }
 
 impl Monomorphizer {
@@ -160,6 +183,7 @@ impl Monomorphizer {
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),
             unrolled_local_claims: RefCell::new(IndexSet::default()),
+            expanding: None,
         }
     }
 
@@ -269,12 +293,39 @@ impl Monomorphizer {
             self.functions.instantiated.insert(key, mangled_name);
             return false;
         }
-        self.functions.instantiated_homes.insert(home, template);
+        self.functions
+            .instantiated_homes
+            .insert(home, template.clone());
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);
+        // Named but never queued: the calls still rewrite onto the name, and
+        // the pipeline bails before anything reads the missing body.
+        if Self::nests_past_bound(&key, type_table) {
+            if self.expanding.is_none() {
+                let func = self
+                    .functions
+                    .templates
+                    .get(&template)
+                    .expect("a queued instance's template is registered")
+                    .borrow();
+                self.expanding = Some(ExpandingTemplate {
+                    module_source: func.module_source.clone(),
+                    name: func.name.clone(),
+                    span: func.span,
+                });
+            }
+            return false;
+        }
         self.functions.pending.push(key);
         true
+    }
+
+    fn nests_past_bound(key: &InstantiationKey, type_table: &TypeTable) -> bool {
+        key.impl_type_args
+            .iter()
+            .chain(&key.method_type_args)
+            .any(|&arg| type_table.outgrows(arg, MAX_INSTANCE_TYPE_DEPTH, MAX_INSTANCE_TYPE_SIZE))
     }
 
     /// Index every queued instance under its canonical key as well, so a site

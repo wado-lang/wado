@@ -843,6 +843,14 @@ pub(super) struct HeapFrame {
     classes: DisjointSets,
     prov: Vec<Prov>,
     local_nodes: Vec<u32>,
+    /// Locals whose definition the walk reached. A caller may query a body it
+    /// is midway through rewriting: LICM reads a hoist's local before linking
+    /// the hoist's `let` in.
+    defined: IndexSet<u32>,
+    /// Some local was read with no definition the walk reached. Such a local
+    /// joins the `ELSEWHERE` class, which may then hold an object of any class,
+    /// fresh ones included.
+    partial: bool,
     /// Each parameter's node, in parameter order.
     params: Vec<u32>,
     expr_base: u32,
@@ -891,6 +899,8 @@ impl HeapFrame {
             classes: DisjointSets::new(expr_base as usize + expr_count),
             prov: vec![Prov::default(); expr_base as usize + expr_count],
             local_nodes: Vec::new(),
+            defined: IndexSet::default(),
+            partial: false,
             params: Vec::with_capacity(params.len()),
             expr_base,
             expr_count,
@@ -900,7 +910,7 @@ impl HeapFrame {
         };
         frame.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
         for (k, &local) in params.iter().enumerate() {
-            let n = frame.local_node(local);
+            let n = frame.define_local(local);
             frame.prov[n as usize].join(Prov::param(k));
             frame.params.push(n);
         }
@@ -919,7 +929,7 @@ impl HeapFrame {
                     StmtKind::Let {
                         local_index, value, ..
                     } => {
-                        let l = frame.local_node(*local_index);
+                        let l = frame.define_local(*local_index);
                         frame.unify_op(effects, body, l, *value);
                     }
                     StmtKind::Return { value: Some(v) } => frame.unify_op(effects, body, RET, *v),
@@ -942,7 +952,7 @@ impl HeapFrame {
         if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
-        frame.classes.flatten();
+        frame.finish();
         frame
     }
 
@@ -957,6 +967,11 @@ impl HeapFrame {
             self.local_nodes[i] = n;
         }
         self.local_nodes[i]
+    }
+
+    fn define_local(&mut self, local: u32) -> u32 {
+        self.defined.insert(local);
+        self.local_node(local)
     }
 
     fn expr_node(&self, e: ExprId) -> Option<u32> {
@@ -1256,7 +1271,8 @@ impl HeapFrame {
         let value_node = self.operand_node(effects, body, value);
         self.unify_nodes(target_node, value_node);
         let place = &body.exprs[target].kind;
-        if let ExprKind::Local { .. } = place {
+        if let ExprKind::Local { index, .. } = place {
+            self.defined.insert(*index);
             return;
         }
         let field = if let ExprKind::FieldAccess { field_index, .. } = place {
@@ -1309,8 +1325,8 @@ impl HeapFrame {
         };
         match &body.pats[pat].kind {
             PatKind::Binding { local_index, .. } => {
+                let l = self.define_local(*local_index);
                 if let OperandNode::Node(n) = scrutinee {
-                    let l = self.local_node(*local_index);
                     self.unify(l, n);
                 }
             }
@@ -1430,6 +1446,17 @@ impl HeapFrame {
                 }
             }
         }
+    }
+
+    fn finish(&mut self) {
+        for i in 0..self.local_nodes.len() {
+            let n = self.local_nodes[i];
+            if n != NO_NODE && !self.defined.contains(&(i as u32)) {
+                self.unify(n, ELSEWHERE);
+                self.partial = true;
+            }
+        }
+        self.classes.flatten();
     }
 
     fn class_prov(&self, n: u32) -> Prov {
@@ -1560,15 +1587,27 @@ impl HeapFrame {
     }
 
     /// Whether objects in class `n` may be ones the local's class `h` holds:
-    /// the same class, or two that both reach outside the body.
+    /// the same class, two that both reach outside the body, or either one the
+    /// `ELSEWHERE` class of a [`Self::partial`] frame.
     fn shares(&self, h: Option<u32>, n: OperandNode) -> bool {
         match (h, n) {
             (_, OperandNode::None) => false,
             (None, _) | (_, OperandNode::Unknown) => true,
             (Some(h), OperandNode::Node(n)) => {
-                n == h || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
+                let elsewhere = self.classes.root(ELSEWHERE);
+                n == h
+                    || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
+                    || (self.partial && (h == elsewhere || n == elsewhere))
             }
         }
+    }
+
+    /// Whether locals `a` and `b` may hold one object.
+    pub(super) fn locals_may_share(&self, a: u32, b: u32) -> bool {
+        let Some(b) = self.local_root(b) else {
+            return true;
+        };
+        self.shares(self.local_root(a), OperandNode::Node(b))
     }
 
     /// Whether `call` may read or write an object of type `key` that the

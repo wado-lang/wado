@@ -160,6 +160,7 @@ fn "effect_handler_continue_cross.wado/helper"() with Counter {
 }
 
 fn "effect_handler_continue_cross.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let outer: ref "effect_handler_continue_cross.wado//Outer";
     let r: i32;
     let $local_2: ref "core:prelude/string.wado//String";
@@ -177,11 +178,11 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_19 = $local_2.used;
     $local_2.used = new_used_18;
-    builtin::array_copy<u8>($local_2.repr, start_19, global:effect_handler_continue_cross.wado::$const_obj_3, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_19, global:effect_handler_continue_cross.wado::$const_obj_3, 0, 2);
     start_19 = r < 0;
     r = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(r); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_19 {
-        if @unlikely(local.tee start_19($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+        if @unlikely(local.tee start_19($local_2.used + 1) > builtin::array_len($load_2)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_19);
         }

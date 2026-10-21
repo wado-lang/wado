@@ -32,6 +32,7 @@ use { assemble_grammar } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { diagnostic_level } from "./gir.wado";
+export use { AtnMode } from "./gen_settings.wado";
 use { Level } from "core:log";
 use { to_snake_case } from "./gen_util.wado";
 use { Deserialize } from "core:serde";
@@ -50,6 +51,9 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
+    /// Which decisions the parser asks the runtime ATN simulator. "Choosing the
+    /// simulator" in the README lists the modes.
+    pub atn: AtnMode = AtnMode::Auto,
 }
 
 impl Deserialize for Options;
@@ -156,20 +160,25 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         highlight_query,
         trace: req.options.trace,
         fragment_entries: req.options.fragment_entries,
+        atn: req.options.atn,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Surface Gale's prediction-strategy diagnostics through the Kiln host, at
     // the level `gir::diagnostic_level` gives each kind — the same level the
     // `gale gen` CLI emits it at, so a grammar built either way is read the same
     // way. Gale diagnostics carry no source span yet, so the label leads the text.
+    let mut refusals: List<String> = [];
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
-            KilnHost::emit_diagnostic(KilnDiagnostic {
-                level: kiln_level(level),
-                span: null,
-                message: `gale: ${d.owner.label()}: ${d.message}`,
-            });
+            let message = `gale: ${d.owner.label()}: ${d.message}`;
+            if level matches { Error } {
+                refusals.push(message);
+            }
+            KilnHost::emit_diagnostic(KilnDiagnostic { level: kiln_level(level), span: null, message });
         }
+    }
+    if !refusals.is_empty() {
+        return Result::Err(Error::Unsupported(refusals.join("\n")));
     }
     let wado_source = generated.source;
 

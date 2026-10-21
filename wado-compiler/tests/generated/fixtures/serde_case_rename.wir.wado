@@ -2336,17 +2336,19 @@ fn "core:json/core/json/from_bytes<serde_case_rename.wado/Color,core:prelude/byt
 
 fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, run_start, i, b) {
     let $load_0: i32;
+    let $load_1: ref Array<u8>;
+    let $v1: bool;
     "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::slice$unchecked"(s, run_start, $load_0 = s.used; if @unlikely((((0 <= run_start) & (run_start <= i)) & (i <= $load_0)) == 0) {
         cold_path;
         "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report0"(run_start, i, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
-    }; if @unlikely((if local.tee $load_0("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, $load_0, run_start)) -> i32 {
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(s.repr, s.used, i);
+    }; if @unlikely(local.tee $load_0((if local.tee $v1("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"(local.tee $load_1(s.repr), $load_0, run_start)) -> i32 {
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::is_char_boundary"($load_1, $load_0, i);
     } else {
         0;
-    }) == 0) {
+    })) == 0) {
         cold_path;
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($load_0, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$slice$contract_report1"($v1, s, i, run_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:208"), used: 13 });
         unreachable;
     }; i), buf);
     if b == 34 {
@@ -5579,14 +5581,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$uncheck
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self.repr, self.start, self.end, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_3 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_3);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 }, $load_3);
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"($mv$self$repr, $mv$self$start, $mv$self$end, f) {
@@ -6165,6 +6164,7 @@ fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($
 
 fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.value,s.buf]"(self, s) {
     let $load_0: i32;
+    let $load_10: ref Array<u8>;
     let new_used_65: i32;
     let start_66: i32;
     let o_181: ref "core:prelude/string.wado//String";
@@ -6199,8 +6199,8 @@ fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<co
         start_66 = local.tee new_used_65(ref.cast "serde_case_rename.wado//Command::AddRemote"(self).payload_0) < 0;
         new_used_65 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_295(x_295 = builtin::i64_extend_i32_s(new_used_65); select i64(x_295 < 0_i64, 0_i64 - x_295, x_295)));
         start_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_66, new_used_65);
-        "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_66, x_295, new_used_65);
-        if @unlikely(local.tee new_used_65(s.used + 1) > builtin::array_len(s.repr)) {
+        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_10(s.repr), start_66, x_295, new_used_65);
+        if @unlikely(local.tee new_used_65(s.used + 1) > builtin::array_len($load_10)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_65);
         }
@@ -6220,7 +6220,7 @@ fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<co
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("remove"), used: 6 };
         })).used;
-        o_181 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = o_181.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_0)), 0, $array_clone_src_4, 0, $load_0); $array_clone_dst_5, used: $load_0 };
+        o_181 = struct.new "core:prelude/string.wado//String" { repr: $load_10 = o_181.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_0)), 0, $load_10, 0, $load_0); $array_clone_dst_5, used: $load_0 };
         if @unlikely(local.tee $load_0(s.used + 1) > builtin::array_len(s.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $load_0);
@@ -6242,8 +6242,8 @@ fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<co
         start_66 = local.tee $load_0(ref.cast "serde_case_rename.wado//Command::Remove"(self).payload_0) < 0;
         $load_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_295(x_295 = builtin::i64_extend_i32_s($load_0); select i64(x_295 < 0_i64, 0_i64 - x_295, x_295)));
         start_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_66, $load_0);
-        "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_66, x_295, $load_0);
-        if @unlikely(local.tee $load_0(s.used + 1) > builtin::array_len(s.repr)) {
+        "core:prelude/primitive.wado/write_decimal_digits"(local.tee $array_clone_dst_5(s.repr), start_66, x_295, $load_0);
+        if @unlikely(local.tee $load_0(s.used + 1) > builtin::array_len($array_clone_dst_5)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $load_0);
         }

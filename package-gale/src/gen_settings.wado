@@ -8,10 +8,44 @@ use { SuperOp } from "./superclass.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { gate_body_of } from "./scan_gate.wado";
 use { HashMap } from "core:collections";
+use { Deserialize } from "core:serde";
+
+/// Which decisions the parser asks the runtime ATN simulator (the `atn`
+/// generator option). The static prediction tree decides what it can either
+/// way; the mode settles what it gives up on.
+#[wire(name_policy = "kebab-case")]
+pub enum AtnMode {
+    /// A rule's ambiguity goes to the simulator, so the tree is the one ANTLR4
+    /// builds, except an at-end conflict no caller continues on, which the
+    /// longest-match tournament decides. A group's and a `?` `*` `+`'s stay
+    /// with the tournament and the continuation scan.
+    Auto,
+    /// Every ambiguity goes to the simulator, a group's and a `?` `*` `+`'s
+    /// included.
+    Always,
+    /// Every ambiguity goes to the tournament, and a grammar with a decision
+    /// only the simulator can make is refused.
+    Never,
+    /// What `Auto` routes to the simulator, but where the parser settles one of
+    /// those decisions without it, it asks the simulator as well and panics
+    /// when the two disagree.
+    Verify,
+}
+
+impl Deserialize for AtnMode;
+
+impl AtnMode {
+    /// Whether a decision settled without the simulator is checked against it.
+    pub fn verifies(&self) -> bool {
+        return *self matches { Verify };
+    }
+}
 
 /// The settings of one generation. `codegen::install_action_context` builds
 /// them; nothing changes them afterwards.
 pub struct GenSettings {
+    /// The `atn` generator option.
+    pub atn: AtnMode = AtnMode::Auto,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option.

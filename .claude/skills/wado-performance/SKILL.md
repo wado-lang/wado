@@ -330,7 +330,10 @@ runs from `benchmark/`, must be absolute.
 
 Fuel counts the Wasm instructions the guest ran (about one unit each). It does
 not depend on the host, so one run per arm is enough, even on a noisy machine.
-It counts instructions, not time: GC and other host work are left out.
+It counts instructions, not time: GC and other host work are left out. It also
+prices every instruction alike, so a change of branch shape needs a timed A/B: a
+`br_table` counts as one instruction however often it mispredicts
+(`trade-offs.md`).
 
 Write a program that runs the code under test a fixed number of times; the
 `core:benchmark` harness repeats by time, so its fuel varies. Subtract a run
@@ -543,12 +546,17 @@ and dropped, with the A/B that killed it and what it generalizes to. **Read it
 before starting**, and add an entry whenever an A/B comes back flat or negative
 — a dead end nobody wrote down is one somebody re-measures.
 
+`trade-offs.md` is the other record: a cost-model change that was kept although
+a row regressed, with every row's A/B and who decided. Add an entry whenever a
+change ships with a losing row.
+
 Stop when the floor is the representation — a store-bound loop on an
 `Array<T>`-backed `String` is near-optimal short of leaving GC arrays.
 
 ## See also
 
 - `dead-ends.md` — what has already been measured and dropped.
+- `trade-offs.md` — what was kept although some row got slower.
 - `profiling-wado-compiler` — the native `wado` binary (host side).
 - `benchmark` — run the suite / wasm-size report.
 - `optimizer-debug` — a NIR/WIR pass producing _wrong_ code, not just slow.

@@ -1,0 +1,1065 @@
+//! A decision's lookahead DFA, explored while the parser is generated: the
+//! stack-free half of ALL(*) prediction, settled ahead of time.
+//!
+//! The runtime simulator predicts with the parse's own call stack. This
+//! explorer has none, so where the decision's rule ends it continues at every
+//! place that rule is called, its global FOLLOW, and also at the end of input,
+//! since any rule may be the one a parse starts at. That admits every
+//! continuation some stack admits. So where the DFA leaves one alternative
+//! alive, the simulator would pick that one too, or find every alternative dead
+//! on the same tokens, an input no alternative parses.
+//!
+//! The parser matches the DFA's tokens and asks the simulator only at the
+//! leaves the DFA leaves open: an alternative tie past `SLL_MAX_DEPTH`
+//! tokens, end of input, or a token no alternative takes.
+
+use { Atn } from "./atn.wado";
+use {
+    ATN_RULE_STOP,
+    ATN_TR_EPSILON,
+    ATN_TR_ATOM,
+    ATN_TR_NOT_ATOM,
+    ATN_TR_WILDCARD,
+    ATN_TR_RULE,
+    ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
+    atn_tr_consumes,
+} from "./runtime/atn.wado";
+use { HashMap } from "core:collections";
+use { CodeWriter, FnSpec } from "lib:wadopoet";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+
+/// How many tokens a DFA reads before it leaves the decision to the simulator.
+global SLL_MAX_DEPTH: i32 = 4;
+/// How many states one decision's DFA may hold before the rest asks.
+global SLL_MAX_STATES: i32 = 1024;
+/// How many configurations one decision's exploration may expand before the
+/// rest of it is left to the simulator. It bounds generation time.
+global SLL_DECISION_BUDGET: i32 = 200000;
+/// How many places the shared closure memo may hold before it is dropped. It
+/// bounds generation memory.
+global SLL_MEMO_CAP: i32 = 2000000;
+
+/// Past the outermost rule, where only end of input follows.
+global SLL_END: i32 = -2;
+/// The decision rule's own frame, whose end continues at the global FOLLOW.
+global SLL_NO_CALLER: i32 = 0;
+/// How many bottom frames there are: `SLL_NO_CALLER`, then one per token step
+/// a configuration may leave the decision rule at. Left at step `j`, it
+/// continues at the global FOLLOW in frame `1 + j`. Every alternative that
+/// ends the rule at step `j` reaches the same configurations from there, and
+/// so does the parse's stack, so a frame names how a configuration got there
+/// as well as where it is.
+///
+/// A stack id is `chain * SLL_BOTTOMS + bottom`, where the chain holds the
+/// frames pushed above the bottom one and chain 0 none. Nothing moves a
+/// configuration off a bottom frame other than `SLL_NO_CALLER`, so the
+/// closure of a place on frame `1 + j` is that of the same place on frame 1,
+/// shifted.
+global SLL_BOTTOMS: i32 = SLL_MAX_DEPTH + 2;
+
+/// How many stacks `config_key` can tell apart: it packs a stack id above 40
+/// bits of state, precedence and alternative.
+global SLL_MAX_STACKS: i64 = 8388608;
+
+global STATE_BITS: i64 = 1048576;
+global PR_BITS: i64 = 1024;
+global ALT_BITS: i64 = 1024;
+
+/// One state of a decision's DFA.
+pub variant SllNode {
+    /// The tokens read so far leave this alternative alone.
+    Alt(i32),
+    /// The simulator decides.
+    Ask,
+    /// The next token picks the edge; a token no edge names asks.
+    Branch(List<SllEdge>),
+}
+
+/// The tokens that lead to node `to`.
+pub struct SllEdge {
+    pub tokens: List<i32>,
+    pub to: i32,
+}
+
+/// A decision's DFA over token kinds `0..kinds`. Node 0 is the start.
+pub struct SllDfa {
+    pub nodes: List<SllNode>,
+    pub kinds: i32,
+}
+
+struct SllConfig {
+    state: i32,
+    alt: i32,
+    pr: i32,
+    stack: i32,
+}
+
+/// Where a configuration stands with no regard to its alternative.
+fn place_key(state: i32, pr: i32, stack: i32) -> i64
+    contract -2 <= state && ((state + 2) as i64) < STATE_BITS
+    contract 0 <= pr && (pr as i64) < PR_BITS
+    contract 0 <= stack && (stack as i64) < SLL_MAX_STACKS
+{
+    return (stack as i64 * PR_BITS + pr as i64) * STATE_BITS + (state + 2) as i64;
+}
+
+fn config_key(c: &SllConfig) -> i64
+    contract 0 <= c.alt && (c.alt as i64) < ALT_BITS
+{
+    return place_key(c.state, c.pr, c.stack) * ALT_BITS + c.alt as i64;
+}
+
+fn place_of(key: i64, alt: i32) -> SllConfig {
+    let state = (key % STATE_BITS) as i32 - 2;
+    let rest = key / STATE_BITS;
+    return SllConfig { state, alt, pr: (rest % PR_BITS) as i32, stack: (rest / PR_BITS) as i32 };
+}
+
+fn bottom_of(place: i64) -> i32 {
+    return place_of(place, 0).stack % SLL_BOTTOMS;
+}
+
+/// How far `place`'s bottom frame sits above frame 1, in place keys, where it
+/// is an escape frame; 0 on `SLL_NO_CALLER`.
+fn frame_shift(place: i64) -> i64 {
+    let bottom = bottom_of(place);
+    if bottom == SLL_NO_CALLER {
+        return 0;
+    }
+    return (bottom - 1) as i64 * PR_BITS * STATE_BITS;
+}
+
+fn config_of(key: i64) -> SllConfig {
+    return place_of(key / ALT_BITS, (key % ALT_BITS) as i32);
+}
+
+/// A set of keys that empties in constant time, so one serves every closure:
+/// a slot is in the set only while it carries the current stamp. A fresh
+/// `HashSet` per closure cost a fifth of the explorer's time.
+struct KeySet {
+    keys: List<i64>,
+    stamps: List<i32>,
+    stamp: i32,
+    count: i32,
+    bits: i32,
+}
+
+impl KeySet {
+    fn new() -> KeySet {
+        return KeySet::with_bits(10);
+    }
+
+    fn with_bits(bits: i32) -> KeySet {
+        return KeySet {
+            keys: List::filled(1 << bits, 0),
+            stamps: List::filled(1 << bits, 0),
+            stamp: 1,
+            count: 0,
+            bits,
+        };
+    }
+
+    fn clear(&mut self) {
+        if self.stamp == i32::MAX {
+            *self = KeySet::with_bits(self.bits);
+            return;
+        }
+        self.stamp += 1;
+        self.count = 0;
+    }
+
+    /// Whether `key` was absent; it is present afterwards.
+    fn insert(&mut self, key: i64) -> bool {
+        if (self.count + 1) * 2 > self.keys.len() {
+            self.grow();
+        }
+        let mask = self.keys.len() - 1;
+        let mut at = (key as u64 * 0x9E3779B97F4A7C15 >> (64 - self.bits) as u64) as i32;
+        while self.stamps[at] == self.stamp {
+            if self.keys[at] == key {
+                return false;
+            }
+            at = at + 1 & mask;
+        }
+        self.keys[at] = key;
+        self.stamps[at] = self.stamp;
+        self.count += 1;
+        return true;
+    }
+
+    fn grow(&mut self) {
+        let mut wider = KeySet::with_bits(self.bits + 1);
+        for let i of 0..<self.keys.len() {
+            if self.stamps[i] == self.stamp {
+                wider.insert(self.keys[i]);
+            }
+        }
+        *self = wider;
+    }
+}
+
+/// `keys` sorted, each once, where each run of it from one of `runs` to the
+/// next is sorted already.
+fn merge_runs(keys: List<i64>, runs: List<i32>) -> List<i64> {
+    let mut cur = keys;
+    let mut bounds = runs;
+    bounds.push(cur.len());
+    while bounds.len() > 2 {
+        let mut next = List::<i64>::with_capacity(cur.len());
+        let mut merged: List<i32> = [];
+        for let mut r = 0; r + 1 < bounds.len(); r += 2 {
+            merged.push(next.len());
+            let mid = bounds[r + 1];
+            let end = if r + 2 < bounds.len() { bounds[r + 2] } else { mid };
+            let mut i = bounds[r];
+            let mut j = mid;
+            while i < mid && j < end {
+                if cur[j] < cur[i] {
+                    next.push(cur[j]);
+                    j += 1;
+                } else {
+                    next.push(cur[i]);
+                    i += 1;
+                }
+            }
+            for let k of i..<mid {
+                next.push(cur[k]);
+            }
+            for let k of j..<end {
+                next.push(cur[k]);
+            }
+        }
+        merged.push(next.len());
+        cur = next;
+        bounds = merged;
+    }
+    let mut kept = 0;
+    for let mut i = 0; i < cur.len(); i += 1 {
+        if kept == 0 || cur[i] != cur[kept - 1] {
+            cur[kept] = cur[i];
+            kept += 1;
+        }
+    }
+    cur.truncate(kept);
+    return cur;
+}
+
+/// Explores the DFAs of one ATN's decisions, sharing the closures they reach.
+pub struct SllExplorer {
+    atn: Atn,
+    eof: i32,
+    /// Per rule, the states a call to it returns to.
+    follows: List<List<i32>>,
+    /// Per state, whether it consumes next, its rule where it is a rule's
+    /// stop state (-1 otherwise), and where its transitions start in the
+    /// `tr_*` columns, which hold every state's transitions in order.
+    consuming: List<bool>,
+    stop_rule: List<i32>,
+    tr_start: List<i32>,
+    tr_kind: List<i32>,
+    tr_target: List<i32>,
+    tr_follow: List<i32>,
+    tr_prec: List<i32>,
+    /// Per chain, its top frame and the chain below it.
+    chain_ret: List<i32>,
+    chain_rpr: List<i32>,
+    chain_parent: List<i32>,
+    chain_index: HashMap<i64, i32>,
+    /// By `closure_key`, the consuming places a place reaches without
+    /// consuming.
+    closures: HashMap<i64, List<i64>>,
+    /// The places `closures` holds.
+    memo_size: i32,
+    /// What the current decision may still expand.
+    budget: i32,
+    /// The configurations the closure in progress has reached.
+    seen: KeySet,
+}
+
+impl SllExplorer {
+    pub fn new(atn: &Atn, eof: i32) -> SllExplorer {
+        let mut consuming: List<bool> = [];
+        let mut stop_rule: List<i32> = [];
+        let mut tr_start: List<i32> = [];
+        let mut tr_kind: List<i32> = [];
+        let mut tr_target: List<i32> = [];
+        let mut tr_follow: List<i32> = [];
+        let mut tr_prec: List<i32> = [];
+        let mut token_entered = List::<bool>::filled(atn.states.len(), false);
+        for let st of &atn.states {
+            consuming.push(!st.transitions.is_empty() && atn_tr_consumes(st.transitions[0].kind));
+            stop_rule.push(if st.kind == ATN_RULE_STOP { st.rule } else { -1 });
+            tr_start.push(tr_kind.len());
+            for let t of &st.transitions {
+                if atn_tr_consumes(t.kind) {
+                    assert st.transitions.len() == 1 && !token_entered[t.target], "a token must move one place to one place";
+                    token_entered[t.target] = true;
+                }
+                tr_kind.push(t.kind);
+                tr_target.push(t.target);
+                tr_follow.push(t.follow);
+                tr_prec.push(t.prec);
+            }
+        }
+        tr_start.push(tr_kind.len());
+        return SllExplorer {
+            atn: *atn,
+            eof,
+            follows: rule_follows(atn),
+            consuming,
+            stop_rule,
+            tr_start,
+            tr_kind,
+            tr_target,
+            tr_follow,
+            tr_prec,
+            chain_ret: [-1],
+            chain_rpr: [0],
+            chain_parent: [-1],
+            chain_index: HashMap::new(),
+            closures: HashMap::new(),
+            memo_size: 0,
+            budget: 0,
+            seen: KeySet::new(),
+        };
+    }
+
+    /// Whether the chains the next decision may push could outgrow
+    /// `SLL_MAX_STACKS`: it pushes at most one per expansion its budget allows.
+    fn stacks_full(&self) -> bool {
+        let chains = SLL_MAX_STACKS / SLL_BOTTOMS as i64;
+        assert chains > SLL_DECISION_BUDGET as i64;
+        return (self.chain_ret.len() + SLL_DECISION_BUDGET) as i64 > chains;
+    }
+
+    /// Drop every chain, and the closures naming them.
+    fn drop_stacks(&mut self) {
+        self.chain_ret.truncate(1);
+        self.chain_rpr.truncate(1);
+        self.chain_parent.truncate(1);
+        self.chain_index = HashMap::new();
+        self.closures = HashMap::new();
+        self.memo_size = 0;
+    }
+
+    fn push_stack(&mut self, ret: i32, rpr: i32, parent: i32) -> i32 {
+        let below = parent / SLL_BOTTOMS;
+        let key = place_key(ret, rpr, below);
+        let chain = if let Some(id) = self.chain_index.get(key) {
+            id;
+        } else {
+            let id = self.chain_ret.len();
+            self.chain_ret.push(ret);
+            self.chain_rpr.push(rpr);
+            self.chain_parent.push(below);
+            self.chain_index[key] = id;
+            id;
+        };
+        return chain * SLL_BOTTOMS + parent % SLL_BOTTOMS;
+    }
+
+    /// The memo key of `place`'s closure at token step `step`. Only a place in
+    /// the decision rule's frame can leave it, so only its closure reads
+    /// `step`; any other is keyed as its place on frame 1.
+    fn closure_key(place: i64, step: i32) -> i64
+        contract SLL_BOTTOMS < 8
+    {
+        if bottom_of(place) == SLL_NO_CALLER {
+            return place * 8 + (step + 1) as i64;
+        }
+        return (place - frame_shift(place)) * 8;
+    }
+
+    /// Push the configurations the one `key` names reaches without consuming,
+    /// at token step `step`. Returns whether it is kept instead: it consumes
+    /// next, or input ends.
+    fn expand(&mut self, key: i64, step: i32, work: &mut List<i64>) -> bool {
+        let c = config_of(key);
+        if c.state == SLL_END || self.consuming[c.state] {
+            return true;
+        }
+        let alt = c.alt as i64;
+        let rule = self.stop_rule[c.state];
+        if rule >= 0 {
+            if c.stack < SLL_BOTTOMS {
+                let escaped = if c.stack == SLL_NO_CALLER { 1 + step } else { c.stack };
+                for let f of &self.follows[rule] {
+                    work.push(place_key(*f, 0, escaped) * ALT_BITS + alt);
+                }
+                work.push(place_key(SLL_END, 0, escaped) * ALT_BITS + alt);
+            } else {
+                let chain = c.stack / SLL_BOTTOMS;
+                let below = self.chain_parent[chain] * SLL_BOTTOMS + c.stack % SLL_BOTTOMS;
+                work.push(place_key(self.chain_ret[chain], self.chain_rpr[chain], below) * ALT_BITS + alt);
+            }
+            return false;
+        }
+        for let j of self.tr_start[c.state]..<self.tr_start[c.state + 1] {
+            let kind = self.tr_kind[j];
+            if kind == ATN_TR_EPSILON || kind == ATN_TR_PRECEDENCE && self.tr_prec[j] >= c.pr {
+                work.push(place_key(self.tr_target[j], c.pr, c.stack) * ALT_BITS + alt);
+            } else if kind == ATN_TR_RULE && self.tr_target[j] >= 0 {
+                let stack = self.push_stack(self.tr_follow[j], c.pr, c.stack);
+                work.push(place_key(self.tr_target[j], self.tr_prec[j], stack) * ALT_BITS + alt);
+            }
+        }
+        return false;
+    }
+
+    /// Spend one expansion of the current decision's budget. Returns whether
+    /// there was one to spend.
+    fn spend(&mut self) -> bool {
+        self.budget -= 1;
+        return self.budget >= 0;
+    }
+
+    /// The `closures` key holding the consuming places `place` reaches at token
+    /// step `step`, short of its `frame_shift`, computed once; `null` once the
+    /// budget runs out.
+    fn place_closure(&mut self, place: i64, step: i32) -> Option<i64> {
+        let memo = SllExplorer::closure_key(place, step);
+        if self.closures.contains_key(memo) {
+            return Option::Some(memo);
+        }
+        let Some(mut kept) = self.walk(place, step, false) else {
+            return null;
+        };
+        kept.sort();
+        if self.memo_size + kept.len() > SLL_MEMO_CAP {
+            self.closures = HashMap::new();
+            self.memo_size = 0;
+        }
+        self.memo_size += kept.len();
+        self.closures[memo] = kept;
+        return Option::Some(memo);
+    }
+
+    /// The closure of the configurations `seeds` keys at token step `step`, as
+    /// sorted keys, or `null` once the budget runs out.
+    fn closure(&mut self, seeds: &List<i64>, step: i32) -> Option<List<i64>> {
+        let mut keys: List<i64> = [];
+        let mut runs: List<i32> = [];
+        for let s of seeds {
+            let place = *s / ALT_BITS;
+            let Some(memo) = self.place_closure(place, step) else {
+                return null;
+            };
+            runs.push(keys.len());
+            let shift = frame_shift(place);
+            let alt = *s % ALT_BITS;
+            for let p of &self.closures[memo] {
+                keys.push((*p + shift) * ALT_BITS + alt);
+            }
+        }
+        return Option::Some(merge_runs(keys, runs));
+    }
+
+    /// Whether the closure of `seeds` at token step `step` holds anything. It
+    /// stops at the first configuration it keeps, so it costs far less than
+    /// the closure; `false` once the budget runs out.
+    fn reaches_any(&mut self, seeds: &List<i64>, step: i32) -> bool {
+        for let s of seeds {
+            let place = *s / ALT_BITS;
+            let memo = SllExplorer::closure_key(place, step);
+            let reached = if self.closures.contains_key(memo) {
+                self.closures[memo].len();
+            } else {
+                let Some(kept) = self.walk(place, step, true) else {
+                    return false;
+                };
+                kept.len();
+            };
+            if reached > 0 {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// The consuming places `place` reaches at token step `step`, short of its
+    /// `frame_shift`, in no order, or only the first one with `first_only`;
+    /// `null` once the budget runs out.
+    fn walk(&mut self, place: i64, step: i32, first_only: bool) -> Option<List<i64>> {
+        self.seen.clear();
+        let mut work: List<i64> = [(place - frame_shift(place)) * ALT_BITS];
+        let mut kept: List<i64> = [];
+        while let Some(key) = work.pop() {
+            if !self.seen.insert(key) {
+                continue;
+            }
+            if !self.spend() {
+                return null;
+            }
+            if self.expand(key, step, &mut work) {
+                kept.push(key / ALT_BITS);
+                if first_only {
+                    break;
+                }
+            }
+        }
+        return Option::Some(kept);
+    }
+
+    /// The start state's closure. An alternative that comes back to the
+    /// decision state through a precedence edge has consumed nothing, so it is
+    /// dropped there, as in the runtime's `atn_closure`; that depends on the
+    /// alternative, so no place memo serves it. Every configuration starts at
+    /// precedence 0, whatever `min_prec` the call asks at: an edge a higher one
+    /// closes reopens in an outer frame of the rule, the outermost of which
+    /// runs at 0, so the alternative the DFA keeps survives at every `min_prec`.
+    fn start_closure(&mut self, dstate: i32) -> Option<List<i64>> {
+        let mut work: List<i64> = [];
+        let ts = &self.atn.states[dstate].transitions;
+        for let mut j = 0; j < ts.len(); j += 1 {
+            work.push(config_key(&SllConfig { state: ts[j].target, alt: j, pr: 0, stack: SLL_NO_CALLER }));
+        }
+        self.seen.clear();
+        let mut kept: List<i64> = [];
+        while let Some(key) = work.pop() {
+            let c = config_of(key);
+            if c.state == dstate && ts[c.alt].kind == ATN_TR_PRECEDENCE || !self.seen.insert(key) {
+                continue;
+            }
+            if !self.spend() {
+                return null;
+            }
+            if self.expand(key, 0, &mut work) {
+                kept.push(key);
+            }
+        }
+        kept.sort();
+        return Option::Some(kept);
+    }
+
+    /// For each token some configuration takes, the configurations it moves
+    /// to, by token ascending. End of input is left out: the simulator decides
+    /// there. A token moves each place to at most one place, and none other to
+    /// it (`new` asserts it), so the configurations at one place still sit
+    /// together, as `settled` reads them.
+    fn moves(&self, configs: &List<i64>) -> List<[i32, List<i64>]> {
+        let mut slot_of = List::<i32>::filled(self.atn.num_tokens, -1);
+        let mut by_slot: List<List<i64>> = [];
+        let mut any: List<[i64, i32]> = [];
+        for let key of configs {
+            let c = config_of(*key);
+            if c.state == SLL_END {
+                continue;
+            }
+            for let t of &self.atn.states[c.state].transitions {
+                let next = place_key(t.target, c.pr, c.stack) * ALT_BITS + c.alt as i64;
+                if t.kind == ATN_TR_ATOM {
+                    self.add_move(&mut slot_of, &mut by_slot, t.label, next);
+                } else if t.kind == ATN_TR_SET {
+                    for let k of &self.atn.sets[t.label] {
+                        self.add_move(&mut slot_of, &mut by_slot, *k, next);
+                    }
+                } else if t.kind == ATN_TR_WILDCARD {
+                    any.push([next, -1]);
+                } else if t.kind == ATN_TR_NOT_ATOM {
+                    any.push([next, t.label]);
+                }
+            }
+        }
+        let mut out: List<[i32, List<i64>]> = [];
+        for let token of 0..<self.atn.num_tokens {
+            if token == self.eof || slot_of[token] < 0 && any.is_empty() {
+                continue;
+            }
+            let mut moved: List<i64> = if slot_of[token] < 0 { [] } else { by_slot[slot_of[token]] };
+            for let a of &any {
+                if a.1 != token {
+                    moved.push(a.0);
+                }
+            }
+            if !moved.is_empty() {
+                out.push([token, moved]);
+            }
+        }
+        return out;
+    }
+
+    fn add_move(&self, slot_of: &mut List<i32>, by_slot: &mut List<List<i64>>, token: i32, next: i64) {
+        if token == self.eof {
+            return;
+        }
+        if slot_of[token] < 0 {
+            slot_of[token] = by_slot.len();
+            by_slot.push([]);
+        }
+        by_slot[slot_of[token]].push(next);
+    }
+
+    /// Whether alternative `lowest` stands wherever another one does. Two
+    /// configurations at one place got there alike (`SLL_BOTTOMS`) and read
+    /// the same tokens on, under any stack, so no lookahead tells them apart
+    /// and the simulator settles on the lowest, as here. `configs` is sorted,
+    /// so the configurations at one place sit together.
+    fn lowest_alt_covers_rest(configs: &List<i64>, lowest: i32) -> bool {
+        let mut i = 0;
+        while i < configs.len() {
+            let place = configs[i] / ALT_BITS;
+            let mut has_lowest = false;
+            let mut has_other = false;
+            while i < configs.len() && configs[i] / ALT_BITS == place {
+                if (configs[i] % ALT_BITS) as i32 == lowest {
+                    has_lowest = true;
+                } else {
+                    has_other = true;
+                }
+                i += 1;
+            }
+            if has_other && !has_lowest {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// The alternative `configs` leave alone, if they leave one.
+    fn settled(configs: &List<i64>) -> Option<i32> {
+        if configs.is_empty() {
+            return null;
+        }
+        let mut lowest = configs[0] % ALT_BITS;
+        let mut alone = true;
+        for let key of configs {
+            let alt = *key % ALT_BITS;
+            if alt != lowest {
+                alone = false;
+                lowest = i64::min(lowest, alt);
+            }
+        }
+        if !alone && !SllExplorer::lowest_alt_covers_rest(configs, lowest as i32) {
+            return null;
+        }
+        return Option::Some(lowest as i32);
+    }
+
+    /// The DFA of decision `decision`.
+    pub fn explore(&mut self, decision: i32) -> SllDfa {
+        let entry = &self.atn.states[self.atn.decision_state[decision]];
+        assert entry.transitions.len() > 1, "a decision the parser asks must offer alternatives";
+        if self.stacks_full() {
+            self.drop_stacks();
+        }
+        self.budget = SLL_DECISION_BUDGET;
+        let Some(start) = self.start_closure(self.atn.decision_state[decision]) else {
+            return SllDfa {
+                nodes: [SllNode::Ask],
+                kinds: self.atn.num_tokens,
+            };
+        };
+        let mut b = DfaBuild::new(start);
+        for let mut n = 0; n < b.configs.len(); n += 1 {
+            self.branch(&mut b, n);
+        }
+        return SllDfa { nodes: prune_asking(b.resolved_nodes()), kinds: self.atn.num_tokens };
+    }
+
+    /// Settle node `n`, or give it the edges the tokens after it take.
+    fn branch(&mut self, b: &mut DfaBuild, n: i32) {
+        if !b.closed[n] {
+            let d = b.depth[n];
+            let Some(closure) = self.closure(&b.configs[n], d) else {
+                return;
+            };
+            if let Some(known) = b.node_at[d].get(closure) {
+                b.alias[n] = known;
+                return;
+            }
+            b.node_at[d][closure] = n;
+            b.configs[n] = closure;
+            b.closed[n] = true;
+        }
+        if let Some(alt) = SllExplorer::settled(&b.configs[n]) {
+            b.nodes[n] = SllNode::Alt(alt);
+            return;
+        }
+        if b.depth[n] >= SLL_MAX_DEPTH {
+            return;
+        }
+        let d = b.depth[n] + 1;
+        let mut edges: List<SllEdge> = [];
+        for let [token, moved] of self.moves(&b.configs[n]) {
+            // A closure is the union of its seeds' places' closures, each
+            // carrying its seed's alternative, so it settles where its seeds
+            // do, unless no seed's place reaches anything. Short of distinct
+            // places closing over one place, it settles nothing else, and a
+            // node at the last depth that does not settle asks.
+            let to = if let Some(alt) = SllExplorer::settled(&moved) {
+                if !self.reaches_any(&moved, d) {
+                    continue;
+                }
+                if let Some(known) = b.alt_node.get(alt) {
+                    known;
+                } else {
+                    let Some(id) = b.add_node(moved, d, true) else {
+                        continue;
+                    };
+                    b.alt_node[alt] = id;
+                    id;
+                }
+            } else {
+                if d == SLL_MAX_DEPTH {
+                    continue;
+                }
+                if let Some(known) = b.moved_at[d].get(moved) {
+                    known;
+                } else {
+                    let Some(id) = b.add_node(moved, d, false) else {
+                        continue;
+                    };
+                    b.moved_at[d][moved] = id;
+                    id;
+                }
+            };
+            add_edge(&mut edges, token, to);
+        }
+        b.nodes[n] = SllNode::Branch(edges);
+    }
+}
+
+/// A decision's DFA while it is explored. A node that leaves alternatives
+/// open is its configurations at a depth, so the DFA has no cycle and the
+/// emitted matches nest at most `SLL_MAX_DEPTH` deep. One that settles is its
+/// alternative.
+///
+/// A node holds the configurations it moved to until it is branched, and only
+/// then their closure, so a node the budget never reaches costs none of it. A
+/// node whose closure another node at its depth holds already is an alias of
+/// that node. A node settled by the configurations it moved to needs no
+/// closure, so it starts `closed`.
+struct DfaBuild {
+    nodes: List<SllNode>,
+    configs: List<List<i64>>,
+    depth: List<i32>,
+    closed: List<bool>,
+    alias: List<i32>,
+    /// By depth, the node each closure or moved set is.
+    node_at: List<HashMap<List<i64>, i32>>,
+    moved_at: List<HashMap<List<i64>, i32>>,
+    alt_node: HashMap<i32, i32>,
+}
+
+impl DfaBuild {
+    fn new(start: List<i64>) -> DfaBuild {
+        let mut node_at: List<HashMap<List<i64>, i32>> = [];
+        let mut moved_at: List<HashMap<List<i64>, i32>> = [];
+        for let _ of 0..=SLL_MAX_DEPTH {
+            node_at.push(HashMap::new());
+            moved_at.push(HashMap::new());
+        }
+        node_at[0][start] = 0;
+        return DfaBuild {
+            nodes: [SllNode::Ask],
+            configs: [start],
+            depth: [0],
+            closed: [true],
+            alias: [-1],
+            node_at,
+            moved_at,
+            alt_node: HashMap::new(),
+        };
+    }
+
+    /// A new node holding `held` at depth `d`, closed or not, unless the DFA
+    /// holds `SLL_MAX_STATES` already.
+    fn add_node(&mut self, held: List<i64>, d: i32, closed: bool) -> Option<i32> {
+        if self.configs.len() >= SLL_MAX_STATES {
+            return null;
+        }
+        self.configs.push(held);
+        self.depth.push(d);
+        self.closed.push(closed);
+        self.alias.push(-1);
+        self.nodes.push(SllNode::Ask);
+        return Option::Some(self.configs.len() - 1);
+    }
+
+    /// The nodes, every edge to an alias led to the node it stands for.
+    fn resolved_nodes(&self) -> List<SllNode> {
+        let mut out = self.nodes;
+        for let mut n = 0; n < out.len(); n += 1 {
+            if let Branch(edges) = &out[n] {
+                let mut led: List<SllEdge> = [];
+                for let e of edges {
+                    let to = if self.alias[e.to] >= 0 { self.alias[e.to] } else { e.to };
+                    for let t of &e.tokens {
+                        add_edge(&mut led, *t, to);
+                    }
+                }
+                for let e of &mut led {
+                    e.tokens.sort();
+                }
+                out[n] = SllNode::Branch(led);
+            }
+        }
+        return out;
+    }
+}
+
+fn rule_follows(atn: &Atn) -> List<List<i32>> {
+    let mut follows: List<List<i32>> = List::filled(atn.rule_start.len(), []);
+    for let st of &atn.states {
+        for let t of &st.transitions {
+            if t.kind == ATN_TR_RULE && t.target >= 0 {
+                let callee = atn.states[t.target].rule;
+                if !follows[callee].contains(&t.follow) {
+                    follows[callee].push(t.follow);
+                }
+            }
+        }
+    }
+    return follows;
+}
+
+fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
+    for let mut i = 0; i < edges.len(); i += 1 {
+        if edges[i].to == to {
+            edges[i].tokens.push(token);
+            return;
+        }
+    }
+    edges.push(SllEdge {
+        tokens: [token],
+        to,
+    });
+}
+
+/// The DFA with every node that can only ask turned into `Ask`, the edges to
+/// one dropped, and the edges to one alternative merged into one edge.
+fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
+    let mut out = nodes;
+    let mut node_of_alt = HashMap::<i32, i32>::new();
+    for let mut n = 0; n < out.len(); n += 1 {
+        if let Alt(a) = &out[n] && !node_of_alt.contains_key(*a) {
+            node_of_alt[*a] = n;
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut n = 0; n < out.len(); n += 1 {
+            if let Branch(edges) = &out[n] {
+                let mut kept: List<SllEdge> = [];
+                for let e of edges {
+                    let to = if let Alt(a) = &out[e.to] {
+                        node_of_alt[*a];
+                    } else {
+                        e.to;
+                    };
+                    if !out[to] matches { Ask } {
+                        for let t of &e.tokens {
+                            add_edge(&mut kept, *t, to);
+                        }
+                    }
+                }
+                if kept.is_empty() {
+                    out[n] = SllNode::Ask;
+                    changed = true;
+                } else if kept != *edges {
+                    out[n] = SllNode::Branch(kept);
+                    changed = true;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+
+/// The function a parser predicts `decision` through: it matches the DFA's
+/// tokens, and asks the simulator where the DFA leaves the decision open.
+pub fn sll_decide_fn_name(decision: i32) -> String {
+    return `atn_decide_${decision}`;
+}
+
+/// Under `atn: "verify"`, what a shortcut's answer goes through: the answer,
+/// checked against the simulator's.
+pub global ATN_VERIFIED: String = "atn_verified";
+
+/// The call `atn_verified(decision, …, answer)` that checks `answer`, a call
+/// over the same `atn`, `tokens`, `pos` and `min_prec`.
+pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    decision: i32,
+    atn: S,
+    tokens: S1,
+    pos: S2,
+    answer: S3,
+) -> String {
+    return `${ATN_VERIFIED}(${decision}, ${atn}, ${tokens}, ${pos}, min_prec, ${answer})`;
+}
+
+/// Emit `sll_decide_fn_name(decision)`. Returns whether it reaches
+/// `ATN_VERIFIED`, which `verify` routes each of its answers through.
+pub fn gen_sll_decide_fn(
+    w: &mut CodeWriter,
+    decision: i32,
+    dfa: &SllDfa,
+    analysis: &GrammarAnalysis,
+    verify: bool,
+) -> bool {
+    let mut f = FnSpec::new(sll_decide_fn_name(decision));
+    f.add_param("atn", "&mut AtnPredictor");
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
+    f.add_param("min_prec", "i32");
+    f.set_return_type("i32");
+    f.emit_begin(w);
+    let shape = SllShape::of(dfa, decision);
+    let answer = |a: String| if verify { atn_verified_call(decision, "atn", "tokens", "pos", a) } else { a };
+    gen_sll_node(w, dfa, &shape, 0, analysis, &answer);
+    w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
+    w.end();
+    w.blank();
+    for let n of 1..<dfa.nodes.len() {
+        if shape.shared[n] {
+            w.begin(`fn ${shape.helper_name(n)}(tokens: &Array<i32>, pos: i32) -> i32`);
+            gen_sll_branch(w, dfa, &shape, n, analysis, &|a: String| a);
+            w.line("return -1;");
+            w.end();
+            w.blank();
+        }
+    }
+    return verify && dfa.nodes.iter_ref().any(|n| n matches { Alt(_) });
+}
+
+/// Where each node of a DFA is read. The DFA is a DAG, so a branch more than
+/// one edge reaches is emitted once, as a function returning the alternative
+/// it decides or -1 where it asks.
+struct SllShape {
+    decision: i32,
+    /// How many tokens past `pos` a branch reads; each path to it has as many.
+    depth: List<i32>,
+    shared: List<bool>,
+}
+
+impl SllShape {
+    fn of(dfa: &SllDfa, decision: i32) -> SllShape {
+        let mut depth = List::<i32>::filled(dfa.nodes.len(), -1);
+        let mut into = List::<i32>::filled(dfa.nodes.len(), 0);
+        depth[0] = 0;
+        let mut queue: List<i32> = [0];
+        for let mut i = 0; i < queue.len(); i += 1 {
+            let n = queue[i];
+            if let Branch(edges) = &dfa.nodes[n] {
+                for let e of edges {
+                    into[e.to] += 1;
+                    if depth[e.to] < 0 {
+                        depth[e.to] = depth[n] + 1;
+                        queue.push(e.to);
+                    }
+                    assert !dfa.nodes[e.to] matches { Branch(_) } || depth[e.to] == depth[n] + 1, "every path to a branch reads as many tokens";
+                }
+            }
+        }
+        let shared: List<bool> = (0..<dfa.nodes.len()).map(|n| into[n] > 1 && dfa.nodes[n] matches { Branch(_) }).collect(
+        );
+        return SllShape { decision, depth, shared };
+    }
+
+    fn helper_name(&self, node: i32) -> String {
+        return `${sll_decide_fn_name(self.decision)}_${node}`;
+    }
+}
+
+/// Emit `ATN_VERIFIED`. Where no alternative survives under the parse's stack,
+/// as in a scan of an alternative that is about to fail, the decision is moot
+/// and nothing is checked.
+pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
+    w.begin(
+        `fn ${ATN_VERIFIED}(decision: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
+    );
+    w.line(
+        "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec, &ATN_NO_FALSE_PREDS);",
+    );
+    w.begin("if viable && simulated != alt");
+    w.line(
+        "panic(`atn verify: decision ${decision} at token ${pos}: the parser picks ${alt}, the simulator ${simulated}`);",
+    );
+    w.end();
+    w.line("return alt;");
+    w.end();
+    w.blank();
+}
+
+/// The kinds among `0..kinds` that no edge of `edges` names.
+fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
+    let mut named = List::<bool>::filled(kinds, false);
+    for let e of edges {
+        for let t of &e.tokens {
+            named[*t] = true;
+        }
+    }
+    return (0..<kinds).filter(|k| !named[k]).collect();
+}
+
+/// `answer` renders what a decided alternative, an expression, is returned as.
+fn gen_sll_node(
+    w: &mut CodeWriter,
+    dfa: &SllDfa,
+    shape: &SllShape,
+    node: i32,
+    analysis: &GrammarAnalysis,
+    answer: &fn(String) -> String,
+) {
+    match &dfa.nodes[node] {
+        Alt(a) => w.line(`return ${answer(`${*a}`)};`),
+        Ask => {
+        },
+        Branch(_) => {
+            if shape.shared[node] {
+                w.line(`let alt = ${shape.helper_name(node)}(tokens, pos);`);
+                w.line(`if alt >= 0 { return ${answer("alt")}; }`);
+            } else {
+                gen_sll_branch(w, dfa, shape, node, analysis, answer);
+            }
+        },
+    }
+}
+
+/// The match branch `node` reads its token in.
+fn gen_sll_branch(
+    w: &mut CodeWriter,
+    dfa: &SllDfa,
+    shape: &SllShape,
+    node: i32,
+    analysis: &GrammarAnalysis,
+    answer: &fn(String) -> String,
+) {
+    let Branch(edges) = &dfa.nodes[node] else {
+        unreachable();
+    };
+    let depth = shape.depth[node];
+    let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
+    // The widest edge takes `_` where the tokens that ask are fewer to name: a
+    // DFA over an expression reads a keyword set at many nodes. A numeric
+    // `type(N)` lexes a kind past `kinds`, which `_` must leave asking: a
+    // wildcard may take it where the widest edge does not.
+    let asking = asking_tokens(edges, dfa.kinds);
+    let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
+    let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };
+    let known_kind = if fallback < 0 { "" } else { ` && tokens[${at}] < ${dfa.kinds}` };
+    w.begin(`if ${at} < tokens.len()${known_kind}`);
+    w.begin(`match tokens[${at}]`);
+    for let mut i = 0; i < edges.len(); i += 1 {
+        if i != fallback {
+            w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
+            gen_sll_node(w, dfa, shape, edges[i].to, analysis, answer);
+            w.end_with(",");
+        }
+    }
+    if fallback < 0 {
+        w.line("_ => {},");
+    } else {
+        if !asking.is_empty() {
+            w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
+        }
+        w.begin("_ =>");
+        gen_sll_node(w, dfa, shape, edges[fallback].to, analysis, answer);
+        w.end_with(",");
+    }
+    w.end_with(";");
+    w.end();
+}

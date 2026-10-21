@@ -102,6 +102,7 @@ global global:dict_mini.wado::$const_obj_14: ref "core:prelude/string.wado//Stri
 global global:dict_mini.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(110, 97, 109, 101, 58, 32);
 
 fn "dict_mini.wado/run"() with Stdout {
+    let $load_47: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $match_13: ref null "core:prelude/string.wado//String";
     let n_39: i32;
@@ -247,11 +248,11 @@ fn "dict_mini.wado/run"() with Stdout {
     }
     new_used_43 = $local_4.used;
     $local_4.used = start_44;
-    builtin::array_copy<u8>($local_4.repr, new_used_43, global:dict_mini.wado::$const_obj_6, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_47($local_4.repr), new_used_43, global:dict_mini.wado::$const_obj_6, 0, 6);
     start_44 = local.tee new_used_43($sroa_dict_entries_169.used) < 0;
     new_used_43 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_177($cm_pair_7_177 = builtin::i64_extend_i32_s(new_used_43); select i64($cm_pair_7_177 < 0_i64, 0_i64 - $cm_pair_7_177, $cm_pair_7_177)));
     if start_44 {
-        if @unlikely(local.tee start_44($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+        if @unlikely(local.tee start_44($local_4.used + 1) > builtin::array_len($load_47)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_44);
         }

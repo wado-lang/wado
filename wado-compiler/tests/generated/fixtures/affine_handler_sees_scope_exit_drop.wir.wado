@@ -205,6 +205,7 @@ global global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0: ref Array<
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
+    let $load_8: ref Array<u8>;
     let c_0: ref "affine_handler_sees_scope_exit_drop.wado//Counter";
     let rx_1: ref null "core:prelude//$Resource";
     let $local_4: ref "core:prelude/string.wado//String";
@@ -253,11 +254,11 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     }
     start_26 = $local_4.used;
     $local_4.used = new_used_25;
-    builtin::array_copy<u8>($local_4.repr, start_26, global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_8($local_4.repr), start_26, global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0, 0, 6);
     new_used_25 = local.tee start_26(c_0.drops) < 0;
     start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_5($cm_pair_5 = builtin::i64_extend_i32_s(start_26); select i64($cm_pair_5 < 0_i64, 0_i64 - $cm_pair_5, $cm_pair_5)));
     if new_used_25 {
-        if @unlikely(local.tee new_used_25($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+        if @unlikely(local.tee new_used_25($local_4.used + 1) > builtin::array_len($load_8)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_25);
         }

@@ -73,6 +73,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:labeled_block_break_in_tuple_for_of.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
+    let $load_0: ref Array<u8>;
     let out_0: ref "core:prelude/string.wado//String";
     let found_6: u8;
     let $local_12: ref "core:prelude/string.wado//String";
@@ -93,8 +94,8 @@ fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
     is_negative = found_6 < 0;
     found_6 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(found_6); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_12, is_negative, found_6);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_12.repr, is_negative, x, found_6);
-    if @unlikely(local.tee found_6($local_12.used + 1) > builtin::array_len($local_12.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0($local_12.repr), is_negative, x, found_6);
+    if @unlikely(local.tee found_6($local_12.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, found_6);
     }
@@ -123,8 +124,8 @@ fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     is_negative = "core:prelude/primitive.wado/count_digits_u64"(x);
     start_54 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_12, 0, is_negative);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_12.repr, start_54, x, is_negative);
-    if @unlikely(local.tee is_negative($local_12.used + 1) > builtin::array_len($local_12.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0($local_12.repr), start_54, x, is_negative);
+    if @unlikely(local.tee is_negative($local_12.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, is_negative);
     }

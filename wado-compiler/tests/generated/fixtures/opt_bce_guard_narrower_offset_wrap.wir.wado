@@ -89,12 +89,13 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     let x: i64;
     if @unlikely((i + 1) >= local.tee $load_0(arr.used)) {
         cold_path;
-        "core:rt/panic"(array.new_data<u8>("offset guard"), 12);
+        let $mv_field_1: ref Array<u8>;
+        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("offset guard")), 12);
         unreachable;
     }
     if @unlikely(i >= $load_0) {
         cold_path;
-        "core:rt/panic"(array.new_data<u8>("plain guard"), 11);
+        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("plain guard")), 11);
         unreachable;
     }
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
@@ -104,11 +105,11 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     }
     start_18 = $local_2.used;
     $local_2.used = $load_0;
-    builtin::array_copy<u8>($local_2.repr, start_18, global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_3, 0, 3);
+    builtin::array_copy<u8>(local.tee $mv_field_1($local_2.repr), start_18, global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_3, 0, 3);
     start_18 = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(i); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_18 {
-        if @unlikely(local.tee start_18($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+        if @unlikely(local.tee start_18($local_2.used + 1) > builtin::array_len($mv_field_1)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_18);
         }

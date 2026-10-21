@@ -163,6 +163,7 @@ global mut global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clo
 global global:effect_handler_with_do.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(109, 97, 114, 107, 58, 32);
 
 fn "effect_handler_with_do.wado/run"() with Stdout {
+    let $load_6: ref Array<u8>;
     let clock: ref "effect_handler_with_do.wado//FixedClock";
     let $local_2_2: ref "core:prelude/string.wado//String";
     let $save_wasi:clocks/monotonic_clock.wado/MonotonicClock: ref null "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock";
@@ -195,9 +196,9 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     }
     start_22 = $local_2_2.used;
     $local_2_2.used = new_used_21;
-    builtin::array_copy<u8>($local_2_2.repr, start_22, global:effect_handler_with_do.wado::$const_obj_3, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_6($local_2_2.repr), start_22, global:effect_handler_with_do.wado::$const_obj_3, 0, 6);
     start_22 = "core:prelude/primitive.wado/count_digits_u64"($local_2_9);
-    if @unlikely(local.tee new_used_21($local_2_2.used + start_22) > builtin::array_len($local_2_2.repr)) {
+    if @unlikely(local.tee new_used_21($local_2_2.used + start_22) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_21);
     }

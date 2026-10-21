@@ -20,13 +20,11 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
 - [ ] **A mid operand holding another mid-operand alternative fails to parse.** With `lr_mid_operand.g4`, `a between b between c and d and e` reports an error, while the jar gives `(s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))`. Every single-level case in `driver_cst_lr_mid_operand_test` matches the jar, and SQLite's `expr` has this shape.
+- [ ] **The TypeScript parser's lookahead DFA disagrees with the simulator.** Under `atn: "verify"`, parsing `benchmark/typescript/input.ts` panics with `atn verify: decision 230 at token 2873: the parser picks 19, the simulator 0`. `auto` takes the DFA's answer there, so its tree may differ from the jar's. The TypeScript driver and tools generate with `auto` until this is closed; `driver_cst_typescript_test`'s own inputs pass under `verify`.
 - [ ] **Recovery trees diverge from ANTLR4 where the edit is Gale's own.** Decision sync and rule-level resync follow ANTLR4 (`resilient-parser.md`, "Building: TreeBuilder + recovery"), pinned against the jar in `tests/driver_cst_antlr_recovery_test.wado`. Three places still differ:
   - The `<error>` region path skips mid-input where ANTLR4 fails the rule. On `tests/grammars/error_recovery.g4`, `let x = } } ;` gives `(item let x = (<error> <skip }> <skip }>) <missing ID> ;)`, and the jar gives `(single (item let x = } } ;) <EOF>)`. `driver_cst_error_recovery_test` pins Gale's tree.
   - A scan-gated decision does not enter a body whose scan fails. On `e : e '+' e | INT | '(' e ')'`, the input `1 + z z` gives `(expr (e 1))`, and the jar gives `(expr (e (e 1) + (e z z)))`. On `r : 'o' ('y' 'v')? '!'`, the input `o y !` deletes `y`, and the jar gives `(r o y <missing 'v'> !)`. The same shape with `*` matches the jar.
   - A non-greedy loop has no loop-back sync, and a group the op walker emits has no entry sync.
-- [ ] **`benchmark/typescript/input.ts` parses clean, but its tree differs from the jar's in about 130 places.** Two shapes account for most of them:
-  - `new Map<string, T>()` gives `new (e Map (e (e <typeArguments>) (arguments ( ))))`. The jar gives `new (e Map (e <typeArguments>)) (arguments ( ))`, leaving `()` to the `new`.
-  - The jar parses `if (…) {…}`, `try {…}` and `for (…)` statements as `expressionStatement` wherever that also scans, and Gale parses them as `ifStatement`, `tryStatement` and `iterationStatement`.
 - [ ] **A lexer alternation whose arms stop at different lengths can pick an arm the rest of the token cannot follow.** `A : ('q' ('y' | 'yz') | 'w') 'h' ;` lexes `qyzh` as four tokens, and so does `B : 'k' ('y' | 'yz')? 'h' ;` on `kyzh`; the jar gives one token each. A fragment whose body is such an alternation, or a single-alternative group or fragment ending in one, lexes as the jar does (`lexer_alt_suffix_shapes.g4`).
 - [ ] **A lexer rule called from a rule that folds case differently takes the first arm of its alternation.** With `A : B 'z' ; B options { caseInsensitive = true; } : 'a' | 'ab' ;`, `abz` lexes as `B:a` and two errors, and `ab` as `B:a` and an error; the jar gives `A:abz` and `B:ab`. The same grammar with the option on both rules, or on neither, lexes as the jar does.
 
@@ -36,7 +34,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ### Pipeline and tooling correctness
 
-Empty right now.
+- [ ] **No test says that `never`, `auto` and `always` build the same tree.** `atn: "verify"` checks only the answers the lookahead DFA and the LR table give for decisions `auto` routes to the simulator. A decision the static path settles, and every decision `never` settles, goes unchecked. The suite runs each grammar under one mode, and running it under all four costs four times over. The intent is a `verify` that asserts the modes agree, cheap enough to be the suite's mode. The cost to beat is code size, since compiling dominates the suite: the generated SQLite parser is 1.0 MB under `never`, 1.8 MB under `auto` and 9.5 MB under `always`.
 
 ## Stage C — action / predicate execution
 
@@ -88,7 +86,8 @@ The 37 are not a gap: each carries neither `[output]` nor `[errors]`, so the des
 Remaining:
 
 - **Pin the `superClass` lexers as their own Stage B′ key.** `antlr4-oracle.sh --super` now answers for `RustLexer` against the same base class `tools/rust_corpus.wado` ports, so its token stream can be oracle-pinned the way `sqlite` and `json` pin trees. `regen-oracle.sh` pins `to_string_tree()` output only, so a token-stream key is new plumbing rather than config.
-- **`TypeScriptLexer` and `ANTLRv4Lexer` have no oracle at all** until each has a base class on both sides. The Wado `impl` exists for both (in their driver tests), but the `tests/grammars/java/` lexer twin does not (TypeScript's _parser_ base has one), and TypeScript's port still has one gap a pin would fix in place: it approximates `IsStrictMode`, which has no lexer-visible answer. ANTLR4's port has none — `Antlr4Base::emit` asks `core:icu` for `Character.isUpperCase` through the same classifier the `.g4` parser reads. `--probe-super` does not substitute; until then those grammars are pinned only by parse-success.
+- **`ANTLRv4Lexer` has no oracle at all** until it has a base class on both sides. The Wado `impl` exists in its driver test, and `Antlr4Base::emit` asks `core:icu` for `Character.isUpperCase` through the same classifier the `.g4` parser reads; the `tests/grammars/java/` twin does not exist. `--probe-super` does not substitute; until then the grammar is pinned only by parse-success.
+- **TypeScript has both twins but no pinned oracle trees.** A file is compared on demand, and no test holds the jar's trees. Both twins approximate `IsStrictMode` the same way, from a `'use strict'` literal alone, since the lexer cannot see the parser's notion of scope.
 - **The `[skip]` bucket is down to three, each held by a directive that changes what the parser produces**: `ParseTrees/AltNum` (`contextSuperClass` + `<TreeNodeWithAltNumField>` render alt numbers into node names), `ParserExec/ParserProperty` (`<ParserPropertyMember()>` declares the member a semantic predicate calls), `LexerExec/PositionAdjustingLexer` (`<PositionAdjustingLexer()>` overrides `nextToken()`). Expanding any of them away would leave a test that no longer tests what the descriptor is for, so each needs the host-side construct genuinely modelled — or the judgement that it is target-language-specific and stays skipped.
 - **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does — it lost a real divergence that way (a token whose own text ends in a space). Stage B is exposed to the same class of masking; no committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live.
 
@@ -113,6 +112,10 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 ### Multi-alt rule-reference expansion in the caller-side mask analysis
 
 The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
+
+### A loop's FOLLOW gate yields where entering stays viable
+
+A greedy `*` yields to any caller continuation that matches, but ANTLR4 loops wherever another iteration stays viable. The test "a greedy loop keeps an iteration its caller's continuation also reads" (`#[TODO]`) pins Rust's `impl Fn() -> a::R + Send`. The same gap keeps a SimpleCst group's call at `NoFollow`. Forwarding the group's continuation there is exact, and on this repository's Rust it exposes the gap in `web_dom_e2e.rs`.
 
 ### Opaque first sets in the LR routing and precedence checks
 

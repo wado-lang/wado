@@ -16,7 +16,7 @@ use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { Span } from "./runtime/lex.wado";
 use { Token } from "./g4/token.wado";
 use { parse } from "./g4/parser.wado";
-use { assign_atn_call_sites } from "./ir.wado";
+use { Grammar, assign_action_ids, assign_atn_call_sites } from "./ir.wado";
 
 fn mk(kind: i32) -> Token {
     return Token::new(kind, "", Span::new(0, 0));
@@ -117,11 +117,63 @@ test "predict resolves a two-token shared-prefix decision" {
     assert adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
+// A numeric `type(N)` lexes a kind past the grammar's, which `.` and `~X` match
+// (see "Bugs in ANTLR4 itself").
+test "a wildcard predicts a kind past the grammar's" {
+    let atn = build_atn(&parse("grammar T;\na : A X | . X | ~A X ;\nA : 'a' ;\nX : 'x' ;\n").unwrap());
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 0);
+    let x = 1;
+    let eof = 2;
+    let foreign = atn.num_tokens + 5;
+    assert adaptive_predict(&sim, d, &([x, x] as List<i32>).to_array(), 0, eof) == 1;
+    assert adaptive_predict(&sim, d, &([foreign, x] as List<i32>).to_array(), 0, eof) == 1;
+}
+
+global K2_BRACE_G4: String = "
+grammar T;
+a : ID '(' ')' | ID '{' '}' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+// The program-wide DFA caches one ATN's predictions, so a second ATN, even one
+// of the same size, must not read them.
+#[expect_trap]
+test "the shared DFA refuses a second ATN of the same size" {
+    let first = build_atn(&parse(K2_G4).unwrap());
+    let second = build_atn(&parse(K2_BRACE_G4).unwrap());
+    assert first.states.len() == second.states.len();
+    let kinds = to_kinds(&[
+        mk(0),
+        mk(4),
+        mk(5),
+    ]);
+    atn_predict_once(&decode(&first), rule_block_decision(&first, 0), &mut AtnPredictor::new(), &kinds, 0, 2);
+    atn_predict_once(&decode(&second), rule_block_decision(&second, 0), &mut AtnPredictor::new(), &kinds, 0, 2);
+}
+
 // ANTLR4 finds the viable alternatives first and only then drops the ones a
 // false predicate gates (`doc/predicates.md`), so disabling the only viable alt
 // leaves none rather than handing the decision to one the input cannot take.
-test "predict drops a disabled alternative from the viable ones" {
-    let g = parse(K2_G4).unwrap();
+global K2_PRED_G4: String = "
+grammar T;
+a : {p0}? ID '(' ')' | {p1}? ID '[' ']' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+/// The action id of the predicate opening `rule`'s alternative `alt`.
+fn left_edge_pred_id(g: &Grammar, rule: i32, alt: i32) -> i32 {
+    return g.parser_rules[rule].alternatives[alt].left_edge_predicates()[0].source.action_id;
+}
+
+// ANTLR4 finds the viable alternatives first and only then drops the ones a
+// false predicate gates (`doc/predicates.md`), so failing the only viable alt
+// leaves none rather than handing the decision to one the input cannot take.
+test "predict drops an alternative whose predicate fails from the viable ones" {
+    let mut g = parse(K2_PRED_G4).unwrap();
+    assign_action_ids(&mut g);
     let atn = build_atn(&g);
     let sim = decode(&atn);
     let d = rule_block_decision(&atn, 0);
@@ -134,24 +186,25 @@ test "predict drops a disabled alternative from the viable ones" {
         mk(5),
     ];  // ID '(' ')' — only alt 0 is viable
     let kinds = to_kinds(&paren);
-    let pick = |disabled: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &disabled);
+    let pick = |false_preds: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &false_preds);
     assert pick([]) == 0;
-    assert pick([1]) == 0;
-    assert pick([0]) == -1;
+    assert pick([left_edge_pred_id(&g, 0, 1)]) == 0;
+    assert pick([left_edge_pred_id(&g, 0, 0)]) == -1;
 }
 
 global COVER_G4: String = "grammar C;
 s : a EOF ;
-a : X Y? | X ;
+a : {p}? X Y? | X ;
 X : 'x' ;
 Y : 'y' ;
 ";
 
 // After `x` the first alternative holds every state the second does, which
 // settles the decision only while the first may win it.
-test "a disabled alternative covering the others does not settle the decision" {
+test "a failed alternative covering the others does not settle the decision" {
     let mut g = parse(COVER_G4).unwrap();
     assign_atn_call_sites(&mut g);
+    assign_action_ids(&mut g);
     let atn = build_atn(&g);
     let tk = TokenKinds::build(&g);
     let eof = tk.id_of("TK_EOF");
@@ -164,7 +217,7 @@ test "a disabled alternative covering the others does not settle the decision" {
         tk.id_of("TK_Y"),
         eof,
     ] as List<i32>).to_array();
-    let pick = |kinds: &Array<i32>, disabled: List<i32>| atn_predict_with_stack(
+    let pick = |kinds: &Array<i32>, false_preds: List<i32>| atn_predict_with_stack(
         &sim,
         d,
         &stack,
@@ -172,12 +225,50 @@ test "a disabled alternative covering the others does not settle the decision" {
         0,
         eof,
         0,
-        &disabled,
+        &false_preds,
     );
+    let p = left_edge_pred_id(&g, 1, 0);
     assert pick(&x_only, []) == 0;
-    assert pick(&x_only, [0]) == 1;
+    assert pick(&x_only, [p]) == 1;
     assert pick(&x_y, []) == 0;
-    assert pick(&x_y, [0]) == -1;
+    assert pick(&x_y, [p]) == -1;
+}
+
+global CALLEE_PRED_G4: String = "grammar P;
+s : g X | A X ;
+g : {q}? A | B ;
+A : 'a' ; B : 'b' ; X : 'x' ;
+";
+
+// A predicate on one alternative of a called rule closes that path alone: `s`
+// still takes its first alternative through `g`'s second.
+test "a failed predicate in a called rule closes only its own path" {
+    let mut g = parse(CALLEE_PRED_G4).unwrap();
+    assign_action_ids(&mut g);
+    let atn = build_atn(&g);
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 0);
+    let empty: List<i32> = [];
+    let q = [left_edge_pred_id(&g, 1, 0)] as List<i32>;
+    let pick = |first: String, false_preds: &List<i32>| atn_predict_with_stack(
+        &sim,
+        d,
+        &empty,
+        &([
+            tk.id_of(first),
+            tk.id_of("TK_X"),
+            eof,
+        ] as List<i32>).to_array(),
+        0,
+        eof,
+        0,
+        false_preds,
+    );
+    assert pick("TK_A", &[]) == 0;
+    assert pick("TK_A", &q) == 1;
+    assert pick("TK_B", &q) == 0;
 }
 
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
@@ -326,6 +417,44 @@ test "a prediction settled inside the visible frames reads no hidden caller" {
     let x = to_kinds(&[mk(4)]);
     assert atn_predict_once(&sim, d, &mut state, &x, 0, tk.id_of("TK_EOF")) == 0;
     assert !state.reveal_callers(hidden);
+}
+
+global TWO_SITES_G4: String = "grammar E;
+prog : top D ;
+top : (r B | Q r) C ;
+r : A | A B ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+Q : 'q' ;
+";
+
+// The predictions a parse caches answer the caller stack they were asked under.
+// On `a b c`, `r` takes `a` at the `r B` call site and `a b` after `q`.
+test "a cached prediction answers only its own caller stack" {
+    let mut g = parse(TWO_SITES_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 2);
+    let csr = &atn.call_site_returns;
+    let kinds = ([
+        tk.id_of("TK_A"),
+        tk.id_of("TK_B"),
+        tk.id_of("TK_C"),
+        tk.id_of("TK_D"),
+        eof,
+    ] as List<i32>).to_array();
+    let mut state = AtnPredictor::new();
+    for let round of 0..<2 {
+        state.stack = [-1, csr[0], csr[1]];
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 0, `round ${round}`;
+        state.stack = [-1, csr[0], csr[2]];
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 1, `round ${round}`;
+    }
 }
 
 // P4.1: the rewritten LR loop-entry form is walkable. A naive

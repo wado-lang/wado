@@ -493,6 +493,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix
 
 fn "core:prelude/intparse.wado/split_sign$sroa[return]"(s) {
     let $load_1: i32;
+    let $load_3: ref Array<u8>;
     let len: i32;
     let is_negative: bool;
     let $v1_8: i32;
@@ -523,16 +524,16 @@ fn "core:prelude/intparse.wado/split_sign$sroa[return]"(s) {
             "core:prelude/intparse.wado/split_sign$cold1$dae[s]"(len, $v1_8, $load_1);
             unreachable;
         }
-        if @unlikely(local.tee $av_37((if local.tee $load_1("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(s.repr, s.start, s.end, $v1_8)) -> i32 {
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(s.repr, s.start, s.end, len);
+        if @unlikely(local.tee $av_37((if local.tee is_negative("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $load_3(s.repr), local.tee $load_1(s.start), local.tee $av_37(s.end), $v1_8)) -> i32 {
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"($load_3, $load_1, $av_37, len);
         } else {
             0;
         })) == 0) {
             cold_path;
-            "core:prelude/intparse.wado/split_sign$cold0"(s, len, $v1_8, $load_1);
+            "core:prelude/intparse.wado/split_sign$cold0"(s, len, $v1_8, is_negative);
             unreachable;
         }
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(s.repr, s.start, $v1_8, len);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"($load_3, $load_1, $v1_8, len);
     } }, 0;
 }
 

@@ -15,6 +15,7 @@ use {
 } from "./ir.wado";
 use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
 use { Diagnostic } from "./gir.wado";
+use { AtnMode } from "./gen_settings.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
@@ -48,18 +49,27 @@ fn diagnostics_saying<S: AsStrSlice>(out: &GeneratedOutput, text: S) -> i32 {
 /// What the parser generated from `grammar` makes of each input to `rule`, one
 /// line each: `input => tree`, or `error`, then any action output. The error's
 /// wording is left out: compatibility covers what is rejected, not how it reads.
-fn parses<S: AsStrSlice>(grammar: S, rule: String, inputs: List<String>) -> String {
-    return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect());
+fn parses<S: AsStrSlice>(
+    grammar: S,
+    rule: String,
+    inputs: List<String>,
+    options: &GenerateOptions = &DEFAULT_OPTIONS,
+) -> String {
+    return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect(), options);
 }
 
 /// `parses` for a grammar with several entry rules: each `[rule, input]` pair,
 /// one line each.
-fn parses_each<S: AsStrSlice>(grammar: S, cases: List<[String, String]>) -> String {
+fn parses_each<S: AsStrSlice>(
+    grammar: S,
+    cases: List<[String, String]>,
+    options: &GenerateOptions = &DEFAULT_OPTIONS,
+) -> String {
     let mut body = String::new();
     for let [rule, input] of cases {
         body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
     }
-    return printed(grammar, body, SHOW_FN);
+    return run_beside(gen_with(grammar, options).source, body, SHOW_FN).stdout;
 }
 
 /// The tokens the lexer generated from `grammar` makes of each input, one line
@@ -377,17 +387,17 @@ Y : 'Y' ;
 }
 
 test "an alternative's scan helper is emitted once for the scan and the parse" {
-    // Alt 0 is contested in `scan_r`, so the scan side emits its function; the
-    // parse side's tournament scans it too, and must call that function.
+    // Alt 0 is contested in `scan_r`, which the group in `s` scans, so the scan
+    // side emits its function; the parse side's tournament scans it too, and
+    // must call that function.
     let input = "grammar T;
-s : r EOF ;
-r : a X | A a Y | B a Z ;
-a : (A|B)+ ;
-A : 'A' ;
-B : 'B' ;
+s : (r X | r Y) EOF ;
+r : ID '=' e | e ;
+e : ID | INT ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
 X : 'X' ;
 Y : 'Y' ;
-Z : 'Z' ;
 ";
     let output = gen_source(input);
     assert output.split("fn scan_r__alt_0(").count() == 2, "defined once";
@@ -397,8 +407,7 @@ Z : 'Z' ;
 test "a scan never re-tests a token its guard already proved" {
     // `(',' b)*` enters on `','`, and `('*' | '/')` is one token out of two.
     let input = "grammar T;
-s : r EOF ;
-r : a | a X ;
+s : (a | a X) EOF ;
 a : b (',' b)* ('*' | '/') ;
 b : Y ;
 X : 'X' ;
@@ -592,6 +601,22 @@ ID : [a-z]+ ;
     assert !body.contains("p.expect(TK_LIT_DOT");
 }
 
+test "a ternary's last operand climbs past a suffix that opens with its `?`" {
+    // TypeScript's `singleExpression '?'? '.' identifierName` beside its
+    // ternary. Trees from the jar.
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '?'? '.' ID | e '*' e | e '?' e ':' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a ? s : x * y", "a ? s : x . y", "a ? s : x", "a ? . b"]);
+    assert got == "a ? s : x * y => (s (e (e a) ? (e s) : (e (e x) * (e y))))
+a ? s : x . y => (s (e (e a) ? (e s) : (e (e x) . y)))
+a ? s : x => (s (e (e a) ? (e s) : (e x)))
+a ? . b => (s (e (e a) ? . b))
+";
+}
+
 test "a prefix operator set takes the token its arm tested" {
     let input = "grammar T;
 s : e EOF ;
@@ -679,21 +704,21 @@ B : 'B' ;
 }
 
 test "trace option instruments the scan tournament and alt picks" {
-    // `b X` vs `b Y` hides the deciding token inside `b`, so this is the scan
-    // tournament; trace shows each alt's scan length and the winner.
+    // `Z X` vs `b` share `Z`, and no caller continues on `X`. A second `Z`
+    // matches no branch of the static tree, so the scan tournament decides;
+    // trace shows each alt's scan length and the winner.
     let input = "grammar T;
 r : a EOF ;
-a : b X
-  | b Y
+a : Z X
+  | b
   ;
-b : Z Z ;
+b : Z | X ;
 X : 'X' ;
-Y : 'Y' ;
 Z : 'Z' ;
 ";
-    let log = traced(input, "parse_r(\"ZZY\")");
+    let log = traced(input, "parse_r(\"ZZ\")");
     assert log.contains("scan a alt#0: fail rule=a alt=0 end=-1
-TRACE gale.trace:       scan a alt#1: -> @3 rule=a alt=1 end=3
+TRACE gale.trace:       scan a alt#1: -> @1 rule=a alt=1 end=1
 TRACE gale.trace:       pick a alt#1 rule=a alt=1
 ");
 
@@ -702,6 +727,166 @@ TRACE gale.trace:       pick a alt#1 rule=a alt=1
     assert !plain.contains("trace_scan_alt");
     assert !plain.contains("trace_pick");
     assert !plain.contains("trace_try");
+}
+
+// `b` hides the token that tells `b X` from `b`, so the static tree gives up.
+global OPAQUE_PREFIX_G4: String = "grammar T;
+r : a EOF ;
+a : b X | b ;
+b : Z Z ;
+X : 'X' ;
+Z : 'Z' ;
+";
+
+test "atn never leaves an ambiguity the simulator decides by default to the tournament" {
+    assert gen_source(OPAQUE_PREFIX_G4).contains("atn_predict_once(&ATN_SIM, ");
+    let never = gen_with(OPAQUE_PREFIX_G4, &GenerateOptions { atn: AtnMode::Never });
+    assert !never.source.contains("ATN_SIM");
+    assert never.source.contains("let _sd_p_0 = scan_a__alt_0(");
+    assert !never.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
+}
+
+// `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
+// the longest scan, `a B`, and strands the `B` the rule still owes.
+global GROUP_LONGEST_G4: String = "grammar G;
+s : (a | a B) B EOF ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+
+test "atn always lets the simulator decide a group" {
+    let inputs: List<String> = ["a b", "a b b"];
+    assert parses(GROUP_LONGEST_G4, "s", inputs) == "a b => error\na b b => (s (a a) b b)\n";
+    let always = parses(GROUP_LONGEST_G4, "s", inputs, &GenerateOptions { atn: AtnMode::Always });
+    assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+}
+
+// The atom choice reads past `any`'s nesting, so the simulator owns it, and the
+// LR loop decides through its table.
+global VERIFIED_LR_G4: String = "grammar L;
+s : K_SEL e (K_ORD ID)? EOF ;
+e : e '||' e | e '=' e | e 'and' e | e 'btw' e 'and' e | n | f '(' ')' | '(' e ')' | INT ;
+n : any ;
+f : any ;
+any : ID | '(' any ')' ;
+K_SEL : 'sel' ;
+K_ORD : 'ord' ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify checks the shortcuts against the simulator and parses as auto does" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let source = gen_with(VERIFIED_LR_G4, &verify).source;
+    assert source.contains("atn_verified(");
+    assert source.contains("fn atn_lr_decide_");
+    assert !gen_source(VERIFIED_LR_G4).contains("atn_verified(");
+    let inputs: List<String> = [
+        "sel a = 1 ord b", "sel (a) = f() ord b", "sel ((a)) || 1 = (b)", "sel a btw 1 and 2 and b = 3",
+        "sel a and b btw c and d",
+    ];
+    assert parses(VERIFIED_LR_G4, "s", inputs, &verify) == parses(VERIFIED_LR_G4, "s", inputs);
+}
+
+// `type(99)` lexes a kind past the grammar's, which only `.` takes (see "Bugs
+// in ANTLR4 itself"). Each table the generator builds covers the grammar's
+// kinds, so it must not turn this one away: the lookahead DFA's widest edge
+// here settles on the set, the LR loop's `_` exits, and a rule's sync set
+// lists the grammar's kinds alone.
+global FOREIGN_KIND_G4: String = "grammar T;
+r : a X EOF ;
+a : b (A | B | C | D | E | F | G) | b . ;
+b : Z Z ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+E : 'e' ;
+F : 'f' ;
+G : 'g' ;
+X : 'x' ;
+Z : 'z' ;
+Q : 'q' -> type(99) ;
+WS : ' ' -> skip ;
+";
+
+global FOREIGN_KIND_LR_G4: String = "grammar L;
+s : e EOF ;
+e : e '+' e | e . INT | INT ;
+INT : [0-9]+ ;
+Q : 'q' -> type(99) ;
+WS : ' ' -> skip ;
+";
+
+global FOREIGN_KIND_STATIC_G4: String = "grammar S;
+r : (A X | . Y) EOF ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+Q : 'q' -> type(99) ;
+WS : ' ' -> skip ;
+";
+
+test "a wildcard takes a kind past the grammar's" {
+    let dfa: List<String> = ["z z q x", "z z a x"];
+    assert parses(FOREIGN_KIND_G4, "r", dfa) == "z z q x => (r (a (b z z) q) x)\nz z a x => (r (a (b z z) a) x)\n";
+    let lr: List<String> = ["1 q 2", "1 + 2"];
+    assert parses(FOREIGN_KIND_LR_G4, "s", lr) == "1 q 2 => (s (e (e 1) q 2))\n1 + 2 => (s (e (e 1) + (e 2)))\n";
+    let static: List<String> = ["q y", "a x"];
+    assert parses(FOREIGN_KIND_STATIC_G4, "r", static) == "q y => (r q y)\na x => (r a x)\n";
+    let loop_g4 = "grammar N;\nr : (~A)* A EOF ;\nA : 'a' ;\nB : 'b' ;\nQ : 'q' -> type(99) ;\nWS : ' ' -> skip ;\n";
+    let looped: List<String> = ["q b q a", "a"];
+    assert parses(loop_g4, "r", looped) == "q b q a => (r q b q a)\na => (r a)\n";
+}
+
+// Each repeat's body can start what follows it, so its first token does not say
+// whether it enters. The trees are the jar's.
+global CONTESTED_REPEATS_G4: String = "grammar R;
+s : a* a B EOF ;
+t : C c? c EOF ;
+u : (A | B)+ A B EOF ;
+a : A ;
+c : D+ ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+
+test "atn always lets the simulator decide a contested repeat" {
+    let got = parses_each(CONTESTED_REPEATS_G4, [
+        ["s", "a b"],
+        ["s", "a a a b"],
+        ["t", "c d d"],
+        ["t", "c d d d"],
+        ["u", "a a b"],
+        ["u", "a b a b"],
+    ], &GenerateOptions { atn: AtnMode::Always });
+    assert got == "a b => (s (a a) b)
+a a a b => (s (a a) (a a) (a a) b)
+c d d => (t c (c d) (c d))
+c d d d => (t c (c d d) (c d))
+a a b => (u a a b)
+a b a b => (u a b a b)
+";
+}
+
+test "atn never refuses a decision only the simulator makes" {
+    let never = gen_with("grammar T;
+r : A?? A B ;
+A : 'a' ;
+B : 'b' ;
+", &GenerateOptions { atn: AtnMode::Never });
+    let refusals: List<String> = never.diagnostics.iter_ref().filter(
+        |d: &Diagnostic| d.kind matches { SimulatorRequired },
+    ).map(
+        |d: &Diagnostic| `${d.owner.label()}: ${d.message}`,
+    ).collect();
+    assert refusals == ["rule 'r': a non-greedy `??` only the ATN simulator decides, and `atn: \"never\"` refuses it"];
 }
 
 test "trace suppresses the pick line for all-single-token rules" {
@@ -1076,7 +1261,7 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     let body = extract_fn_body(&output, "fn _parse_if_stmt__inner(");
     // The `??` enter/skip decision is the ATN simulator's, stamped at compile time,
     // so the shape stays one `if` whose condition is the simulator call.
-    assert body.contains("if atn_predict_once(&ATN_SIM,");
+    assert body.contains("if atn_decide_");
     assert body.contains(") == 1");
     assert !body.contains("atn_ng_optional_enter(");
     assert !body.contains("if p.peek_kind() == TK_LIT_else");
@@ -1167,7 +1352,7 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
     assert output.contains("fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert output.contains(", &mut p.atn, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert output.contains("(&mut p.atn, &p.kinds, p.pos, min_prec) == 1");
     assert output.contains("atn_predict_once(&ATN_SIM,");
 }
 
@@ -1282,12 +1467,12 @@ test "a tail optional enters only where its body can match" {
 test "an optional probe that scans the rest of an alternative ends its scan" {
     let output = gen_source("
 grammar T;
-s : a ';' ;
-a : 'b'? c | c 'd' ;
+s : (a ';' | a 'e') ;
+a : 'b'? c ;
 c : 'b'* 'c' 'c' ;
 WS : ' ' -> skip ;
 ");
-    let body = extract_fn_body(&output, "fn scan_a__alt_0(");
+    let body = extract_fn_body(&output, "fn scan_a(");
     assert body.contains("cont_done_"), "a probe that holds scans `c` once";
 }
 
@@ -1361,6 +1546,171 @@ test "a loop ending its rule declines an iteration its caller's token would stra
         "{ case a: x; default: y; }", "{ case a: default; }", "{ case a: x default: y }", "{ case a: default }",
     ]);
     assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n";
+}
+
+global LOOP_BODY_TAIL_G4: String = "
+grammar T;
+top : (s | m) EOF ;
+s : 'a' (',' x)* 'k' ;
+m : 'm' (x | 'c')* 'k' ;
+x : 'b' 'k'? ;
+WS : ' ' -> skip ;
+";
+
+test "a call ending a loop body hears what follows the loop, not its rule's end" {
+    // SQLite's `result_column ( ',' result_column )* ( K_FROM … )?`: the body's
+    // last call continues into another iteration or into the rest of the rule.
+    let got = parses(LOOP_BODY_TAIL_G4, "top", ["a , b k", "a , b , b k", "a , b k k", "m b k", "m b c b k", "m b k k"]);
+    assert got == "a , b k => (top (s a , (x b) k))\na , b , b k => (top (s a , (x b) , (x b) k))\na , b k k => (top (s a , (x b k) k))\nm b k => (top (m m (x b) k))\nm b c b k => (top (m m (x b) c (x b) k))\nm b k k => (top (m m (x b k) k))\n";
+}
+
+global OPENED_CONT_G4: String = "
+grammar T;
+s : '(' fs ')' EOF ;
+fs : f (',' f)* ','? ;
+f : g ('::' g)* ;
+g : ID a? ;
+a : '<' ID (',' ID)? ','? '>' | '<' ID ',' ID ','? '>' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a loop's skippable iteration keeps every reading of what follows the loop" {
+    // Rust's `E<'a, H>` as a tuple field: `fs` offers `g` a next `f` or its
+    // `)`, and `f`'s `::` loop sits between them.
+    let got = parses(OPENED_CONT_G4, "s", [
+        "( e < h , h > )", "( e < h , h > , u )", "( e < h , h , > )", "( e :: d < h > , )",
+    ]);
+    assert got == "( e < h , h > ) => (s ( (fs (f (g e (a < h , h >)))) ))\n( e < h , h > , u ) => (s ( (fs (f (g e (a < h , h >))) , (f (g u))) ))\n( e < h , h , > ) => (s ( (fs (f (g e (a < h , h , >)))) ))\n( e :: d < h > , ) => (s ( (fs (f (g e) :: (g d (a < h >))) ,) ))\n";
+}
+
+global NON_GREEDY_TAIL_G4: String = "
+grammar T;
+s : list 'x' ')' 'x' ')' EOF ;
+list : '(' item (',' item)*? ')' ;
+item : ID 'x'? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a non-greedy loop's tail call does not read past what follows the loop" {
+    // SQLite's `'(' column_def (',' column_def)*? … ')'`: the `)` stands
+    // between the last `item` and what follows `list`, which here matches
+    // `x )` as deep as the gate reads.
+    let got = parses(NON_GREEDY_TAIL_G4, "s", ["( a , b x ) x ) x )", "( a x , b ) x ) x )"]);
+    assert got == "( a , b x ) x ) x ) => (s (list ( (item a) , (item b x) )) x ) x ))\n( a x , b ) x ) x ) => (s (list ( (item a x) , (item b) )) x ) x ))\n";
+}
+
+global NON_GREEDY_SCAN_G4: String = "
+grammar N;
+p : (lst | '#')* EOF ;
+lst : ';'* st (';'+ st)* ';'* ;
+st : '(' item (',' item)*? (',' tc)* ')' ;
+item : name name? ;
+name : ID | 'pk' ;
+tc : 'pk' '(' ID ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a scan leaves a non-greedy loop where the parse does" {
+    // SQLite's `( ',' column_def )*? ( ',' table_constraint )*`: a scan that
+    // takes `pk` as another `item` fails at its `(`, so `lst` declines the
+    // iteration the parse would have taken.
+    let got = parses(NON_GREEDY_SCAN_G4, "p", ["( a ) ; ( b , pk ( c ) ) ;", "( a , pk ( c ) ) ; ( b ) ;"]);
+    assert got == "( a ) ; ( b , pk ( c ) ) ; => (p (lst (st ( (item (name a)) )) ; (st ( (item (name b)) , (tc pk ( c )) )) ;))\n( a , pk ( c ) ) ; ( b ) ; => (p (lst (st ( (item (name a)) , (tc pk ( c )) )) ; (st ( (item (name b)) )) ;))\n";
+}
+
+// SQLite's `sql_stmt_list`: an iteration's `;`s are also the list's tail.
+global SPECULATIVE_LOOP_G4: String = "
+grammar S;
+p : (lst | '#')* EOF ;
+lst : ';'* st (';'+ st)* ';'* ;
+st : ID ('.' ID)* | ID '(' ID ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a loop that parses its iteration speculatively rewinds the one that fails" {
+    // The second input's iteration takes `; ;` before `#` fails it.
+    let got = parses(SPECULATIVE_LOOP_G4, "p", ["a ; b ( c ) ;", "a . b ; ; # c ;"]);
+    assert got == "a ; b ( c ) ; => (p (lst (st a) ; (st b ( c )) ;))\na . b ; ; # c ; => (p (lst (st a . b) ; ;) # (lst (st c) ;))\n";
+}
+
+test "a loop speculates only where the parse runs no action" {
+    assert gen_source(SPECULATIVE_LOOP_G4).contains("let sp_pending");
+    let with_predicate = SPECULATIVE_LOOP_G4.replace("st : ID (", "st : {true}? ID (");
+    assert !gen_source(&with_predicate).contains("let sp_pending"), "`speculating` skips a predicate";
+}
+
+// SQLite's SELECT statements: `simple` is `factored` without its loop.
+global SUBSUMED_ALT_G4: String = "
+grammar T;
+s : (compound | factored | simple) ';' EOF ;
+compound : core ('u' core)+ order? ;
+factored : core ('u' core)* order? ;
+simple : core order? ;
+core : 's' ID (',' ID)* ;
+order : 'o' ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tournament leaves out an alternative an earlier one subsumes" {
+    let got = parses(SUBSUMED_ALT_G4, "s", ["s a ;", "s a , b u s c o d ;", "s a o b ;"]);
+    assert got == "s a ; => (s (factored (core s a)) ;)\ns a , b u s c o d ; => (s (compound (core s a , b) u (core s c) (order o d)) ;)\ns a o b ; => (s (factored (core s a) (order o b)) ;)\n";
+    assert !gen_source(SUBSUMED_ALT_G4).contains("scan_simple("), "ANTLR4 never takes `simple`, so nothing scans it";
+}
+
+// `.*` matches empty, so it subsumes the empty alternative after it.
+global SUBSUMED_EMPTY_ALT_G4: String = "
+grammar T;
+s : ( X | .* | ) Y EOF ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+";
+
+test "a group's follow set selects no alternative an earlier one subsumes" {
+    let got = parses(SUBSUMED_EMPTY_ALT_G4, "s", ["y", "x y", "x x y"]);
+    assert got == "y => (s y)\nx y => (s x y)\nx x y => (s x x y)\n";
+}
+
+test "a wildcard loop leaves its alternative the token it needs" {
+    let grammar = SUBSUMED_EMPTY_ALT_G4.replace("( X | .* | )", ".*");
+    let got = parses(&grammar, "s", ["y", "x y", "y y"]);
+    assert got == "y => (s y)\nx y => (s x y)\ny y => (s y y)\n";
+}
+
+test "a loop ending a group alternative leaves what follows the group" {
+    let grammar = SUBSUMED_EMPTY_ALT_G4.replace("( X | .* | ) Y", "( X* | Y ) X");
+    let got = parses(&grammar, "s", ["x", "x x x", "y x"]);
+    assert got == "x => (s x)\nx x x => (s x x x)\ny x => (s y x)\n";
+}
+
+global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
+grammar T;
+s : 'fn' ty '{' '}' EOF ;
+ty : 'impl' tp ('+' tp)* ;
+tp : seg ('::' seg)* ;
+seg : ID fnp? ;
+fnp : '(' ')' '->' tp ('+' tp)* ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+// The loop's FOLLOW gate yields wherever the caller's continuation matches;
+// telling a viable iteration from a stranding one needs the simulator. See
+// "Failed approaches" in AGENTS.md.
+#[TODO]
+test "a greedy loop keeps an iteration its caller's continuation also reads" {
+    // Rust's `impl Fn() -> a::R + Send`: the outer path reads `:: r` too, but
+    // the inner one stays viable, and ANTLR4 resolves that by looping.
+    let got = parses(LOOP_ENTERS_WHILE_VIABLE_G4, "s", [
+        "fn impl f ( ) -> a :: r + s { }", "fn impl f ( ) -> a :: r { }", "fn impl f ( ) -> a :: r :: q + s { }",
+        "fn impl a :: b + c { }",
+    ]);
+    assert got == "fn impl f ( ) -> a :: r + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)) + (tp (seg s)))))) { })\nfn impl f ( ) -> a :: r { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r)))))) { })\nfn impl f ( ) -> a :: r :: q + s { } => (s fn (ty impl (tp (seg f (fnp ( ) -> (tp (seg a) :: (seg r) :: (seg q)) + (tp (seg s)))))) { })\nfn impl a :: b + c { } => (s fn (ty impl (tp (seg a) :: (seg b)) + (tp (seg c))) { })\n";
 }
 
 global TAIL_TOKEN_OPTIONAL_G4: String = "
@@ -1745,10 +2095,10 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
 }
 
 // Alts 0 and 1 share `A` and `B`, which the token after them tells apart. `s`
-// scans `e` to choose between its alternatives, so `scan_e` is emitted.
+// scans `e` to choose between its group's alternatives, so `scan_e` is emitted.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
-s : e X EOF | e Y EOF ;
+s : (e X | e Y) EOF ;
 X : 'x' ;
 Y : 'y' ;
 e : f '(' ')' | n | K ;
@@ -2927,12 +3277,11 @@ test "a tournament leaves a simulable gate to the candidate's scan" {
     int noStruct = 0;
 }
 start : r EOF ;
-r : {noStruct == 0}? ID xs
-  | ID xs RB
+r : {noStruct == 0}? ID LB
+  | ID LB X
   | LB {noStruct = 1;} r {noStruct = 0;} RB
   ;
-xs : LB+ ;
-ID : 'x' ; LB : '(' ; RB : ')' ;
+ID : 'x' ; LB : '(' ; RB : ')' ; X : 'y' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), "the grammar must reach a tournament";
@@ -3256,6 +3605,27 @@ x in a a => error
 ";
 }
 
+test "a call after a prefix operand is the prefix's own when only it can take one" {
+    let got = parses("grammar T;
+s : e ';' EOF ;
+e : e '.' ID
+  | 'new' e targs? args
+  | 'new' e targs?
+  | e args
+  | ID e?
+  | '(' e ')' ;
+targs : '<' ID '>' ;
+args : '(' (arg (',' arg)*)? ')' ;
+arg : e ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["new E(a);", "new E(a.b);", "new E(f(a));"]);
+    assert got == "new E(a); => (s (e new (e E) (args ( (arg (e a)) ))) ;)
+new E(a.b); => (s (e new (e E) (args ( (arg (e (e a) . b)) ))) ;)
+new E(f(a)); => (s (e new (e E) (args ( (arg (e f (e ( (e a) )))) ))) ;)
+";
+}
+
 test "a non-greedy optional in a left-recursive suffix leaves the else to its caller" {
     let got = parses("grammar T;
 s : e 'else' ID EOF ;
@@ -3461,6 +3831,49 @@ abcc => error
 abckx => (scanned (xg a b c) k x) [abcx]
 abcky => (scanned (xg a b c) k y) [abcy]
 ";
+}
+
+test "a let chain after a simulated operand leaves its `&&` to the chain" {
+    let got = parses("grammar T;
+s : 'match' ID '{' arm* '}' EOF ;
+arm : ID guard? '=>' '{' '}' ;
+guard : 'if' 'let' ID '=' e tail* | 'if' e tail* ;
+tail : '&&' 'let' ID '=' e ;
+e : e '&&' e
+  | e '.' ID
+  | p '!'
+  | p
+  ;
+p : ID ('::' ID)* ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["match x { a if b && let q = c => {} }", "match x { a if b && c => {} }"]);
+    assert got == "match x { a if b && let q = c => {} } => (s match x { (arm a (guard if (e (p b)) (tail && let q = (e (p c)))) => { }) })
+match x { a if b && c => {} } => (s match x { (arm a (guard if (e (e (p b)) && (e (p c)))) => { }) })
+";
+}
+
+// `x`'s first alternative opens with `g`, whose predicate prediction meets
+// before any token, so it decides `x` as one written on the alternative does.
+test "a predicate at the left edge of an invoked rule gates an ATN-routed decision" {
+    let got = parses_each("grammar T;
+options { language = Wado; }
+off : x 'c'* EOF ;
+x : g 'b'
+  | 'a' 'b' 'c'
+  ;
+g : { false }? 'a' ;
+on : y 'c'* EOF ;
+y : h 'b'
+  | 'a' 'b' 'c'
+  ;
+h : { true }? 'a' ;
+WS : ' ' -> skip ;
+", [
+        ["off", "abc"],
+        ["on", "abc"],
+    ]);
+    assert got == "abc => (off (x a b c))\nabc => (on (y (h a) b) c)\n";
 }
 
 test "a non-greedy loop in a left-recursive suffix stops where the rest of the suffix matches" {

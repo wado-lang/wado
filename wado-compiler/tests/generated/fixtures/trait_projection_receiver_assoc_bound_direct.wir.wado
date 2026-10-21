@@ -177,9 +177,9 @@ fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_proj
     let new_used_24: i32;
     let start_25: i32;
     let x: i64;
-    let b: ref Array<u8>;
     let f_85: ref "core:prelude/format.wado//Formatter";
     let $sroa_other_repr_126: ref Array<u8>;
+    let $sroa_other_repr_128: ref Array<u8>;
     h = local.tee $v0(struct.new "trait_projection_receiver_assoc_bound_direct.wado//H" { v: 3 }).v;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
     $sroa_other_repr_126 = array.new_fixed<u8>(60);
@@ -193,19 +193,19 @@ fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_proj
     start_25 = h < 0;
     h = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(h); select i64(x < 0_i64, 0_i64 - x, x)));
     start_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, start_25, h);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_25, x, h);
-    $sroa_other_repr_126 = array.new_fixed<u8>(62);
-    if @unlikely(local.tee h($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_other_repr_126($local_2.repr), start_25, x, h);
+    $sroa_other_repr_128 = array.new_fixed<u8>(62);
+    if @unlikely(local.tee h($local_2.used + 1) > builtin::array_len($sroa_other_repr_126)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, h);
     }
     start_25 = $local_2.used;
     $local_2.used = h;
-    builtin::array_copy<u8>($local_2.repr, start_25, $sroa_other_repr_126, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_25, $sroa_other_repr_128, 0, 1);
     if @unlikely(local.tee start_25($inline_core_prelude_array_wado_seq_eq_u8__23: block -> bool {
-        $sroa_other_repr_126 = $local_2.repr;
+        $sroa_other_repr_128 = $local_2.repr;
         start_25 = $local_2.used;
-        b = array.new_fixed<u8>(60, 51, 62);
+        $sroa_other_repr_126 = array.new_fixed<u8>(60, 51, 62);
         if start_25 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
         }
@@ -213,7 +213,7 @@ fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_proj
         b4: block {
             l5: loop {
                 break_if b4 h >= start_25;
-                if builtin::array_get_value<u8>($sroa_other_repr_126, h) != builtin::array_get_value<u8>(b, h) {
+                if builtin::array_get_value<u8>($sroa_other_repr_128, h) != builtin::array_get_value<u8>($sroa_other_repr_126, h) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
                 }
                 h = h + 1;
@@ -224,41 +224,41 @@ fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_proj
     }) == 0) {
         cold_path;
         start_25 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }), 152);
-        b = $local_3_3.repr;
+        $sroa_other_repr_128 = $local_3_3.repr;
         $sroa_other_repr_126 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b, start_25, $sroa_other_repr_126, 0, 20);
+        builtin::array_copy<u8>($sroa_other_repr_128, start_25, $sroa_other_repr_126, 0, 20);
         h = start_25 + 20;
         $sroa_other_repr_126 = array.new_data<u8>("$test_0_a_projection_receiver_formats_through_the_bound_on_the_associated_type");
-        builtin::array_copy<u8>(b, h, $sroa_other_repr_126, 0, 78);
+        builtin::array_copy<u8>($sroa_other_repr_128, h, $sroa_other_repr_126, 0, 78);
         h = start_25 + 98;
         $sroa_other_repr_126 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, h, $sroa_other_repr_126, 0, 4);
+        builtin::array_copy<u8>($sroa_other_repr_128, h, $sroa_other_repr_126, 0, 4);
         h = start_25 + 102;
         $sroa_other_repr_126 = array.new_data<u8>("trait_projection_receiver_assoc_bound_direct.wado");
-        builtin::array_copy<u8>(b, h, $sroa_other_repr_126, 0, 49);
+        builtin::array_copy<u8>($sroa_other_repr_128, h, $sroa_other_repr_126, 0, 49);
         start_25 = start_25 + 151;
         $sroa_other_repr_126 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b, start_25, $sroa_other_repr_126, 0, 1);
+        builtin::array_copy<u8>($sroa_other_repr_128, start_25, $sroa_other_repr_126, 0, 1);
         f_85 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3_3));
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(27, f_85);
         start_25 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3_3, 53);
         $sroa_other_repr_126 = $local_3_3.repr;
-        b = array.new_data<u8>("
+        $sroa_other_repr_128 = array.new_data<u8>("
 condition: shown(&H { v: 3 }) == \"<3>\"
 ");
-        builtin::array_copy<u8>($sroa_other_repr_126, start_25, b, 0, 40);
+        builtin::array_copy<u8>($sroa_other_repr_126, start_25, $sroa_other_repr_128, 0, 40);
         start_25 = start_25 + 40;
-        b = array.new_data<u8>("&H { v: 3 }: ");
-        builtin::array_copy<u8>($sroa_other_repr_126, start_25, b, 0, 13);
+        $sroa_other_repr_128 = array.new_data<u8>("&H { v: 3 }: ");
+        builtin::array_copy<u8>($sroa_other_repr_126, start_25, $sroa_other_repr_128, 0, 13);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3_3);
         "core:prelude/format.wado/&trait_projection_receiver_assoc_bound_direct.wado/H^core:prelude/traits.wado/Inspect::inspect"($v0, $local_4);
         start_25 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3_3, 21);
-        b = $local_3_3.repr;
+        $sroa_other_repr_128 = $local_3_3.repr;
         $sroa_other_repr_126 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>(b, start_25, $sroa_other_repr_126, 0, 1);
+        builtin::array_copy<u8>($sroa_other_repr_128, start_25, $sroa_other_repr_126, 0, 1);
         start_25 = start_25 + 1;
         $sroa_other_repr_126 = array.new_data<u8>("shown(&H { v: 3 }): ");
-        builtin::array_copy<u8>(b, start_25, $sroa_other_repr_126, 0, 20);
+        builtin::array_copy<u8>($sroa_other_repr_128, start_25, $sroa_other_repr_126, 0, 20);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3_3)), $local_2.repr, $local_2.used);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_3_3);
         "core:rt/panic"($local_3_3.repr, $local_3_3.used);
@@ -956,7 +956,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<t
     };
     f_40 = f.buf;
     "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(global:core:prelude/traits.wado::$const_obj_49, f_40);
-    if @unlikely(local.tee start_60(local.tee f_40(f.buf).used + 2) > builtin::array_len(f_40.repr)) {
+    if @unlikely(local.tee start_60(f_40.used + 2) > builtin::array_len(f_40.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, start_60);
     }
@@ -970,7 +970,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<t
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, new_used_59, f_40.repr, f_40.used, v);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_40(f.buf).repr, new_used_59, x, v);
-    if @unlikely(local.tee v(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
+    if @unlikely(local.tee v(f_40.used + 1) > builtin::array_len(f_40.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, v);
     }
@@ -1615,25 +1615,20 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
 }
 
 fn "core:prelude/traits.wado/trait_projection_receiver_assoc_bound_direct.wado/H^core:prelude/traits.wado/Inspect::inspect$sroa[self.v]"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
     let field_6: ref "core:prelude/traits.wado//StructField<trait_projection_receiver_assoc_bound_direct.wado/H,i32>";
-    let self_12: ref "core:prelude/string.wado//String";
-    let other_15: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<trait_projection_receiver_assoc_bound_direct.wado/H,[i32]>$sroa[v.v]"(self, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<trait_projection_receiver_assoc_bound_direct.wado/H>$sroa[f.buf]"(f.buf);
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<trait_projection_receiver_assoc_bound_direct.wado/H>$sroa[f.buf]"(local.tee $load_1(f.buf));
     field_6 = "trait_projection_receiver_assoc_bound_direct.wado/trait_projection_receiver_assoc_bound_direct.wado/H^core:prelude/traits.wado/ReflectStruct::members"().0;
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_15(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }), self_12);
-    self_12 = field_6.field_name;
-    other_15 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_12, other_15);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_15);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(field_6.field_name, $load_1);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $load_1);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), other_15);
+    $load_1 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }, $load_1);
 }
 
 export fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_projection_receiver_formats_through_the_bound_on_the_associated_type" as "$test_0_a_projection_receiver_formats_through_the_bound_on_the_associated_type"

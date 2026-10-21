@@ -1474,7 +1474,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_k {
         p.take();
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
+        if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 6) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut opt_enter: bool = false;
         if p.peek_kind() != TK_EOF {
             opt_enter_scan: {
@@ -1495,7 +1495,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         return;
     } else if kind == TK_LIT_m {
         p.take();
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
+        if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 6) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut opt_enter: bool = false;
         if p.peek_kind() != TK_EOF {
             opt_enter_scan: {

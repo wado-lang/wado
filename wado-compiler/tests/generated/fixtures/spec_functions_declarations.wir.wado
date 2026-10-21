@@ -219,6 +219,7 @@ global global:core:prelude/format.wado::$const_obj_10: ref Array<u8> = array.new
 global global:core:prelude/format.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
 
 fn "spec_functions_declarations.wado/$test_2_a_unit_function"() {
+    let $load_2: i32;
     let $load_3: ref Array<u8>;
     let log_0: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $cond_1: bool;
@@ -240,7 +241,7 @@ fn "spec_functions_declarations.wado/$test_2_a_unit_function"() {
     builtin::array_set<ref "core:prelude/string.wado//String">(local.tee elements_15(log_0.repr), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
     log_0.used = 0 + 1;
     elements_39 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
-    if @unlikely(local.tee $cond_1("core:prelude/array.wado/core/prelude/array.wado/seq_eq<core:prelude/string.wado/String>$dae[a_start,b_start,b_end]"(elements_15, log_0.used, elements_39)) == 0) {
+    if @unlikely(local.tee $cond_1("core:prelude/array.wado/core/prelude/array.wado/seq_eq<core:prelude/string.wado/String>$dae[a_start,b_start,b_end]"(elements_15, local.tee $load_2(log_0.used), elements_39)) == 0) {
         cold_path;
         $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(120), used: 0 }), 80);
         $load_3 = $local_5.repr;
@@ -275,14 +276,14 @@ condition: log == [\"a\"]
         "core:rt/panic"($local_5.repr, $local_5.used);
         unreachable;
     }
-    if @unlikely(local.tee $cond_1(log_0.used) >= builtin::array_len(log_0.repr)) {
+    if @unlikely($load_2 >= builtin::array_len(elements_15)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(log_0);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee elements_39(log_0.repr), $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
-    log_0.used = $cond_1 + 1;
-    if 0 < local.tee $cond_1(log_0.used) {
-        builtin::array_fill<ref "core:prelude/string.wado//String">(elements_39, 0, ref.null none, $cond_1);
+    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee elements_15(log_0.repr), $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
+    log_0.used = $load_2 + 1;
+    if 0 < local.tee $load_2(log_0.used) {
+        builtin::array_fill<ref "core:prelude/string.wado//String">(elements_15, 0, ref.null none, $load_2);
         log_0.used = 0;
     }
     if @unlikely((log_0.used == 0) == 0) {

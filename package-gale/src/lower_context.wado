@@ -4,8 +4,8 @@
 //! (`LowerMarks`) the parser plan is decided from.
 
 use { Alternative, ParserRule } from "./ir.wado";
-use { Diagnostics, Rule } from "./gir.wado";
-use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
+use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
+use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -35,9 +35,6 @@ pub struct LowerMarks {
     pub follow_forward_edges: List<List<String>>,
     /// The rule makes a decision the simulator decides.
     pub rule_asks_simulator: List<bool>,
-    /// The simulator decides inside the rule's body, not only at its
-    /// left-recursion loop.
-    pub rule_body_predicts: List<bool>,
     /// The rules whose functions carry the FOLLOW slots, by snake name: the
     /// closure of `rule_reads_follow` over `follow_forward_edges`, settled once
     /// every rule is lowered.
@@ -52,7 +49,6 @@ impl LowerMarks {
             rule_reads_follow: flags,
             follow_forward_edges: List::filled(rule_count, []),
             rule_asks_simulator: flags,
-            rule_body_predicts: flags,
         };
     }
 
@@ -132,19 +128,24 @@ impl LowerContext {
         self.marks.caller_follow_gate = true;
     }
 
-    /// Record a decision the simulator makes inside the body of the rule being
-    /// lowered.
-    pub fn mark_body_predicts(&mut self) {
+    /// Record a decision the simulator makes in the rule being lowered, `what`
+    /// naming it. Under `atn: "never"` it is the refusal.
+    pub fn mark_asks_simulator<S: AsStrSlice>(&mut self, what: S) {
         let idx = self.current_rule_index();
         self.marks.mark_asks_simulator(idx);
-        self.marks.rule_body_predicts[idx] = true;
+        if self.settings.atn matches { Never } {
+            self.diagnostics.warn(
+                &DiagnosticOwner::rule_dispatch(self.current_rule_name()),
+                DiagnosticKind::SimulatorRequired,
+                `${what} only the ATN simulator decides, and \`atn: "never"\` refuses it`,
+            );
+        }
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
-    pub fn mark_needs_lr_atn(&mut self) {
+    pub fn mark_needs_lr_atn<S: AsStrSlice>(&mut self, what: S) {
         self.marks.needs_lr_atn = true;
-        let idx = self.current_rule_index();
-        self.marks.mark_asks_simulator(idx);
+        self.mark_asks_simulator(what);
     }
 
     /// Record that the rule being lowered reads the continuation it was called
@@ -200,5 +201,14 @@ impl LowerContext {
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
+    }
+
+    /// Whether the choice among the alternatives `alt_indices` of the rule
+    /// being lowered reaches a decision the simulator makes. `multi_alt` is
+    /// as for `rule_overlap::overlap_groups_of`.
+    pub fn choice_routes(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
+        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
+        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
+        return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, self.settings.atn);
     }
 }

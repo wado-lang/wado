@@ -25,6 +25,9 @@
 #                   `options { superClass = X }` grammar extends.
 #   --probe-super   report on stderr what the input does against a
 #                   synthesized base class, and always exit 3.
+#   --lexer <file>  the lexer grammar a split `parser grammar <N>Parser`
+#                   reads its tokens from; it must be named `<N>Lexer`, as
+#                   TestRig loads the pair by the shared `<N>`.
 #
 # A grammar with `options { superClass = X }` has no behaviour without X,
 # so `--super` is the only way to oracle one and `--probe-super` is a
@@ -53,12 +56,14 @@ Options:
   --super <file>    compile <file> alongside the recognizer (repeatable)
   --probe-super     report what the input does against a synthesized base
                     class; diagnostic only, always exits 3
+  --lexer <file>    the lexer grammar of a split parser grammar
 EOF
     exit 1
 }
 
 MODE="tree"
 PROBE_SUPER=0
+LEXER_PATH=""
 SUPER_SRCS=()
 # Counted separately: `${#arr[@]}` on an empty array trips `set -u` on the
 # bash 3.2 still shipped as /bin/bash on macOS.
@@ -69,6 +74,8 @@ while [ $# -gt 0 ]; do
         --probe-super) PROBE_SUPER=1; shift ;;
         --super) [ $# -ge 2 ] || usage; SUPER_SRCS[$SUPER_N]="$2"; SUPER_N=$((SUPER_N + 1)); shift 2 ;;
         --super=*) SUPER_SRCS[$SUPER_N]="${1#--super=}"; SUPER_N=$((SUPER_N + 1)); shift ;;
+        --lexer) [ $# -ge 2 ] || usage; LEXER_PATH="$2"; shift 2 ;;
+        --lexer=*) LEXER_PATH="${1#--lexer=}"; shift ;;
         --) shift; break ;;
         -*) echo "oracle: unknown option: $1" >&2; usage ;;
         *) break ;;
@@ -77,6 +84,11 @@ done
 
 if [ "$PROBE_SUPER" = "1" ] && [ "$SUPER_N" -gt 0 ]; then
     echo "oracle: --probe-super and --super are mutually exclusive" >&2
+    exit 1
+fi
+# The probe stubs one base from one grammar; a split pair declares two.
+if [ -n "$LEXER_PATH" ] && { [ "$MODE" = "tokens" ] || [ "$PROBE_SUPER" = "1" ]; }; then
+    echo "oracle: --lexer takes neither --tokens (pass the lexer grammar itself) nor --probe-super" >&2
     exit 1
 fi
 
@@ -110,34 +122,64 @@ fi
 # prints only on a successful substitution: the legal layout with the
 # `;` on a later line (`grammar Foo\n;`) must extract `Foo`, not pass
 # the raw line through as the "name".
-declared_name=$(grep -E '^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+[A-Za-z_]' "$GRAMMAR_PATH" 2>/dev/null \
-    | head -1 \
-    | sed -nE 's/^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\2/p')
-if [ -n "$declared_name" ]; then
-    GRAMMAR_NAME="$declared_name"
-else
-    GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
-fi
+declared_grammar_name() {
+    local declared
+    declared=$(grep -E '^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+[A-Za-z_]' "$1" 2>/dev/null \
+        | head -1 \
+        | sed -nE 's/^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\2/p')
+    if [ -n "$declared" ]; then
+        echo "$declared"
+    else
+        basename "$1" .g4
+    fi
+}
 
 # The generated recognizer will `extends X`, so X has to be on the compile
 # path. Most grammars declare none, and no match must not trip `pipefail`.
-SUPER_CLASS=$(tr '\n' ' ' < "$GRAMMAR_PATH" \
-    | { grep -oE 'superClass[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' || true; } \
-    | head -1 \
-    | sed -E 's/.*=[[:space:]]*//')
+declared_super_class() {
+    tr '\n' ' ' < "$1" \
+        | { grep -oE 'superClass[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' || true; } \
+        | head -1 \
+        | sed -E 's/.*=[[:space:]]*//'
+}
 
-if [ -n "$SUPER_CLASS" ] && [ "$PROBE_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
+refuse_unsupplied_super() {
     cat >&2 <<EOF
-oracle: $GRAMMAR_NAME declares 'options { superClass = $SUPER_CLASS; }' but no
+oracle: $1 declares 'options { superClass = $2; }' but no
 oracle: base class was supplied, so the generated recognizer has nothing to
 oracle: extend and javac would fail. Either:
-oracle:   --super <path/to/$SUPER_CLASS.java>  the real base class — the oracle
+oracle:   --super <path/to/$2.java>  the real base class — the oracle
 oracle:       then runs the specification the Gale side models, so a diff is
 oracle:       a Gale bug and not two different grammars disagreeing
 oracle:   --probe-super  report what the input does against a synthesized
 oracle:       base — a diagnostic to size that work, never an oracle
 EOF
     exit 1
+}
+
+GRAMMAR_NAME="$(declared_grammar_name "$GRAMMAR_PATH")"
+TESTRIG_NAME="$GRAMMAR_NAME"
+SUPER_CLASS="$(declared_super_class "$GRAMMAR_PATH")"
+
+if [ -n "$SUPER_CLASS" ] && [ "$PROBE_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
+    refuse_unsupplied_super "$GRAMMAR_NAME" "$SUPER_CLASS"
+fi
+
+if [ -n "$LEXER_PATH" ]; then
+    if [ ! -f "$LEXER_PATH" ]; then
+        echo "oracle: cannot find lexer grammar: $LEXER_PATH" >&2
+        exit 1
+    fi
+    LEXER_NAME="$(declared_grammar_name "$LEXER_PATH")"
+    TESTRIG_NAME="${GRAMMAR_NAME%Parser}"
+    if [ "$TESTRIG_NAME" = "$GRAMMAR_NAME" ] || [ "$LEXER_NAME" != "${TESTRIG_NAME}Lexer" ]; then
+        echo "oracle: a split pair must be named <N>Parser and <N>Lexer; got $GRAMMAR_NAME and $LEXER_NAME" >&2
+        exit 1
+    fi
+    LEXER_SUPER_CLASS="$(declared_super_class "$LEXER_PATH")"
+    if [ -n "$LEXER_SUPER_CLASS" ] && [ "$SUPER_N" -eq 0 ]; then
+        refuse_unsupplied_super "$LEXER_NAME" "$LEXER_SUPER_CLASS"
+    fi
 fi
 if [ "$PROBE_SUPER" = "1" ] && [ -z "$SUPER_CLASS" ]; then
     echo "oracle: --probe-super given but $GRAMMAR_NAME declares no superClass" >&2
@@ -264,6 +306,13 @@ else
 fi
 
 cp "$GRAMMAR_PATH" "$WORK_DIR/$GRAMMAR_NAME.g4"
+# The lexer goes first, so its `.tokens` exists when the parser's
+# `tokenVocab` asks for it.
+GRAMMAR_FILES=("$WORK_DIR/$GRAMMAR_NAME.g4")
+if [ -n "$LEXER_PATH" ]; then
+    cp "$LEXER_PATH" "$WORK_DIR/$LEXER_NAME.g4"
+    GRAMMAR_FILES=("$WORK_DIR/$LEXER_NAME.g4" "$WORK_DIR/$GRAMMAR_NAME.g4")
+fi
 
 # --probe-super replays the input under both predicate polarities, and a
 # pipe can only be read once.
@@ -277,7 +326,7 @@ fi
 
 # Generate Java sources. -no-listener avoids emitting Listener
 # scaffolding we don't need.
-if ! java -jar "$JAR_PATH" -Dlanguage=Java -no-listener -o "$WORK_DIR" "$WORK_DIR/$GRAMMAR_NAME.g4" >"$WORK_DIR/antlr.log" 2>&1; then
+if ! java -jar "$JAR_PATH" -Dlanguage=Java -no-listener -o "$WORK_DIR" "${GRAMMAR_FILES[@]}" >"$WORK_DIR/antlr.log" 2>&1; then
     echo "oracle: antlr4 codegen failed; see $WORK_DIR/antlr.log" >&2
     cat "$WORK_DIR/antlr.log" >&2
     exit 1
@@ -301,7 +350,7 @@ run_testrig() {
     shift 2
     set +e
     java ${1+"$@"} -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
-        "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
+        "$TESTRIG_NAME" "$START_RULE" "$TESTRIG_FLAG" \
         <"$WORK_DIR/input.txt" >"$outf" 2>"$errf"
     local rc=$?
     set -e
