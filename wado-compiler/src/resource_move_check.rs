@@ -1705,21 +1705,12 @@ impl MoveWalker<'_, '_> {
         self.suppress -= 1;
         self.visit_iteration(head, body, update);
         let jumps = self.loops.pop().expect("pushed above");
-        let mut end = (!head.is_endless()).then(|| {
+        let end = (!head.is_endless()).then(|| {
             let mut ended = std::mem::take(&mut self.flow);
             ended.merge(entry);
             ended
         });
-        if let Some(broken) = jumps.breaks {
-            reach(&mut end, broken);
-        }
-        match end {
-            Some(end) => {
-                self.flow = end;
-                false
-            }
-            None => true,
-        }
+        self.continue_from(end, jumps.breaks)
     }
 
     /// Whether `expr` is of type `!`: evaluating it never falls through.
@@ -1762,7 +1753,13 @@ impl MoveWalker<'_, '_> {
         self.labels.push((label.to_string(), None));
         let diverged = self.visit_block(block);
         let (_, broken) = self.labels.pop().expect("pushed above");
-        let mut end = (!diverged).then(|| std::mem::take(&mut self.flow));
+        let end = (!diverged).then(|| std::mem::take(&mut self.flow));
+        self.continue_from(end, broken)
+    }
+
+    /// Continues from where the construct falls through, `end`, joined with
+    /// where its `break`s land. Answers whether neither is reached.
+    fn continue_from(&mut self, mut end: Option<Flow>, broken: Option<Flow>) -> bool {
         if let Some(broken) = broken {
             reach(&mut end, broken);
         }
