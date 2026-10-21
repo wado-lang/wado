@@ -77,8 +77,16 @@ enum SpreadElems {
     Fixed(Vec<TypeId>),
     /// A count unknown before monomorphization (a pack), or never (an error).
     Open(Vec<TypeId>),
-    /// A tuple literal operand of this many elements, not yet resolved.
-    Literal(usize),
+}
+
+/// What one element of a tuple literal contributes, as far as is known before
+/// the elements take their expected types.
+enum TupleSlot<'e> {
+    Single,
+    Spread(SpreadElems),
+    /// A spread of a tuple literal (the operand) with this many elements,
+    /// resolved once its slice of the expected type is known.
+    LiteralSpread(&'e Expr, usize),
 }
 
 /// How many elements a tuple literal has whatever its elements' types, which
@@ -5078,24 +5086,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // each takes its own expected type wherever the spreads are concrete.
         // A literal operand counts its elements without being resolved, and
         // waits for its own slice of the expected type.
-        let spreads: Vec<Option<SpreadElems>> = tuple_lit
+        let slots: Vec<TupleSlot> = tuple_lit
             .elements
             .iter()
             .map(|elem| match elem {
-                Expr::Spread(inner, _) => Some(match literal_tuple_arity(inner) {
-                    Some(arity) => SpreadElems::Literal(arity),
-                    None => self.resolve_spread_elems(elem, inner, ctx, None),
-                }),
-                _ => None,
+                Expr::Spread(inner, _) => match literal_tuple_arity(inner) {
+                    Some(arity) => TupleSlot::LiteralSpread(inner, arity),
+                    None => TupleSlot::Spread(self.resolve_spread_elems(elem, inner, ctx, None)),
+                },
+                _ => TupleSlot::Single,
             })
             .collect();
-        let arity = spreads
+        let arity = slots
             .iter()
-            .map(|spread| match spread {
-                None => Some(1),
-                Some(SpreadElems::Fixed(elems)) => Some(elems.len()),
-                Some(SpreadElems::Literal(arity)) => Some(*arity),
-                Some(SpreadElems::Open(_)) => None,
+            .map(|slot| match slot {
+                TupleSlot::Single => Some(1),
+                TupleSlot::Spread(SpreadElems::Fixed(elems)) => Some(elems.len()),
+                TupleSlot::LiteralSpread(_, arity) => Some(*arity),
+                TupleSlot::Spread(SpreadElems::Open(_)) => None,
             })
             .sum::<Option<usize>>();
         let expected_elem_types: Option<Vec<TypeId>> =
@@ -5113,30 +5121,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // single-evaluation-temporary construction (with its own `ctx`), so
         // this records only the types, which match what reify builds.
         let mut elem_types: Vec<TypeId> = Vec::new();
-        for (elem, spread) in tuple_lit.elements.iter().zip(spreads) {
-            match spread {
-                Some(SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) => {
+        for (elem, slot) in tuple_lit.elements.iter().zip(slots) {
+            match slot {
+                TupleSlot::Spread(SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) => {
                     elem_types.extend(elems);
                 }
-                Some(SpreadElems::Literal(arity)) => {
-                    let Expr::Spread(inner, _) = elem else {
-                        unreachable!("only a spread element records a spread");
-                    };
+                TupleSlot::LiteralSpread(inner, arity) => {
                     let start = elem_types.len();
                     let expected = expected_elem_types.as_ref().map(|expected| {
                         let slice = expected[start..start + arity].to_vec();
                         self.tysys.type_table.borrow_mut().make_tuple(slice)
                     });
-                    match self.resolve_spread_elems(elem, inner, ctx, expected) {
-                        SpreadElems::Fixed(elems) | SpreadElems::Open(elems) => {
-                            elem_types.extend(elems);
-                        }
-                        SpreadElems::Literal(_) => {
-                            unreachable!("a resolved spread has its element types")
-                        }
-                    }
+                    let (SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) =
+                        self.resolve_spread_elems(elem, inner, ctx, expected);
+                    elem_types.extend(elems);
                 }
-                None => {
+                TupleSlot::Single => {
                     let elem_expected = expected_elem_types
                         .as_ref()
                         .map(|expected| expected[elem_types.len()]);
