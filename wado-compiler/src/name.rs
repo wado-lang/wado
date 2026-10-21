@@ -23,9 +23,6 @@ use std::hash::Hash;
 /// label, global, or synthesized struct or function. A Wado identifier holds no
 /// dollar sign, so a minted name collides with nothing an author wrote and no
 /// source can `break` to a synthesized label.
-///
-/// The `AsyncCall::__cm_*` fields are the exception: the standard library
-/// declares them in Wado source, which cannot spell the prefix.
 pub const INTERNAL_PREFIX: &str = "$";
 
 /// Canonical method name of the synthesised `$call` impl on every
@@ -158,6 +155,11 @@ pub fn contract_holder_name(method: &str) -> String {
 }
 
 const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
+
+/// Whether `function_name` names a trait's `contract` clause holder.
+pub fn is_contract_holder(function_name: &str) -> bool {
+    function_name.contains(CONTRACT_HOLDER_PREFIX)
+}
 
 /// The function a failed `contract` clause names, from the name of the one
 /// reifying it: the method a clause holder holds the clauses of.
@@ -353,6 +355,12 @@ pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> Strin
     format!("$field_get${mangled_struct}${mangled_field}")
 }
 
+/// [`field_get_helper_name`]'s twin answering a reference to the field, which
+/// lowering rewrites `builtin::struct_field_ref::<S, F>` calls to.
+pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
+    format!("$field_ref${mangled_struct}${mangled_field}")
+}
+
 /// Name of the synthesized hole-read helper for a template shape and one of
 /// its hole types, both by structural mangle. Lowering rewrites
 /// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
@@ -369,8 +377,11 @@ pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
 /// Name of the synthesized function that drops the resources a value of a
 /// self-holding type holds, by structural mangle of the type.
 pub fn drop_glue_name(mangled_type: &str) -> String {
-    format!("$drop${mangled_type}")
+    format!("{DROP_GLUE_PREFIX}{mangled_type}")
 }
+
+/// What every [`drop_glue_name`] starts with.
+pub const DROP_GLUE_PREFIX: &str = "$drop$";
 
 /// Whether `name` is a per-type bridge — a helper synthesis mints for a *type*
 /// rather than for a call site: the value-copy pair, the reflect accessors
@@ -519,6 +530,10 @@ pub fn cm_name_key(cm_name: &str) -> String {
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
+
+/// The WIR struct an affine resource is: the object holding its handle. Not a
+/// `Box<i32>`, which the optimizer scalarizes as a value with no identity.
+pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
 
 /// The name closure `functor_id`'s functor struct is interned under.
 #[must_use]

@@ -1,22 +1,28 @@
 // A call started inside a closure is the closure's: the function around it
-// still declares what waiting on a call handed to it performs.
+// still declares what waiting on a call it reaches otherwise performs.
 #[cm("example:demo/fetch")]
 interface Fetch {
     #[cm("example:demo/fetch#get")]
     async fn get(url: String) -> AsyncCall<i32>;
 }
 
-fn finish(call: AsyncCall<i32>) -> i32 with Fetch {
+global mut PENDING: Option<AsyncCall<i32>> = null;
+
+fn finish() -> i32 {
     let _start = || { let _ = Fetch::get("/b"); };
-    return call.wait();
+    if let Some(call) = PENDING.take() {
+        return call.wait();
+    }
+    return 0;
 }
 
 export fn run() with Fetch {
-    let _ = finish(Fetch::get("/a"));
+    PENDING = Option::Some(Fetch::get("/a"));
+    let _ = finish();
 }
 
 __DATA__
 {
-    "compile_error": ":11:12: analysis error: missing resource 'Subtask' required by 'wait'; 11:12: missing resource 'WaitableSet' required by 'wait'",
+    "compile_error": ":14:16: analysis error: missing resource 'Subtask' required by 'wait'",
     "compile_error_codes": ["MISSING_EFFECT"]
 }

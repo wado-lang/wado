@@ -355,8 +355,9 @@ fn module_idents() -> TreeSet<String> {
 /// The type parameter `forward` takes its backend as.
 global BACKEND_PARAM: String = "Bk";
 
-/// That parameter declared with its bound.
-global BACKEND_BOUND: String = `${BACKEND_PARAM}: Backend`;
+/// That parameter declared with its kind and bound: a backend may own device
+/// resources.
+global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
 
 /// The struct `pass` returns several outputs in, as the backend holds them.
 global PASSED: String = "Passed";

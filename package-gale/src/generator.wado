@@ -64,7 +64,7 @@ fn type_refusal(primary: &InputFile, inputs: &List<InputFile>) -> Option<String>
     if let Some(other) = primary.type && other != "antlr4" {
         return Option::Some(`gale: '${primary.path}' is given \`type: "${other}"\`; a grammar is \`type: "antlr4"\``);
     }
-    for let input of *inputs {
+    for let input of inputs {
         if let Some(other) = input.type && other != "antlr4" && other != "tree-sitter-highlights" {
             return Option::Some(
                 `gale: '${input.path}' is given \`type: "${other}"\`; an input is \`type: "antlr4"\` or \`type: "tree-sitter-highlights"\``,
@@ -75,31 +75,24 @@ fn type_refusal(primary: &InputFile, inputs: &List<InputFile>) -> Option<String>
 }
 
 /// The grammars, the primary first, and the highlight queries the request
-/// carries, each `[path, text]`. A stream is outside drop elaboration, so every
-/// one is read or dropped before any return.
+/// carries, each `[path, text]`. A file not read drops its stream on return.
 fn read_inputs(
     primary: InputFile,
     inputs: List<InputFile>,
 ) -> Result<[List<[String, String]>, List<[String, String]>], Error> {
     if let Some(reason) = type_refusal(&primary, &inputs) {
-        primary.content.drop();
-        for let input of inputs {
-            input.content.drop();
-        }
         return Result::Err(Error::Unsupported(reason));
     }
-    let mut files: List<InputFile> = [primary];
-    files.extend(&inputs);
+    // Read back to front off the end, so each file moves out as it is read.
+    let mut pending = inputs;
+    pending.insert(0, primary);
+    pending.reverse();
     let mut grammars: List<[String, String]> = [];
     let mut queries: List<[String, String]> = [];
-    for let mut i = 0; i < files.len(); i += 1 {
-        let file = files[i];
+    while let Some(file) = pending.pop() {
         let text = match read_text(file.content) {
             Ok(text) => text,
             Err(e) => {
-                for let rest of files[i + 1..<files.len()].to_list() {
-                    rest.content.drop();
-                }
                 return Result::Err(Error::InvalidSchema(`gale: '${file.path}' is not UTF-8: ${e}`));
             },
         };

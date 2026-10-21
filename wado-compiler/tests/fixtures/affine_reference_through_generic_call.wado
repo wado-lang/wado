@@ -1,0 +1,24 @@
+// A parameter declared a type parameter takes the borrow itself, which the
+// result may return.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn same<T>(t: T) -> T {
+    return t;
+}
+
+test {
+    let t = Tok { id: 1 };
+    let r = same(&t);
+    let moved = t;
+    assert r.id == 1;
+}
+
+__DATA__
+{"compile_error": ":20:12: analysis error: `r` refers into `t`, which moved at 19:17"}

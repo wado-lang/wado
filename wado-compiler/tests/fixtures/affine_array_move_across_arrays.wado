@@ -1,0 +1,35 @@
+// A move from one array into another empties the whole source range, so
+// releasing that range afterwards drops nothing that moved. This is the shape
+// of `List::split_off`, where the ranges overlap as indices.
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+fn split<affine T>(from: &mut Array<T>, used: i32, at: i32) -> Array<T> {
+    let n = used - at;
+    let mut moved: Array<T> = builtin::array_new(n);
+    builtin::array_move(&mut moved, 0, from, at, n);
+    builtin::array_release(from, at, n);
+    return moved;
+}
+
+test {
+    let mut toks: Array<Tok> = builtin::array_new(3);
+    toks[0] = Tok { id: 1 };
+    toks[1] = Tok { id: 10 };
+    toks[2] = Tok { id: 100 };
+    let rest = split(&mut toks, 3, 1);
+    assert DROPS == 0;
+    builtin::drop(rest);
+    assert DROPS == 110;
+    builtin::drop(toks);
+    assert DROPS == 111;
+}

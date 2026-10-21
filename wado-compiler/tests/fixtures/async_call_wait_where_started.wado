@@ -1,6 +1,7 @@
-// A function or closure that starts an async call waits on it with nothing
-// more to declare; one handed the call declares what waiting performs.
-fn finish(call: AsyncCall<i32>) -> i32 with (Subtask, WaitableSet) {
+// A call owns its `Subtask`, so whoever holds the call waits on it with
+// nothing more to declare: where it starts, where it is handed on, and in a
+// closure.
+fn finish(call: AsyncCall<i32>) -> i32 {
     return call.wait();
 }
 

@@ -1,0 +1,24 @@
+// A `?` between `Future::new()` and the write drops the writable end
+// unwritten, which traps naming it: a reader would otherwise wait forever
+// (WEP: Affine Types).
+
+fn parse(text: String) -> Result<i32, String> {
+    if text == "x" {
+        return Result::Err("not a number");
+    }
+    return Result::Ok(1);
+}
+
+fn produce(text: String) -> Result<Future<i32>, String> {
+    let [rx, tx] = Future::<i32>::new();
+    let value = parse(text)?;
+    tx.write(value);
+    return Result::Ok(rx);
+}
+
+export fn run() {
+    let _ = produce("x");
+}
+
+__DATA__
+{"stderr_contains": ["`FutureWritable<i32>` dropped before its write: its reader would wait forever"], "trapped": true}

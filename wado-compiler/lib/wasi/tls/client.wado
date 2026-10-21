@@ -25,4 +25,7 @@ pub resource Connector {
     #[cm("wasi:tls/client@0.3.0-draft#[static]connector.connect")]
     #[cm_params("this", "server-name")]
     async fn connect(this: Connector, server_name: String) -> AsyncCall<Result<(), Error>>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }

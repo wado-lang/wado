@@ -41,15 +41,26 @@ pub(super) struct BinderInScope {
     /// type. Not what names a binder in a mangle — see
     /// [`TraitContext::impl_owner`].
     pub(super) decl: Option<ast::AstId>,
+    /// Declared `affine T`: an argument for it may be move-only.
+    pub(super) is_affine: bool,
 }
 
 impl BinderInScope {
     /// A binder the source declares, named by its own node.
-    pub(super) fn declared(index: u32, type_id: TypeId, decl: ast::AstId) -> Self {
+    pub(super) fn declared(index: u32, type_id: TypeId, param: &ast::GenericParam) -> Self {
         Self {
             index,
             type_id,
-            decl: Some(decl),
+            decl: Some(param.id),
+            is_affine: param.is_affine,
+        }
+    }
+
+    /// A binder `param` declares where one does, else an undeclared one.
+    pub(super) fn of(index: u32, type_id: TypeId, param: Option<&ast::GenericParam>) -> Self {
+        match param {
+            Some(param) => Self::declared(index, type_id, param),
+            None => Self::undeclared(index, type_id),
         }
     }
 
@@ -59,6 +70,7 @@ impl BinderInScope {
             index,
             type_id,
             decl: None,
+            is_affine: false,
         }
     }
 }
@@ -267,8 +279,11 @@ pub(super) fn trait_params_from_impl<'p, 'a, A>(
 
 /// The node in `params` that declares `name`, when one does. The caller picks
 /// the list, since only it knows which item bound the name (#1932).
-pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
-    params.iter().find(|p| p.name == name).map(|p| p.id)
+pub(super) fn param_decl<'p>(
+    params: &'p [ast::GenericParam],
+    name: &str,
+) -> Option<&'p ast::GenericParam> {
+    params.iter().find(|p| p.name == name)
 }
 
 /// Mutable trait resolution context scoped to the current resolution site.
@@ -307,6 +322,18 @@ pub(super) struct TraitContext {
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
     pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
+}
+
+impl TraitContext {
+    /// The type parameters in scope declared `affine T`, which a body treats
+    /// as move-only.
+    pub(super) fn affine_params(&self) -> Vec<String> {
+        self.type_params
+            .iter()
+            .filter(|(_, binder)| binder.is_affine)
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
 }
 
 /// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
@@ -806,7 +833,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let type_id = self.resolve_type(&ast::Type::Function(sig.clone()));
             self.bind_param(
                 &param.name,
-                BinderInScope::declared(index, type_id, param.id),
+                BinderInScope::declared(index, type_id, param),
                 Vec::new(),
             );
         }
@@ -847,11 +874,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 ),
             };
             let bounds = self.scoped_bounds(tp);
-            self.bind_param(
-                &tp.name,
-                BinderInScope::declared(idx, type_id, tp.id),
-                bounds,
-            );
+            self.bind_param(&tp.name, BinderInScope::declared(idx, type_id, tp), bounds);
             if consumed_index {
                 idx += 1;
             }
@@ -978,7 +1001,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let bounds = scope.scoped_bounds(param);
             scope.bind_param(
                 &param.name,
-                BinderInScope::declared(base + index as u32, type_id, param.id),
+                BinderInScope::declared(base + index as u32, type_id, param),
                 bounds,
             );
         }
@@ -1224,7 +1247,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
             self.bind_param(
                 &param.name,
-                BinderInScope::declared(idx, resolved_arg, param.id),
+                BinderInScope::declared(idx, resolved_arg, param),
                 bounds,
             );
         }

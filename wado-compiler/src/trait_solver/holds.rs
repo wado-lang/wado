@@ -372,6 +372,16 @@ impl Query<'_> {
                 Binding::One(ty) => vec![ty],
                 Binding::Pack(elems) => elems.iter().collect(),
             };
+            // The marker owes no body, so its answer's requests are dropped.
+            if param.copyable
+                && let Some(copyable) = program.copyable
+                && !elements.iter().all(|element| {
+                    self.holds(&peel_newtypes(program, element), copyable, &[])
+                        .is_some()
+                })
+            {
+                return None;
+            }
             for bound in &param.bounds {
                 for element in &elements {
                     // The bound writes its arguments in the impl's own
@@ -640,6 +650,19 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
         base.map_params(&|i| args.get(i as usize).cloned())
             .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
     )
+}
+
+/// `ty` with every newtype level peeled. A newtype copies where its base does,
+/// and the subject a newtype's base is asked under ranks impls, which a kind
+/// does not. A newtype cycle is reported where it is declared.
+fn peel_newtypes(program: &Program, ty: &SolverType) -> SolverType {
+    let mut seen = vec![ty.clone()];
+    while let Some(base) = newtype_base(program, seen.last().expect("seeded"))
+        && !seen.contains(&base)
+    {
+        seen.push(base);
+    }
+    seen.pop().expect("seeded")
 }
 
 /// Whether the impl answers a bound writing `args`: at every parameter each
@@ -1676,6 +1699,7 @@ mod tests {
                         assoc: OUTPUT,
                         ty: SolverType::Param(0),
                     }],
+                    copyable: false,
                 }],
                 ..concrete(PRODUCT, SolverType::Param(0))
             })
@@ -1724,6 +1748,7 @@ mod tests {
                             assoc: OUTPUT,
                             ty: SolverType::Param(1),
                         }],
+                        copyable: false,
                     },
                     ParamDef::default(),
                 ],
@@ -1779,6 +1804,7 @@ mod tests {
                             assoc: FIELDS,
                             ty: SolverType::Tuple(vec![SolverType::Pack(1)]),
                         }],
+                        copyable: false,
                     },
                     ParamDef::bounded(vec![ARBITRARY]),
                 ],

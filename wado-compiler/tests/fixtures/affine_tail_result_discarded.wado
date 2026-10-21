@@ -1,0 +1,36 @@
+// The last statement of a block that yields nothing discards its value, as
+// any other statement does, so an affine result drops there (WEP: Affine
+// Types): a unit function's last call, and an `if` statement branch's.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+fn clear(slot: &mut Option<Tok>) {
+    slot.take();
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+export fn run() with Stdout {
+    let mut a: Option<Tok> = Option::Some(Tok { n: 1 });
+    clear(&mut a);
+    println("cleared");
+    if builtin::black_box(true) {
+        make(2);
+    }
+    println("end");
+}
+
+__DATA__
+{"stdout": "drop 1\ncleared\ndrop 2\nend\n"}

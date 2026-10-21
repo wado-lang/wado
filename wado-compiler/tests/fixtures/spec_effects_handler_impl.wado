@@ -31,6 +31,10 @@ impl Fields for CountingFields {
         self.calls += 1;
         resume this.has(name)
     }
+    fn drop(&mut self, this: Fields) {                            // answers `f.drop()`, and scope exit
+        this.drop();
+        resume ()
+    }
     ..trap
 }
 

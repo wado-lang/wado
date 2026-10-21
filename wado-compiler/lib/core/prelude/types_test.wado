@@ -1,12 +1,3 @@
-use { MonotonicClock } from "wasi:clocks";
-
-#[expect_trap]
-test "AsyncCall::wait after the call ended traps" {
-    let call = MonotonicClock::wait_for(0);
-    call.wait();
-    call.wait();
-}
-
 test "Option::unwrap on Some" {
     let x: Option<i32> = Option::Some(42);
     assert x.unwrap() == 42;
@@ -144,4 +135,13 @@ test "Result::map_err" {
     let err: Result<i32, String> = Result::Err("boom");
     assert ok.map_err(|e: String| e.len()) == Result::<i32, i32>::Ok(42);
     assert err.map_err(|e: String| e.len()) == Result::<i32, i32>::Err(4);
+}
+
+test "Option::take and Option::replace move the value out" {
+    let mut slot: Option<i32> = Option::Some(1);
+    assert slot.replace(2) == Option::Some(1);
+    assert slot.take() == Option::Some(2);
+    assert slot.take() matches { None };
+    assert slot.replace(3) matches { None };
+    assert slot == Option::Some(3);
 }

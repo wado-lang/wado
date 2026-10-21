@@ -82,11 +82,12 @@ fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
 }
 
 fn read_body(resp: Response) -> ByteList {
-    let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
     let buf = body_stream_rx.read_to_end_bytes();
     body_stream_rx.drop();
+    res_tx.write(Result::Ok(()));
     return buf;
 }
 

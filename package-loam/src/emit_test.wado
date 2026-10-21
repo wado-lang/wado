@@ -75,7 +75,7 @@ test "the generated module imports the runtime from the spec it is given" {
     assert out.contains("} from \"lib:loam\";\n");
     assert !out.contains("pub fn matmul");
     assert out.contains("pub struct Weights {");
-    assert out.contains("pub struct Prepared<Bk: Backend> {");
+    assert out.contains("pub struct Prepared<affine Bk: Backend> {");
     assert out.contains("pub fn forward<");
 }
 
@@ -83,7 +83,7 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     let out = generate(MLP, mlp_layout(), false).unwrap();
 
     assert out.contains(
-        "pub fn forward<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
     );
     assert out.contains("let H = backend.matmul_rhs(X, &weights.W1, null);");
     assert out.contains(
@@ -95,7 +95,7 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     // `pass` takes the input and leaves the output on the backend, and
     // `forward` uploads the one and reads the other back.
     assert out.contains(
-        "pub fn pass<Bk: Backend>(backend: &mut Bk, X: &Bk::Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
+        "pub fn pass<affine Bk: Backend>(backend: &mut Bk, X: &Bk::Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
     );
     assert out.contains("    return Y;\n");
     assert out.contains("    return backend.download(&pass(backend, &X, weights));\n");
@@ -151,7 +151,7 @@ test "the weights become the backend's for every pass where they are prepared" {
     // `W1` is read only as a product's right operand, so it is prepared as one.
     assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
     assert out.contains(
-        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
+        "    pub fn prepare<affine Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
     );
     assert out.contains("backend.matmul_rhs(X, &weights.W1");
 }
@@ -269,10 +269,10 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
         "pub struct Outputs {\n    pub Z: Tensor<f32, [Batch, In]>,\n    pub Y: Tensor<f32, [Batch, In]>,\n}",
     );
     assert out.contains(
-        "pub fn forward<Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Outputs with _ {",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Outputs with _ {",
     );
     assert out.contains(
-        "pub struct Passed<Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [Batch, In]>,\n    pub Y: Bk::Tensor<f32, [Batch, In]>,\n}",
+        "pub struct Passed<affine Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [Batch, In]>,\n    pub Y: Bk::Tensor<f32, [Batch, In]>,\n}",
     );
     assert out.contains("return Passed { Z: Z, Y: Y };");
     assert out.contains("let Passed { Z, Y } = pass(backend, &A, weights);");
@@ -314,7 +314,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     ]).unwrap();
 
     assert out.contains(
-        "impl<Bk: Backend> Prepared<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Prepared<Bk> with _ {",
+        "impl<affine Bk: Backend> Prepared<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Prepared<Bk> with _ {",
     );
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.contains(
@@ -1059,7 +1059,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     ]).unwrap();
 
     assert out.contains("    pub prepare_: Tensor<f32, [Unit]>,\n");
-    assert out.contains("pub fn prepare<Bk: Backend>(&self");
+    assert out.contains("pub fn prepare<affine Bk: Backend>(&self");
 }
 
 test "a tensor named as a runtime item the module does not import keeps its name" {
@@ -1227,7 +1227,7 @@ test "a half precision boundary states its own element type" {
     let out = generate(mlp("float16"), mlp_layout()).unwrap();
 
     assert out.contains(
-        "pub fn forward<Bk: Backend>(backend: &mut Bk, X: &Tensor<f16, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f16, [Batch, Out]> with _ {",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f16, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f16, [Batch, Out]> with _ {",
     );
     assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
 }

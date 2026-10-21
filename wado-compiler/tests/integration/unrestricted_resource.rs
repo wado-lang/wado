@@ -41,7 +41,7 @@ fn a_plain_resource_is_move_only() {
     assert!(
         errors
             .iter()
-            .any(|e| e.contains("resource `h` used after it was moved")),
+            .any(|e| e.contains("affine value `h` used after it was moved")),
         "expected a use-after-move error, got {errors:?}"
     );
 }
@@ -67,7 +67,7 @@ fn an_affine_resource_stays_move_only() {
     assert!(
         errors
             .iter()
-            .any(|e| e.contains("resource `h` used after it was moved")),
+            .any(|e| e.contains("affine value `h` used after it was moved")),
         "an affine handle keeps the move-only discipline, got {errors:?}"
     );
 }
@@ -84,7 +84,7 @@ fn a_generic_resource_stays_move_only() {
     assert!(
         errors
             .iter()
-            .any(|e| e.contains("resource `s` used after it was moved")),
+            .any(|e| e.contains("affine value `s` used after it was moved")),
         "a generic resource declaring no linearity is affine, got {errors:?}"
     );
 }

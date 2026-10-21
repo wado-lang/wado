@@ -102,6 +102,9 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
+    /// The `Box<T>` a slot holds a value in, for the types
+    /// [`Self::boxes_slot`] names, keyed by the type.
+    slot_boxes: IndexMap<TypeKey, TypeId>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -136,6 +139,10 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
+    /// Struct field types by declaration and instance arguments, a template's
+    /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
+    /// reads.
+    struct_field_index: IndexMap<(DefId, Vec<TypeKey>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -157,6 +164,8 @@ pub struct TypeTable {
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
     /// classes their handles carry where they declare them.
     unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
+    /// Structs and variants declared `affine`.
+    affine_decls: IndexSet<DefId>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -273,6 +282,7 @@ impl TypeTable {
             projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
+            slot_boxes: IndexMap::default(),
             struct_name_index: IndexMap::default(),
             decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -280,6 +290,7 @@ impl TypeTable {
             bound_driven_synth_requests: IndexSet::default(),
             impl_targets: IndexMap::default(),
             variant_case_index: IndexMap::default(),
+            struct_field_index: IndexMap::default(),
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
@@ -287,6 +298,7 @@ impl TypeTable {
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
+            affine_decls: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -553,6 +565,17 @@ impl TypeTable {
         self.unrestricted_resources.contains_key(&def)
     }
 
+    pub fn mark_affine_decl(&mut self, def: DefId) {
+        self.affine_decls.insert(def);
+    }
+
+    /// Whether `def` is a struct or variant declared `affine`: move-only in
+    /// every instantiation, whatever its fields hold.
+    #[must_use]
+    pub fn is_affine_decl(&self, def: DefId) -> bool {
+        self.affine_decls.contains(&def)
+    }
+
     /// The classes an unrestricted resource's handles carry, where it declares them.
     #[must_use]
     pub fn handle_classes(&self, def: DefId) -> Option<HandleClasses> {
@@ -595,6 +618,13 @@ impl TypeTable {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
             _ => None,
         }
+    }
+
+    /// Whether `ty` is an affine resource, which the guest holds as a GC object
+    /// boxing its `i32` handle.
+    #[must_use]
+    pub fn is_resource_object(&self, ty: TypeId) -> bool {
+        self.handle_scalar(ty) == Some(Self::I32)
     }
 
     /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
@@ -1587,6 +1617,9 @@ impl TypeTable {
             if let Some(&payload) = self.box_payload_types.get(id) {
                 components.push(payload);
             }
+            if let Some(wrapper) = self.slot_box(id) {
+                components.push(wrapper);
+            }
             if let Some(ty) = self.types.get(id) {
                 match ty {
                     ResolvedType::Struct {
@@ -1680,6 +1713,8 @@ impl TypeTable {
         self.box_payload_types.retain(|id, &payload| {
             effective_keep.contains(&id) && effective_keep.contains(&payload)
         });
+        self.slot_boxes
+            .retain(|_, wrapper| effective_keep.contains(wrapper));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -2044,6 +2079,21 @@ impl TypeTable {
         self.make_generic_instance(def, vec![elem])
     }
 
+    pub fn make_stream_write(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StreamWrite);
+        self.make_generic_instance(def, vec![elem])
+    }
+
+    pub fn make_future_write(&mut self, payload: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::FutureWrite);
+        self.make_generic_instance(def, vec![payload])
+    }
+
+    pub fn make_subtask(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::Subtask);
+        self.make_resource(def)
+    }
+
     /// Create a `AsyncCall<T>` generic struct instance type.
     ///
     /// Unlike `Future<T>` and `Stream<T>` (which are CM handle resources),
@@ -2053,6 +2103,11 @@ impl TypeTable {
     pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::AsyncCall);
         self.make_generic_instance(def, vec![inner])
+    }
+
+    pub fn make_result_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ResultBuffer);
+        self.make_struct(StructDef::Decl(def))
     }
 
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
@@ -2376,6 +2431,116 @@ impl TypeTable {
         self.variant_case_index.get(&def).map(Vec::as_slice)
     }
 
+    /// Register the field types of a struct declaration instantiated with
+    /// `args` (none for the template) for [`Self::holds_affine_resource`].
+    pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
+        let key = (def, self.type_keys(&args));
+        self.struct_field_index.insert(key, fields);
+    }
+
+    /// Whether a value of `ty` is, or holds at any depth, an affine resource:
+    /// what makes each place holding one a nullable reference to its object
+    /// (WEP: Affine Types). A reference, a function and an unrestricted
+    /// handle hold none.
+    #[must_use]
+    pub fn holds_affine_resource(&self, ty: TypeId) -> bool {
+        self.holds_affine_in(ty, &[], &mut Vec::new())
+    }
+
+    /// [`Self::holds_affine_resource`] inside a template whose type parameters
+    /// hold one where `params` says. `open` is the declarations the walk is
+    /// inside, each with its `params`: one reached again with the same answers
+    /// adds nothing, which ends polymorphic recursion.
+    fn holds_affine_in(
+        &self,
+        ty: TypeId,
+        params: &[bool],
+        open: &mut Vec<(DefId, Vec<bool>)>,
+    ) -> bool {
+        let ty = self.representation_head(ty);
+        // `List` is the compiler's, so no struct registers its fields.
+        if let Some(elem) = self.list_element(ty) {
+            return self.holds_affine_in(elem, params, open);
+        }
+        let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
+            ResolvedType::TypeParam { index, .. } => {
+                return params.get(*index as usize).copied().unwrap_or(false);
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+                return self.is_resource_object(ty);
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                return self.holds_affine_in(*elem, params, open);
+            }
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => (
+                None,
+                &[],
+                self.anon_struct_fields(*shape)
+                    .iter()
+                    .map(|(_, ty)| *ty)
+                    .collect(),
+            ),
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
+            | ResolvedType::GenericInstance { def, type_args } => {
+                if self.is_affine_decl(*def) {
+                    return true;
+                }
+                if self.is_tuple_def(*def) {
+                    (None, &[], type_args.clone())
+                } else if let Some(fields) = self
+                    .struct_field_index
+                    .get(&(*def, self.type_keys(type_args)))
+                    .or_else(|| self.struct_field_index.get(&(*def, Vec::new())))
+                {
+                    // An instance's own fields are concrete, so the arguments
+                    // its template would read are only the recursion guard's.
+                    (Some(*def), type_args.as_slice(), fields.clone())
+                } else if let Some(cases) = self.variant_case_index.get(def) {
+                    let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
+                    (Some(*def), type_args.as_slice(), payloads)
+                } else {
+                    return false;
+                }
+            }
+            ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
+                Some(cases) => (
+                    Some(*def),
+                    &[],
+                    cases.iter().map(|(_, _, payload)| *payload).collect(),
+                ),
+                None => return false,
+            },
+            _ => return false,
+        };
+        let Some(def) = def else {
+            return members
+                .into_iter()
+                .any(|member| self.holds_affine_in(member, params, open));
+        };
+        if self.is_affine_decl(def) {
+            return true;
+        }
+        let inner: Vec<bool> = args
+            .iter()
+            .map(|&arg| self.holds_affine_in(arg, params, open))
+            .collect();
+        if open.iter().any(|(d, p)| *d == def && *p == inner) {
+            return false;
+        }
+        open.push((def, inner.clone()));
+        let held = members
+            .into_iter()
+            .any(|member| self.holds_affine_in(member, &inner, open));
+        open.pop();
+        held
+    }
+
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two variant types share a name.
     pub fn find_variant_type(&self, def: DefId) -> Option<TypeId> {
@@ -2684,6 +2849,38 @@ impl TypeTable {
     /// `None` if the given `TypeId` is not a registered wrapper.
     pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
         self.box_payload_types.get(wrapper).copied()
+    }
+
+    /// Whether a slot (a field, a tuple element, a payload or an array element)
+    /// holds a `ty` in a `Box<T>`: an affine variant. A variant value is
+    /// immutable, so only a box makes the slot a place that `&mut` writes
+    /// (WEP: Affine Types).
+    pub fn boxes_slot(&self, ty: TypeId) -> bool {
+        self.is_variant_value(ty) && self.holds_affine_resource(ty)
+    }
+
+    /// Whether a value of `ty` is a variant's, generic or not, through any
+    /// newtype.
+    pub fn is_variant_value(&self, ty: TypeId) -> bool {
+        match self.get(self.representation_head(ty)) {
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance { def, .. } => {
+                self.variant_template_cases(*def).is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// Record the `Box<T>` a slot holds each `ty` in.
+    pub fn register_slot_box(&mut self, ty: TypeId, wrapper: TypeId) {
+        let key = self.type_key(ty);
+        self.slot_boxes.insert(key, wrapper);
+    }
+
+    /// The `Box<T>` a slot holds each `ty` in, where [`Self::boxes_slot`] says
+    /// it does.
+    pub fn slot_box(&self, ty: TypeId) -> Option<TypeId> {
+        self.slot_boxes.get(&self.type_key(ty)).copied()
     }
 
     /// Whether `type_id` may name storage rather than hold a value: a `&T` /

@@ -1,0 +1,58 @@
+// A generic `Drop` impl runs for each instance: at a scope exit in a concrete
+// body, for an `affine T` a generic body drops, and with what `drop` leaves in
+// `self` dropped field by field, a resource reaching its handler
+// (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Wrap<affine T> {
+    value: T,
+    id: i32,
+}
+
+impl<affine T> Drop for Wrap<T> {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+struct Counter {
+    drops: i32,
+}
+
+impl Stream<u8> for Counter {
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        self.drops += 1;
+        resume ()
+    }
+    ..trap
+}
+
+fn scope_exit() {
+    let _w = Wrap { value: 1, id: 5 };
+}
+
+fn keep<affine T>(value: T) {}
+
+export fn run() with Stdout {
+    scope_exit();
+    println(`scope exit: ${DROPS}`);
+    keep(Wrap { value: "s", id: 7 });
+    println(`generic body: ${DROPS}`);
+    keep(Wrap { value: Wrap { value: "t", id: 1000 }, id: 0 });
+    println(`nested: ${DROPS}`);
+    DROPS = 12;
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut c = Counter { drops: 0 };
+    with &mut c do {
+        let _w = Wrap { value: rx, id: 100 };
+    }
+    println(`field: ${DROPS} stream drops=${c.drops}`);
+}
+
+__DATA__
+{"stdout": "scope exit: 5\ngeneric body: 12\nnested: 1012\nfield: 112 stream drops=1\n"}

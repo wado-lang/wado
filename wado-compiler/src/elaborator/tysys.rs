@@ -29,6 +29,7 @@ use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::name::{ARRAY_TYPE_NAME, FqTypeName};
 use crate::resolve::Resolutions;
+use crate::semantics::{Destination, Operand};
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -147,6 +148,31 @@ impl TypeSystem {
         holds_resource(self, type_id)
     }
 
+    /// Whether a value of `type_id` is move-only in a body whose `affine`
+    /// type parameters are `affine_params`: it holds an affine resource, or
+    /// one of those parameters, at any depth.
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
+        holds_resource(
+            &AffineParams {
+                types: self,
+                affine_params,
+            },
+            type_id,
+        )
+    }
+
+    /// The index of the first field or case of the declaration `type_id` whose
+    /// type is affine in every instantiation: one a type parameter reaches
+    /// holds nothing here.
+    pub(crate) fn first_affine_member(&self, type_id: TypeId) -> Option<usize> {
+        let Held::Members { members, .. } = self.members_held(type_id) else {
+            return None;
+        };
+        members
+            .into_iter()
+            .position(|member| holds_resource(self, member))
+    }
+
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
     /// handed it may write: one it is or holds at any depth, or one behind a
     /// function or resource, whose captures and state no type shows.
@@ -160,6 +186,142 @@ impl TypeSystem {
                     | ResolvedType::GenericResource { .. }
             )
         })
+    }
+
+    /// Whether a value of `type_id` may hold a reference: one it is or holds at
+    /// any depth, a function's captures, or a type parameter, which a caller
+    /// may bind to one.
+    pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
+        self.may_hold_reference_from(type_id, true, None, &mut IndexSet::default())
+    }
+
+    /// Whether a borrow passed at `operand` of a call of `callee` may reach
+    /// `destination`. It may not where the parameter is declared a reference
+    /// and the declared destination type holds no reference that could point
+    /// into the borrowed type: a body generic over the rest has no way to make
+    /// such a reference of its own, so what it puts there holds only what the
+    /// borrowed place already held. A parameter declared a type parameter takes
+    /// the borrow as its argument, which the body may put anywhere.
+    pub(crate) fn borrow_reaches(
+        &self,
+        callee: DefId,
+        operand: Operand,
+        destination: Destination,
+    ) -> bool {
+        let (decl, first_value) = match self.signatures.method_sig(callee) {
+            Some(sig) => (&sig.decl, sig.first_value_param()),
+            None => match self.signatures.function_sig(callee) {
+                Some(sig) => (&sig.decl, 0),
+                None => return true,
+            },
+        };
+        let param = |operand: Operand| {
+            let at = match operand {
+                Operand::Receiver => 0,
+                Operand::Arg(i) => first_value + i,
+            };
+            decl.param_types
+                .get(at)
+                .map(|&param| self.type_table.borrow().get(param).clone())
+        };
+        let Some(ResolvedType::Ref(borrowed) | ResolvedType::MutRef(borrowed)) = param(operand)
+        else {
+            return true;
+        };
+        let into = match destination {
+            Destination::Result => match decl.return_type {
+                Some(ret) => ret,
+                None => return false,
+            },
+            // A parameter declared `&` takes no write, whatever the caller
+            // passed it.
+            Destination::Through(target) => match param(target) {
+                Some(ResolvedType::MutRef(target)) => target,
+                Some(ResolvedType::Ref(_)) => return false,
+                _ => return true,
+            },
+        };
+        self.may_hold_reference_from(into, false, Some(borrowed), &mut IndexSet::default())
+    }
+
+    /// Whether a reference to `pointee` may point into a value of `place`: at
+    /// it or at what it holds at any depth, through a newtype either way. A
+    /// type parameter on either side may be bound to anything.
+    fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
+        let open = |resolved: &ResolvedType| {
+            matches!(
+                resolved,
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::AssocParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::AssocTypeProjection { .. }
+            )
+        };
+        let head_key = |ty: TypeId| {
+            let tt = self.type_table.borrow();
+            tt.type_key(tt.representation_head(ty))
+        };
+        let pointee = self.type_table.borrow().representation_head(pointee);
+        if open(self.type_table.borrow().get(pointee)) {
+            return true;
+        }
+        let target = head_key(pointee);
+        self.reaches(place, &|ty, resolved| {
+            open(resolved) || head_key(ty) == target
+        })
+    }
+
+    /// A declaration's fields name its own parameters, which its arguments
+    /// answer for, so `params` is false below a field. With `into`, only a
+    /// reference that may point into that type counts.
+    fn may_hold_reference_from(
+        &self,
+        type_id: TypeId,
+        params: bool,
+        into: Option<TypeId>,
+        walked: &mut IndexSet<(TypeKey, bool)>,
+    ) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        let (args, members) = match resolved {
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                return into.is_none_or(|place| self.may_point_into(pointee, place));
+            }
+            ResolvedType::Function { .. } => return true,
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => return params,
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+            ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
+            ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
+            ResolvedType::Struct { type_args, .. }
+            | ResolvedType::GenericInstance { type_args, .. } => {
+                let mut members = self.struct_field_type_ids_of(type_id).unwrap_or_default();
+                members.extend(self.case_payload_types(type_id).unwrap_or_default());
+                (type_args, members)
+            }
+            ResolvedType::Variant { .. } => (
+                Vec::new(),
+                self.case_payload_types(type_id).unwrap_or_default(),
+            ),
+        };
+        if !walked.insert((self.type_table.borrow().type_key(type_id), params)) {
+            return false;
+        }
+        args.into_iter()
+            .any(|arg| self.may_hold_reference_from(arg, params, into, walked))
+            || members
+                .into_iter()
+                .any(|member| self.may_hold_reference_from(member, false, into, walked))
     }
 
     /// Whether a value of `type_id` is or holds a float, in a field, element or
@@ -724,12 +886,64 @@ fn reaches(
     false
 }
 
+/// What a type holds inside a body that declares `affine_params`: each of
+/// them counts as an affine resource.
+struct AffineParams<'a> {
+    types: &'a TypeSystem,
+    affine_params: &'a [String],
+}
+
+impl HeldTypes for AffineParams<'_> {
+    fn key(&self, type_id: TypeId) -> TypeKey {
+        self.types.key(type_id)
+    }
+
+    fn held(&self, type_id: TypeId) -> Held {
+        let is_affine_param = match self.types.type_table.borrow().get(type_id) {
+            ResolvedType::TypeParam { name, .. } => self.affine_params.contains(name),
+            ResolvedType::AssocTypeProjection {
+                owning_trait,
+                assoc_name,
+                ..
+            } => self
+                .types
+                .trait_env
+                .assoc_type_decl(owning_trait, assoc_name)
+                .is_some_and(|decl| decl.is_affine),
+            _ => false,
+        };
+        if is_affine_param {
+            Held::Resource
+        } else {
+            self.types.held(type_id)
+        }
+    }
+}
+
 impl HeldTypes for TypeSystem {
     fn key(&self, type_id: TypeId) -> TypeKey {
         self.type_table.borrow().type_key(type_id)
     }
 
+    /// A type declared `affine` is move-only whatever its members hold, as a
+    /// type implementing `Drop` is.
     fn held(&self, type_id: TypeId) -> Held {
+        let declared_affine = {
+            let table = self.type_table.borrow();
+            table
+                .nominal_def(table.representation_head(type_id))
+                .is_some_and(|def| table.is_affine_decl(def))
+        };
+        if declared_affine {
+            return Held::Resource;
+        }
+        self.members_held(type_id)
+    }
+}
+
+impl TypeSystem {
+    /// What `type_id` holds one level down, read from its members alone.
+    fn members_held(&self, type_id: TypeId) -> Held {
         let (base, resolved) = {
             let table = self.type_table.borrow();
             let base = table.representation_head(type_id);
@@ -744,6 +958,11 @@ impl HeldTypes for TypeSystem {
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
+            ResolvedType::BuiltinArray(element) => Held::Members {
+                decl: None,
+                args: Vec::new(),
+                members: vec![element],
+            },
             _ => {
                 if let Some(elements) = self.type_table.borrow().as_tuple(base) {
                     return Held::Members {

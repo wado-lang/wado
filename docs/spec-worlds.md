@@ -458,10 +458,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let greetings = headers.get("x-greeting" as FieldName);
     assert is_post && path == "/greet" && greetings.len() == 1;
 
-    let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [done, done_tx] = Future::<Result<(), ErrorCode>>::new();
     let [request_body, _request_trailers] = Request::consume_body(request, done);
     let name = String::from_utf8_lossy(request_body.read_to_end_bytes());
     request_body.drop();
+    done_tx.write(Result::<(), ErrorCode>::Ok(()));
 
     let [body, body_tx] = Stream::<u8>::new();
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -634,15 +635,17 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     }
 }
 
-fn request_for(path: String) -> Request {
-    let [trailers, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [request, _sent] = Request::new(Headers::new(), null, trailers, null);
     let _ = request.set_path_with_query(Some(path));
-    return request;
+    return [request, trailers_tx];
 }
 
 test "only the root is served" {
-    assert handle(request_for("/admin")) matches { Err(HttpRequestDenied) };
+    let [request, trailers_tx] = request_for("/admin");
+    assert handle(request) matches { Err(HttpRequestDenied) };
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 ```
 

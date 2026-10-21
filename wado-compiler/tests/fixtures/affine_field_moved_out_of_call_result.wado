@@ -1,0 +1,16 @@
+// Moving a field out of a call's result leaves the rest of the result to drop
+// when the statement ends (WEP: Affine Types).
+affine struct Pair { a: Stream<u8>, b: Stream<u8> }
+
+fn make(a: Stream<u8>, b: Stream<u8>) -> Pair {
+    return Pair { a, b };
+}
+
+test {
+    let [ra, ta] = Stream::<u8>::new();
+    let [rb, tb] = Stream::<u8>::new();
+    let a = make(ra, rb).a;
+    assert tb.write([1]).result == CopyResult::Dropped;
+    a.drop();
+    assert ta.write([1]).result == CopyResult::Dropped;
+}

@@ -145,12 +145,12 @@ use gpt2 from "./gpt2.onnxtext"
     };
 
 /// GPT-2 with its weights loaded where `Bk` runs the kernels.
-pub struct Model<Bk: Backend> {
+pub struct Model<affine Bk: Backend> {
     backend: Bk,
     weights: gpt2::Prepared<Bk>,
 }
 
-impl<Bk: Backend> Model<Bk> {
+impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from a safetensors checkpoint laid out
     /// as `gpt2-header.safetensors` says.
     pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {

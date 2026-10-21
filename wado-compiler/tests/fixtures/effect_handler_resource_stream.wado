@@ -19,13 +19,12 @@ struct MockStream {
 
 impl Stream<u8> for MockStream {
     fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
-        // Hand out a fake handle pair. Both ends of this single
-        // stream share the MockStream's `log` buffer, so the
-        // writable end's writes are observed by the readable end's
-        // reads — buffered semantics, unlike wasmtime's unbuffered
-        // canonical streams.
-        let id: i32 = 0;
-        resume [id as Stream<u8>, id as StreamWritable<u8>]
+        // A real pair, which the outer dispatch chain makes, since an integer
+        // converts to no resource. Both ends of this single stream share the
+        // MockStream's `log` buffer, so the writable end's writes are observed
+        // by the readable end's reads — buffered semantics, unlike wasmtime's
+        // unbuffered canonical streams.
+        resume Stream::<u8>::new()
     }
     fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = this;
@@ -42,13 +41,12 @@ impl Stream<u8> for MockStream {
 }
 
 impl StreamWritable<u8> for MockStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
         let _ = this;
-        let count = data.len();
         for let b of data {
             self.log.push(b);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed }
+        resume StreamWrite { rest: [], result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;

@@ -1,0 +1,67 @@
+// An affine type implements `Iterator`. `for-of` moves it into the loop
+// through `ForOf`, an adapter moves it into itself, and every one drops once.
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+affine struct Counter {
+    n: i32,
+    token: Token,
+}
+
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.n >= 3 {
+            return null;
+        }
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+fn counter() -> Counter {
+    return Counter { n: 0, token: Token { id: 1 } };
+}
+
+fn sum<affine I: Iterator<Item = i32>>(it: I) -> i32 with _ {
+    let mut total = 0;
+    for let x of it {
+        total += x;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    for let x of counter() {
+        println(`${x}`);
+    }
+    for let [i, x] of counter().map(|x| x * 10).filter(|x| x > 10).enumerate() {
+        println(`${i}: ${x}`);
+    }
+    for let [a, b] of counter().zip(counter().chain(counter()).step_by(2)) {
+        println(`${a}, ${b}`);
+    }
+    println(`${sum(counter())} ${counter().count()}`);
+    let c = counter();
+    for let x of c {
+        if x == 1 {
+            break;
+        }
+    }
+    println(`drops ${DROPS}`);
+}
+
+__DATA__
+{"stdout": "1\n2\n3\n0: 20\n1: 30\n1, 1\n2, 3\n3, 2\n6 3\ndrops 8\n"}

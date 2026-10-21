@@ -20,34 +20,17 @@ use {
     CopyResult,
     Future,
     FutureWritable,
+    FutureWriteResult,
     Stream,
     StreamChunk,
     StreamWrite,
     StreamWritable,
+    ReadyEvent,
     WaitEvent,
-    Waitable,
+    call_state,
     cm_packed_upper,
     write_copy_is_final,
 } from "core:prelude/types.wado";
-
-/// Split a packed `future.new` result (`readable | writable << 32`) into the
-/// `[Future<T>, FutureWritable<T>]` pair. The parameterized canonical call is
-/// emitted by CM-binding synthesis; this is the Wado-level handle split.
-#[compiler_item("cm_future_pair")]
-internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
-    let rx = packed as i32;
-    let tx = (packed >> 32) as i32;
-    return [rx as Future<T>, tx as FutureWritable<T>];
-}
-
-/// Split a packed `stream.new` result into the `[Stream<T>, StreamWritable<T>]`
-/// pair. See [`cm_future_pair`].
-#[compiler_item("cm_stream_pair")]
-internal fn cm_stream_pair<T>(packed: i64) -> [Stream<T>, StreamWritable<T>] {
-    let rx = packed as i32;
-    let tx = (packed >> 32) as i32;
-    return [rx as Stream<T>, tx as StreamWritable<T>];
-}
 
 /// Copies bytes from linear memory to a new GC array.
 internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
@@ -90,12 +73,7 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
-/// Drop a write_via_stream Future handle to signal completion.
-/// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-internal fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
-    future.drop();
-}
 
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
@@ -108,9 +86,9 @@ pub fn log_stdout(message: String) {
     }
     let [rx, tx] = Stream::<u8>::new();
 
-    let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
+    let written = builtin::call_indirect_stdout_write_via_stream::<Result<(), CliErrorCode>>(rx);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
+    written.drop();
 }
 
 /// Logs a message with newline to stderr (ambient, no effect required).
@@ -124,9 +102,9 @@ pub fn log_stderr(message: String) {
     }
     let [rx, tx] = Stream::<u8>::new();
 
-    let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);
+    let written = builtin::call_indirect_stderr_write_via_stream::<Result<(), CliErrorCode>>(rx);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
+    written.drop();
 }
 
 /// Logs a message to stderr and traps.
@@ -337,17 +315,29 @@ internal fn cm_await_blocked(handle: i32) -> i32 {
 }
 
 /// The `CopyResult` a packed CM copy reports (`CanonicalABI.md`): the low
-/// nibble of `(count << 4) | status`.
+/// nibble of `(count << 4) | status`. Cancellation is unreachable: no binding
+/// cancels a copy.
 #[compiler_item("cm_copy_result")]
 internal fn cm_copy_result(packed: i32) -> CopyResult {
-    let status = packed & 0xf;
-    if status == 0 {
-        return CopyResult::Completed;
+    return match packed & 0xf {
+        0 => CopyResult::Completed,
+        1 => CopyResult::Dropped,
+        _ => unreachable(),
+    };
+}
+
+/// How a future write whose packed result is `packed` ended, a BLOCKED one
+/// pending. Cancellation is unreachable: no binding cancels a write.
+#[compiler_item("cm_future_write_result")]
+internal fn cm_future_write_result(packed: i32) -> FutureWriteResult {
+    if packed == -1 {
+        return FutureWriteResult::Pending;
     }
-    if status == 1 {
-        return CopyResult::Dropped;
-    }
-    return CopyResult::Cancelled;
+    return match cm_copy_result(packed) {
+        Completed => FutureWriteResult::Completed,
+        Dropped => FutureWriteResult::Dropped,
+        Cancelled => unreachable(),
+    };
 }
 
 /// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
@@ -399,25 +389,26 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
 /// CM adapter for stream.write(data) on Stream<u8>: one copy, reporting what
 /// the reader took. `StreamWritable::write_all` is the loop over it.
 #[compiler_item("cm_stream_write_u8")]
-internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
-    let packed = cm_lower_array_u8(data);
-    let ptr = packed as i32;
-    let len = (packed >> 32) as i32;
+internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite<u8> {
+    let bytes = data.internal_raw_data_ref();
+    let len = data.len();
+    let ptr = cm_lower_list_u8(bytes, 0, len) as i32;
     let written = cm_stream_write_once(handle, ptr, len);
     let freed = builtin::realloc(ptr, len, 1, 0);
-    return written;
+    return StreamWrite {
+        rest: Slice::internal_new(bytes, cm_packed_count(written), len).to_list(),
+        result: cm_copy_result(written),
+    };
 }
 
-/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED copy.
-internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
-    let mut result = builtin::stream_write(handle, ptr, cm_copy_count(count));
+/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED
+/// copy. Returns the packed result.
+internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> i32 {
+    let result = builtin::stream_write(handle, ptr, cm_copy_count(count));
     if result == -1 {
-        result = cm_await_blocked(handle);
+        return cm_await_blocked(handle);
     }
-    return StreamWrite {
-        count: cm_packed_count(result),
-        result: cm_copy_result(result),
-    };
+    return result;
 }
 
 /// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is
@@ -432,10 +423,12 @@ internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResu
     let mut taken = 0;
     loop {
         let written = cm_stream_write_once(handle, ptr + taken, len - taken);
-        taken += written.count;
-        if write_copy_is_final(&written) || taken >= len {
+        let delivered = cm_packed_count(written);
+        let result = cm_copy_result(written);
+        taken += delivered;
+        if write_copy_is_final(result, delivered) || taken >= len {
             let freed = builtin::realloc(ptr, len, 1, 0);
-            return written.result;
+            return result;
         }
     }
 }
@@ -467,21 +460,11 @@ internal fn cm_error_context_debug_message(handle: i32) -> String {
 }
 
 /// CM adapter for waitable_set.wait().
-/// Allocates output buffer, calls waitable-set-wait, constructs WaitEvent.
 #[compiler_item("cm_waitable_set_wait")]
 internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_wait(ws, out_ptr);
-    let evt_handle = builtin::i32_load(out_ptr);
-    let payload = builtin::i32_load(out_ptr + 4);
-    let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 };
-}
-
-#[compiler_item("cm_waitable_join")]
-internal fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
-    builtin::waitable_join(handle, ws);
-    return handle;
+    return cm_wait_event(code, out_ptr);
 }
 
 #[compiler_item("cm_waitable_set_poll")]
@@ -492,10 +475,20 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
         let freed = builtin::realloc(out_ptr, 8, 4, 0);
         return null;
     }
-    let evt_handle = builtin::i32_load(out_ptr);
+    return Option::Some(cm_wait_event(code, out_ptr));
+}
+
+/// The event of `code` whose handle and payload the host wrote at `out_ptr`,
+/// which this frees.
+///
+/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
+/// cannot arrive either.
+fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
+    assert code == 1, "only a subtask joins a set";
+    let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return Option::Some(WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 });
+    return WaitEvent { handle, event: ReadyEvent::Call(call_state(payload as u32)) };
 }
 
 // `as` with a half on either side. No instruction converts a half, so a half

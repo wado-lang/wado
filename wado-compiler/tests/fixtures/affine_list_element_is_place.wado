@@ -1,0 +1,31 @@
+// An element of a list of affine variants is a place (WEP: Affine Types):
+// `list[i].take()` empties the slot, `&mut list[i]` reaches it, and a store
+// drops what the slot held.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+fn clear(slot: &mut Option<Tok>) {
+    slot.take();
+}
+
+export fn run() with Stdout {
+    let mut list: List<Option<Tok>> = [Option::Some(Tok { n: 1 }), Option::Some(Tok { n: 2 })];
+    let t = list[0].take();
+    println(`took ${t.unwrap().n}`);
+    clear(&mut list[1]);
+    list[0] = Option::Some(Tok { n: 3 });
+    println("end");
+}
+
+__DATA__
+{"stdout": "took 1\ndrop 1\ndrop 2\nend\ndrop 3\n"}

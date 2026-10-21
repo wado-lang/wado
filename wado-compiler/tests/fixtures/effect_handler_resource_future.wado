@@ -5,7 +5,7 @@
 // single shared `stored` slot; the bundled `with &mut f do` form
 // installs both handlers at once for the duration of the `do` block.
 // Inside the block, `Future::<i32>::new()` / `tx.write(value)` /
-// `rx.read()` / `tx.drop()` / `rx.drop()` all dispatch through the
+// `rx.read()` all dispatch through the
 // per-monomorphisation `$effect_dispatch__<module>/Future<i32>__*` /
 // `$effect_dispatch__<module>/FutureWritable<i32>__*` wrappers into
 // `MockFuture`'s methods rather than the CM canonical
@@ -21,12 +21,11 @@ struct MockFuture {
 
 impl Future<i32> for MockFuture {
     fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
-        // Hand out a fake handle pair. Both ends share the
-        // MockFuture's `stored` slot, so a write through the
-        // FutureWritable end is observed by a read on the Future
-        // end without a concurrent runtime task.
-        let id: i32 = 0;
-        resume [id as Future<i32>, id as FutureWritable<i32>]
+        // A real pair, which the outer dispatch chain makes, since an integer
+        // converts to no resource. Both ends share the MockFuture's `stored`
+        // slot, so a write through the FutureWritable end is observed by a
+        // read on the Future end without a concurrent runtime task.
+        resume Future::<i32>::new()
     }
     fn read(&mut self, this: &Future<i32>) -> Option<i32> {
         let _ = this;
@@ -41,11 +40,11 @@ impl Future<i32> for MockFuture {
 }
 
 impl FutureWritable<i32> for MockFuture {
-    fn write(&mut self, this: &FutureWritable<i32>, value: i32) {
+    fn write(&mut self, this: &FutureWritable<i32>, value: i32) -> FutureWrite<i32> {
         let _ = this;
         self.stored = Option::Some(value);
         self.write_count += 1;
-        resume ()
+        resume FutureWrite { rest: null, result: FutureWriteResult::Completed }
     }
     fn drop(&mut self, this: &FutureWritable<i32>) {
         let _ = this;
@@ -65,8 +64,6 @@ export fn run() with Stdout {
         tx.write(42);
         let value = rx.read();
         assert value matches { Some(42) };
-        tx.drop();
-        rx.drop();
     }
     assert f.write_count == 1;
     assert f.read_count == 1;

@@ -27,7 +27,7 @@ pub enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-pub trait Eq<Rhs = Self> with () {
+pub affine trait Eq<Rhs = Self> with () {
     /// Returns true if self equals other.
     fn eq(&self, other: &Rhs) -> bool;
 }
@@ -46,7 +46,7 @@ impl<T: Eq> Eq for &mut T {
 
 /// Whether `a` and `b` point to one place, not merely to equal values. `==`
 /// on references compares the values.
-pub fn ref_eq<T>(a: &T, b: &T) -> bool {
+pub fn ref_eq<affine T>(a: &T, b: &T) -> bool {
     return builtin::ref_eq(a, b);
 }
 
@@ -54,7 +54,7 @@ pub fn ref_eq<T>(a: &T, b: &T) -> bool {
 /// bound read. A float's puts every NaN last, as one value, and `-0.0` equal to
 /// `0.0`.
 #[compiler_item("ord")]
-pub trait Ord: Eq with () {
+pub affine trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -68,16 +68,25 @@ pub trait Hasher with () {
 }
 
 /// A value a hash table can key on. Values that are `==` feed a hasher alike.
-pub trait Hash: Eq with () {
+pub affine trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
 }
 
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
-pub trait Default with () {
+pub affine trait Default with () {
     /// Returns the default value for this type.
     fn default() -> Self;
+}
+
+/// What a drop of an affine value runs: at scope exit, at a store over it, for
+/// a value nothing keeps, and by name. A type without an impl drops its fields
+/// one by one. What `drop` leaves in `self` drops field by field after it, and
+/// only an affine type implements it.
+#[compiler_item("drop")]
+pub affine trait Drop with () {
+    fn drop(self);
 }
 
 /// A type's identity: the root every reflected kind sits under. Sealed and
@@ -155,7 +164,7 @@ pub enum CaseStyle {
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
-pub trait Member with () {
+pub affine trait Member with () {
     /// The source field name.
     #[compiler_item("member_name")]
     fn name(&self) -> String;
@@ -277,14 +286,14 @@ pub trait ReflectTemplate: Reflect with () {
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
 #[compiler_item("variant_case")]
-pub struct VariantCase<T, P> {
+pub struct VariantCase<affine T, affine P> {
     index: i32,
     case_name: String,
     wire_override: Option<String>,
     is_unit: bool,
 }
 
-impl<T, P> VariantCase<T, P> {
+impl<affine T, affine P> VariantCase<T, P> {
     /// The case's tag.
     pub fn discriminant(&self) -> i32 {
         return self.index;
@@ -300,11 +309,6 @@ impl<T, P> VariantCase<T, P> {
         return builtin::variant_tag(v) == self.index;
     }
 
-    /// The payload of this case in `v`. Traps unless `holds(v)`.
-    pub fn extract(&self, v: &T) -> P {
-        return builtin::variant_case_extract(v, self.index);
-    }
-
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
@@ -316,7 +320,14 @@ impl<T, P> VariantCase<T, P> {
     }
 }
 
-impl<T, P> Member for VariantCase<T, P> {
+impl<affine T, P> VariantCase<T, P> {
+    /// The payload of this case in `v`. Traps unless `holds(v)`.
+    pub fn extract(&self, v: &T) -> P {
+        return builtin::variant_case_extract(v, self.index);
+    }
+}
+
+impl<affine T, affine P> Member for VariantCase<T, P> {
     fn name(&self) -> String {
         return self.case_name;
     }
@@ -470,7 +481,7 @@ pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
 #[compiler_item("struct_field")]
-pub struct StructField<T, F> {
+pub struct StructField<affine T, affine F> {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -478,7 +489,7 @@ pub struct StructField<T, F> {
     is_secret: bool,
 }
 
-impl<T, F> StructField<T, F> {
+impl<affine T, affine F> StructField<T, F> {
     /// The field's declaration index.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -494,13 +505,20 @@ impl<T, F> StructField<T, F> {
         return self.is_secret;
     }
 
+    /// This field in `v`, by reference.
+    pub fn get_ref(&self, v: &T) -> &F {
+        return builtin::struct_field_ref(v, self.index);
+    }
+}
+
+impl<affine T, F> StructField<T, F> {
     /// The value of this field in `v`.
     pub fn get(&self, v: &T) -> F {
         return builtin::struct_field_get(v, self.index);
     }
 }
 
-impl<T, F> Member for StructField<T, F> {
+impl<affine T, affine F> Member for StructField<T, F> {
     fn name(&self) -> String {
         return self.field_name;
     }
@@ -567,7 +585,7 @@ internal fn struct_close(f: &mut Formatter) {
     f.write_str(" }");
 }
 
-impl<T, F> Inspect for StructField<T, F> {
+impl<affine T, affine F> Inspect for StructField<T, F> {
     fn inspect(&self, f: &mut Formatter) {
         struct_open(f, "StructField");
         struct_field(f, "index", true);
@@ -589,7 +607,7 @@ impl<T, F> Inspect for StructField<T, F> {
     }
 }
 
-impl<T, P> Inspect for VariantCase<T, P> {
+impl<affine T, affine P> Inspect for VariantCase<T, P> {
     fn inspect(&self, f: &mut Formatter) {
         struct_open(f, "VariantCase");
         struct_field(f, "index", true);
@@ -658,12 +676,27 @@ pub trait Ref with () {
 pub trait RefMut with () {
 }
 
+/// Marker every affine resource holds, and nothing else. Sealed and
+/// compiler-stated; user impls are rejected. See WEP: Affine Types.
+#[compiler_item("affine_resource")]
+pub trait AffineResource with () {
+}
+
+/// Marker of a type no value of which is affine, so a copy of one is sound:
+/// what an `impl`'s parameter not declared `affine` admits. The compiler
+/// states it of primitives, function values and every declaration not
+/// declared `affine`; the prelude states it of `Array` and tuples. See WEP:
+/// Affine Types.
+#[compiler_item("copyable")]
+internal trait Copyable with () {
+}
+
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
 #[compiler_item("index_ref")]
-pub trait IndexRef<IndexType> with () {
-    type Output: Ref;
+pub affine trait IndexRef<IndexType> with () {
+    affine type Output: Ref;
 
     /// Returns a reference to the element at the given index.
     fn index_ref(&self, index: IndexType) -> &Self::Output;
@@ -673,8 +706,8 @@ pub trait IndexRef<IndexType> with () {
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
 #[compiler_item("index_ref_mut")]
-pub trait IndexRefMut<IndexType> with () {
-    type Output: RefMut;
+pub affine trait IndexRefMut<IndexType> with () {
+    affine type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
     fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
@@ -684,8 +717,8 @@ pub trait IndexRefMut<IndexType> with () {
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
 #[compiler_item("index_assign")]
-pub trait IndexAssign<IndexType> with () {
-    type Output;
+pub affine trait IndexAssign<IndexType> with () {
+    affine type Output;
 
     /// Assigns a value to the element at the given index.
     fn index_assign(&mut self, index: IndexType, value: Self::Output);
@@ -818,14 +851,14 @@ pub trait Shr<Rhs = Self> with () {
 /// Types implementing this trait can be formatted with `${x}` in template strings.
 /// All format traits write to a `Formatter` that wraps `&mut String`.
 #[compiler_item("display")]
-pub trait Display with () {
+pub affine trait Display with () {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
 
 /// What every standard library error type is: a failure carrying a reason a
 /// person can read. It adds nothing to `Display`, so a bound on it says only that.
-pub trait Error: Display with () {
+pub affine trait Error: Display with () {
 }
 
 /// Trait for debug/inspect formatting.
@@ -836,7 +869,7 @@ pub trait Error: Display with () {
 /// - Structs show field names: `Point { x: 10, y: 20 }`
 /// - Enums/Variants show type-qualified names: `Color::Red`
 #[compiler_item("inspect")]
-pub trait Inspect with () {
+pub affine trait Inspect with () {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
 }
@@ -846,7 +879,7 @@ pub trait Inspect with () {
 /// elided and reported with a trailing `, ..`.
 /// The alternate (`#`) rendering the struct `Inspect` hands off to:
 /// `Name {\n  field: value,\n}`, one field per indented line.
-fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
+fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, affine ..F: Inspect>(v: &S, f: &mut Formatter) {
     let mut wrote_field = false;
     let mut has_secret = false;
     for let field of ReflectStruct::<S>::members() {
@@ -861,7 +894,7 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
             f.write_newline_indent();
             f.write_str(&field.name());
             f.write_str(": ");
-            field.get(v).inspect(f);
+            field.get_ref(v).inspect(f);
             f.write_str(",");
         }
     }
@@ -883,7 +916,7 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
 
 /// The name a struct's debug form opens with, and the space after it. An
 /// anonymous struct has none, so it reads as the literal that built it.
-fn write_struct_head<S: Reflect>(f: &mut Formatter) {
+fn write_struct_head<affine S: Reflect>(f: &mut Formatter) {
     let name = Reflect::<S>::type_name();
     if !name.is_empty() {
         f.write_str(&name);
@@ -891,7 +924,7 @@ fn write_struct_head<S: Reflect>(f: &mut Formatter) {
     }
 }
 
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
+impl<affine S: ReflectStruct<FieldTypes = [..F]>, affine ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
             inspect_struct_alternate(self, f);
@@ -912,7 +945,7 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
                 }
                 f.write_str(&field.name());
                 f.write_str(": ");
-                field.get(self).inspect(f);
+                field.get_ref(self).inspect(f);
             }
         }
         if wrote_field {
@@ -960,7 +993,7 @@ fn inspect_variant_payload<P: Inspect>(payload: &P, f: &mut Formatter) {
 
 /// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
 /// write `Name::Case`, then the payload in parens unless the case is unit.
-impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
+impl<affine V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
@@ -1064,7 +1097,7 @@ pub trait UpperExp with () {
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
-pub trait Iterator with _ {
+pub affine trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -1087,8 +1120,8 @@ pub trait Iterator with _ {
     }
 
     /// Transforms each element using a function.
-    fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(&self, f: F) -> IterMap<Self, F> with () {
-        return IterMap { inner: *self, f };
+    fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(self, f: F) -> IterMap<Self, F> with () {
+        return IterMap { inner: self, f };
     }
 
     /// Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
@@ -1187,40 +1220,40 @@ pub trait Iterator with _ {
     }
 
     /// Returns an adapter that skips elements for which `pred` returns false.
-    fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(&self, pred: F) -> IterFilter<Self, F> with () {
-        return IterFilter { inner: *self, pred };
+    fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with () {
+        return IterFilter { inner: self, pred };
     }
 
     /// Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
-    fn enumerate(&self) -> IterEnumerate<Self> with () {
-        return IterEnumerate { inner: *self, count: 0 };
+    fn enumerate(self) -> IterEnumerate<Self> with () {
+        return IterEnumerate { inner: self, count: 0 };
     }
 
     /// Returns an adapter that stops after yielding at most `n` elements.
-    fn take(&self, n: i32) -> IterTake<Self> with () {
-        return IterTake { inner: *self, remaining: n };
+    fn take(self, n: i32) -> IterTake<Self> with () {
+        return IterTake { inner: self, remaining: n };
     }
 
     /// Returns an adapter that discards the first `n` elements before yielding the rest.
-    fn skip(&self, n: i32) -> IterSkip<Self> with () {
-        return IterSkip { inner: *self, remaining: n };
+    fn skip(self, n: i32) -> IterSkip<Self> with () {
+        return IterSkip { inner: self, remaining: n };
     }
 
     /// Returns an adapter that yields the first element, then every `step`-th after it.
-    fn step_by(&self, step: i32) -> IterStepBy<Self> with ()
+    fn step_by(self, step: i32) -> IterStepBy<Self> with ()
         contract step > 0
     {
-        return IterStepBy { inner: *self, gap: step - 1, started: false };
+        return IterStepBy { inner: self, gap: step - 1, started: false };
     }
 
     /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
-    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with () {
-        return IterChain { first: *self, second: other, first_done: false };
+    fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with () {
+        return IterChain { first: self, second: other, first_done: false };
     }
 
     /// Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
-    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with () {
-        return IterZip { first: *self, second: other };
+    fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with () {
+        return IterZip { first: self, second: other };
     }
 
     /// Adds the remaining elements. None for an empty iterator.
@@ -1308,12 +1341,12 @@ pub trait Iterator with _ {
 
 /// Generic map iterator adapter that wraps any Iterator. Its type carries the
 /// function's, so advancing it performs what the function does.
-pub struct IterMap<I: Iterator, F> {
+pub struct IterMap<affine I: Iterator, F> {
     pub inner: I,
     pub f: F,
 }
 
-impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for IterMap<I, F> {
+impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for IterMap<I, F> {
     type Item = U;
 
     fn next(&mut self) -> Option<Self::Item> with E {
@@ -1324,6 +1357,8 @@ impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for Iter
     }
 }
 
+// Its own impl: through the blanket one over `Iterator`, `into_iter` is
+// charged the effects of the function the adapter holds.
 impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for IterMap<I, F> {
     type Item = U;
     type Iter = IterMap<I, F>;
@@ -1335,12 +1370,12 @@ impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for 
 
 /// Generic filter iterator adapter that wraps any Iterator. Its type carries
 /// the predicate's, so advancing it performs what the predicate does.
-pub struct IterFilter<I: Iterator, F> {
+pub struct IterFilter<affine I: Iterator, F> {
     pub inner: I,
     pub pred: F,
 }
 
-impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for IterFilter<I, F> {
+impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for IterFilter<I, F> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with E {
@@ -1356,6 +1391,7 @@ impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for Iter
     }
 }
 
+// Its own impl, as `IterMap`'s is.
 impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for IterFilter<I, F> {
     type Item = I::Item;
     type Iter = IterFilter<I, F>;
@@ -1366,12 +1402,12 @@ impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for 
 }
 
 /// Generic enumerate iterator adapter that yields (index, element) pairs.
-pub struct IterEnumerate<I: Iterator> {
+pub struct IterEnumerate<affine I: Iterator> {
     pub inner: I,
     pub count: i32,
 }
 
-impl<I: Iterator> Iterator for IterEnumerate<I> {
+impl<affine I: Iterator> Iterator for IterEnumerate<I> {
     type Item = [i32, I::Item];
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1384,22 +1420,13 @@ impl<I: Iterator> Iterator for IterEnumerate<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterEnumerate<I> {
-    type Item = [i32, I::Item];
-    type Iter = IterEnumerate<I>;
-
-    fn into_iter(&self) -> IterEnumerate<I> {
-        return *self;
-    }
-}
-
 /// Generic take iterator adapter that limits elements from any Iterator.
-pub struct IterTake<I: Iterator> {
+pub struct IterTake<affine I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
 
-impl<I: Iterator> Iterator for IterTake<I> {
+impl<affine I: Iterator> Iterator for IterTake<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1415,22 +1442,13 @@ impl<I: Iterator> Iterator for IterTake<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterTake<I> {
-    type Item = I::Item;
-    type Iter = IterTake<I>;
-
-    fn into_iter(&self) -> IterTake<I> {
-        return *self;
-    }
-}
-
 /// Generic skip iterator adapter that skips elements from any Iterator.
-pub struct IterSkip<I: Iterator> {
+pub struct IterSkip<affine I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
 
-impl<I: Iterator> Iterator for IterSkip<I> {
+impl<affine I: Iterator> Iterator for IterSkip<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1445,23 +1463,14 @@ impl<I: Iterator> Iterator for IterSkip<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterSkip<I> {
-    type Item = I::Item;
-    type Iter = IterSkip<I>;
-
-    fn into_iter(&self) -> IterSkip<I> {
-        return *self;
-    }
-}
-
 /// Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
-pub struct IterStepBy<I: Iterator> {
+pub struct IterStepBy<affine I: Iterator> {
     pub inner: I,
     pub gap: i32,
     pub started: bool,
 }
 
-impl<I: Iterator> Iterator for IterStepBy<I> {
+impl<affine I: Iterator> Iterator for IterStepBy<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1473,23 +1482,14 @@ impl<I: Iterator> Iterator for IterStepBy<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterStepBy<I> {
-    type Item = I::Item;
-    type Iter = IterStepBy<I>;
-
-    fn into_iter(&self) -> IterStepBy<I> {
-        return *self;
-    }
-}
-
 /// Generic chain iterator adapter that chains two iterators of the same item type.
-pub struct IterChain<I: Iterator, J: Iterator> {
+pub struct IterChain<affine I: Iterator, affine J: Iterator> {
     pub first: I,
     pub second: J,
     pub first_done: bool,
 }
 
-impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
+impl<affine I: Iterator, affine J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1503,22 +1503,13 @@ impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
     }
 }
 
-impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> {
-    type Item = I::Item;
-    type Iter = IterChain<I, J>;
-
-    fn into_iter(&self) -> IterChain<I, J> {
-        return *self;
-    }
-}
-
 /// Generic zip iterator adapter that pairs elements from two iterators.
-pub struct IterZip<I: Iterator, J: Iterator> {
+pub struct IterZip<affine I: Iterator, affine J: Iterator> {
     pub first: I,
     pub second: J,
 }
 
-impl<I: Iterator, J: Iterator> Iterator for IterZip<I, J> {
+impl<affine I: Iterator, affine J: Iterator> Iterator for IterZip<I, J> {
     type Item = [I::Item, J::Item];
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1531,24 +1522,14 @@ impl<I: Iterator, J: Iterator> Iterator for IterZip<I, J> {
     }
 }
 
-impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
-    type Item = [I::Item, J::Item];
-    type Iter = IterZip<I, J>;
-
-    fn into_iter(&self) -> IterZip<I, J> {
-        return *self;
-    }
-}
-
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
-pub trait IntoIterator with _ {
+pub affine trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value.
-    /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).
     fn into_iter(&self) -> Self::Iter;
 }
 
@@ -1563,20 +1544,42 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
+/// What `for let x of e` walks when `e` is a value of a type implementing it:
+/// the loop passes `e` to `start` and calls the state's
+/// `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
+/// what it walks, so an affine element moves into the binding once. Any other
+/// iterable is walked through its `IntoIterator`.
+#[compiler_item("for_of")]
+pub affine trait ForOf with _ {
+    affine type Item;
+    affine type State;
+
+    fn start(self) -> Self::State;
+}
+
+impl<affine I: Iterator> ForOf for I {
+    type Item = I::Item;
+    type State = I;
+
+    fn start(self) -> I {
+        return self;
+    }
+}
+
 /// Infallible conversion trait.
 /// Implement this to define how to convert from type `T` into `Self`.
 /// Usage: `TargetType::from(value)` — the target type is always explicit.
 ///
 /// The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 #[compiler_item("from")]
-pub trait From<T> with () {
+pub affine trait From<T> with () {
     /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
 /// Fallible conversion trait. `Err: Error`, so a caller reaching the failure
 /// through the bound can always report its reason.
-pub trait TryFrom<T> with () {
+pub affine trait TryFrom<T> with () {
     type Err: Error;
 
     /// Attempts to convert a value of type `T` into `Self`.

@@ -1,0 +1,52 @@
+// A set delivers a call's resolution once. The call it hands back still ends
+// every way a call ends: a wait returns, a cancel and a drop end it, and a set
+// it joins again reports it at once.
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+/// A call the host resolves after it starts, handed back by the set that
+/// delivered its resolution.
+fn delivered() -> AsyncCall<()> with MonotonicClock {
+    let mut set = WaitableSet::<AsyncCall<()>>::new();
+    set.join(MonotonicClock::wait_for(1_000_000));
+    loop {
+        let ready = set.wait();
+        if ready.event matches { Call(state) && state.is_resolved() } {
+            return ready.member;
+        }
+        set.join(ready.member);
+    }
+}
+
+affine variant Timer {
+    Only(AsyncCall<()>),
+}
+
+impl Waitable for Timer;
+
+export fn run() with (Stdout, MonotonicClock) {
+    delivered().wait();
+    println("waited");
+
+    delivered().cancel();
+    println("cancelled");
+
+    let dropped = delivered();
+    builtin::drop(dropped);
+    println("dropped");
+
+    let mut again = WaitableSet::<AsyncCall<()>>::new();
+    again.join(delivered());
+    let ready = again.wait();
+    ready.member.wait();
+    println(`joined again, ${again.len()} left`);
+
+    let mut timers = WaitableSet::<Timer>::new();
+    timers.join(Timer::Only(MonotonicClock::wait_for(1_000_000)));
+    let first = timers.wait();
+    builtin::drop(first);
+    println("wrapper dropped");
+}
+
+__DATA__
+{"stdout": "waited\ncancelled\ndropped\njoined again, 0 left\nwrapper dropped\n"}

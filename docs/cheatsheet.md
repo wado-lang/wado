@@ -585,6 +585,28 @@ let all  = Perms::all();   // 7 (all bits set)
 assert rw as u32 == 3;     // cast to/from u32
 ```
 
+### Affine Types
+
+A resource is move-only, and so is anything holding one: such a type is
+declared `affine`. A value of it drops once, where its scope ends, unless it
+moved. See [the spec](./spec-types.md#affine-types).
+
+```wado
+affine struct Conn { socket: TcpSocket, retries: i32 }
+
+impl Drop for Conn {                    // optional; without it, fields drop in order
+    fn drop(self) { log_stderr("closed"); }
+}
+
+let a = Conn { socket, retries: 0 };
+let b = a;                              // moves; `a` is unusable now
+builtin::drop(b);                       // drops here rather than at scope exit
+
+fn first<affine T>(xs: List<T>) -> Option<T> { ... }  // `affine T` admits one
+let t = slot.take();                    // `Option::take` moves out through `&mut`
+for let c of conns { ... }              // consumes the list; `&conns` borrows it
+```
+
 ## References
 
 ```wado

@@ -54,7 +54,7 @@ use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
-use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
+use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
@@ -3081,6 +3081,50 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// What a slot's `value` interpolates as, with its format spec: `Inspect`,
+    /// or `<moved>` where a move emptied the place. A variant spends null on a
+    /// case of its own, so only a struct or a resource is told apart.
+    fn assert_slot_rendering(
+        &self,
+        value: TirExpr,
+        string_type: TypeId,
+        span: Span,
+    ) -> (TirExpr, Option<TemplateFormatSpec>) {
+        let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
+        let can_be_moved = self.tysys.carries_resource(value.type_id) && {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(value.type_id);
+            tt.nominal_def(head)
+                .is_none_or(|def| tt.variant_template_cases(def).is_none())
+        };
+        if !can_be_moved {
+            return (value, inspect_spec);
+        }
+        let string = |kind| TirExpr::new(kind, string_type, span);
+        let moved = builtin_call("is_moved", vec![value.clone()], TypeTable::BOOL);
+        let inspected = string(TirExprKind::TemplateString {
+            parts: vec![TirTemplatePart::Interpolation {
+                expr: Box::new(value),
+                format_spec: inspect_spec,
+            }],
+        });
+        let choice = string(TirExprKind::If {
+            condition: Box::new(moved),
+            then_branch: TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(string(TirExprKind::StringLiteral(MOVED.to_string()))),
+                    span,
+                )],
+                span,
+            ),
+            else_branch: Some(TirBlock::new(
+                vec![TirStmt::new(TirStmtKind::Expr(inspected), span)],
+                span,
+            )),
+        });
+        (choice, None)
+    }
+
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -3291,7 +3335,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ),
                 (None, None) => continue,
             };
-            let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
+            let (local_ref, inspect_spec) =
+                self.assert_slot_rendering(local_ref, string_type, span);
             match slot.seen_local_index {
                 Some(seen_index) => {
                     let render_index = render_local_of[&slot_idx];

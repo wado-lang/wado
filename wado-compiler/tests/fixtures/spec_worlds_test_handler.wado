@@ -13,15 +13,17 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     }
 }
 
-fn request_for(path: String) -> Request {
-    let [trailers, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [request, _sent] = Request::new(Headers::new(), null, trailers, null);
     let _ = request.set_path_with_query(Some(path));
-    return request;
+    return [request, trailers_tx];
 }
 
 test "only the root is served" {
-    assert handle(request_for("/admin")) matches { Err(HttpRequestDenied) };
+    let [request, trailers_tx] = request_for("/admin");
+    assert handle(request) matches { Err(HttpRequestDenied) };
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__

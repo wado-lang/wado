@@ -9,9 +9,9 @@ fn eat(c: Counter) { }
 
 fn misuse(c: Counter, d: Counter) {
     eat(c);          // moves `c`
-    c.bump();        // ERROR: resource `c` used after it was moved
+    c.bump();        // ERROR: affine value `c` used after it was moved
     d.consume();     // a by-value `self` moves `d` too
 }
 
 __DATA__
-{"compile_error": "resource `c` used after it was moved"}
+{"compile_error": "affine value `c` used after it was moved"}

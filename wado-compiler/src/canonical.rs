@@ -212,6 +212,15 @@ pub enum CmFuturePayload {
     Value(CmPayloadType),
 }
 
+impl CmFuturePayload {
+    /// Whether a write waits for its reader. The rest return at once and leave
+    /// the copy pending, since a reader in the same instance would deadlock a
+    /// writer waiting on it.
+    pub fn write_awaits_reader(&self) -> bool {
+        matches!(self, Self::Trailers | Self::Transmission(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
     StreamNew(CmStreamPayload),
@@ -323,6 +332,13 @@ impl CanonicalIntrinsic {
                 | Self::FutureCancelWrite(_)
                 | Self::SubtaskCancel
         )
+    }
+
+    /// Whether the intrinsic creates both ends of a stream or future, packed in
+    /// one `i64` as `readable | writable << 32`.
+    #[must_use]
+    pub fn creates_pair(&self) -> bool {
+        matches!(self, Self::StreamNew(_) | Self::FutureNew(_))
     }
 
     /// The stream intrinsic a payload-less base name denotes, at `payload`.

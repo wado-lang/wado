@@ -1,0 +1,23 @@
+// Dropping an `Array` drops each element it still holds, as a `List` does.
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+test {
+    let mut toks: Array<Tok> = builtin::array_new(3);
+    toks[0] = Tok { id: 1 };
+    toks[2] = Tok { id: 100 };
+    let taken = builtin::array_take(&mut toks, 0);
+    builtin::drop(toks);
+    assert DROPS == 100;
+    builtin::drop(taken);
+    assert DROPS == 101;
+}

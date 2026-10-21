@@ -689,7 +689,6 @@ fn open<S: AsStrSlice>(
 /// transfer that skips this future reports a truncated file as a whole one.
 fn finish<S: AsStrSlice>(path: S, done: Future<Result<(), ErrorCode>>) -> Result<(), FsError> {
     let finished = done.read();
-    done.drop();
     if let Some(Err(e)) = finished {
         return Result::Err(failure(path, e));
     }

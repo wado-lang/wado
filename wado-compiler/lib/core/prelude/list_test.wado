@@ -807,3 +807,73 @@ test "collecting a slice's values copies the elements" {
     out[0].push(1);
     assert src[1].is_empty();
 }
+
+global mut LIST_TEST_DROPS: i32 = 0;
+
+affine struct ListTestToken {
+    id: i32,
+}
+
+impl Drop for ListTestToken {
+    fn drop(self) {
+        LIST_TEST_DROPS += 1;
+    }
+}
+
+test "for-of moves affine elements out and drops the ones a break skips" {
+    let tokens: List<ListTestToken> = [
+        ListTestToken { id: 1 },
+        ListTestToken { id: 2 },
+        ListTestToken { id: 3 },
+    ];
+    let mut seen = 0;
+    for let t of tokens {
+        seen += t.id;
+        if t.id == 2 {
+            break;
+        }
+    }
+    assert seen == 3;
+    assert LIST_TEST_DROPS == 3;
+
+    let more: List<ListTestToken> = [
+        ListTestToken { id: 4 },
+        ListTestToken { id: 5 },
+    ];
+    for let t of more {
+        seen += t.id;
+    }
+    assert seen == 12;
+    assert LIST_TEST_DROPS == 5;
+}
+
+test "for-of moves affine elements out of an array" {
+    let mut tokens: Array<ListTestToken> = builtin::array_new(2);
+    tokens[0] = ListTestToken { id: 1 };
+    tokens[1] = ListTestToken { id: 2 };
+    let before = LIST_TEST_DROPS;
+    let mut seen = 0;
+    for let t of tokens {
+        seen += t.id;
+        break;
+    }
+    assert seen == 1;
+    assert LIST_TEST_DROPS == before + 2;
+}
+
+test "split_off moves the tail out and keeps the head" {
+    let mut xs: List<i32> = [1, 2, 3, 4];
+    let tail = xs.split_off(1);
+    assert xs == [1];
+    assert tail == [2, 3, 4];
+    assert xs.split_off(1).is_empty();
+}
+
+fn first_through_as_slice<S: AsSlice<Elem = i32>>(s: &S) -> i32 {
+    return *s.iter_ref().next().unwrap();
+}
+
+test "AsSlice::iter_ref reaches a list through the bound" {
+    let xs: List<i32> = [7, 8];
+    assert first_through_as_slice(&xs) == 7;
+}

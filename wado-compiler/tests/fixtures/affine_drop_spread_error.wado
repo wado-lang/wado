@@ -1,0 +1,20 @@
+// `..base` takes fields from `base`, and a type that implements `Drop` gives
+// up none (WEP: Affine Types).
+
+affine struct Guard {
+    id: i32,
+    tag: i32,
+}
+
+impl Drop for Guard {
+    fn drop(self) {}
+}
+
+test {
+    let a = Guard { id: 1, tag: 2 };
+    let b = Guard { ..a, id: 3 };
+    assert b.tag == 2;
+}
+
+__DATA__
+{"compile_error": ":15:23: analysis error: `Guard` implements `Drop`, so `..base` cannot take fields from it: its `drop` relies on the fields it was built with"}

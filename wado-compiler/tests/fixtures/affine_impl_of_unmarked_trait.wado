@@ -1,0 +1,23 @@
+// An affine type implements only an `affine trait`: an unmarked trait's default
+// bodies may copy `Self`.
+use { Fields } from "wasi:http";
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+affine struct Holder {
+    f: Fields,
+}
+
+impl Named for Holder {
+    fn name(&self) -> String {
+        return "holder";
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":13:6: analysis error: `Holder` is affine, so it implements only an `affine trait`, and `Named` is not one"}

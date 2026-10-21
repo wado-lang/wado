@@ -1,0 +1,22 @@
+// A refutable pattern that does not match consumes nothing, so the `else` of an
+// `if let` may still use the scrutinee.
+use { Fields } from "wasi:http";
+
+affine variant Slot {
+    Empty,
+    Held(Fields),
+}
+
+fn count(s: Slot) -> i32 {
+    if let Held(f) = s {
+        return f.copy_all().len();
+    } else {
+        let again = s;
+        return if again matches { Empty } { -1 } else { -2 };
+    }
+}
+
+test {
+    assert count(Slot::Empty) == -1;
+    assert count(Slot::Held(Fields::new())) == 0;
+}

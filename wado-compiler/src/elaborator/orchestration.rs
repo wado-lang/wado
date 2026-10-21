@@ -556,6 +556,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
+                        if struct_decl.is_affine {
+                            type_table
+                                .borrow_mut()
+                                .mark_affine_decl(resolutions.defs().def_at(struct_decl.id));
+                        }
                         // Unresolved until the second sub-pass; the name is what is needed now.
                         data.struct_fields.insert(
                             resolutions.defs().def_at(struct_decl.id),
@@ -578,6 +583,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Variant(variant_decl) => {
+                        if variant_decl.is_affine {
+                            type_table
+                                .borrow_mut()
+                                .mark_affine_decl(resolutions.defs().def_at(variant_decl.id));
+                        }
                         // Insert with empty cases first - will be populated in second sub-pass
                         data.variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
@@ -931,13 +941,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
+            CompilerItem::AffineResource,
+            CompilerItem::Waitable,
         ] {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
                 continue;
             };
             let sealed_name = resolutions.defs().name(sealed).to_string();
             for header in trait_env.impl_headers.values() {
-                if !is_user_local(&header.module) {
+                if !is_user_local(&header.module) || header.written_out {
                     continue;
                 }
                 if header.trait_def() == Some(sealed) {
@@ -945,6 +957,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &header.module,
                         TypeError::SealedTraitImpl {
                             trait_name: sealed_name.clone(),
+                            derived_by_marker: sealed_item == CompilerItem::Waitable,
                             span: header.span,
                         },
                     );

@@ -1,0 +1,21 @@
+// `for-of` over an affine list moves the list into the loop, so reading it
+// after the loop is a use after move (WEP: Affine Types).
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {}
+}
+
+export fn run() {
+    let tokens: List<Token> = [Token { id: 1 }];
+    for let t of tokens {
+        builtin::drop(t);
+    }
+    let n = tokens.len();
+}
+
+__DATA__
+{"compile_error": ":17:13: analysis error: affine value `tokens` used after it was moved (moved at 14:18)"}

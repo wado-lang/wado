@@ -1,0 +1,23 @@
+// A `&mut` parameter outlives the body, so it cannot keep a reference into an
+// affine local of it.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn keep(out: &mut List<&Tok>) {
+    let t = Tok { id: 7 };
+    out.push(&t);
+}
+
+test {
+    let mut seen: List<&Tok> = [];
+    keep(&mut seen);
+}
+
+__DATA__
+{"compile_error": ":14:15: analysis error: `out` keeps a reference into `t` past the body, where `t` drops"}

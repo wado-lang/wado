@@ -1,22 +1,11 @@
-// WaitableSet creation and drop E2E test
-// Tests that WaitableSet::new() and WaitableSet::drop() work correctly.
+// A WaitableSet is created and dropped empty.
 
-use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+use { println, Stdout } from "core:cli";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> with WaitableSet {
-    // Create a waitable set
-    let ws = WaitableSet::new();
-
-    // Drop it
-    ws.drop();
-
-    // Return 200 OK
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Headers::new();
-    let [response, _tx_future] = Response::new(headers, null, trailers_future);
-    task return Result::<Response, ErrorCode>::Ok(response);
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+export fn run() with Stdout {
+    let set = WaitableSet::<Subtask>::new();
+    println(`empty: ${set.is_empty()}`);
 }
 
 __DATA__
-{"wasi:http/service": {"status": 200}}
+{"stdout": "empty: true\n"}

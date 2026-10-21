@@ -1,0 +1,8 @@
+// `builtin::drop` drops a value where it is called, so a reader sees the end
+// gone before the scope that bound it ends (WEP: Affine Types).
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    builtin::drop(tx);
+    assert rx.read(1).result == CopyResult::Dropped;
+}

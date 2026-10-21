@@ -10,7 +10,7 @@ Assignment, parameter passing, and return all perform a deep copy of the value. 
 
 The copy stops at a reference. A `&T` or `&mut T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views.
 
-A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
+A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-types.md#affine-types), an affine resource or anything holding one, is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)). A reference to an affine value names the value itself, not a copy, so it sees every write to it. It is read only while the value is in place: a read after a move or a drop of it is a compile error (see [References into Affine Values](./spec-types.md#references-into-affine-values)).
 
 <!-- {"fixture":"spec_memory_copy.wado"} -->
 
@@ -179,6 +179,11 @@ through [match ergonomics](./spec-patterns.md#match-ergonomics), such as
 `if let A(b) = r { b.n = 1; }`, lands. Replacing the whole value through the
 reference would not, so it is an error.
 
+A field, tuple element, payload or element holding an affine variant is a place
+of its own, so `&mut` of it is the slot itself. Replacing the value through the
+reference lands in the slot, and `opt.take()` on `h.slot` or on `list[i]` leaves
+`None` there.
+
 These rules for references to replace-on-assign values are not settled. They are
 being relaxed toward what Rust allows, so expect them to change.
 
@@ -225,6 +230,9 @@ assert *r == 1;
 ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 ```
 
+An affine variant is the exception: its slot is a place, as
+[the previous section](#mutable-references-to-fields-and-elements) states.
+
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
 reference to a closure points to the place holding it, not to the closure:
 
@@ -270,6 +278,8 @@ impl Point {
 ```
 
 A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable.
+
+A trait's method counts as generic, since its `Self` is a type parameter, so it may take `self` by value (`Iterator::map(self, f)`). Every impl of it takes the receiver the trait declares.
 
 ### `mut` Parameters
 

@@ -1,0 +1,14 @@
+// `*r = value` through a `&mut` to a resource stores into the place `r` names,
+// so the owner reads the new resource.
+use { Fields, FieldName } from "wasi:http";
+
+fn replace_with_fresh(r: &mut Fields) {
+    *r = Fields::new();
+}
+
+test {
+    let mut fields = Fields::new();
+    let _ = fields.append("x" as FieldName, [1]);
+    replace_with_fresh(&mut fields);
+    assert fields.copy_all().is_empty();
+}

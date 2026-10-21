@@ -440,12 +440,20 @@ fn resolve_imports(
         }
     }
 
-    let reaches_intrinsic = |name: &str| {
-        reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f)
-                if f.module_source.is_core_builtin() && f.name == name)
+    // Asked of the declaration, so a monomorphized builtin answers by the name
+    // it was declared under.
+    let reached_intrinsics: Vec<String> = project
+        .functions
+        .iter()
+        .map(|func| func.borrow())
+        .filter(|func| reachable.contains(&function_id_for(func)))
+        .filter_map(|func| {
+            FunctionRef::from_resolved(&func, func.module_source.clone())
+                .intrinsic()
+                .map(str::to_string)
         })
-    };
+        .collect();
+    let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 
     let ambient = if let Some(decided) = project.ambient_stdio {
         decided
@@ -1775,6 +1783,10 @@ fn collect_type_dependencies(
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
+    // A slot of this type holds it in a box, which only WIR names.
+    if let Some(wrapper) = type_table.slot_box(type_id) {
+        collect_type_transitive(wrapper, type_table, reachable);
+    }
     match type_table.get(type_id) {
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)

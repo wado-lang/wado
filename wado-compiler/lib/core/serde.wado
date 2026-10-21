@@ -390,7 +390,7 @@ pub trait Serializer with () {
 
 
 #[compiler_item("serialize")]
-pub trait Serialize with () {
+pub affine trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
@@ -600,7 +600,7 @@ pub trait Deserializer with () {
 
 
 #[compiler_item("deserialize")]
-pub trait Deserialize with () {
+pub affine trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
 
     /// Deserialize the next element from a sequence access.

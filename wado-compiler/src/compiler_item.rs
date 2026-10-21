@@ -180,12 +180,16 @@ pub enum CompilerItem {
     Slice,
     /// `AsyncCall<T>` — the subtask handle a `task`-returning call yields.
     AsyncCall,
+    /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
+    ResultBuffer,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
     Future,
     /// `FutureWritable<T>` — the write end of a CM future.
     FutureWritable,
+    /// `Subtask` — the subtask an async import call runs as.
+    Subtask,
     /// `Stream<T>` — the CM stream handle a `stream` type lowers to.
     Stream,
     /// `StreamWritable<T>` — the write end of a CM stream.
@@ -218,6 +222,8 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Drop` — what a drop of an affine value runs (WEP: Affine Types).
+    Drop,
     /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
     FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
@@ -253,6 +259,15 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexRefMut`.
     RefMut,
+    /// `AffineResource` — sealed marker every affine resource holds, so
+    /// `ResourceId::of` takes one and nothing else.
+    AffineResource,
+    /// `Waitable` — what a `WaitableSet` holds, sealed: the standard library
+    /// implements it, and a variant derives it from its cases.
+    Waitable,
+    /// `Copyable` — sealed marker of a type no value of which is affine: what
+    /// an impl's parameter not declared `affine` admits (WEP: Affine Types).
+    Copyable,
     /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
     /// and a literal dispatch to.
     IndexValue,
@@ -324,6 +339,9 @@ pub enum CompilerItem {
     /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
     /// subject must implement.
     IntoIterator,
+    /// `core:prelude/traits::ForOf` — what a `for-of` loop over a value
+    /// passes it to.
+    ForOf,
     /// `core:prelude/traits::LiteralSpread` — what `..base` inside a literal
     /// merges through.
     LiteralSpread,
@@ -427,6 +445,8 @@ pub enum CompilerItem {
     /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
     ListPush,
+    /// `List<T>::split_off` — what a stream write did not deliver, moved out.
+    ListSplitOff,
     /// `List<T>::with_capacity` — the buffer a `list<T>` lift fills.
     ListWithCapacity,
     /// `List<T>::len` — the element count a `list<T>` lower sizes its buffer by.
@@ -658,10 +678,6 @@ pub enum CompilerItem {
     HandleClass,
     /// `core:rt::inspect_handle`.
     InspectHandle,
-    /// `core:rt::cm_future_pair`.
-    CmFuturePair,
-    /// `core:rt::cm_stream_pair`.
-    CmStreamPair,
     /// `core:rt::memory_to_gc_string`.
     MemoryToGcString,
     /// `core:rt::cm_lower_string`.
@@ -676,12 +692,19 @@ pub enum CompilerItem {
     CmAwaitBlocked,
     /// `core:prelude/types::CopyResult`, how a CM copy ended.
     CopyResult,
+    /// `core:prelude/types::FutureWriteResult`, how a future write ended.
+    FutureWriteResult,
     /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
     StreamChunk,
-    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` copied.
+    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` did
+    /// not deliver.
     StreamWrite,
+    /// `core:prelude/types::FutureWrite`, likewise for `FutureWritable::write`.
+    FutureWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
+    /// `core:rt::cm_future_write_result`.
+    CmFutureWriteResult,
     /// `core:rt::cm_copy_count`.
     CmCopyCount,
     /// `core:rt::cm_buffer_bytes`.
@@ -700,8 +723,6 @@ pub enum CompilerItem {
     CmErrorContextDebugMessage,
     /// `core:rt::cm_waitable_set_wait`.
     CmWaitableSetWait,
-    /// `core:rt::cm_waitable_join`.
-    CmWaitableJoin,
     /// `core:rt::cm_waitable_set_poll`.
     CmWaitableSetPoll,
     /// `core:rt::f16_widen` — the exact `f32`; lowers `f16 as T`.
@@ -754,10 +775,13 @@ impl CompilerItem {
         Self::Result,
         Self::Ordering,
         Self::CopyResult,
+        Self::FutureWriteResult,
         Self::StreamChunk,
         Self::StreamWrite,
+        Self::FutureWrite,
         Self::CaseStyle,
         Self::Default,
+        Self::Drop,
         Self::FromLeBytes,
         Self::Reflect,
         Self::ReflectStruct,
@@ -769,8 +793,10 @@ impl CompilerItem {
         Self::ReflectTemplateHole,
         Self::Slice,
         Self::AsyncCall,
+        Self::ResultBuffer,
         Self::Future,
         Self::FutureWritable,
+        Self::Subtask,
         Self::Stream,
         Self::StreamWritable,
         Self::ByteList,
@@ -782,6 +808,9 @@ impl CompilerItem {
         Self::Member,
         Self::Ref,
         Self::RefMut,
+        Self::AffineResource,
+        Self::Waitable,
+        Self::Copyable,
         Self::IndexValue,
         Self::IndexRef,
         Self::IndexRefMut,
@@ -814,6 +843,7 @@ impl CompilerItem {
         Self::FieldSchema,
         Self::Iterator,
         Self::IntoIterator,
+        Self::ForOf,
         Self::LiteralSpread,
         Self::Display,
         Self::Inspect,
@@ -851,6 +881,7 @@ impl CompilerItem {
         Self::CaseStyleKebab,
         Self::CaseStyleScreamingKebab,
         Self::ListPush,
+        Self::ListSplitOff,
         Self::ListWithCapacity,
         Self::ListLen,
         Self::ListIndexValue,
@@ -941,8 +972,6 @@ impl CompilerItem {
         Self::CoverageProbe,
         Self::HandleClass,
         Self::InspectHandle,
-        Self::CmFuturePair,
-        Self::CmStreamPair,
         Self::MemoryToGcString,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
@@ -950,6 +979,7 @@ impl CompilerItem {
         Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
+        Self::CmFutureWriteResult,
         Self::CmCopyCount,
         Self::CmBufferBytes,
         Self::CmPackedCount,
@@ -959,7 +989,6 @@ impl CompilerItem {
         Self::CmErrorContextNew,
         Self::CmErrorContextDebugMessage,
         Self::CmWaitableSetWait,
-        Self::CmWaitableJoin,
         Self::CmWaitableSetPoll,
         Self::F16Widen,
         Self::Bf16Widen,
@@ -999,10 +1028,13 @@ impl CompilerItem {
             Self::Result => "result",
             Self::Ordering => "ordering",
             Self::CopyResult => "copy_result",
+            Self::FutureWriteResult => "future_write_result",
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
+            Self::FutureWrite => "future_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
+            Self::Drop => "drop",
             Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
             Self::ReflectStruct => "reflect_struct",
@@ -1014,8 +1046,10 @@ impl CompilerItem {
             Self::ReflectTemplateHole => "template_hole",
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
+            Self::ResultBuffer => "result_buffer",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
+            Self::Subtask => "subtask",
             Self::Stream => "stream",
             Self::StreamWritable => "stream_writable",
             Self::ByteList => "byte_list",
@@ -1027,6 +1061,9 @@ impl CompilerItem {
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
+            Self::AffineResource => "affine_resource",
+            Self::Waitable => "waitable",
+            Self::Copyable => "copyable",
             Self::IndexValue => "index_value",
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
@@ -1059,6 +1096,7 @@ impl CompilerItem {
             Self::FieldSchema => "field_schema",
             Self::Iterator => "iterator",
             Self::IntoIterator => "into_iterator",
+            Self::ForOf => "for_of",
             Self::LiteralSpread => "literal_spread",
             Self::Display => "display",
             Self::Inspect => "inspect",
@@ -1096,6 +1134,7 @@ impl CompilerItem {
             Self::CaseStyleKebab => "case_style_kebab",
             Self::CaseStyleScreamingKebab => "case_style_screaming_kebab",
             Self::ListPush => "list_push",
+            Self::ListSplitOff => "list_split_off",
             Self::ListWithCapacity => "list_with_capacity",
             Self::ListLen => "list_len",
             Self::ListIndexValue => "list_index_value",
@@ -1129,8 +1168,6 @@ impl CompilerItem {
             Self::CoverageProbe => "coverage_probe",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
-            Self::CmFuturePair => "cm_future_pair",
-            Self::CmStreamPair => "cm_stream_pair",
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
@@ -1138,6 +1175,7 @@ impl CompilerItem {
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
+            Self::CmFutureWriteResult => "cm_future_write_result",
             Self::CmCopyCount => "cm_copy_count",
             Self::CmBufferBytes => "cm_buffer_bytes",
             Self::CmPackedCount => "cm_packed_count",
@@ -1147,7 +1185,6 @@ impl CompilerItem {
             Self::CmErrorContextNew => "cm_error_context_new",
             Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
             Self::CmWaitableSetWait => "cm_waitable_set_wait",
-            Self::CmWaitableJoin => "cm_waitable_join",
             Self::CmWaitableSetPoll => "cm_waitable_set_poll",
             Self::F16Widen => "f16_widen",
             Self::Bf16Widen => "bf16_widen",
@@ -1244,8 +1281,6 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
-            | Self::CmFuturePair
-            | Self::CmStreamPair
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
@@ -1253,6 +1288,7 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
             | Self::CmPackedCount
@@ -1262,7 +1298,6 @@ impl CompilerItem {
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
-            | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll
             | Self::F16Widen
             | Self::Bf16Widen
@@ -1295,8 +1330,10 @@ impl CompilerItem {
             | Self::Result
             | Self::Ordering
             | Self::CopyResult
+            | Self::FutureWriteResult
             | Self::StreamChunk
             | Self::StreamWrite
+            | Self::FutureWrite
             | Self::CaseStyle
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
@@ -1306,6 +1343,7 @@ impl CompilerItem {
             | Self::CaseStyleKebab
             | Self::CaseStyleScreamingKebab
             | Self::Default
+            | Self::Drop
             | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
@@ -1317,8 +1355,10 @@ impl CompilerItem {
             | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall
+            | Self::ResultBuffer
             | Self::Future
             | Self::FutureWritable
+            | Self::Subtask
             | Self::Stream
             | Self::StreamWritable
             | Self::ByteList
@@ -1330,6 +1370,9 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::AffineResource
+            | Self::Waitable
+            | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut
@@ -1339,6 +1382,7 @@ impl CompilerItem {
             | Self::Ord
             | Self::From
             | Self::ListPush
+            | Self::ListSplitOff
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue
@@ -1422,7 +1466,8 @@ impl CompilerItem {
             | Self::LowerExp
             | Self::UpperExp
             | Self::Iterator
-            | Self::IntoIterator => true,
+            | Self::IntoIterator
+            | Self::ForOf => true,
             // Kiln generator world only.
             Self::KilnRequest | Self::KilnNoOptions => generator_world,
             // Loaded only when the user imports `core:collections`.
@@ -1508,6 +1553,8 @@ impl CompilerItem {
                 // mints. The sealed `Reflect*` faces need no entry: that pass
                 // writes them at TIR level, where no AST block exists.
                 | Self::Member
+                // Called by every drop `synthesis::resource_cleanup` writes.
+                | Self::Drop
         )
     }
 
@@ -1527,8 +1574,6 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
-            | Self::CmFuturePair
-            | Self::CmStreamPair
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
@@ -1536,6 +1581,7 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
             | Self::CmPackedCount
@@ -1545,7 +1591,6 @@ impl CompilerItem {
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
-            | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll
             | Self::F16Widen
             | Self::Bf16Widen
@@ -1572,20 +1617,26 @@ impl CompilerItem {
             | Self::ReflectFlagsBit
             | Self::ReflectTemplateHole
             | Self::Slice
-            | Self::AsyncCall => CompilerItemKind::Struct,
-            Self::Future | Self::FutureWritable | Self::Stream | Self::StreamWritable => {
-                CompilerItemKind::Resource
-            }
+            | Self::AsyncCall
+            | Self::ResultBuffer => CompilerItemKind::Struct,
+            Self::Future
+            | Self::FutureWritable
+            | Self::Stream
+            | Self::StreamWritable
+            | Self::Subtask => CompilerItemKind::Resource,
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
-                CompilerItemKind::Enum
-            }
-            Self::StreamChunk | Self::StreamWrite => CompilerItemKind::Struct,
+            Self::Ordering
+            | Self::Alignment
+            | Self::CaseStyle
+            | Self::CopyResult
+            | Self::FutureWriteResult => CompilerItemKind::Enum,
+            Self::StreamChunk | Self::StreamWrite | Self::FutureWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::Drop
             | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
@@ -1597,6 +1648,9 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::AffineResource
+            | Self::Waitable
+            | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut
@@ -1618,6 +1672,7 @@ impl CompilerItem {
             | Self::FieldSchema
             | Self::Iterator
             | Self::IntoIterator
+            | Self::ForOf
             | Self::Display
             | Self::Inspect
             | Self::Binary
@@ -1639,6 +1694,7 @@ impl CompilerItem {
             | Self::Shr
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
+            | Self::ListSplitOff
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue

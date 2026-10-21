@@ -43,6 +43,13 @@ pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: &WirTy
     }
 }
 
+pub(super) fn local_get(name: &str, ty: &WirType) -> WirInstr {
+    WirInstr::LocalGet {
+        name: name.to_string(),
+        result_ty: ty.clone(),
+    }
+}
+
 pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
     [
         WirInstr::DeclareLocal {
@@ -1565,6 +1572,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let value_block = self.prelude_block_holds(tuple_type_id, false);
         let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
+        let raw_fields = self.as_slots(raw_fields, elements, &type_id);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, prelude, fields)
     }
@@ -1587,9 +1595,26 @@ impl FunctionTranslator<'_, '_> {
             self.type_table.get(array_type_id),
             ResolvedType::BuiltinArray(_)
         );
+        let raw_array_type_id = if is_raw_array {
+            type_id.clone()
+        } else {
+            // The `repr` field is a non-nullable ref to the raw `Array<T>`.
+            let WirType::Ref {
+                type_id: raw_array_type_id,
+                ..
+            } = self.struct_field_wir_type(&type_id, SeqField::Backing.field_name())
+            else {
+                panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
+            };
+            raw_array_type_id
+        };
+        let slot_ty = self.array_element_wir_type(&raw_array_type_id);
         let element_instrs: Vec<WirInstr> = elements
             .iter()
-            .map(|e| self.translate_operand(*e))
+            .map(|e| {
+                let element = self.translate_operand(*e);
+                self.as_slot(element, &slot_ty, self.operand_type_id(*e))
+            })
             .collect();
         if is_raw_array {
             return WirInstr::ArrayNewFixed {
@@ -1597,14 +1622,6 @@ impl FunctionTranslator<'_, '_> {
                 elements: element_instrs,
             };
         }
-        // The `repr` field is a non-nullable ref to the raw `Array<T>`.
-        let WirType::Ref {
-            type_id: raw_array_type_id,
-            ..
-        } = self.struct_field_wir_type(&type_id, SeqField::Backing.field_name())
-        else {
-            panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
-        };
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1617,6 +1634,77 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32Const(used),
             ],
         )
+    }
+
+    /// What the field `field_access` reads holds, before [`Self::read_slot`],
+    /// and the field's WIR type: a boxed field's box.
+    fn translate_field_held(&mut self, field_access: ExprId) -> (WirInstr, WirType) {
+        let arena = self.body;
+        let expr = &arena.exprs[field_access];
+        let ExprKind::FieldAccess {
+            expr: receiver,
+            field_name,
+            ..
+        } = &expr.kind
+        else {
+            unreachable!("`translate_field_held` takes a field access");
+        };
+        // When the receiver is a TIR local that was bound from a
+        // multi-value-return Call, read the corresponding split
+        // local directly. The aggregate was never materialised
+        // as a struct ref — a `StructGet` here would read an
+        // uninitialised slot.
+        let receiver = *receiver;
+        if let Some(re) = receiver.as_expr()
+            && let ExprKind::Local {
+                index: tir_local, ..
+            } = &arena.exprs[re].kind
+            && let Some(splits) = self.multi_value_split_locals.get(tir_local)
+            && let Some((name, ty)) = splits.get(field_name)
+        {
+            return (local_get(name, ty), ty.clone());
+        }
+        // A stackless field leaves nothing on the stack, so the
+        // declaration side dropped it: emit only the receiver for its
+        // side effects. `&()` is as empty as `()` here.
+        if self.is_stackless_type(expr.type_id) {
+            let recv = self.translate_operand(receiver);
+            return (
+                WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]),
+                WirType::Unit,
+            );
+        }
+        let recv = self.translate_operand(receiver);
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
+        let WirType::Ref { type_id, .. } = wir_type else {
+            panic!(
+                "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
+                self.operand_type_id(receiver)
+            );
+        };
+        let result_ty = self.struct_field_wir_type(&type_id, field_name);
+        let held = WirInstr::StructGet {
+            type_id,
+            field_name: field_name.clone(),
+            expr: Box::new(recv),
+            result_ty: result_ty.clone(),
+        };
+        (held, result_ty)
+    }
+
+    /// The name of the field at NIR index `field_index` of the struct
+    /// `struct_tid`. The index counts NIR fields, which a Wasm struct leaving
+    /// out `()` ones no longer matches one to one.
+    pub(super) fn nir_field_name(&self, struct_tid: &WirTypeId, field_index: u32) -> String {
+        match self.ctx.nir_field_names.get(&struct_tid.index()) {
+            Some(names) => names[field_index as usize].clone(),
+            None => match self.ctx.types.get(struct_tid.index() as usize) {
+                Some(WirTypeDef::Struct(st)) => st.fields[field_index as usize].name.clone(),
+                _ => panic!("[WIR] field {field_index} read from a type that is not a struct"),
+            },
+        }
     }
 
     /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
@@ -1641,6 +1729,63 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Whether a value of `type_id` is an affine resource's `$Resource` object,
+    /// which the Component Model sees only as the handle inside it.
+    pub(super) fn is_handle_box(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.wir_type(type_id),
+            WirType::Ref { type_id, .. } if type_id == *self.ctx.handle_box()
+        )
+    }
+
+    /// The type a core function the Component Model provides takes for a
+    /// value of `type_id`: a resource as its handle.
+    fn core_wir_type(&self, type_id: TypeId) -> WirType {
+        if self.is_handle_box(type_id) {
+            WirType::I32
+        } else {
+            self.wir_type(type_id)
+        }
+    }
+
+    /// The handle an affine resource's box holds.
+    pub(super) fn handle_of(&self, resource: WirInstr) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: "value".to_string(),
+            expr: Box::new(resource),
+            result_ty: WirType::I32,
+        }
+    }
+
+    /// A new box holding `handle`, the object an affine resource is.
+    pub(super) fn handle_box_of(&self, handle: WirInstr) -> WirInstr {
+        self.struct_new(self.ctx.handle_box().clone(), vec![handle])
+    }
+
+    /// Whether `op` hands its resource over as an `own`: the box itself, not a
+    /// reference to it, which lowers as a `borrow`.
+    fn is_owned_handle_box(&self, op: Operand) -> bool {
+        let type_id = self.operand_type_id(op);
+        self.is_handle_box(type_id) && !self.type_table.is_reference_shaped(type_id)
+    }
+
+    /// Write 0 into the box `resource`, which the Component Model never issues
+    /// as a handle: index 0 of a handle table is reserved.
+    pub(super) fn zero_handle(&self, resource: WirInstr) -> WirInstr {
+        self.set_handle(resource, WirInstr::I32Const(0))
+    }
+
+    /// Write `handle` into the box `resource`.
+    pub(super) fn set_handle(&self, resource: WirInstr, handle: WirInstr) -> WirInstr {
+        WirInstr::StructSet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: "value".to_string(),
+            expr: Box::new(resource),
+            value: Box::new(handle),
+        }
+    }
+
     /// Translate `*r = v` for an in-place aggregate referent by copying `v` into
     /// the shared handle field by field, through two temps so each side is
     /// evaluated once. Only the expression-position shape (`let u = (*r = v);`)
@@ -1649,9 +1794,10 @@ impl FunctionTranslator<'_, '_> {
     fn translate_deref_assign(&mut self, ref_expr: Operand, val: WirInstr) -> WirInstr {
         let recv = self.translate_operand(ref_expr);
         let wir_type = self.wir_type(self.operand_type_id(ref_expr));
-        let WirType::Ref { type_id, .. } = wir_type else {
+        let WirType::Ref { type_id, .. } = &wir_type else {
             panic!("[WIR] deref-assign referent expected Ref WirType, got {wir_type:?}");
         };
+        let type_id = type_id.clone();
         let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(type_id.index() as usize) else {
             panic!("[WIR] deref-assign referent is not a struct type: {type_id:?}");
         };
@@ -1665,10 +1811,8 @@ impl FunctionTranslator<'_, '_> {
         // not clash with the lower path's `$deref_ref_{nir_idx}` temps.
         let ref_local = self.fresh_local("$expr_deref_ref");
         let val_local = self.fresh_local("$expr_deref_val");
-        let ref_ty = WirType::Ref {
-            type_id: type_id.clone(),
-            nullable: false,
-        };
+        // An affine referent's slot is nullable (WEP: Affine Types).
+        let ref_ty = wir_type.clone();
         let mut instrs = Vec::with_capacity(4 + fields.len());
         instrs.extend(declare_and_set_local(
             ref_local.clone(),
@@ -2646,17 +2790,7 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
                 };
-                // The index counts NIR fields, which a Wasm struct leaving out
-                // `()` ones no longer matches one to one.
-                let field_name = match self.ctx.nir_field_names.get(&struct_tid.index()) {
-                    Some(names) => names[field_index as usize].clone(),
-                    None => match self.ctx.types.get(struct_tid.index() as usize) {
-                        Some(WirTypeDef::Struct(st)) => {
-                            st.fields[field_index as usize].name.clone()
-                        }
-                        _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
-                    },
-                };
+                let field_name = self.nir_field_name(&struct_tid, field_index);
                 // Multi-value-return split: if the receiver is a local that was
                 // split into per-field scalars (the aggregate was never
                 // materialised), read the split local directly — a `StructGet`
@@ -2666,19 +2800,18 @@ impl FunctionTranslator<'_, '_> {
                     && let Some(splits) = self.multi_value_split_locals.get(&idx)
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
-                    return WirInstr::LocalGet {
-                        name: name.clone(),
-                        result_ty: ty.clone(),
-                    };
+                    let (held, ty) = (local_get(name, ty), ty.clone());
+                    return self.read_slot(held, &ty, type_id);
                 }
                 let recv = self.extract_value(receiver);
                 let result_ty = self.struct_field_wir_type(&struct_tid, &field_name);
-                WirInstr::StructGet {
+                let held = WirInstr::StructGet {
                     type_id: struct_tid,
                     field_name,
                     expr: Box::new(recv),
-                    result_ty,
-                }
+                    result_ty: result_ty.clone(),
+                };
+                self.read_slot(held, &result_ty, type_id)
             }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
@@ -2814,57 +2947,14 @@ impl FunctionTranslator<'_, '_> {
                 let value_block = self.prelude_block_holds(expr.type_id, false);
                 let (prelude, field_instrs) =
                     self.translate_args_erasing_unit(&values, value_block);
+                let field_instrs = self.as_slots(field_instrs, &values, &type_id);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
 
-            ExprKind::FieldAccess {
-                expr: receiver,
-                field_name,
-                ..
-            } => {
-                // When the receiver is a TIR local that was bound from a
-                // multi-value-return Call, read the corresponding split
-                // local directly. The aggregate was never materialised
-                // as a struct ref — a `StructGet` here would read an
-                // uninitialised slot.
-                let receiver = *receiver;
-                if let Some(re) = receiver.as_expr()
-                    && let ExprKind::Local {
-                        index: tir_local, ..
-                    } = &arena.exprs[re].kind
-                    && let Some(splits) = self.multi_value_split_locals.get(tir_local)
-                    && let Some((name, ty)) = splits.get(field_name)
-                {
-                    return WirInstr::LocalGet {
-                        name: name.clone(),
-                        result_ty: ty.clone(),
-                    };
-                }
-                // A stackless field leaves nothing on the stack, so the
-                // declaration side dropped it: emit only the receiver for its
-                // side effects. `&()` is as empty as `()` here.
-                if self.is_stackless_type(expr.type_id) {
-                    let recv = self.translate_operand(receiver);
-                    return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
-                }
-                let recv = self.translate_operand(receiver);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
-                let WirType::Ref { type_id, .. } = wir_type else {
-                    panic!(
-                        "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        self.operand_type_id(receiver)
-                    );
-                };
-                let result_ty = self.struct_field_wir_type(&type_id, field_name);
-                WirInstr::StructGet {
-                    type_id,
-                    field_name: field_name.clone(),
-                    expr: Box::new(recv),
-                    result_ty,
-                }
+            ExprKind::FieldAccess { .. } => {
+                let (held, slot_ty) = self.translate_field_held(expr_id);
+                self.read_slot(held, &slot_ty, expr.type_id)
             }
 
             ExprKind::Assign { target, value } => {
@@ -2919,7 +3009,14 @@ impl FunctionTranslator<'_, '_> {
                                 self.operand_type_id(receiver)
                             );
                         };
-                        self.struct_set(type_id, field_name.clone(), recv, val)
+                        let target_type = arena.exprs[target].type_id;
+                        let slot_ty = self.struct_field_wir_type(&type_id, field_name);
+                        match self.held_box(&slot_ty, target_type) {
+                            Some(field_box) => {
+                                self.store_boxed_field(type_id, field_name, [recv, val], field_box)
+                            }
+                            None => self.struct_set(type_id, field_name.clone(), recv, val),
+                        }
                     }
                     ExprKind::Index {
                         expr: array_expr,
@@ -3053,7 +3150,7 @@ impl FunctionTranslator<'_, '_> {
                 if self.is_stackless_type(*payload_type) {
                     WirInstr::Nop
                 } else {
-                    self.translate_variant_payload(*inner, *case_index)
+                    self.translate_variant_payload(*inner, *case_index, *payload_type)
                 }
             }
             ExprKind::VariantConstruct {
@@ -3071,8 +3168,45 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
 
             ExprKind::CmRawCall { target, args, .. } => {
-                let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_operand(*a)).collect();
+                // The core function takes and returns a resource as its handle.
+                // One it takes as an `own` leaves its box zeroed, since the host
+                // owns the handle from then on (WEP: Affine Types). The operands
+                // are then evaluated in order before the call, so zeroing one
+                // box precedes no operand written after it.
+                let owns = args.iter().any(|a| self.is_owned_handle_box(*a));
+                let mut before = Vec::new();
+                let translated_args: Vec<WirInstr> = args
+                    .iter()
+                    .map(|a| {
+                        let arg = self.translate_operand(*a);
+                        let type_id = self.operand_type_id(*a);
+                        if !owns {
+                            return if self.is_handle_box(type_id) {
+                                self.handle_of(arg)
+                            } else {
+                                arg
+                            };
+                        }
+                        let ty = self.wir_type(type_id);
+                        let name = self.fresh_local("$cm_arg");
+                        before.extend(declare_and_set_local(name.clone(), ty.clone(), arg));
+                        let read = local_get(&name, &ty);
+                        if !self.is_handle_box(type_id) {
+                            return read;
+                        }
+                        let handle = self.fresh_local("$cm_handle");
+                        before.extend(declare_and_set_local(
+                            handle.clone(),
+                            WirType::I32,
+                            self.handle_of(read.clone()),
+                        ));
+                        if self.is_owned_handle_box(*a) {
+                            before.push(self.zero_handle(read));
+                        }
+                        local_get(&handle, &WirType::I32)
+                    })
+                    .collect();
+                let returns_handle = self.is_handle_box(expr.type_id);
                 let import_name = target.import_name();
                 // The core import is the canonical's to type, not the call
                 // site's: a cancel answers with the `u32` its copy ended on
@@ -3098,16 +3232,13 @@ impl FunctionTranslator<'_, '_> {
                     };
                     let params: Vec<WirType> = args
                         .iter()
-                        .map(|a| {
-                            self.ctx
-                                .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
-                        })
+                        .map(|a| self.core_wir_type(self.operand_type_id(*a)))
                         .collect();
                     let mut results =
                         if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
                             vec![]
                         } else {
-                            vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
+                            vec![self.core_wir_type(expr.type_id)]
                         };
                     if discards_result {
                         assert!(results.is_empty(), "a UNIT call declares no result");
@@ -3120,10 +3251,18 @@ impl FunctionTranslator<'_, '_> {
                     func_id,
                     args: translated_args,
                 };
-                if discards_result {
+                let call = if discards_result {
                     WirInstr::Drop(Box::new(call))
+                } else if returns_handle {
+                    self.handle_box_of(call)
                 } else {
                     call
+                };
+                if before.is_empty() {
+                    call
+                } else {
+                    before.push(call);
+                    WirInstr::Seq(before)
                 }
             }
 

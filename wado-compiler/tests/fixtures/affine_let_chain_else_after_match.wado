@@ -1,0 +1,40 @@
+// A `let` that matched before a later element of its chain failed has moved
+// its scrutinee into the binding, so the `else` no longer holds it.
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+affine variant Slot {
+    Empty,
+    Held(Token),
+}
+
+fn check() -> bool {
+    return builtin::black_box(false);
+}
+
+fn take(s: Slot) -> i32 {
+    if let Held(t) = s && check() {
+        return t.id;
+    } else {
+        let again = s;
+        return if again matches { Empty } { -1 } else { -2 };
+    }
+}
+
+export fn run() with Stdout {
+    println(`${take(Slot::Held(Token { id: 1 }))}`);
+}
+
+__DATA__
+{"compile_error": ":30:21: analysis error: affine value `s` used after it was moved (moved at 27:22)"}

@@ -36,11 +36,12 @@ fn send_get(url: Url) -> Response with Client {
 }
 
 fn read_body(resp: Response) -> String {
-    let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
 
     let body = body_stream.read_to_end_bytes();
     body_stream.drop();
+    res_tx.write(Result::Ok(()));
 
     return String::from_utf8_lossy(body);
 }

@@ -582,6 +582,9 @@ pub resource TcpSocket {
     #[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-send-buffer-size")]
     #[cm_params("self", "value")]
     fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }
 
 /// A UDP socket handle.
@@ -833,4 +836,7 @@ pub resource UdpSocket {
     #[cm("wasi:sockets/types@0.3.0#[method]udp-socket.set-send-buffer-size")]
     #[cm_params("self", "value")]
     fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }

@@ -19,7 +19,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirStructField, TirVariantCase, TirVariantDecl, TypeId,
+    TirVariantCase, TirVariantDecl, TypeId,
 };
 use crate::type_table::TypeTable;
 
@@ -27,7 +27,7 @@ use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
     cm_canonical_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    param_local, return_stmt, split_packed_ptr_len, synth_span,
+    param_local, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::cm_free::{
@@ -128,7 +128,7 @@ fn lower_to_flat_inner(
             let (scalar, flat_value) = if ctx.type_table.borrow().is_unrestricted_handle(type_id) {
                 (TypeTable::F64, handle_to_f64(value))
             } else {
-                (TypeTable::I32, value)
+                (TypeTable::I32, cast(value, TypeTable::I32))
             };
             let local = alloc_local(next_local, locals, scalar);
             stmts.push(let_stmt("$flat", local, scalar, flat_value));
@@ -864,7 +864,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     {
                         return (handle_from_f64(handle.0, target_type_id), 1);
                     }
-                    handle
+                    (cast(handle.0, target_type_id), handle.1)
                 }
                 other @ (ResolvedType::Never
                 | ResolvedType::Newtype { .. }
@@ -995,7 +995,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                 )
             }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
-            _ => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
+            _ => (
+                cast(
+                    local_ref(flat_param_locals[0], "$p", TypeTable::I32),
+                    target_type_id,
+                ),
+                1,
+            ),
         },
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => {
@@ -1210,22 +1216,11 @@ fn lift_struct_from_flat_params(
             tir_modules,
             lift_ctx,
         );
-        fields.push(TirStructField {
-            name: field.name.clone(),
-            value: lifted,
-            field_index: field.index,
-        });
+        assert_eq!(field.index as usize, fields.len());
+        fields.push((field.name.as_str(), lifted));
         offset += consumed;
     }
-    let struct_expr = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: struct_type_id,
-            struct_name: struct_decl.name.clone(),
-            fields,
-        },
-        struct_type_id,
-        synth_span(),
-    );
+    let struct_expr = struct_literal(struct_type_id, struct_decl.name.as_str(), fields);
     let result_local = alloc_local(next_local, locals, struct_type_id);
     stmts.push(let_stmt(
         "$struct_lift",

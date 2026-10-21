@@ -62,6 +62,10 @@ A function or closure that starts an async call also holds the effects
 declare. A closure is a body of its own, so a call it starts grants nothing to
 the function around it.
 
+Under [WEP: Affine Types](./wep-2026-10-17-affine-types.md) a call owns its
+`Subtask`, so a function handed a call through its signature holds these
+effects too.
+
 ### Globals
 
 Reading or writing a `global mut` is an effect. The details, such as which

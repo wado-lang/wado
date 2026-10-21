@@ -1,0 +1,14 @@
+// `affine` on a declaration that holds no affine value is an error: a
+// parameter it holds is copyable unless the instantiation says otherwise.
+
+affine struct Pair<T> {
+    a: T,
+    b: Option<T>,
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": ":4:15: analysis error: `Pair` holds no affine value, so it cannot be declared `affine struct`"}

@@ -11,13 +11,14 @@ use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
-use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId};
+use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId};
 use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, expr_stmt,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
     generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, synth_span,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, struct_literal,
+    synth_span,
 };
 
 use super::types::{
@@ -305,9 +306,22 @@ fn synthesize_lift_inner(
                             let load_name = disc_load_op(cm_discriminant_byte_size(variants.len()));
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
+                        if ctx
+                            .cm_interface_registry
+                            .get_resource_cm_name_by_source(source, &named.name)
+                            .is_some()
+                        {
+                            return lift_handle(ty, addr, ctx);
+                        }
                     }
-                    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
-                    builtin_call(load, vec![addr], loaded)
+                    if ctx.cm_interface_registry.extern_handle(ty).is_some() {
+                        let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
+                        return builtin_call(load, vec![addr], loaded);
+                    }
+                    // The test world drops a library's exports before their
+                    // types register, yet still synthesizes the bindings their
+                    // bodies reach; those bindings are never called.
+                    builtin_call("i32_load", vec![addr], TypeTable::I32)
                 }
             }
         }
@@ -326,19 +340,29 @@ fn synthesize_lift_inner(
                     &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
                 )
             } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
-                builtin_call("i32_load", vec![addr], TypeTable::I32)
+                lift_handle(ty, addr, ctx)
             } else {
                 panic!("unsupported generic type for CM lift: {gname}")
             }
         }
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
-        Type::Reference(_) | Type::MutReference(_) => {
-            let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
-            builtin_call(load, vec![addr], loaded)
-        }
+        Type::Reference(_) | Type::MutReference(_) => lift_handle(ty, addr, ctx),
         other => panic!("unsupported type for CM lift: {other:?}"),
     }
+}
+
+/// The resource `ty` names, lifted from the handle at `addr`. The cast is what
+/// makes the handle the resource's object (WEP: Affine Types).
+fn lift_handle(ty: &Type, addr: TirExpr, ctx: &LiftContext<'_>) -> TirExpr {
+    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
+    let resource = cm_held_type_to_type_id(
+        ty,
+        &mut ctx.type_table.borrow_mut(),
+        ctx.cm_interface_registry,
+        ctx.cm_package,
+    );
+    cast(builtin_call(load, vec![addr], loaded), resource)
 }
 
 /// Try to lift a WASI variant or enum type from linear memory into a GC
@@ -454,24 +478,10 @@ fn try_lift_wasi_struct(
         let lifted_field =
             synthesize_lift_inner(field_ty, field_addr, next_local, stmts, locals, ctx);
         let lifted_field = materialize_if_needed(lifted_field, next_local, stmts, locals);
-        let field_name = &wado_fields[i];
-        tir_fields.push(TirStructField {
-            name: field_name.clone(),
-            value: lifted_field,
-            field_index: i as u32,
-        });
+        tir_fields.push((wado_fields[i].as_str(), lifted_field));
     }
 
-    // Build the StructLiteral expression
-    let struct_expr = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: struct_type_id,
-            struct_name: named.name.clone(),
-            fields: tir_fields,
-        },
-        struct_type_id,
-        synth_span(),
-    );
+    let struct_expr = struct_literal(struct_type_id, named.name.as_str(), tir_fields);
 
     // Materialize the struct into a local
     let result_local = alloc_local(next_local, locals, struct_type_id);

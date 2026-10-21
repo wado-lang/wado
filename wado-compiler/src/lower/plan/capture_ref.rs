@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::place_root;
 use crate::name::{capture_ref_name, is_for_body_label};
 use crate::tir::{
-    CaptureSource, LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt,
+    CaptureSource, FrameLocals, LetStorage, TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -38,84 +38,6 @@ pub fn capture_observed_by_ref(flat: &mut FlatPackage) {
 enum Body<'a> {
     Block(&'a mut TirBlock),
     Expr(&'a mut TirExpr),
-}
-
-/// The local table of one frame: a function's, or a closure body's, whose
-/// parameters are numbered ahead of its body locals.
-enum FrameLocals<'a> {
-    Function {
-        locals: &'a mut Vec<TirLocal>,
-        local_count: &'a mut u32,
-    },
-    Closure {
-        params: &'a [(String, TypeId)],
-        body_locals: &'a mut Vec<TirLocal>,
-    },
-}
-
-impl FrameLocals<'_> {
-    /// `None` past the table, which a synthesized frame may leave empty: its
-    /// slots cannot be told apart from a fresh one, so it gets no proxy.
-    fn local(&self, index: u32) -> Option<(&str, TypeId)> {
-        let index = index as usize;
-        match self {
-            Self::Function { locals, .. } => locals
-                .get(index)
-                .map(|local| (local.name.as_str(), local.type_id)),
-            Self::Closure {
-                params,
-                body_locals,
-            } => match params.get(index) {
-                Some((name, type_id)) => Some((name, *type_id)),
-                None => body_locals
-                    .get(index - params.len())
-                    .map(|local| (local.name.as_str(), local.type_id)),
-            },
-        }
-    }
-
-    /// The locals the frame declares, by index; a closure's parameters, which no
-    /// loop of the body they head can declare, are left out.
-    fn declarations(&self) -> impl Iterator<Item = (u32, &TirLocal)> {
-        let (first, declared) = match self {
-            Self::Function { locals, .. } => (0, locals.as_slice()),
-            Self::Closure {
-                params,
-                body_locals,
-            } => (params.len(), body_locals.as_slice()),
-        };
-        declared
-            .iter()
-            .enumerate()
-            .map(move |(at, local)| (u32::try_from(first + at).unwrap(), local))
-    }
-
-    fn alloc(&mut self, name: String, type_id: TypeId) -> u32 {
-        let local = TirLocal {
-            name,
-            type_id,
-            is_mut: false,
-            span: Span::default(),
-        };
-        match self {
-            Self::Function {
-                locals,
-                local_count,
-            } => {
-                assert_eq!(**local_count as usize, locals.len());
-                locals.push(local);
-                **local_count += 1;
-                **local_count - 1
-            }
-            Self::Closure {
-                params,
-                body_locals,
-            } => {
-                body_locals.push(local);
-                u32::try_from(params.len() + body_locals.len() - 1).unwrap()
-            }
-        }
-    }
 }
 
 fn rewrite_frame(

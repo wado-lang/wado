@@ -1,0 +1,22 @@
+// A closure captures by reference, so one called after the scope of an affine
+// capture ended reads a dropped value.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let mut f: fn() -> i32 = || 0;
+    blk: {
+        let t = Tok { id: 7 };
+        f = || t.id;
+    }
+    assert f() == 7;
+}
+
+__DATA__
+{"compile_error": ":18:12: analysis error: `f` refers into `t`, which dropped as its scope ended"}

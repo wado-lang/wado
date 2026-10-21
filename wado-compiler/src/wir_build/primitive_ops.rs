@@ -603,6 +603,12 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let inner_instr = self.translate_operand(inner);
+        if self.is_handle_box(from_type) && !self.is_handle_box(to_type) {
+            return self.handle_of(inner_instr);
+        }
+        if self.is_handle_box(to_type) && !self.is_handle_box(from_type) {
+            return self.handle_box_of(inner_instr);
+        }
         let from = match self.type_table.get(from_type) {
             // A discriminant and a bitmask are unsigned i32s, so they convert
             // as a `u32` does.
@@ -839,7 +845,7 @@ impl FunctionTranslator<'_, '_> {
     /// Build an array.get instruction sequence.
     /// Given an List<T> struct ref, extracts the repr field and does the appropriate get.
     fn build_list_get(
-        &self,
+        &mut self,
         arr: WirInstr,
         idx: WirInstr,
         array_type_id: TypeId,
@@ -926,6 +932,9 @@ impl FunctionTranslator<'_, '_> {
             }
         };
 
+        if let Some(element_box) = self.element_box(array_type_id) {
+            return self.unbox_slot(get_instr, element_box);
+        }
         // For reference element types, convert nullable to non-null
         if is_ref {
             WirInstr::RefAsNonNull(Box::new(get_instr))
@@ -979,11 +988,16 @@ impl FunctionTranslator<'_, '_> {
                 result_ty: repr_result_ty,
             };
 
-            WirInstr::ArraySet {
-                type_id: raw_type,
-                array: Box::new(raw_arr),
-                index: Box::new(idx),
-                value: Box::new(val),
+            match self.element_box(base_type_id) {
+                Some(element_box) => {
+                    self.store_boxed_element(raw_type, [raw_arr, idx, val], element_box)
+                }
+                None => WirInstr::ArraySet {
+                    type_id: raw_type,
+                    array: Box::new(raw_arr),
+                    index: Box::new(idx),
+                    value: Box::new(val),
+                },
             }
         } else {
             WirInstr::Drop(Box::new(val))

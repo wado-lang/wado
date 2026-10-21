@@ -1,0 +1,55 @@
+// `for-of` over a list of affine values moves each element into the binding
+// once, and a `break` drops the elements the loop did not reach
+// (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn eat(t: Token) -> i32 {
+    return t.id;
+}
+
+fn count<affine T>(items: List<T>) -> i32 {
+    let mut n = 0;
+    for let item of items {
+        builtin::drop(item);
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let tokens: List<Token> = [Token { id: 1 }, Token { id: 2 }, Token { id: 3 }];
+    let mut sum = 0;
+    for let t of tokens {
+        sum += eat(t);
+    }
+    assert sum == 6;
+    assert DROPS == 3;
+
+    let more: List<Token> = [Token { id: 4 }, Token { id: 5 }, Token { id: 6 }];
+    for let t of more {
+        if t.id == 5 {
+            break;
+        }
+    }
+    assert DROPS == 6;
+
+    assert count([Token { id: 7 }, Token { id: 8 }] as List<Token>) == 2;
+    assert DROPS == 8;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

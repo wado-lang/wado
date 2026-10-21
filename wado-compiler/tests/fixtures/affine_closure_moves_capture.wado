@@ -1,0 +1,15 @@
+// A closure captures by reference, so a body that moves an affine capture
+// would copy it out of the reference.
+use { Fields } from "wasi:http";
+
+fn eat(f: Fields) {
+}
+
+test {
+    let f = Fields::new();
+    let g = || eat(f);
+    g();
+}
+
+__DATA__
+{"compile_error": ":10:20: analysis error: a closure captures `f` by reference, so its body cannot move it"}

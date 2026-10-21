@@ -1,0 +1,12 @@
+// A tuple a reference holds, reassigned while it holds an affine element:
+// the drop empties the element with a synthesized store, which lowering must
+// not take for the in-place write of the tuple (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let mut pair = [rx, 1];
+    let r = &pair;
+    pair = [rx2, 2];
+    assert r.1 == 2;
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

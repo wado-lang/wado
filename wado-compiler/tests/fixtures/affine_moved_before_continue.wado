@@ -1,0 +1,29 @@
+// A `continue` carries what its path moved to the next iteration.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let t = Tok { id: 1 };
+    let c = builtin::black_box(true);
+    let mut i = 0;
+    while i < 2 {
+        i += 1;
+        if c {
+            eat(t);
+            continue;
+        }
+    }
+}
+
+__DATA__
+{"compile_error": ":22:17: analysis error: affine value `t` used after it was moved (moved at 22:17)"}

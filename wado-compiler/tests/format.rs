@@ -192,6 +192,35 @@ fn test_format_keeps_resource_extends() {
     assert_eq!(formatted, again, "format should be idempotent");
 }
 
+#[test]
+fn test_format_keeps_affine_declarations() {
+    let source = concat!(
+        "pub affine struct Holder {\n",
+        "    f: Fields,\n",
+        "}\n",
+        "\n",
+        "affine variant Slot {\n",
+        "    Empty,\n",
+        "    Held(Fields),\n",
+        "}\n",
+        "\n",
+        "affine trait Source {\n",
+        "    affine type Item;\n",
+        "\n",
+        "    fn next(&mut self) -> Self::Item;\n",
+        "}\n",
+        "\n",
+        "fn wrap<affine T>(x: T) -> Option<T> {\n",
+        "    return Option::Some(x);\n",
+        "}\n",
+    );
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        source
+    );
+    assert_format_preserves_ast(source);
+}
+
 /// An attribute array of identifiers prints back unquoted, as written.
 #[test]
 fn test_format_keeps_identifier_attribute_array() {

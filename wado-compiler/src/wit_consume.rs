@@ -21,7 +21,9 @@ use crate::name::wado_identifier;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
-use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
+use wit_parser::{
+    Handle, Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
+};
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -458,6 +460,7 @@ impl Builder {
                     name_span: syn(),
                     visibility: Visibility::Public,
                     is_export: false,
+                    is_affine: wit_holds_affine(resolve, WitType::Id(type_id)),
                     type_params: Vec::new(),
                     fields,
                     attrs: vec![cm],
@@ -509,6 +512,7 @@ impl Builder {
                     name_span: syn(),
                     visibility: Visibility::Public,
                     is_export: false,
+                    is_affine: wit_holds_affine(resolve, WitType::Id(type_id)),
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
@@ -711,6 +715,37 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
         TypeDefKind::Stream(t) => CmShape::Stream(*t),
         TypeDefKind::Type(inner) => classify_wit(resolve, *inner),
         _ => CmShape::Leaf,
+    }
+}
+
+/// Whether a value of WIT type `ty` holds an `own` handle, a stream or a future
+/// at any depth, which makes the Wado type it maps to affine. WIT admits no
+/// recursive type, so the walk ends.
+pub fn wit_holds_affine(resolve: &Resolve, ty: WitType) -> bool {
+    let WitType::Id(id) = ty else {
+        return false;
+    };
+    let holds = |t: &WitType| wit_holds_affine(resolve, *t);
+    match &resolve.types[id].kind {
+        TypeDefKind::Handle(Handle::Own(_))
+        | TypeDefKind::Resource
+        | TypeDefKind::Future(_)
+        | TypeDefKind::Stream(_) => true,
+        TypeDefKind::Handle(Handle::Borrow(_))
+        | TypeDefKind::Flags(_)
+        | TypeDefKind::Enum(_)
+        | TypeDefKind::Unknown => false,
+        TypeDefKind::Record(r) => r.fields.iter().any(|f| holds(&f.ty)),
+        TypeDefKind::Tuple(t) => t.types.iter().any(holds),
+        TypeDefKind::Variant(v) => v.cases.iter().any(|c| c.ty.as_ref().is_some_and(holds)),
+        TypeDefKind::Option(t)
+        | TypeDefKind::List(t)
+        | TypeDefKind::FixedLengthList(t, _)
+        | TypeDefKind::Type(t) => holds(t),
+        TypeDefKind::Map(k, v) => holds(k) || holds(v),
+        TypeDefKind::Result(r) => {
+            r.ok.as_ref().is_some_and(holds) || r.err.as_ref().is_some_and(holds)
+        }
     }
 }
 

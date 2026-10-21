@@ -1,0 +1,46 @@
+// A trait method taking an affine `self` by value states a `contract`. The
+// clause holder the trait keeps owns nothing: lowering copies its clauses to
+// each caller, and the method's own body owns `self`.
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+affine struct Holder {
+    n: i32,
+    token: Token,
+}
+
+affine trait Take {
+    fn n(&self) -> i32;
+
+    fn take(self, k: i32) -> i32
+        contract k > 0
+    {
+        return self.n() + k;
+    }
+}
+
+impl Take for Holder {
+    fn n(&self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() with Stdout {
+    let h = Holder { n: 1, token: Token { id: 1 } };
+    println(`${h.take(2)}`);
+    println(`drops ${DROPS}`);
+}
+
+__DATA__
+{"stdout": "3\ndrops 1\n"}

@@ -1308,10 +1308,13 @@ impl TypeSystem {
                 let base = self.type_table.borrow().get(*base_type).clone();
                 self.is_ref_identity(&base)
             }
+            // An affine resource is an object, its box (WEP: Affine Types).
+            ResolvedType::Resource { def } => {
+                !self.type_table.borrow().is_unrestricted_resource(*def)
+            }
+            ResolvedType::GenericResource { .. } => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Unknown
@@ -2288,7 +2291,8 @@ impl TypeSystem {
     }
 
     /// Whether what the receiver substitutes for an `impl` block's parameters
-    /// satisfies their bounds: `impl<T: Ord> List<T>` wants an `Ord` element.
+    /// satisfies their bounds and kinds: `impl<T: Ord> List<T>` wants an `Ord`
+    /// element, and `impl<T> List<T>` a copyable one (WEP: Affine Types).
     pub(super) fn check_impl_block_bounds(
         &self,
         ctx: &Scope,
@@ -2300,39 +2304,49 @@ impl TypeSystem {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
         let type_params = &header.type_params;
-        if type_params.iter().all(|p| p.bounds.is_empty()) {
+        if type_params
+            .iter()
+            .all(|p| p.bounds.is_empty() && p.is_affine)
+        {
             return true;
         }
 
         // The bound's own site says which trait it names and what it writes for
         // that trait's parameters, so the check compares declarations rather
         // than the spelling the impl header happened to write.
-        let bounds_map: IndexMap<&str, Vec<FqTraitName>> = type_params
+        let bounds_map: IndexMap<&str, (bool, Vec<FqTraitName>)> = type_params
             .iter()
-            .filter(|p| !p.bounds.is_empty())
             .map(|p| {
                 (
                     p.name.as_str(),
-                    p.bounds
-                        .iter()
-                        .filter_map(|b| self.bound_written(b))
-                        .collect(),
+                    (
+                        p.is_affine,
+                        p.bounds
+                            .iter()
+                            .filter_map(|b| self.bound_written(b))
+                            .collect(),
+                    ),
                 )
             })
             .collect();
+        let affine_params = ctx.trait_ctx.affine_params();
+        let holds = |(is_affine, bounds): &(bool, Vec<FqTraitName>), type_arg: TypeId| {
+            (*is_affine || !self.is_affine(type_arg, &affine_params))
+                && self.bounds_hold(ctx, scope, type_arg, bounds)
+        };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
         // the receiver's pointee rather than for an argument of it.
         if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &header.ty
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
-            let Some(bounds) = bounds_map.get(inner.name.as_str()) else {
+            let Some(param) = bounds_map.get(inner.name.as_str()) else {
                 return true;
             };
             let Some(pointee) = receiver.and_then(|id| self.pointee_of(id)) else {
                 return true;
             };
-            return self.bounds_hold(ctx, scope, pointee, bounds);
+            return holds(param, pointee);
         }
         let Some(type_args) = type_args else {
             // An existence or bounds check that threaded no positions has
@@ -2349,7 +2363,7 @@ impl TypeSystem {
                 names
                     .name_of(slot)
                     .and_then(|name| bounds_map.get(name))
-                    .is_none_or(|bounds| self.bounds_hold(ctx, scope, type_arg, bounds))
+                    .is_none_or(|param| holds(param, type_arg))
             });
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
@@ -2361,11 +2375,9 @@ impl TypeSystem {
                 let ast::Type::TypePackSpread(name, _) = elem else {
                     return true;
                 };
-                bounds_map.get(name.as_str()).is_none_or(|bounds| {
-                    type_args
-                        .iter()
-                        .all(|&type_arg| self.bounds_hold(ctx, scope, type_arg, bounds))
-                })
+                bounds_map
+                    .get(name.as_str())
+                    .is_none_or(|param| type_args.iter().all(|&type_arg| holds(param, type_arg)))
             });
         }
         true
@@ -2402,15 +2414,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
-        let bounded = self
+        let affine_params = self.annotate_ctx.trait_ctx.affine_params();
+        let owes = self
             .type_lookup()
             .declared_generic_params(def)
             .is_some_and(|params| {
-                params
-                    .iter()
-                    .any(|p| p.bounds.iter().any(ast::TraitBound::names_a_trait))
+                params.iter().zip(type_args).any(|(p, &arg)| {
+                    p.bounds.iter().any(ast::TraitBound::names_a_trait)
+                        || (!p.is_affine && self.tysys.is_affine(arg, &affine_params))
+                })
             });
-        if !bounded {
+        if !owes {
             return;
         }
         self.owe_bounds(OwedBounds {
@@ -2475,6 +2489,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
+            if !param.is_affine {
+                let affine_params = self.annotate_ctx.trait_ctx.affine_params();
+                if let Some(&affine) = subjects
+                    .iter()
+                    .find(|&&subject| self.tysys.is_affine(subject, &affine_params))
+                {
+                    let type_name = self.tysys.type_id_to_string(affine);
+                    let _ = self.emit(TypeError::AffineArgument {
+                        type_name,
+                        param_name: param.name.clone(),
+                        span,
+                    });
+                }
+            }
             for bound in &param.real_bounds() {
                 // `Self` where no receiver binds one was rejected where the
                 // bound was written, as `reject_self_in_bounds` reports.

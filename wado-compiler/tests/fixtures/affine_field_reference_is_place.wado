@@ -1,0 +1,38 @@
+// `&mut` of a field holding an affine variant is the field itself (WEP: Affine
+// Types): a reference a variable holds writes into it, as one passed to a
+// function does.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+affine struct Holder {
+    slot: Option<Tok>,
+    other: Option<Tok>,
+}
+
+fn clear(slot: &mut Option<Tok>) {
+    slot.take();
+}
+
+export fn run() with Stdout {
+    let mut h = Holder { slot: Option::Some(Tok { n: 1 }), other: null };
+    clear(&mut h.slot);
+    println("cleared");
+    let r = &mut h.other;
+    *r = Option::Some(Tok { n: 2 });
+    let t = h.other.take();
+    println(`took ${t.unwrap().n}`);
+    println("end");
+}
+
+__DATA__
+{"stdout": "drop 1\ncleared\ntook 2\ndrop 2\nend\n"}

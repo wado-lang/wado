@@ -1,13 +1,13 @@
 // A resource reached through a reference cannot be returned.
 use { Fields } from "wasi:http";
 
-struct Holder { f: Fields }
+affine struct Holder { f: Fields }
 
 impl Holder {
     fn peek(&self) -> Fields {
-        return self.f;       // ERROR: cannot move resource `Fields` out of a reference
+        return self.f;       // ERROR: cannot move affine type `Fields` out of a reference
     }
 }
 
 __DATA__
-{"compile_error": "cannot move resource `Fields` out of a reference"}
+{"compile_error": "cannot move affine type `Fields` out of a reference"}

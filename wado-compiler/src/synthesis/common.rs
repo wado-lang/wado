@@ -8,6 +8,7 @@
 use crate::call_args::CallArgs;
 use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::component_model::peel_newtypes;
 use crate::hashmap::IndexSet;
 
 use crate::ast::Visibility;
@@ -17,7 +18,7 @@ use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -177,6 +178,28 @@ pub fn handle_bits(handle: TirExpr) -> TirExpr {
         TypeTable::U64,
         span,
     )
+}
+
+/// The scalar a resource handle is, where `type_id` is a resource, a reference
+/// to one, or a newtype over either.
+pub fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
+    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
+}
+
+/// Whether `type_id` is an affine resource, or a reference to one.
+pub fn is_affine_resource(tt: &TypeTable, type_id: TypeId) -> bool {
+    handle_scalar(tt, type_id) == Some(TypeTable::I32)
+}
+
+/// The `i32` handle `value` holds where it is an affine resource, or a
+/// reference to one; `value` itself otherwise. The cast is what reads the
+/// handle out of the resource's object (WEP: Affine Types).
+pub fn affine_handle(value: TirExpr, tt: &TypeTable) -> TirExpr {
+    if is_affine_resource(tt, value.type_id) {
+        cast(value, TypeTable::I32)
+    } else {
+        value
+    }
 }
 
 /// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.
@@ -352,6 +375,32 @@ fn cm_target_call(target: CmCallTarget, args: Vec<TirExpr>, return_type: TypeId)
     TirExpr::new(
         TirExprKind::CmRawCall { target, args },
         return_type,
+        synth_span(),
+    )
+}
+
+/// A literal of the struct `name`, `fields` given in declaration order.
+pub fn struct_literal<S: Into<String>>(
+    struct_type: TypeId,
+    name: impl Into<String>,
+    fields: impl IntoIterator<Item = (S, TirExpr)>,
+) -> TirExpr {
+    let fields = fields
+        .into_iter()
+        .zip(0..)
+        .map(|((name, value), field_index)| TirStructField {
+            name: name.into(),
+            value,
+            field_index,
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name: name.into(),
+            fields,
+        },
+        struct_type,
         synth_span(),
     )
 }

@@ -24,7 +24,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
+    BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
+    TypeId,
 };
 use crate::type_table::TypeTable;
 use funcset::{FuncKeyMap, FuncKeySet};
@@ -178,7 +179,9 @@ pub fn plan(
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
-    register_variant_cases(flat);
+    // Again: closure lifting has added its environment structs since `plan`
+    // registered the rest.
+    register_type_templates(flat);
     let seed = analyze::collect_seed_types(flat);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present
@@ -278,9 +281,10 @@ pub fn plan(
     }
 }
 
-/// Publish every variant declaration's case templates to the type table,
-/// so [`needs_value_copy`] can classify variants from a `&TypeTable`.
-fn register_variant_cases(flat: &FlatPackage) {
+/// Publish every variant declaration's case templates, and every struct's
+/// field types, to the type table, so [`needs_value_copy`] can classify
+/// variants and WIR can tell an affine type from a `&TypeTable`.
+pub(super) fn register_type_templates(flat: &FlatPackage) {
     let mut type_table = flat.type_table.borrow_mut();
     for variant in &flat.variants {
         let cases: Vec<(String, u32, TypeId)> = variant
@@ -289,6 +293,12 @@ fn register_variant_cases(flat: &FlatPackage) {
             .map(|c| (c.name.clone(), c.index, c.payload))
             .collect();
         type_table.register_variant_cases(variant.def, cases);
+    }
+    for s in &flat.structs {
+        if let StructDef::Decl(def) = s.def {
+            let fields = s.fields.iter().map(|f| f.type_id).collect();
+            type_table.register_struct_fields(def, s.type_args.clone(), fields);
+        }
     }
 }
 
@@ -390,6 +400,11 @@ fn needs_copy_in_env(
 ) -> bool {
     if depth > NEEDS_COPY_DEPTH_LIMIT {
         return true;
+    }
+    // An affine value is one object that moves from place to place, never
+    // copied (WEP: Affine Types).
+    if type_table.holds_affine_resource(type_id) {
+        return false;
     }
     let is_box = type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
     match type_table.get(type_id) {

@@ -1,0 +1,12 @@
+// A store through a reference into the object the value was moved out of is
+// refused: no place would own it (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let mut x = rx;
+    let r = &mut x;
+    let v = x;
+    *r = v;
+}
+
+__DATA__
+{"compile_error": ":8:6: analysis error: `r` refers into `x`, which moved at 7:13"}

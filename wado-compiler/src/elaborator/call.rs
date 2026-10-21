@@ -41,7 +41,7 @@ use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::escape::unescape_bytes;
-use crate::from_marker::WRAP_IN_CASE;
+use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 

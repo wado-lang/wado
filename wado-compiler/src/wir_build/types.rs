@@ -21,10 +21,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use super::context::WirContext;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key, wir_tuple_type_key,
-    wir_type_key, wir_variant_case_key,
+    RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key,
+    wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
-use crate::wir::WirAbstractHeapType;
+use crate::wir::{WirAbstractHeapType, WirTypeId};
 use crate::{hashmap, tir};
 
 /// A type declaration in topological order (struct or variant).
@@ -298,8 +298,7 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            // Struct fields use non-nullable refs.
-            let ty = ty.as_nonnull();
+            let ty = field_slot_type(ctx, tir_struct, type_table, f.type_id, ty);
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -383,7 +382,8 @@ fn register_variant(
             let payload = if type_table.get(case.payload) == &ResolvedType::Unit {
                 Vec::new()
             } else {
-                vec![ctx.type_id_to_wir_type_pending(type_table, case.payload)]
+                let ty = ctx.type_id_to_wir_type_pending(type_table, case.payload);
+                vec![ctx.boxed_slot_type(type_table, case.payload, ty)]
             };
             (case.name.clone(), payload)
         })
@@ -489,7 +489,11 @@ fn register_raw_array_type(
     }
 
     let fq = mangle_builtin_array_type(&elem_name);
-    let elem_wir_type = ctx.type_id_to_wir_type_pending(type_table, element_type_id);
+    let elem_wir_type = ctx.boxed_slot_type(
+        type_table,
+        element_type_id,
+        ctx.type_id_to_wir_type_pending(type_table, element_type_id),
+    );
 
     let type_id = ctx.register_type(
         fq.clone(),
@@ -521,6 +525,22 @@ fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
             .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::Box))
 }
 
+/// `ty`, the WIR type of a field of `s` of type `type_id`, as the field holds
+/// it. A box's `value` holds the value itself, or a box would hold a box.
+fn field_slot_type(
+    ctx: &WirContext<'_>,
+    s: &NirStruct,
+    type_table: &TypeTable,
+    type_id: TypeId,
+    ty: WirType,
+) -> WirType {
+    if is_box_instance(s, type_table) {
+        ctx.unboxed_slot_type(type_table, type_id, ty)
+    } else {
+        ctx.slot_type(type_table, type_id, ty)
+    }
+}
+
 fn register_box_structs(ctx: &mut WirContext<'_>) {
     let type_table = &*ctx.package.type_table.borrow();
     for s in &ctx.package.structs {
@@ -533,6 +553,31 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
     // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
     // Wasm level but there's no explicit Option<i32> usage in the source code.
     ensure_box_type(ctx, "i32", WirType::I32);
+    ctx.handle_box = Some(register_resource_object(ctx));
+}
+
+/// The struct an affine resource is (WEP: Affine Types).
+fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
+    let module_source = ModuleSource::prelude();
+    let fq = wir_type_key(&module_source, RESOURCE_OBJECT_STRUCT);
+    ctx.register_type(
+        fq.clone(),
+        WirTypeDef::Struct(WirStructType {
+            name: WirName { fq },
+            fields: vec![WirField {
+                name: "value".to_string(),
+                ty: WirType::I32,
+                mutable: true,
+            }],
+            meta: WirMeta {
+                module_source: Some(module_source),
+                ..WirMeta::default()
+            },
+            generic_origin: None,
+            newtype_origin: None,
+            supertype: None,
+        }),
+    )
 }
 
 /// Ensure a `Box<T>` struct type exists for the given primitive name.
@@ -662,8 +707,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         if matches!(ty, WirType::Unit) {
                             return None;
                         }
-                        // Tuple fields use non-nullable refs
-                        let ty = ty.as_nonnull();
+                        let ty = ctx.slot_type(type_table, elem_type_id, ty);
                         Some(WirField {
                             name: format!("{i}"),
                             ty,
@@ -900,9 +944,12 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 let cases: Option<Vec<(String, Vec<WirType>)>> = cases
                     .into_iter()
                     .map(|(name, payload)| {
-                        let wir_payload = match type_table.get(payload) {
-                            ResolvedType::Unit => Vec::new(),
-                            _ => vec![ctx.try_type_id_to_wir_type(type_table, payload)?],
+                        let wir_payload = if matches!(type_table.get(payload), ResolvedType::Unit) {
+                            Vec::new()
+                        } else {
+                            let held = type_table.slot_box(payload).unwrap_or(payload);
+                            let ty = ctx.try_type_id_to_wir_type(type_table, held)?;
+                            vec![ctx.boxed_slot_type(type_table, payload, ty)]
                         };
                         Some((name, wir_payload))
                     })
@@ -1339,8 +1386,13 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            // Make struct fields non-nullable (same as register_struct).
-                            resolved = Some(wir_type.as_nonnull());
+                            resolved = Some(field_slot_type(
+                                ctx,
+                                tir_struct,
+                                type_table,
+                                field_type_id,
+                                wir_type,
+                            ));
                             break;
                         }
                     }
@@ -1368,8 +1420,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             let wir_type =
                                 ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {
-                                // Make tuple fields non-nullable.
-                                resolved = Some(wir_type.as_nonnull());
+                                resolved = Some(ctx.slot_type(type_table, elem_type_id, wir_type));
                                 break;
                             }
                         }
@@ -1429,7 +1480,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         wir_idx,
                         case_idx,
                         payload_idx,
-                        new_ty.as_nonnull(),
+                        ctx.slot_type(type_table, tir_payload_id, new_ty),
                     ));
                 }
             }
@@ -1489,7 +1540,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             if is_abstract_ref(&payload_ty) {
                 continue; // Still abstract; can't resolve
             }
-            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty.as_nonnull()));
+            // The payload's own slot type, affine or not, as the variant states it.
+            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty));
         }
     }
     for (type_idx, field_idx, new_type) in case_struct_fixups {

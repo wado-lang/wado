@@ -59,6 +59,8 @@ fn ref_receiver_methods(flat: &FlatPackage) -> value_copy::funcset::FuncKeySet {
 
 pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan, Bail> {
     globals::extract(flat, errors)?;
+    // The write-back and boxing ask which types are affine.
+    value_copy::register_type_templates(flat);
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);

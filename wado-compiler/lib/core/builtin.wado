@@ -20,6 +20,7 @@
 use { Formatter } from "core:prelude/format.wado";
 use { i128 } from "core:prelude/int128.wado";
 use { ByteList } from "core:prelude/bytes.wado";
+use { Future, Stream } from "core:prelude/types.wado";
 
 /// Completes the current task with a `result<>`, flattened to its one
 /// discriminant: 0 for Ok. Any other result delivers through its own canon.
@@ -51,8 +52,8 @@ pub fn i32_eqz(a: i32) -> i32;
 #[side_effect(none)]
 pub fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
 
-/// Whether `a` and `b` are the same reference: `ref.eq`, or equal handles for
-/// a resource.
+/// Whether `a` and `b` are the same reference: `ref.eq`, which for a resource
+/// asks for one box.
 #[storage(none)]
 #[side_effect(none)]
 internal fn ref_eq<T: Ref>(a: T, b: T) -> bool;
@@ -71,7 +72,7 @@ pub fn copy_value<T>(value: T) -> T;
 /// Used by `VariantCase::holds` (WEP 2026-06-13 §3e); lowered to a direct tag read.
 #[storage(none)]
 #[side_effect(none)]
-pub fn variant_tag<T>(v: &T) -> i32;
+pub fn variant_tag<affine T>(v: &T) -> i32;
 
 /// Extracts the payload of variant case `index` from `v` as `P`.
 /// Traps unless `v`'s live case is `index`. Lowering rewrites each
@@ -79,26 +80,33 @@ pub fn variant_tag<T>(v: &T) -> i32;
 /// synthesized alongside `ReflectVariant` (WEP 2026-06-13 §3e).
 #[storage(part_of_args)]
 #[side_effect(trap)]
-pub fn variant_case_extract<T, P>(v: &T, index: i32) -> P;
+pub fn variant_case_extract<affine T, P>(v: &T, index: i32) -> P;
 
 /// Builds variant case `index` of `T` around `payload`.
 /// Rewritten by lowering like `variant_case_extract`.
 #[storage(holds_args)]
 #[side_effect(none)]
-pub fn variant_case_construct<T, P>(payload: P, index: i32) -> T;
+pub fn variant_case_construct<affine T, affine P>(payload: P, index: i32) -> T;
 
 /// Builds the one case of variant `V` whose payload is `P` around `value`.
 /// The body the compiler writes for `impl From<P> for V;`; a `V` with no such
 /// case, or more than one, is reported at the call.
 #[storage(holds_args)]
 #[side_effect(none)]
-pub fn wrap_in_case<V, P>(value: P) -> V;
+pub fn wrap_in_case<affine V, affine P>(value: P) -> V;
 
 /// Reads field `index` of struct `v`. Rewritten by lowering to a direct
 /// field access (WEP 2026-06-13 §2). Used by `StructField::get`.
 #[storage(part_of_args)]
 #[side_effect(none)]
-pub fn struct_field_get<T, F>(v: &T, index: i32) -> F;
+pub fn struct_field_get<affine T, F>(v: &T, index: i32) -> F;
+
+/// Reads field `index` of struct `v` by reference, so an affine field is not
+/// copied. Rewritten by lowering like `struct_field_get`. Used by
+/// `StructField::get_ref`.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn struct_field_ref<affine T, affine F>(v: &T, index: i32) -> &F;
 
 /// Reads hole `index` of template `t` as `V`, dereferencing a hole held by
 /// handle. Rewritten by lowering to the per-(shape, hole-type) helper
@@ -116,14 +124,14 @@ pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 /// other fact states yet.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
+pub fn hole_fmt<affine T>(t: &T, index: i32, f: &mut Formatter);
 
 /// Returns the length of a GC array. `array.len` reads the header, so the
 /// element type is irrelevant — but it must still be *named*, or every caller
 /// with a `&Array<T>` is checked against an element type it does not have.
 #[storage(none)]
 #[side_effect(none)]
-pub fn array_len<T>(arr: &Array<T>) -> i32;
+pub fn array_len<affine T>(arr: &Array<T>) -> i32;
 
 /// Returns a byte from a u8 array at the given index.
 #[storage(none)]
@@ -138,7 +146,7 @@ pub fn array_set_u8(arr: &mut Array<u8>, idx: i32, value: u8);
 /// Creates a new Array<T> with given length, initialized to default values.
 #[storage(fresh, len = len)]
 #[side_effect(trap, negative = len)]
-pub fn array_new<T>(len: i32) -> Array<T>;
+pub fn array_new<affine T>(len: i32) -> Array<T>;
 
 /// An `Array<T>` read from a byte literal as little-endian `T`s, built as a
 /// constant by the compiler. `T` is a numeric primitive.
@@ -152,24 +160,39 @@ pub fn array_new_data<T>(bytes: ByteList) -> Array<T>;
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
+/// Moves the element at `idx` out of `arr`: an affine one leaves its slot
+/// empty, a copyable one stays (WEP: Affine Types). Resource drop synthesis
+/// expands the call.
+#[storage(part_of_args)]
+#[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
+pub fn array_take<affine T>(arr: &mut Array<T>, idx: i32) -> T;
+
 /// Returns a reference to the element at `idx`. A `Ref` element is aliased in
 /// place; a scalar yields a read-only boxed snapshot (the `&T` read model), so
 /// this is sound to read for every `T` — hence no `Ref` bound.
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+pub fn array_get_ref<affine T>(arr: &Array<T>, idx: i32) -> &T;
 
 /// Returns a mutable reference to the element at `idx`, for in-place mutation.
 /// Bounded `T: RefMut`: a `&mut` to a scalar would box a copy with no write-back,
 /// so only in-place-mutable elements can be handed out mutably.
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
+pub fn array_get_ref_mut<affine T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
+
+/// Returns the box the field at `field` of `holder` holds an affine variant in,
+/// which is the field's place (WEP: Affine Types). `field` is a constant. Lowering
+/// emits the call for `&mut holder.f`, since a `&` there is no reference to the
+/// value the field reads as.
+#[storage(part_of_args)]
+#[side_effect(none)]
+internal fn field_slot<affine S, affine T>(holder: &mut S, field: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [arr], at = [idx])]
-pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+pub fn array_set<affine T>(arr: &mut Array<T>, idx: i32, value: T);
 
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..], each as
 /// a value copy makes it, as if through a buffer. A value-typed element costs
@@ -184,7 +207,7 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 /// collection grows or shifts its backing array.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
-pub fn array_move<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+pub fn array_move<affine T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
 /// Allocates a new Array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
@@ -223,7 +246,7 @@ pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 /// second does not.
 #[storage(none)]
 #[side_effect(trap, outside = [arr], at = [offset], count = len)]
-pub fn array_release<T>(arr: &mut Array<T>, offset: i32, len: i32);
+pub fn array_release<affine T>(arr: &mut Array<T>, offset: i32, len: i32);
 
 /// Loads an i32 from linear memory (Wasm i32.load).
 #[storage(none)]
@@ -444,7 +467,7 @@ pub fn unreachable() -> !;
 /// work it names.
 #[storage(part_of_args)]
 #[side_effect(black_box)]
-pub fn black_box<T>(value: T) -> T;
+pub fn black_box<affine T>(value: T) -> T;
 
 /// True while a lazy-initialized global still holds its `null` placeholder.
 ///
@@ -453,7 +476,34 @@ pub fn black_box<T>(value: T) -> T;
 /// instead of asserting it away. Any other reference reads as initialized.
 #[storage(none)]
 #[side_effect(none)]
-pub fn is_uninitialized<T>(value: &T) -> bool;
+pub fn is_uninitialized<affine T>(value: &T) -> bool;
+
+/// True where the place `value` reads holds no affine object: a move emptied
+/// it (WEP: Affine Types). Resource drop synthesis guards each drop with it.
+/// It reads the place by value, since a reference to a variant is a box that
+/// is never null.
+#[storage(none)]
+#[side_effect(none)]
+internal fn is_moved<affine T>(value: T) -> bool;
+
+/// Drop `value` where it is called (WEP: Affine Types). Resource drop synthesis
+/// replaces the call with the drop of what it takes.
+#[storage(none)]
+#[side_effect(none)]
+pub fn drop<affine T>(value: T);
+
+/// Store `value` where `r` points and return what was there, the one way
+/// `core` moves a value out through a reference (WEP: Affine Types). Resource
+/// drop synthesis expands the call, and the move check trusts it.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn replace<affine T>(r: &mut T, value: T) -> T;
+
+/// Exchange the handles the boxes `a` and `b` hold: `replace` on a resource,
+/// whose box keeps its identity (WEP: Affine Types).
+#[storage(none)]
+#[side_effect(opaque)]
+internal fn swap_handles<R>(a: &R, b: &R);
 
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
@@ -624,9 +674,8 @@ pub fn subtask_drop(handle: i32);
 #[side_effect(opaque, suspend)]
 pub fn subtask_cancel(handle: i32);
 
-/// Join a waitable (subtask/stream/future) to a waitable set.
-/// Returns a Waitable token.  The canonical returns void; we return
-/// the original handle so callers can use it as the Waitable identity.
+/// Join a waitable (subtask/stream/future) to a waitable set, or leave its
+/// set where `ws` is 0.
 #[canonical("wasi", "waitable-join")]
 #[storage(none)]
 #[side_effect(opaque)]
@@ -652,23 +701,33 @@ pub fn error_context_debug_message(handle: i32, outptr: i32);
 #[side_effect(opaque)]
 pub fn error_context_drop(handle: i32);
 
+/// The handle `r` holds, read without moving it. `ResourceId::of` bounds `R`
+/// to an affine resource.
+#[storage(none)]
+#[side_effect(read)]
+internal fn resource_handle<affine R>(r: &R) -> i32;
+
+/// Write 0, which the Component Model never issues, into the box `r`: what an
+/// object holds once its content moved into another (WEP: Affine Types).
+#[storage(none)]
+#[side_effect(opaque)]
+internal fn zero_handle<R>(r: &R);
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
-/// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
 /// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
+pub fn call_indirect_stdout_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
-/// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
 /// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
+pub fn call_indirect_stderr_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 
 /// Whether `call_indirect_stdout_write_via_stream` reaches stdout, rather than
 /// trapping in a component that imports no stdout.

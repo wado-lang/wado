@@ -16,16 +16,17 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr, expr_stmt,
-    generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const, i64_const,
-    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len,
-    synth_span,
+    affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
+    expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
+    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
-    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
-    cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
-    flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    cm_held_type_to_type_id, cm_layout_i32, cm_val_type_from_type_id, coerce_flat_lower,
+    disc_store_op, field_access, flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag,
+    variant_test,
 };
 use crate::compiler_item::CompilerItem;
 use crate::name::{FqTypeName, UNIT_TYPE_NAME};
@@ -154,7 +155,7 @@ pub fn synthesize_lower(
             // and anything unresolved keep the 4-byte default.
             _ => vec![expr_stmt(builtin_call(
                 scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
-                vec![addr, value],
+                vec![addr, affine_handle(value, &ctx.type_table.borrow())],
                 TypeTable::UNIT,
             ))],
         },
@@ -162,7 +163,7 @@ pub fn synthesize_lower(
         Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
             vec![expr_stmt(builtin_call(
                 "i32_store",
-                vec![addr, value],
+                vec![addr, affine_handle(value, &ctx.type_table.borrow())],
                 TypeTable::UNIT,
             ))]
         }
@@ -178,7 +179,7 @@ pub fn synthesize_lower(
         ),
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
             scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
-            vec![addr, value],
+            vec![addr, affine_handle(value, &ctx.type_table.borrow())],
             TypeTable::UNIT,
         ))],
         other => panic!("unsupported type for CM memory lower: {other:?}"),
@@ -228,7 +229,7 @@ pub(super) fn synthesize_lower_tuple(
         // type lacks args (shouldn't happen for a well-formed tuple value).
         let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_type_to_type_id(
+            cm_held_type_to_type_id(
                 elem_ty,
                 &mut tt,
                 ctx.cm_interface_registry,
@@ -410,7 +411,12 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
             let payload = case.payload.map(|ty| {
                 let tid = {
                     let mut tt = ctx.type_table.borrow_mut();
-                    cm_type_to_type_id(&ty, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
+                    cm_held_type_to_type_id(
+                        &ty,
+                        &mut tt,
+                        ctx.cm_interface_registry,
+                        ctx.wasi_package,
+                    )
                 };
                 (ty, tid)
             });
@@ -492,7 +498,7 @@ pub(super) fn synthesize_lower_option_to_memory(
             }
             _ => {
                 drop(tt);
-                cm_type_to_type_id(
+                cm_held_type_to_type_id(
                     inner_type,
                     &mut ctx.type_table.borrow_mut(),
                     ctx.cm_interface_registry,
@@ -660,7 +666,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
             _ => {
                 drop(tt);
                 let mut tt = ctx.type_table.borrow_mut();
-                cm_type_to_type_id(
+                cm_held_type_to_type_id(
                     &elem_resolved,
                     &mut tt,
                     ctx.cm_interface_registry,
@@ -1283,7 +1289,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
                             let mut tt = ctx.type_table.borrow_mut();
-                            cm_type_to_type_id(
+                            cm_held_type_to_type_id(
                                 payload_ty,
                                 &mut tt,
                                 ctx.cm_interface_registry,
@@ -1460,10 +1466,12 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(handle_to_f64(value));
         }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
-        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => flat_args.push(value),
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => {
+            flat_args.push(affine_handle(value, &ctx.type_table.borrow()));
+        }
         // Stream / Future / Own / Borrow are i32 handles (single flat arg).
         Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
-            flat_args.push(value);
+            flat_args.push(affine_handle(value, &ctx.type_table.borrow()));
         }
         other => panic!("unsupported type for CM value flattening: {other:?}"),
     }
@@ -1492,7 +1500,7 @@ fn synthesize_flatten_tuple_to_flat_args(
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_type_to_type_id(
+            cm_held_type_to_type_id(
                 elem_ty,
                 &mut tt,
                 ctx.cm_interface_registry,
@@ -1540,7 +1548,7 @@ pub(super) fn flatten_cm_record_fields(
         let resolved_field = ctx.cm_interface_registry.value_type(field_ty);
         let field_type_id = {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_type_to_type_id(
+            cm_held_type_to_type_id(
                 &resolved_field,
                 &mut tt,
                 ctx.cm_interface_registry,
@@ -1628,15 +1636,11 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     // Flatten the Some payload via a TIR Match that binds the inner
     // value. The None arm is empty; variant `Match` is exhaustive on
     // `Option<T>` so no wildcard is required.
-    let inner_type_id = {
-        let mut tt = ctx.type_table.borrow_mut();
-        cm_type_to_type_id(
-            inner_type,
-            &mut tt,
-            ctx.cm_interface_registry,
-            ctx.wasi_package,
-        )
-    };
+    let inner_type_id = ctx
+        .type_table
+        .borrow()
+        .as_option(vt)
+        .expect("an option flattens from an `Option` value");
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
     let payload_binding_name = format!("$opt_payload_{payload_binding_local}");
     let payload_expr = local_ref(payload_binding_local, &payload_binding_name, inner_type_id);
@@ -1841,7 +1845,7 @@ fn flatten_result_case_arm(
 
     let payload_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        cm_type_to_type_id(
+        cm_held_type_to_type_id(
             payload_type,
             &mut tt,
             ctx.cm_interface_registry,
@@ -1945,7 +1949,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     let offset = offsets[field_idx];
                     let field_type_id = {
                         let mut tt = ctx.type_table.borrow_mut();
-                        cm_type_to_type_id(
+                        cm_held_type_to_type_id(
                             field_ty,
                             &mut tt,
                             ctx.cm_interface_registry,

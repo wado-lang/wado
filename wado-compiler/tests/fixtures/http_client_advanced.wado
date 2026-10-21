@@ -32,7 +32,7 @@ fn send_request(path: String) -> Response with Client {
 }
 
 fn read_body(resp: Response) -> String {
-    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_future, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_future);
 
     let result = match String::try_from_utf8(body_stream.read_to_end_bytes()) {
@@ -40,6 +40,7 @@ fn read_body(resp: Response) -> String {
         Err(_) => panic("invalid utf-8"),
     };
     body_stream.drop();
+    res_tx.write(Result::<(), ErrorCode>::Ok(()));
     return result;
 }
 
