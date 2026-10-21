@@ -1,0 +1,31 @@
+// A hole's specifier selects a trait, and a generic hole meets it through the
+// bounds its item declares (WEP 2026-01-10).
+type Meters = i32;
+
+fn show<X: Display>(x: X) -> String {
+    return `${x}`;
+}
+
+fn show_ref<X: Display>(x: &X) -> String {
+    return `${x}`;
+}
+
+fn hex<X: LowerHex>(x: X) -> String {
+    return `${x:#x}`;
+}
+
+fn inspect<X>(x: X) -> String {
+    return `${x:?}`;
+}
+
+test "a bounded generic hole renders" {
+    assert show(42) == "42";
+    assert show_ref(&"a") == "a";
+    assert hex(255) == "0xff";
+    assert inspect(7) == "7";
+    let m: Meters = 3;
+    assert `${m:x}` == "3";
+}
+
+__DATA__
+{"test": {}}

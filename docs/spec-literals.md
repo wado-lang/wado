@@ -1087,8 +1087,7 @@ instantiates the tag with it. A bound the tag places on its pack is met only
 through the bounds the item declares, as for any call.
 
 > Not yet implemented: a hole whose type mentions a type parameter is rejected
-> as a tag's argument, and a tag that never calls `fmt` on a hole accepts a type
-> lacking the trait its specifier selects.
+> as a tag's argument.
 
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its

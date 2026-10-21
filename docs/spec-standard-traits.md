@@ -896,7 +896,7 @@ reference to one, or a [`StrSlice`](./spec-types.md#string-views) view of one:
 <!-- {"fixture":"spec_traits_as_str_slice_decl.wado"} -->
 
 ```wado
-pub trait AsStrSlice: Eq<String> with () {
+pub trait AsStrSlice: Eq<String> + Display with () {
     fn as_str_slice(&self) -> StrSlice;
     // default bodies over the view: len, slice, chars, starts_with, find, …
 }
@@ -914,7 +914,8 @@ passes a reference through. A parameter that only reads its text names
 `AsStrSlice` requires `Eq<String>`, so a body generic over it compares its text
 with `==` against a string, and a string-literal pattern matches it. `==` on a
 type parameter reads the parameter's bounds, so without the requirement neither
-would resolve.
+would resolve. It requires `Display` for the same reason: a template hole of
+the parameter's type renders as its text.
 
 Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
 

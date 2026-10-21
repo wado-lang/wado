@@ -3275,8 +3275,8 @@ impl TypeTable {
         Some(bounds)
     }
 
-    /// What `<base as owning_trait>::assoc_name<args>` is, for a `base` that
-    /// carries no type parameter, or `None` where nothing binds it.
+    /// What `<base as owning_trait>::assoc_name<args>` is, or `None` where
+    /// nothing binds it.
     pub fn answer_projection(
         &mut self,
         base: TypeId,
@@ -3285,6 +3285,9 @@ impl TypeTable {
         assoc_name: &str,
         args: &[TypeId],
     ) -> Option<TypeId> {
+        if !self.projection_base_is_rigid(base) {
+            return None;
+        }
         let family = self.projection_family(base, owning_trait, trait_args, assoc_name)?;
         Some(self.instantiate_family(*owning_trait, assoc_name, family, args))
     }
@@ -3582,9 +3585,7 @@ impl TypeTable {
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
-            .filter(|(_, entry)| {
-                type_args.is_none_or(|args| self.entry_slots(entry, args).is_some())
-            })
+            .filter(|(_, entry)| type_args.is_none_or(|args| self.entry_reaches(entry, args)))
             .collect();
         if candidates.iter().any(|(_, entry)| entry.written.is_empty()) {
             candidates.retain(|(_, entry)| entry.written.is_empty());
@@ -3626,6 +3627,23 @@ impl TypeTable {
         }
     }
 
+    /// Whether `entry`'s impl's target binds at `type_args`:
+    /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
+    fn entry_reaches(&self, entry: &AssocAnswer, type_args: &[TypeId]) -> bool {
+        self.entry_slots(entry, type_args).is_some()
+    }
+
+    fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {
+        AssocAnswers(
+            answers
+                .0
+                .iter()
+                .filter(|entry| self.entry_reaches(entry, type_args))
+                .cloned()
+                .collect(),
+        )
+    }
+
     /// [`Self::entry_slots`] with the slots the impl's bounds project from
     /// those, which interning reaches.
     fn entry_slots_mut(
@@ -3650,21 +3668,21 @@ impl TypeTable {
         base_decl: AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
+        let mut type_args: Vec<(u32, TypeId)> =
+            substitution.iter().map(|(&i, &t)| (i, t)).collect();
+        type_args.sort_by_key(|&(index, _)| index);
+        let type_args: Vec<TypeId> = type_args.into_iter().map(|(_, t)| t).collect();
         let defs: Vec<(DefId, String, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl)
             .flat_map(|(key, answers)| {
-                answers
+                self.answers_reaching(answers, &type_args)
                     .0
-                    .iter()
-                    .map(move |entry| (key.trait_decl, key.assoc_name.clone(), entry.clone()))
+                    .into_iter()
+                    .map(move |entry| (key.trait_decl, key.assoc_name.clone(), entry))
             })
             .collect();
-        let mut type_args: Vec<(u32, TypeId)> =
-            substitution.iter().map(|(&i, &t)| (i, t)).collect();
-        type_args.sort_by_key(|&(index, _)| index);
-        let type_args: Vec<TypeId> = type_args.into_iter().map(|(_, t)| t).collect();
         for (trait_decl, assoc_name, entry) in defs {
             let slots = self.entry_slots_mut(&entry, &type_args);
             // The header's arguments are written over the impl's parameters too.
@@ -3887,14 +3905,14 @@ impl TypeTable {
         }
         let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
-        let answers = self
-            .generic_assoc_type_defs
-            .get(&GenericAssocTypeKey {
+        let answers = self.answers_reaching(
+            self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
                 target_decl: decl,
                 trait_decl: *trait_key,
                 assoc_name: assoc_name.to_string(),
-            })?
-            .clone();
+            })?,
+            &type_args,
+        );
         // A generic impl records the arguments it writes, which may read its
         // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
         // the instance's arguments, defaults filled as `wanted`'s are.
@@ -4421,8 +4439,6 @@ impl TypeTable {
                 {
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
-                // Substitute the parameter first; only attempt projection
-                // resolution once the underlying type is fully concrete.
                 let substituted_base = self.subst_rec(param_id, leaves);
                 // A projection over a projection is answered by what the base
                 // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
@@ -4437,15 +4453,13 @@ impl TypeTable {
                     let answer = *answer;
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
-                if !self.contains_type_param(substituted_base)
-                    && let Some(resolved) = self.answer_projection(
-                        substituted_base,
-                        &owning_trait,
-                        new_trait_args.as_deref(),
-                        &assoc_name,
-                        &new_args,
-                    )
-                {
+                if let Some(resolved) = self.answer_projection(
+                    substituted_base,
+                    &owning_trait,
+                    new_trait_args.as_deref(),
+                    &assoc_name,
+                    &new_args,
+                ) {
                     return resolved;
                 }
                 // Bindings are resolved in the same frame as the rest of the
@@ -5175,6 +5189,17 @@ impl TypeTable {
                 | ResolvedType::TypePack { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         )
+    }
+
+    /// Whether an impl answering a projection off `base` is chosen by `base`'s
+    /// head alone: `SliceRefIter<T>::Item` is `&T` whatever `T` is.
+    fn projection_base_is_rigid(&self, base: TypeId) -> bool {
+        let head = self.peel_refs(base);
+        !self.receiver_head_awaits_substitution(head)
+            && !matches!(
+                self.get(head),
+                ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error
+            )
     }
 
     /// Whether `id`'s representation is known only once substitution settles

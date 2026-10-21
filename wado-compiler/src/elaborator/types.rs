@@ -19,6 +19,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
+use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
@@ -1292,6 +1293,14 @@ pub enum TypeError {
     MissingTraitImpl {
         type_name: String,
         trait_name: String,
+        span: Span,
+    },
+
+    /// A template hole whose type lacks the trait its specifier selects.
+    TemplateHoleMissingTrait {
+        type_name: String,
+        trait_name: String,
+        is_display: bool,
         span: Span,
     },
 
@@ -2770,6 +2779,16 @@ impl TypeError {
             } => (
                 Code::TraitBoundNotSatisfied,
                 format!("type '{type_name}' does not implement {trait_name}"),
+                *span,
+            ),
+            TypeError::TemplateHoleMissingTrait {
+                type_name,
+                trait_name,
+                is_display,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                missing_trait_message(type_name, trait_name, *is_display),
                 *span,
             ),
             TypeError::AmbiguousLiteralConversion {

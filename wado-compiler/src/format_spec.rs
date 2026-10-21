@@ -19,6 +19,8 @@
 
 use std::fmt;
 
+use crate::compiler_item::CompilerItem;
+
 /// Alignment of the rendered value within `width`.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Align {
@@ -65,6 +67,21 @@ pub enum FormatKind {
 }
 
 impl FormatKind {
+    /// The trait the value renders through.
+    #[must_use]
+    pub const fn trait_item(self) -> CompilerItem {
+        match self {
+            Self::Display | Self::Fixed => CompilerItem::Display,
+            Self::Inspect => CompilerItem::Inspect,
+            Self::Binary => CompilerItem::Binary,
+            Self::Octal => CompilerItem::Octal,
+            Self::LowerHex => CompilerItem::LowerHex,
+            Self::UpperHex => CompilerItem::UpperHex,
+            Self::LowerExp => CompilerItem::LowerExp,
+            Self::UpperExp => CompilerItem::UpperExp,
+        }
+    }
+
     fn from_char(c: char) -> Option<Self> {
         match c {
             '?' => Some(Self::Inspect),

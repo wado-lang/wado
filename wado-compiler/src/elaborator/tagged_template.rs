@@ -86,7 +86,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .zip(template.interpolations())
             .map(|((ty, spec), expr)| {
-                sound &= self.hole_type_admissible(ty, expr.span());
+                // An inadmissible hole's own error says what the trait check
+                // would say again.
+                if self.hole_type_admissible(ty, expr.span()) {
+                    self.check_hole_format_trait(ty, spec.as_deref(), expr.span());
+                } else {
+                    sound = false;
+                }
                 TemplateHole {
                     ty,
                     spec,
