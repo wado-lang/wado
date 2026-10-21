@@ -35,8 +35,9 @@ pub struct LowerMarks {
     pub follow_forward_edges: List<List<String>>,
     /// The rule makes a decision the simulator decides.
     pub rule_asks_simulator: List<bool>,
-    /// Under `atn: "verify"`, the simulator checks a pick the static path made.
-    pub simulator_checks: bool = false,
+    /// Under `atn: "verify"`, the simulator checks a pick the rule's static
+    /// path made.
+    pub rule_checks_simulator: List<bool>,
     /// The rules whose functions carry the FOLLOW slots, by snake name: the
     /// closure of `rule_reads_follow` over `follow_forward_edges`, settled once
     /// every rule is lowered.
@@ -51,6 +52,7 @@ impl LowerMarks {
             rule_reads_follow: flags,
             follow_forward_edges: List::filled(rule_count, []),
             rule_asks_simulator: flags,
+            rule_checks_simulator: flags,
         };
     }
 
@@ -62,7 +64,7 @@ impl LowerMarks {
     /// Whether any decision routes to the runtime ATN simulator or is checked
     /// against it.
     pub fn needs_atn(&self) -> bool {
-        return self.simulator_checks || self.rule_asks_simulator.contains(&true);
+        return self.rule_asks_simulator.contains(&true) || self.rule_checks_simulator.contains(&true);
     }
 }
 
@@ -150,7 +152,8 @@ impl LowerContext {
     /// them.
     pub fn mark_checks_with_simulator(&mut self) {
         assert self.settings.atn.verifies(), "only `atn: \"verify\"` checks the static path's picks";
-        self.marks.simulator_checks = true;
+        let idx = self.current_rule_index();
+        self.marks.rule_checks_simulator[idx] = true;
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.

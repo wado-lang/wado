@@ -55,6 +55,9 @@ pub struct ParserPlan {
     /// `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
     pub needs_lr_atn: bool = false,
     rule_asks_simulator: List<bool> = [],
+    /// The rule asks the simulator, or under `atn: "verify"` has it check a
+    /// pick, so its helpers carry what the simulator reads.
+    rule_consults_simulator: List<bool> = [],
     /// A call to the rule can reach one that asks the simulator, so the call
     /// pushes the return state the prediction reads.
     rule_reaches_simulator: List<bool> = [],
@@ -134,6 +137,9 @@ pub fn plan_parser(
         needs_atn,
         needs_lr_atn: marks.needs_lr_atn,
         rule_asks_simulator: marks.rule_asks_simulator,
+        rule_consults_simulator: (0..<rule_count).map(
+            |r| marks.rule_asks_simulator[r] || marks.rule_checks_simulator[r],
+        ).collect(),
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
         scan_memo: rescanned.contains(&true) || any_lr,
         rescanned,
@@ -157,6 +163,7 @@ impl ParserPlan {
         let none = List::<bool>::filled(rule_count, false);
         return ParserPlan {
             rule_asks_simulator: none,
+            rule_consults_simulator: none,
             rule_reaches_simulator: none,
             rescanned: none,
         };
@@ -176,6 +183,11 @@ impl ParserPlan {
     /// Whether rule `rule` makes a decision the simulator decides.
     pub fn rule_asks_simulator(&self, rule: i32) -> bool {
         return self.rule_asks_simulator[rule];
+    }
+
+    /// Whether rule `rule` asks the simulator or has it check a pick.
+    pub fn rule_consults_simulator(&self, rule: i32) -> bool {
+        return self.rule_consults_simulator[rule];
     }
 
 

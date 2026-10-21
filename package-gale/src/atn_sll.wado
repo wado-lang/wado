@@ -879,11 +879,26 @@ pub fn sll_decide_fn_name(decision: i32) -> String {
 /// checked against the simulator's.
 pub global ATN_VERIFIED: String = "atn_verified";
 
-/// What picked an answer `ATN_VERIFIED` checks, as its panic names it.
+/// What picked an answer `ATN_VERIFIED` checks. The call passes its
+/// discriminant, and only the panic spells it out.
 pub enum AtnPicker {
     Tournament,
     LookaheadDfa,
     LrTable,
+}
+
+global ATN_PICKERS: List<AtnPicker> = [AtnPicker::Tournament, AtnPicker::LookaheadDfa, AtnPicker::LrTable];
+
+fn atn_picker_name(picker: AtnPicker) -> String {
+    return match picker {
+        Tournament => "the tournament",
+        LookaheadDfa => "the lookahead DFA",
+        LrTable => "the LR table",
+    };
+}
+
+fn atn_picker_code(picker: &AtnPicker) -> i32 {
+    return ReflectEnum::<AtnPicker>::discriminant(picker);
 }
 
 /// The call `atn_verified(decision, …, answer)` that checks `answer`, the pick
@@ -897,12 +912,7 @@ pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsSt
     prec: S3,
     answer: S4,
 ) -> String {
-    let by = match picker {
-        Tournament => "the tournament",
-        LookaheadDfa => "the lookahead DFA",
-        LrTable => "the LR table",
-    };
-    return `${ATN_VERIFIED}(${decision}, "${by}", ${atn}, ${tokens}, ${pos}, ${prec}, ${answer})`;
+    return `${ATN_VERIFIED}(${decision}, ${atn_picker_code(&picker)}, ${atn}, ${tokens}, ${pos}, ${prec}, ${answer})`;
 }
 
 /// Emit `sll_decide_fn_name(decision)`. Returns whether it reaches
@@ -987,12 +997,18 @@ impl SllShape {
 /// and nothing is checked.
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     w.begin(
-        `fn ${ATN_VERIFIED}(decision: i32, by: String, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
+        `fn ${ATN_VERIFIED}(decision: i32, picker: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
     );
     w.line(
         "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec, &ATN_NO_FALSE_PREDS);",
     );
     w.begin("if viable && simulated != alt");
+    w.begin("let by = match picker");
+    for let picker of ATN_PICKERS {
+        w.line(`${atn_picker_code(&picker)} => "${atn_picker_name(picker)}",`);
+    }
+    w.line("_ => unreachable(),");
+    w.end_with(";");
     w.line(
         "panic(`atn verify: decision ${decision} at token ${pos}: ${by} picks ${alt}, the simulator ${simulated}`);",
     );

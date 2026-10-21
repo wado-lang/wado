@@ -798,7 +798,36 @@ test "atn verify checks a group's tournament against the simulator" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
     assert parses(GROUP_LONGEST_G4, "s", ["a b b"], &verify) == "a b b => (s (a a) b b)\n";
     let out = eval_beside(gen_with(GROUP_LONGEST_G4, &verify).source, wado`show("a b", parse_s("a b"));\n`, SHOW_FN);
+    assert !out.status matches { Exited(0) };
     assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
+}
+
+// The atoms `n …` and `f …` share `any`, and one holds a group tournament, so
+// both checks run in helpers of a left-recursive rule, which read its
+// `min_prec`.
+global LR_GROUP_CHECK_G4: String = "grammar L;
+s : e EOF ;
+e : e '+' e | n (a | a B) | f '(' ')' | INT ;
+n : any ;
+f : any ;
+any : ID | '(' any ')' ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+ID : [x-z]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify checks a group inside a left-recursive rule's atom" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let inputs: List<String> = ["x a b + 1", "1 + y ( )"];
+    assert parses(LR_GROUP_CHECK_G4, "s", inputs, &verify) == parses(
+        LR_GROUP_CHECK_G4,
+        "s",
+        inputs,
+        &GenerateOptions { atn: AtnMode::Never },
+    );
 }
 
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the

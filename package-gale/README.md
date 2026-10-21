@@ -251,17 +251,20 @@ chooses who decides the rest: the runtime simulator, which builds the tree
 ANTLR4 builds, or the longest-match scan tournament, which is faster and can
 build a different one.
 
-| `atn`              | A rule's ambiguity | A group's or a `?` `*` `+`'s ambiguity | A decision only the simulator can make |
-| ------------------ | ------------------ | -------------------------------------- | -------------------------------------- |
-| `"auto"` (default) | simulator          | tournament or a continuation scan      | simulator                              |
-| `"always"`         | simulator          | simulator                              | simulator                              |
-| `"never"`          | tournament         | tournament or a continuation scan      | refused: no parser is built            |
-| `"verify"`         | as `"auto"`        | as `"auto"`                            | as `"auto"`                            |
+| `atn`              | A rule's ambiguity  | A group's or a `?` `*` `+`'s ambiguity | A decision only the simulator can make |
+| ------------------ | ------------------- | -------------------------------------- | -------------------------------------- |
+| `"auto"` (default) | simulator           | tournament or a continuation scan      | simulator                              |
+| `"always"`         | simulator           | simulator                              | simulator                              |
+| `"never"`          | tournament          | tournament or a continuation scan      | refused: no parser is built            |
+| `"verify"`         | tournament, checked | tournament, checked                    | simulator                              |
 
-`"verify"` builds the parser `"auto"` builds, except that a decision the
-parser settles without the simulator, though `"auto"` routes it there, is asked
-of the simulator as well. The parser panics where the two answers differ. It is
-for testing a faster path against the simulator over real inputs, not for use.
+`"verify"` builds the tree `"never"` builds. Where `"auto"` would hand a
+rule's ambiguity to the simulator, or `"always"` a group's, the parser asks the
+simulator as well and panics where its answer differs from the tournament's.
+The lookahead DFA `"auto"` reads there is checked the same way. A `?` `*` `+`
+and a left-recursion loop's suffix are not checked yet, and neither is a
+decision a predicate gates. It is for testing the tournament against the
+simulator over real inputs, not for use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when
