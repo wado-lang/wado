@@ -131,15 +131,15 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                         | Linux                                                     | macOS                                       |
-| ------------------------------- | --------------------------------------------------------- | ------------------------------------------- |
-| Loader and shared libraries     | `/lib*`, `/usr/lib*`, `/etc/ld.so.cache`                  | `/usr/lib`, `/System`, the dyld cache       |
-| The program                     | the resolved binary and its install prefix                | the same (`/opt/homebrew/…`, say)           |
-| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`, its socket  | `/private/etc/…`, mDNSResponder             |
-| TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                    | `/private/etc/ssl`, the keychain            |
-| Locale and time zones           | `/usr/share/zoneinfo`, locale data                        | the same                                    |
-| Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting   | the same                                    |
-| Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit  | the same                                    |
+| Purpose                         | Linux                                                    | macOS                                 |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
+| Loader and shared libraries     | `/lib*`, `/usr/lib*`, `/etc/ld.so.cache`                 | `/usr/lib`, `/System`, the dyld cache |
+| The program                     | the resolved binary and its install prefix               | the same (`/opt/homebrew/…`, say)     |
+| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`, its socket | `/private/etc/…`, mDNSResponder       |
+| TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
+| Locale and time zones           | `/usr/share/zoneinfo`, locale data                       | the same                              |
+| Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
+| Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
 
 - The baseline is read and execute only. The private `HOME` and `TMPDIR` are the
   only writable entries.
@@ -274,7 +274,8 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 - `ProcessError { program, kind }` names the program as `FsError` names its
   path. The kinds are `NotFound`, `NotPermitted`, `Unsupported`,
   `Io(ErrorCode)`, `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only
-  `read` returns `Failed`.
+  `read` returns `Failed`: `output` and `status` hand the exit status back as a
+  value, while `read` returns only text and has nowhere else to report it.
 
 ### The `cmd` template
 
@@ -296,14 +297,14 @@ here it would mean nothing and the program would read it wrong. Writing
 `` cmd`git commit -m "fix bug"` `` would otherwise pass `"fix` and `bug"` as
 two arguments. Each of these in literal text is a contract violation:
 
-| Kind                      | Characters                                 |
-| ------------------------- | ------------------------------------------ |
-| Quoting and escaping      | `"` `'` `\`                                |
-| Pipes, lists, redirection | `\|` `&` `;` `<` `>`                       |
-| Subshells and groups      | `(` `)` `{` `}`                            |
-| Expansion                 | `$` (other than `${`), `` ` ``, `~`        |
-| Globbing                  | `*` `?` `[` `]`                            |
-| Comments                  | `#`                                        |
+| Kind                      | Characters                          |
+| ------------------------- | ----------------------------------- |
+| Quoting and escaping      | `"` `'` `\`                         |
+| Pipes, lists, redirection | `\|` `&` `;` `<` `>`                |
+| Subshells and groups      | `(` `)` `{` `}`                     |
+| Expansion                 | `$` (other than `${`), `` ` ``, `~` |
+| Globbing                  | `*` `?` `[` `]`                     |
+| Comments                  | `#`                                 |
 
 A value holding any of them goes through a hole: `` cmd`grep ${"a|b"} log` ``.
 Everything else is allowed, so `--flag=value` and `user@host:path` stay
