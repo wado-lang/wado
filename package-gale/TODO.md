@@ -34,7 +34,7 @@ Entries state the symptom, how to reproduce it, and anything already measured â€
 
 ### Pipeline and tooling correctness
 
-Empty right now.
+- [ ] **No test says that `never`, `auto` and `always` build the same tree.** `atn: "verify"` checks only the answers the lookahead DFA and the LR table give for decisions `auto` routes to the simulator. A decision the static path settles, and every decision `never` settles, goes unchecked. The suite runs each grammar under one mode, and running it under all four costs four times over. The intent is a `verify` that asserts the modes agree, cheap enough to be the suite's mode. The cost to beat is code size, since compiling dominates the suite: the generated SQLite parser is 1.0 MB under `never`, 1.8 MB under `auto` and 9.5 MB under `always`.
 
 ## Stage C â€” action / predicate execution
 
