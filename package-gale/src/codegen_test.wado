@@ -961,6 +961,53 @@ test "atn verify checks a contested repeat against the simulator" {
     }
 }
 
+// A loop in a left-recursion suffix whose body is decided by its own
+// alternatives, and which must leave the suffix's `D` behind. The trees are the
+// jar's.
+test "a decided loop in a left-recursion suffix leaves what follows it" {
+    let g4 = "grammar R;
+s : e EOF ;
+e : e C (D | D C)* D
+  | A
+  ;
+A : 'a' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+    let got = parses_each(g4, [["s", "a c d"], ["s", "a c d d"], ["s", "a c d c d"], ["s", "a c d c d c d"]]);
+    assert got == "a c d => (s (e (e a) c d))
+a c d d => (s (e (e a) c d d))
+a c d c d => (s (e (e a) c d c d))
+a c d c d c d => (s (e (e a) c d c d c d))
+";
+}
+
+// On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
+// to the suffix's `D`. The trees are the jar's.
+test "atn verify checks a contested repeat in a left-recursion suffix" {
+    let g4 = "grammar R;
+s : e EOF ;
+e : e C (D | D D)* D
+  | A
+  ;
+A : 'a' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let agreed = parses_each(g4, [["s", "a c d"], ["s", "a c d d d"], ["s", "a c d c d"]], &verify);
+    assert agreed == "a c d => (s (e (e a) c d))
+a c d d d => (s (e (e a) c d d d))
+a c d c d => (s (e (e (e a) c d) c d))
+";
+    let input = "a c d d";
+    let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains(": the repeat picks "), out.stderr;
+}
+
 // The atom choice between the two `new` alternatives is the simulator's under
 // `auto`, so the loop is too. The trees are the jar's.
 global CONTESTED_NEW_G4: String = "grammar L;

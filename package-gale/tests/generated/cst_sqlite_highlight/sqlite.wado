@@ -19608,6 +19608,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                         p.expect(TK_CLOSE_PAR, &SYNC_73, true);
                     } else {
                         if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
+                        let _rc_at = p.pos;
                         let mut opt_enter: bool = false;
                         if _kind_set_15(p.peek_kind()) {
                             opt_enter_scan: {
@@ -19633,6 +19634,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                             p.atn_ret_pending = 1935;
                             _parse_database_name(p);
                             p.expect(TK_DOT, &SYNC_7, false);
+                        }
+                        if !p.recovering {
+                            let _ = atn_verified(191, 1, &mut p.atn, &p.kinds, _rc_at, min_prec, if p.pos > _rc_at { 0 } else { 1 });
                         }
                         p.site = 218;
                         p.atn_ret_pending = 1939;
@@ -19916,6 +19920,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                             p.expect(TK_CLOSE_PAR, &SYNC_73, true);
                         } else {
                             if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
+                            let _rc_at_2 = p.pos;
                             let mut opt_enter_2: bool = false;
                             if _kind_set_15(p.peek_kind()) {
                                 opt_enter_scan_2: {
@@ -19941,6 +19946,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                 p.atn_ret_pending = 1935;
                                 _parse_database_name(p);
                                 p.expect(TK_DOT, &SYNC_7, false);
+                            }
+                            if !p.recovering {
+                                let _ = atn_verified(191, 1, &mut p.atn, &p.kinds, _rc_at_2, min_prec, if p.pos > _rc_at_2 { 0 } else { 1 });
                             }
                             p.site = 218;
                             p.atn_ret_pending = 1939;
@@ -20088,6 +20096,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.take();
                 if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
+                let _rc_at_3 = p.pos;
                 let mut opt_enter_3: bool = false;
                 if p.peek_kind() == TK_K_NOT {
                     opt_enter_scan_3: {
@@ -20102,6 +20111,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                 }
                 if opt_enter_3 {
                     p.expect(TK_K_NOT, &SYNC_9, false);
+                }
+                if !p.recovering {
+                    let _ = atn_verified(196, 1, &mut p.atn, &p.kinds, _rc_at_3, min_prec, if p.pos > _rc_at_3 { 0 } else { 1 });
                 }
                 p.site = 236;
                 p.atn_ret_pending = 1993;

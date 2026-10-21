@@ -4382,34 +4382,38 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         }
         w.begin("loop");
         w.line("if p.recovering { break; }");
+        let at = begin_iteration_check(w, r, nc, "");
         if ctx.current_rule_reads_follow() {
             gen_caller_follow_gate(w, r);
         }
-        // The op-driven walker discharges no duty of its own: the guard below
-        // carries the reserve, and nothing here has ever been reached by a loop
-        // owing more. Asserted rather than discharged, because a discharge no
-        // grammar reaches is untested code that reads as coverage. If one
-        // fires, call `gen_iteration_duties` at that site and bring the grammar
-        // that fired it.
         if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
             if let Some(branches) = op_group_alt_decision(g, ctx) {
-                assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                 w.line(`if ${best} <= p.pos { break; }`);
+                gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 gen_loop_back_sync(w, ctx, r);
+                end_iteration_check(w, r, ctx, &at);
                 w.end();
+                gen_exit_check(w, r, ctx, "p.pos");
                 return;
             }
         }
+        // The guard carries the reserve, and no grammar has brought a loop here
+        // owing more. Asserted rather than discharged, because a discharge no
+        // grammar reaches is untested code that reads as coverage. If one fires,
+        // call `gen_iteration_duties` here as the decided entry above does, and
+        // bring the grammar that fired it.
         assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
         let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &r.body_admits, ctx, nc);
         w.line(`if ${scan_pos} < 0 { break; }`);
         gen_op(w, &r.body, ctx, nc);
         gen_loop_back_sync(w, ctx, r);
+        end_iteration_check(w, r, ctx, &at);
         w.end();
+        gen_exit_check(w, r, ctx, "p.pos");
         return;
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
@@ -4419,25 +4423,27 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         &body_guard_cond(r, ctx),
         follow_gate,
     );
-    match r.kind {
-        Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
-        Star => {
-            w.begin(`while !p.recovering && ${and_operand(cond)}`);
-            gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
-            gen_loop_back_sync(w, ctx, r);
-            w.end();
-        },
-        Plus => {
-            begin_plus_first_iteration(w, nc);
-            gen_op(w, &r.body, ctx, nc);
-            w.end();
-            gen_loop_back_sync(w, ctx, r);
-            w.begin(`while !p.recovering && ${and_operand(cond)}`);
-            gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
-            gen_loop_back_sync(w, ctx, r);
-            w.end();
-        },
+    if let Optional = r.kind {
+        let at = begin_iteration_check(w, r, nc, "");
+        gen_op_optional(w, r, ctx, nc, follow_gate);
+        if let Some(at) = at {
+            gen_exit_check_or_entered(w, r, ctx, &at);
+        }
+        return;
     }
+    if let Plus = r.kind {
+        begin_plus_first_iteration(w, nc);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        gen_loop_back_sync(w, ctx, r);
+    }
+    w.begin(`while !p.recovering && ${and_operand(cond)}`);
+    let at = begin_iteration_check(w, r, nc, "");
+    gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
+    gen_loop_back_sync(w, ctx, r);
+    end_iteration_check(w, r, ctx, &at);
+    w.end();
+    gen_exit_check(w, r, ctx, "p.pos");
 }
 
 /// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
