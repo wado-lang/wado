@@ -1520,12 +1520,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A tagged template hole whose type mentions a type parameter.
-    TemplateHoleGeneric {
-        type_name: String,
-        span: Span,
-    },
-
     /// `#[compiler_item("...")]` attribute that failed validation —
     /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
     /// on a struct), or used outside a `core::*` module. The
@@ -1923,14 +1917,6 @@ impl TypeError {
             TypeError::TemplateTagNotCallable { span } => (
                 Code::InvalidSyntax,
                 "a template tag must name a function or a static method".to_string(),
-                *span,
-            ),
-            TypeError::TemplateHoleGeneric { type_name, span } => (
-                Code::UnsupportedFeature,
-                format!(
-                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template shape generic over the enclosing item is not implemented yet"
-                ),
                 *span,
             ),
             TypeError::CannotInferType { message, span } => {

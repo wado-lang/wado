@@ -1,0 +1,25 @@
+// A generic hole is checked against the enclosing item's declared bounds at
+// the template, under either form: a tag's pack bound, and `format`'s
+// specifier trait as `${x}` reports it (WEP 2026-01-10).
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Ord>(t: T) -> i32 {
+    return 1;
+}
+
+fn sorted<X: Display>(x: X) -> i32 {
+    return tag`${x}`;
+}
+
+fn shown<X>(x: X) -> String {
+    return format`${x}`;
+}
+
+export fn run() {
+    let _ = sorted(1);
+    let _ = shown(1);
+}
+
+__DATA__
+{
+    "compile_error": ":9:12: analysis error: type 'X' does not implement trait 'Ord' required by bound on 'V'; 13:21: type `X` does not implement trait `Display`; use `${x:?}` for debug output, or add an `impl Display`",
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

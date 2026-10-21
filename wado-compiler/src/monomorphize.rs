@@ -25,6 +25,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::synthesis::resource_cleanup;
 use crate::synthesis::resource_cleanup::Generics;
+use crate::synthesis::template::hole_fmt_helper;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
@@ -306,6 +307,20 @@ impl Monomorphizer {
             .collect()
     }
 
+    /// The `$hole_fmt` of each template shape among `structs`, which only a
+    /// substitution reaches: synthesis gives the open shape none
+    /// ([`hole_fmt_helper`]).
+    fn hole_fmt_helpers(
+        &self,
+        structs: &[TirStruct],
+        tt: &Rc<RefCell<TypeTable>>,
+    ) -> Vec<TirFunction> {
+        structs
+            .iter()
+            .filter_map(|s| hole_fmt_helper(s, tt, &self.functions.trait_env))
+            .collect()
+    }
+
     /// Monomorphize `module` against templates a previous run already holds,
     /// whose `TypeId`s index the module's own table.
     fn monomorphize_with_externals(
@@ -350,6 +365,10 @@ impl Monomorphizer {
 
         // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
         let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
+        let helpers = self.hole_fmt_helpers(&new_structs, &module.type_table);
+        module
+            .functions
+            .extend(helpers.into_iter().map(|f| Rc::new(RefCell::new(f))));
         module.structs.extend(new_structs);
 
         // Phase 5: Remove generic structs and open shapes from the concrete
@@ -444,6 +463,7 @@ impl Monomorphizer {
                 made_progress = true;
                 self.alias_canonical_keys(&mut module.type_table.borrow_mut());
             }
+            batch.extend(self.hole_fmt_helpers(&new_structs, &module.type_table));
             module.structs.extend(new_structs);
             for (shape, index) in std::mem::take(&mut self.structs.pending_shapes) {
                 let instances = self.instantiate_shape_substitution(

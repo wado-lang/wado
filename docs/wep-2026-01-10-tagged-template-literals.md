@@ -591,8 +591,8 @@ serial advances on read, so a template nested inside a hole mints its own
   method, an undefined tag, a tag whose parameter is not `ReflectTemplate`,
   whitespace before the backtick in statement and argument position, a tag of
   the wrong arity, an unsatisfied `..V` bound naming the hole type, a concrete
-  `Holes` binding, a hole whose type mentions a type parameter, a tag call
-  whose effect the caller leaves undeclared. Each is one diagnostic.
+  `Holes` binding, a tag call whose effect the caller leaves undeclared. Each
+  is one diagnostic.
 
 ### Order
 
@@ -651,20 +651,33 @@ below close that, in this order.
   `X: Display` alone (`template_hole_trait_bound.wado`,
   `template_hole_trait_unbounded_error.wado`), and a tag that never calls `fmt`
   rejects a hole lacking its specifier's trait
-  (`tagged_template_spec_trait_error.wado`). `` format`${x}` `` over `x: X`
-  waits on the next item, which admits a generic hole as a tag's argument.
+  (`tagged_template_spec_trait_error.wado`).
 
-- [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
-  is open as the first item makes any shape. Each concrete template shape that
-  monomorphization reaches instantiates each origin's `ReflectTemplate` impl as
-  the first item instantiates any shape's methods. `$hole_get` and `$hole_fmt`
-  are named after the shape rather than filed under it as methods, so they are
-  instantiated the same way by name. Both happen inside the fixpoint, so what
-  their bodies call is instantiated in turn.
+- [x] Generic template shapes. A template shape is open as the first item makes
+  any shape. Each concrete template shape that monomorphization reaches
+  instantiates each origin's `ReflectTemplate` impl as the first item
+  instantiates any shape's methods.
 
-  Done when `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
-  a tag's pack bound is checked against the declared bounds, and
-  `` format`${x}` `` reports the missing bound `` `${x}` `` reports.
+  A hole is held by `&` unless that would box it, so an open shape holds a
+  hole of type `X` by `&`, while the shape `X = i32` reaches holds the `i32`
+  by value. Substituting into an open shape's field types would therefore
+  disagree with the concrete shape's layout. Three things follow.
+  - Monomorphization drops the `&` an instance's template literal takes of a
+    hole that the concrete shape holds by value (`hold_holes_as_shape`).
+  - Synthesis gives an open shape no `$hole_fmt` and no `$hole_get`. Their
+    bodies read the fields, so neither can be substituted from the open
+    shape.
+  - Each concrete shape only a substitution reaches is given its own helpers.
+    `$hole_fmt` is built inside the monomorphization fixpoint, so what it calls
+    is instantiated in turn. `$hole_get` is minted after monomorphization, as
+    `$field_get` is, because it groups the holes by their type. Two holes of
+    `X` and `Y` share that type only once both are `i32`.
+
+  Done: `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
+  including one a substitution reaches twice and one a literal also writes
+  (`tagged_template_generic_hole.wado`). A tag's pack bound is checked against
+  the declared bounds, and `` format`${x}` `` reports the missing bound
+  `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:

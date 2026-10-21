@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
-    TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
+    TirStructField, TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -2250,7 +2250,7 @@ impl Monomorphizer {
                 fields,
             } => {
                 // First substitute field expressions (which will update expr.type_id)
-                for field in fields {
+                for field in fields.iter_mut() {
                     self.substitute_types_in_expr(
                         &mut field.value,
                         substitution,
@@ -2302,6 +2302,7 @@ impl Monomorphizer {
                     }
                     _ => {}
                 }
+                hold_holes_as_shape(fields, *struct_type, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.substitute_types_in_expr(
@@ -4280,6 +4281,35 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
         );
     }
     expr
+}
+
+/// Hold each hole of a template literal as the concrete shape's field does.
+/// Reify holds a hole of type `X` by `&`, since a reference to a type
+/// parameter does not box. The concrete shape holds a scalar by value.
+fn hold_holes_as_shape(fields: &mut [TirStructField], shape_type: TypeId, tt: &mut TypeTable) {
+    let Some(holes) = tt
+        .template_shape_of_type(shape_type)
+        .map(|shape| shape.holes.iter().map(|hole| hole.ty).collect::<Vec<_>>())
+    else {
+        return;
+    };
+    for (field, hole_ty) in fields.iter_mut().zip(holes) {
+        if tt.hole_held_by_ref(hole_ty) {
+            continue;
+        }
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: inner,
+        } = &field.value.kind
+        {
+            field.value = (**inner).clone();
+        }
+        assert_eq!(
+            tt.type_key(field.value.type_id),
+            tt.type_key(hole_ty),
+            "a hole held by value has the hole's type"
+        );
+    }
 }
 
 /// The instruction a monomorphized operator call lowers to, named by the

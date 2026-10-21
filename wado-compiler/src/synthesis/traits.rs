@@ -1299,6 +1299,37 @@ pub(super) fn generate_field_bridge_helpers(
     .collect()
 }
 
+/// `$hole_get$S$V` for template shape `struct_type`. A hole's field holds it by
+/// handle unless it would box, so the read through it derefs; `$hole_get` is
+/// otherwise `$field_get`.
+pub(super) fn generate_hole_bridge_helpers(
+    type_table: &RefCell<TypeTable>,
+    fields: &[FieldInfo],
+    hole_types: &[TypeId],
+    struct_type: TypeId,
+    span: Span,
+) -> Vec<TirFunction> {
+    let members: Vec<ReadBridgeMember> = fields
+        .iter()
+        .zip(hole_types)
+        .map(|((name, field_type, index), &hole_type)| ReadBridgeMember {
+            name: name.clone(),
+            index: *index,
+            field_type: *field_type,
+            value_type: hole_type,
+        })
+        .collect();
+    let ref_struct_type = type_table.borrow_mut().make_ref(struct_type);
+    generate_read_bridge_helpers(
+        type_table,
+        &members,
+        (hole_get_helper_name, Read::Value),
+        struct_type,
+        ref_struct_type,
+        span,
+    )
+}
+
 /// What a read bridge answers: the member's value, or a reference to it.
 #[derive(Clone, Copy)]
 pub(super) enum Read {
@@ -1490,6 +1521,8 @@ struct ReflectTemplateTarget {
     shape: TemplateShape,
     /// The struct's fields, one per hole, typed as the field holds them.
     fields: Vec<FieldInfo>,
+    /// Whether a hole mentions a type parameter of the enclosing item.
+    open: bool,
     span: Span,
 }
 
@@ -1518,6 +1551,7 @@ fn generate_template_reflect_impls(
                         .iter()
                         .map(|f| (f.name.clone(), f.type_id, f.index))
                         .collect(),
+                    open: tt.anon_shape_is_open(id),
                     span: s.span,
                 })
             })
@@ -1554,10 +1588,9 @@ fn generate_template_reflect_impls(
         let receiver = &target.receiver;
         let hole_types: Vec<TypeId> = target.shape.holes.iter().map(|h| h.ty).collect();
 
-        let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
+        let (struct_type, member_types, members_tuple_type) = {
             let mut tt = module.type_table.borrow_mut();
             let struct_type = tt.make_struct(target.def);
-            let ref_struct_type = tt.make_ref(struct_type);
             let holes_tuple_type = tt.make_tuple(hole_types.clone());
             let member_types: Vec<TypeId> = hole_types
                 .iter()
@@ -1574,12 +1607,7 @@ fn generate_template_reflect_impls(
                     (REFLECT_MEMBERS_ASSOC, members_tuple_type),
                 ],
             );
-            (
-                struct_type,
-                ref_struct_type,
-                member_types,
-                members_tuple_type,
-            )
+            (struct_type, member_types, members_tuple_type)
         };
 
         let display_name = module.type_table.borrow().struct_head_decl_name(target.def);
@@ -1628,27 +1656,18 @@ fn generate_template_reflect_impls(
             string_fn(&tail_method, &unescape_template_segment(tail_raw)),
             string_fn(&raw_tail_method, tail_raw),
         ];
-        // A hole's field holds it by handle unless it would box, so the read
-        // through it derefs; `$hole_get` is otherwise `$field_get`.
-        let hole_members: Vec<ReadBridgeMember> = target
-            .fields
-            .iter()
-            .zip(&hole_types)
-            .map(|((name, field_type, index), &hole_type)| ReadBridgeMember {
-                name: name.clone(),
-                index: *index,
-                field_type: *field_type,
-                value_type: hole_type,
-            })
-            .collect();
-        functions.extend(generate_read_bridge_helpers(
-            &module.type_table,
-            &hole_members,
-            (hole_get_helper_name, Read::Value),
-            struct_type,
-            ref_struct_type,
-            span,
-        ));
+        // An open shape's `$hole_get` would group its holes by a parameter,
+        // which two holes may share only once substituted, so each concrete
+        // shape a substitution reaches mints its own after monomorphization.
+        if !target.open {
+            functions.extend(generate_hole_bridge_helpers(
+                &module.type_table,
+                &target.fields,
+                &hole_types,
+                struct_type,
+                span,
+            ));
+        }
         generated.extend(functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
         ctx.record_impl(receiver, &template_trait_name.canonical().expect(KEYED));
     }

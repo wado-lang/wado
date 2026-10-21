@@ -1,0 +1,57 @@
+// A hole that mentions the enclosing item's type parameter makes the template
+// shape open, and each instantiation reaches the tag with its concrete shape
+// (WEP 2026-01-10's roadmap).
+use { println, Stdout } from "core:cli";
+
+fn count<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(h.source());
+        out.push_str(&"=");
+        h.fmt(&t, &mut Formatter::new(&mut out));
+        out.push_str(&"|");
+    }
+    return out;
+}
+
+fn wrap<X: Display>(x: X) -> String {
+    return count`a${x}b${x:>4}`;
+}
+
+fn both<X: Display, Y: Display>(x: X, y: Y) -> String {
+    return count`${x}${y}${1}`;
+}
+
+fn formatted<X: Display>(x: X) -> String {
+    return format`<${x}>`;
+}
+
+fn nested<X: Display>(x: X) -> String {
+    return wrap(formatted(x));
+}
+
+// A shape substituted twice: `wrap`'s `X` is `outer`'s `Y`, then `i64`.
+fn outer<Y: Display>(y: Y) -> String {
+    return wrap(y);
+}
+
+fn specs<X: LowerHex + Display>(x: X, xs: List<X>) -> String {
+    return format`${x:#x} ${xs:?} ${x:>3}`;
+}
+
+export fn run() with Stdout {
+    println(wrap(5));
+    println(wrap("hi"));
+    println(both(1, "two"));
+    println(both(true, 'c'));
+    println(formatted(3.5));
+    println(nested(7));
+    println(outer(9 as i64));
+    println(specs(255, [1, 2]));
+    // The shape `wrap(5)` substitutes to, written: one type, one tag instance.
+    let x = 6;
+    println(count`a${x}b${x:>4}`);
+}
+
+__DATA__
+{"stdout": "x=5|x=   5|\nx=hi|x=  hi|\nx=1|y=two|1=1|\nx=true|y=c|1=1|\n<3.5>\nx=<7>|x= <7>|\nx=9|x=   9|\n0xff [1, 2] 255\nx=6|x=   6|\n"}

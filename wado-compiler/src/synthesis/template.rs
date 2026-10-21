@@ -39,7 +39,7 @@ use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
     TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TypeId,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
@@ -148,50 +148,63 @@ pub fn synthesize_hole_fmt_helpers(
     tt: &Rc<RefCell<TypeTable>>,
     trait_env: &Arc<TraitEnv>,
 ) {
+    let helpers: Vec<TirFunction> = module
+        .structs
+        .iter()
+        .filter(|s| !matches!(s.def, StructDef::Anon(id) if tt.borrow().anon_shape_is_open(id)))
+        .filter_map(|s| hole_fmt_helper(s, tt, trait_env))
+        .collect();
+    module
+        .functions
+        .extend(helpers.into_iter().map(|f| Rc::new(RefCell::new(f))));
+}
+
+/// `$hole_fmt` for template shape `s`, or `None` where `s` is not one. An open
+/// shape gets none: it holds a hole of type `X` by `&`, and the shape
+/// `X = i32` reaches holds the `i32` by value, so monomorphization builds one
+/// for each concrete shape a substitution reaches.
+pub(crate) fn hole_fmt_helper(
+    s: &TirStruct,
+    tt: &Rc<RefCell<TypeTable>>,
+    trait_env: &Arc<TraitEnv>,
+) -> Option<TirFunction> {
+    let (struct_type, holes) = {
+        let table = tt.borrow();
+        let StructDef::Anon(id) = s.def else {
+            return None;
+        };
+        let shape = table.template_shape(id)?;
+        let struct_type = table.find_struct_type(s.def)?;
+        let holes: Vec<HoleFmtArm> = shape
+            .holes
+            .iter()
+            .zip(&s.fields)
+            .map(|(hole, field)| HoleFmtArm {
+                field_type: field.type_id,
+                hole_type: hole.ty,
+                spec: hole.spec.as_deref().map(|spec| {
+                    format_spec::parse(spec)
+                        .expect("the parser rejects a malformed format specifier")
+                }),
+            })
+            .collect();
+        (struct_type, holes)
+    };
     let names = FormatStdlibNames::from_type_table(&tt.borrow());
     let ctx = TemplateCtx {
         tt,
-        module_src: module.module_source.clone(),
+        module_src: s.module_source.clone(),
         trait_env,
         names: &names,
     };
-    let targets: Vec<(TypeId, Vec<HoleFmtArm>, Span)> = {
-        let table = tt.borrow();
-        module
-            .structs
-            .iter()
-            .filter_map(|s| {
-                let StructDef::Anon(id) = s.def else {
-                    return None;
-                };
-                let shape = table.template_shape(id)?;
-                let struct_type = table.find_struct_type(s.def)?;
-                let holes = shape
-                    .holes
-                    .iter()
-                    .zip(&s.fields)
-                    .map(|(hole, field)| HoleFmtArm {
-                        field_type: field.type_id,
-                        hole_type: hole.ty,
-                        spec: hole.spec.as_deref().map(|spec| {
-                            format_spec::parse(spec)
-                                .expect("the parser rejects a malformed format specifier")
-                        }),
-                    })
-                    .collect();
-                Some((struct_type, holes, s.span))
-            })
-            .collect()
-    };
-    for (struct_type, holes, span) in targets {
-        let mut helper = build_hole_fmt_helper(struct_type, &holes, span, &ctx);
-        // The index is a constant at every site `TemplateHole::fmt` reaches after
-        // `members()` folds, so the splice keeps one arm; as a call it would
-        // keep the whole dispatch, and its arms are what the threshold
-        // refuses.
-        helper.inline_hint = tir::InlineHint::Always;
-        module.functions.push(Rc::new(RefCell::new(helper)));
-    }
+    let mut helper = build_hole_fmt_helper(struct_type, &holes, s.span, &ctx);
+    helper.module_source = s.module_source.clone();
+    // The index is a constant at every site `TemplateHole::fmt` reaches after
+    // `members()` folds, so the splice keeps one arm; as a call it would
+    // keep the whole dispatch, and its arms are what the threshold
+    // refuses.
+    helper.inline_hint = tir::InlineHint::Always;
+    Some(helper)
 }
 
 /// One arm of a shape's `$hole_fmt` helper, at the hole's own index: the
@@ -211,7 +224,7 @@ fn build_hole_fmt_helper(
     span: Span,
     ctx: &TemplateCtx,
 ) -> TirFunction {
-    let (ref_struct_type, formatter_type, mut_ref_formatter, mut_ref_string, mangled_struct) = {
+    let (ref_struct_type, formatter_type, mut_ref_formatter, mut_ref_string, helper_name) = {
         let mut table = ctx.tt.borrow_mut();
         let formatter_def = table.require_compiler_item_def(CompilerItem::Formatter);
         let formatter_type = table.make_struct(StructDef::Decl(formatter_def));
@@ -221,7 +234,7 @@ fn build_hole_fmt_helper(
             formatter_type,
             table.make_mut_ref(formatter_type),
             table.make_mut_ref(string_type),
-            table.mangle_type_arg_for_generic(struct_type),
+            hole_fmt_helper_name(&table.mangle_type_arg_for_generic(struct_type)),
         )
     };
     let local = |index: u32, name: &str, type_id: TypeId| {
@@ -303,7 +316,7 @@ fn build_hole_fmt_helper(
     ];
     let locals = locals_from_params(&params);
     make_synthetic_free_function(
-        hole_fmt_helper_name(&mangled_struct),
+        helper_name,
         params,
         TypeTable::UNIT,
         body,
