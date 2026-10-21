@@ -146,14 +146,13 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let delivered_6: i32;
     let ptr_15: i32;
+    let ptr_17: i32;
     let count_18: i32;
-    let result_19: i32;
+    let i: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
-    let i: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -168,35 +167,34 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l6: loop {
-            delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
-                $mv$data$start = ptr_15 + i;
-                count_18 = $mv$data$end - i;
-                if local.tee result_19("wasi/stream-write"(handle, $mv$data$start, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
-                    ws = "wasi/waitable-set-new"();
-                    "wasi/waitable-join"(handle, ws);
-                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                    status = builtin::load_i32(evt_ptr + 4);
-                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                    "wasi/waitable-join"(handle, 0);
-                    "wasi/waitable-set-drop"(ws);
-                    break $inline_cm_stream_write_once_4: status;
+            ptr_17 = ptr_15 + i;
+            count_18 = $mv$data$end - i;
+            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: $mv$data$start;
                 }
-                break $inline_cm_stream_write_once_4: result_19;
+                ws = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, ws);
+                evt_ptr = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                status = builtin::load_i32(evt_ptr + 4);
+                drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                "wasi/waitable-join"(handle, 0);
+                "wasi/waitable-set-drop"(ws);
+                break $inline_cm_await_blocked_6: status;
             }) >>u 4;
-            let $match_scrut_0: i32;
-            $match_scrut_0 = (if local.tee $match_scrut_0(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely($match_scrut_0 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + delivered_6;
-            if (($match_scrut_0 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_18;
+            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return $match_scrut_0;
+                return ptr_17;
             }
             continue l6;
         };

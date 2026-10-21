@@ -56,6 +56,8 @@ global mut CM_CALLBACKS: core:prelude/list.wado/List<fn()->()> = deferred null;
 
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
 
+global CM_BLOCKED: i32 = -1;
+
 global CM_COPY_MAX: i32 = deferred 0;
 
 global mut $modules_initialized: bool = false;
@@ -6234,7 +6236,14 @@ fn inspect_handle(f: &mut core:prelude/format.wado/Formatter, name: core:prelude
     "core::prelude/traits.wado::struct_close"(f);
 }
 
-fn cm_await_blocked(handle: i32) -> i32 {
+fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
+    if (packed != core::rt::CM_BLOCKED) {
+        return packed;
+    }
+    return core::rt::cm_await_copy(handle);
+}
+
+fn cm_await_copy(handle: i32) -> i32 {
     let ws: i32 = core::builtin::waitable_set_new();
     core::builtin::waitable_join(handle, ws);
     let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
@@ -6255,7 +6264,7 @@ fn cm_copy_result(packed: i32) -> core:prelude/types.wado/CopyResult {
 }
 
 fn cm_future_write_result(packed: i32) -> core:prelude/types.wado/FutureWriteResult {
-    if (packed == -1) {
+    if (packed == core::rt::CM_BLOCKED) {
         return core:prelude/types.wado/FutureWriteResult::Pending;
     }
     return match core::rt::cm_copy_result(packed) {
@@ -6284,10 +6293,7 @@ fn cm_packed_count(packed: i32) -> i32 {
 fn cm_stream_read_u8(handle: i32, max: i32) -> core:prelude/types.wado/StreamChunk<u8> {
     let room: i32 = core::rt::cm_buffer_bytes(core::rt::cm_copy_count(max), 1);
     let ptr: i32 = core::builtin::realloc(0, 0, 1, room);
-    let mut result: i32 = core::builtin::stream_read(handle, ptr, room);
-    if (result == -1) {
-        result = core::rt::cm_await_blocked(handle);
-    }
+    let result: i32 = core::rt::cm_await_blocked(handle, core::builtin::stream_read(handle, ptr, room));
     let count: i32 = core::rt::cm_packed_count(result);
     let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
     let freed: i32 = core::builtin::realloc(ptr, room, 1, 0);
@@ -6304,11 +6310,7 @@ fn cm_stream_write_u8(handle: i32, data: core:prelude/list.wado/List<u8>) -> cor
 }
 
 fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> i32 {
-    let result: i32 = core::builtin::stream_write(handle, ptr, core::rt::cm_copy_count(count));
-    if (result == -1) {
-        return core::rt::cm_await_blocked(handle);
-    }
-    return result;
+    return core::rt::cm_await_blocked(handle, core::builtin::stream_write(handle, ptr, core::rt::cm_copy_count(count)));
 }
 
 fn cm_stream_write_raw_all_u8(handle: i32, data: core:prelude/slice.wado/Slice<u8>) -> core:prelude/types.wado/CopyResult {
@@ -6379,7 +6381,7 @@ fn cm_wait_event(code: i32, out_ptr: i32) -> core:prelude/types.wado/WaitEvent {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:rt", used: 7 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: core:prelude/format.wado/Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 487 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 495 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"only a subtask joins a set", used: 26 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: code == 1\n", used: 22 });
