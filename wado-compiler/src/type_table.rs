@@ -3585,9 +3585,7 @@ impl TypeTable {
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
-            .filter(|(_, entry)| {
-                type_args.is_none_or(|args| self.entry_slots(entry, args).is_some())
-            })
+            .filter(|(_, entry)| type_args.is_none_or(|args| self.entry_reaches(entry, args)))
             .collect();
         if candidates.iter().any(|(_, entry)| entry.written.is_empty()) {
             candidates.retain(|(_, entry)| entry.written.is_empty());
@@ -3629,14 +3627,18 @@ impl TypeTable {
         }
     }
 
-    /// The entries of `answers` whose impl's target binds at `type_args`:
+    /// Whether `entry`'s impl's target binds at `type_args`:
     /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
+    fn entry_reaches(&self, entry: &AssocAnswer, type_args: &[TypeId]) -> bool {
+        self.entry_slots(entry, type_args).is_some()
+    }
+
     fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {
         AssocAnswers(
             answers
                 .0
                 .iter()
-                .filter(|entry| self.entry_slots(entry, type_args).is_some())
+                .filter(|entry| self.entry_reaches(entry, type_args))
                 .cloned()
                 .collect(),
         )
