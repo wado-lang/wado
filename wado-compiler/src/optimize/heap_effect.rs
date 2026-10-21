@@ -284,7 +284,13 @@ impl HeapEffectsCache {
             *frame = OnceLock::new();
         }
         if edited.contains(&true) {
-            self.solve(&project.functions, type_table, gate.exec(), &edited, &mut moved);
+            self.solve(
+                &project.functions,
+                type_table,
+                gate.exec(),
+                &edited,
+                &mut moved,
+            );
         }
         #[cfg(debug_assertions)]
         self.assert_one_settled(&project.functions, type_table);
@@ -349,11 +355,10 @@ impl HeapEffectsCache {
                 })
                 .flat_map(|c| components[c].iter().copied())
                 .collect();
-            let before: Vec<Summary> = pending
+            let before: Vec<(usize, Summary)> = pending
                 .iter()
-                .map(|&n| std::mem::take(self.summary_mut(n)))
+                .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            let members = pending.clone();
             while !pending.is_empty() {
                 let this = &*self;
                 let fresh = exec.map(&pending, |&n| this.summarize(functions, type_table, n));
@@ -375,7 +380,7 @@ impl HeapEffectsCache {
                 }
                 pending = next;
             }
-            for (n, before) in members.into_iter().zip(before) {
+            for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
             }
         }
@@ -1008,9 +1013,12 @@ impl HeapFrame {
     /// Join what each call makes share, as its callee answers now, and settle
     /// the classes.
     fn link(&mut self, effects: &HeapEffects, body: &Body) {
+        let call_args = std::mem::take(&mut self.call_args);
         for i in 0..self.calls.len() {
-            self.call_flows(effects, body, i);
+            let (result, span) = self.call_nodes[i].clone();
+            self.call_flows(effects, body, self.calls[i], result, &call_args[span]);
         }
+        self.call_args = call_args;
         self.finish();
     }
 
@@ -1443,10 +1451,14 @@ impl HeapFrame {
 
     /// Join what a call makes share: its result with what the callee returns,
     /// and each argument with what the callee stores into it.
-    fn call_flows(&mut self, effects: &HeapEffects, body: &Body, i: usize) {
-        let e = self.calls[i];
-        let (result, span) = self.call_nodes[i].clone();
-        let nodes = self.call_args[span].to_vec();
+    fn call_flows(
+        &mut self,
+        effects: &HeapEffects,
+        body: &Body,
+        e: ExprId,
+        result: OperandNode,
+        nodes: &[OperandNode],
+    ) {
         match call_target(effects, body, e) {
             Target::Summary(s) => {
                 for (j, &n) in nodes.iter().enumerate() {
@@ -1498,7 +1510,7 @@ impl HeapFrame {
                 }
             }
             Target::Opaque { .. } => {
-                for &n in &nodes {
+                for &n in nodes {
                     self.unify_nodes(result, n);
                 }
                 if let OperandNode::None | OperandNode::Unknown = result {
