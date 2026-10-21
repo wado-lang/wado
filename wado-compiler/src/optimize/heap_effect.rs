@@ -463,7 +463,8 @@ impl HeapEffectsCache {
                     fresh = build();
                     &fresh
                 };
-                frame.summary(&frame.linked(&effects, body), &effects, body)
+                let classes = frame.link(frame.classes.clone(), &effects, body);
+                frame.summary(&classes, &effects, body)
             }
             Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
@@ -898,7 +899,7 @@ struct AccessSite {
 
 /// A union-find over a frame's nodes, where a class holds what flows together
 /// and its root carries the origins reaching it.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct Classes {
     sets: DisjointSets,
     prov: Vec<Prov>,
@@ -999,11 +1000,12 @@ impl HeapFrame {
     /// The classes of `body`, whose parameters are the locals `params`.
     pub(super) fn new(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
         let mut frame = Self::unlinked(effects, body, params);
-        frame.classes = frame.linked(effects, body);
+        let unlinked = std::mem::take(&mut frame.classes);
+        frame.classes = frame.link(unlinked, effects, body);
         frame
     }
 
-    /// The frame before [`Self::linked`]: what the body alone joins, read from
+    /// The frame before [`Self::link`]: what the body alone joins, read from
     /// nothing in the summaries, so it stands as long as the body does.
     fn unlinked(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
         let expr_count = body.exprs.len();
@@ -1076,10 +1078,9 @@ impl HeapFrame {
         frame
     }
 
-    /// The classes once each call joins what it makes share, as its callee
-    /// answers now.
-    fn linked(&self, effects: &HeapEffects, body: &Body) -> Classes {
-        let mut classes = self.classes.clone();
+    /// This frame's `classes` once each call joins what it makes share, as its
+    /// callee answers now.
+    fn link(&self, mut classes: Classes, effects: &HeapEffects, body: &Body) -> Classes {
         for (&e, (result, span)) in self.calls.iter().zip(&self.call_nodes) {
             Self::call_flows(
                 &mut classes,
