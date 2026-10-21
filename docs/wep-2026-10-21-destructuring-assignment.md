@@ -20,8 +20,7 @@ through `IndexAssign`. Nothing tells the analysis that the two calls reach one
 slot.
 
 `List::swap(a, b)` already exchanges two elements without a copy, through
-`builtin::array_take`. That covers a list, but no other container. It is also a
-method on one container, not something the language says.
+`builtin::array_take`. That covers a list, but no other container.
 
 Rust's answer is `std::mem::swap(&mut a, &mut b)`. That shape does not fit Wado:
 
@@ -112,8 +111,7 @@ It is that call where all of these hold:
 
 The call evaluates `c`, `i` and `j` once each. Where the desugaring is defined,
 an impl must leave the container as the desugaring would. `a == b` is the
-impl's to handle, and the result must then be unchanged. `List::swap` already
-handles it.
+impl's to handle, and `List::swap` already does.
 
 The standard containers implement it. Each exchanges the values in place and
 copies nothing:
@@ -201,8 +199,3 @@ well.
 
 The left side takes only a flat tuple of targets. `_`, a rest `..`, a nested
 tuple and a struct pattern (`{ x, y } = p`) are not accepted.
-
-### Copy-free rotation and cross-container exchange
-
-A rotation, or an exchange between two containers, copies its composite values.
-The remark reports each one.
