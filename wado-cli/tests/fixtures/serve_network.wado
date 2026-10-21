@@ -1,15 +1,11 @@
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
-use {
-    TcpSocket,
-    UdpSocket,
-    IpNameLookup,
-    IpAddressFamily,
-    IpSocketAddress,
-    Ipv4SocketAddress,
-} from "wasi:sockets";
+use { TcpSocket, UdpSocket, IpNameLookup, IpAddressFamily, IpSocketAddress, Ipv4SocketAddress } from "wasi:sockets";
 
 fn loopback() -> IpSocketAddress {
-    return IpSocketAddress::Ipv4(Ipv4SocketAddress { port: 0, address: [127, 0, 0, 1] });
+    return IpSocketAddress::Ipv4(Ipv4SocketAddress {
+        port: 0,
+        address: [127, 0, 0, 1],
+    });
 }
 
 fn bind_tcp() -> String with TcpSocket {
@@ -45,9 +41,7 @@ fn resolve_localhost() -> String with IpNameLookup {
     };
 }
 
-export async fn handle(_request: Request) -> Result<Response, ErrorCode>
-    with (TcpSocket, UdpSocket, IpNameLookup)
-{
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with (TcpSocket, UdpSocket, IpNameLookup) {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let headers = Headers::new();
