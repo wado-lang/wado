@@ -230,6 +230,7 @@ function main(): void {
       arch: { type: "string", default: machine() },
       symbolicator: { type: "string", default: "auto" },
       under: { type: "string" },
+      thread: { type: "string" },
     },
   });
 
@@ -237,11 +238,12 @@ function main(): void {
     console.error(
       "usage: analyze_native_profile.ts PROFILE.json [--top N] " +
         "[--binary wado] [--main-base 0x100000000] " +
-        "[--symbolicator auto|atos|addr2line] [--under REGEX]",
+        "[--symbolicator auto|atos|addr2line] [--under REGEX] [--thread REGEX]",
     );
     process.exit(2);
   }
   const under = values.under == null ? null : new RegExp(values.under as string);
+  const threadFilter = values.thread == null ? null : new RegExp(values.thread as string);
 
   const profilePath = positionals[0];
   const top = parseInt(values.top as string, 10);
@@ -286,6 +288,7 @@ function main(): void {
     m.set(k, (m.get(k) ?? 0) + w);
 
   for (const thread of profile.threads) {
+    if (threadFilter != null && !threadFilter.test(thread.name)) continue;
     const keys = threadFuncKeys(thread);
     const frFunc = thread.frameTable.func;
     const stFrame = thread.stackTable.frame;
