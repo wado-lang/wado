@@ -2,9 +2,10 @@
 //!
 //! Without it the canonical never hands BLOCKED back to the guest, so the
 //! BLOCKED branch of `core:rt`'s `cm_await_blocked`, which every stream read
-//! and write settles through, is unreachable code shipped in every component. Runtime fixtures cannot catch the regression: they pass either
-//! way, since the host blocks instead. The option is only observable in the
-//! emitted component.
+//! and write settles through, is unreachable code shipped in every component.
+//! Runtime fixtures cannot catch the regression: they pass either way, since
+//! the host blocks instead. The option is only observable in the emitted
+//! component.
 //!
 //! See `docs/wep-2026-07-25-async-stream-canonical.md`.
 
