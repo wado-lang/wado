@@ -161,6 +161,17 @@ pub(crate) fn body_modes(body: &Block, facts: &impl BodyFacts) -> Modes {
     Modes { modes: walk.modes }
 }
 
+/// The modes of `expr`, evaluated where no body walk reaches it: a default, a
+/// global's initializer, an associated constant.
+pub(crate) fn expr_modes(expr: &Expr, facts: &impl BodyFacts) -> Modes {
+    let mut walk = ModeWalk {
+        facts,
+        modes: IndexMap::default(),
+    };
+    walk.expr(expr, OperandMode::Consume);
+    Modes { modes: walk.modes }
+}
+
 struct ModeWalk<'f, F> {
     facts: &'f F,
     modes: IndexMap<AstId, OperandMode>,
@@ -354,7 +365,10 @@ fn positions(expr: &Expr) -> Vec<(&Expr, Position)> {
             .map(|hole| (hole, borrow))
             .collect(),
         Expr::Range(r) => vec![(&r.start, borrow), (&r.end, borrow)],
-        Expr::Matches(m) => vec![(&m.expr, borrow)],
+        Expr::Matches(m) => std::iter::once(&m.expr)
+            .chain(&m.guard)
+            .map(|operand| (operand, borrow))
+            .collect(),
         Expr::WithHandler(w) => w.handlers.iter().map(|h| (&h.handler, consume)).collect(),
         Expr::Ident(_)
         | Expr::Literal(_)

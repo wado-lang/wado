@@ -1694,6 +1694,7 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
         "every cell reads the receiver, so reify binds it before either expansion"
     );
     let tuple = type_table.peel_refs(receiver.type_id);
+    let by_value = tuple == receiver.type_id;
     let transposed = type_table
         .transposed_tuple(tuple)
         .expect("method lookup admits `zip` only over rows that transpose");
@@ -1728,7 +1729,7 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
                         *row_type,
                         span,
                     );
-                    TirExpr::new(
+                    let cell = TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(row_access),
                             field_index: col as u32,
@@ -1736,7 +1737,9 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
                         },
                         cells[col],
                         span,
-                    )
+                    );
+                    // A receiver held by value hands each cell on, once.
+                    if by_value { cell.moved() } else { cell }
                 })
                 .collect();
             TirExpr::new(TirExprKind::TupleLiteral { elements }, column_type, span)

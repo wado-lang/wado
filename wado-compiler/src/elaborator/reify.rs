@@ -585,13 +585,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         affine_params: Vec<String>,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let modes = ownership::body_modes(
-            body,
-            &ReifyFacts {
-                reify: self,
-                affine_params: &affine_params,
-            },
-        );
+        self.with_ownership(affine_params, |facts| ownership::body_modes(body, facts), reify)
+    }
+
+    /// [`Self::with_body_ownership`] for an expression reified where no body
+    /// is: a default, a global's initializer, an associated constant.
+    fn with_expr_ownership<R>(
+        &mut self,
+        expr: &ast::Expr,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_ownership(Vec::new(), |facts| ownership::expr_modes(expr, facts), reify)
+    }
+
+    fn with_ownership<R>(
+        &mut self,
+        affine_params: Vec<String>,
+        walk: impl FnOnce(&ReifyFacts<'_, 'a, H>) -> Modes,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let modes = walk(&ReifyFacts {
+            reify: self,
+            affine_params: &affine_params,
+        });
         let ownership = Some(Rc::new(BodyOwnership {
             modes,
             affine_params,
@@ -625,6 +641,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     fn is_affine(&self, expr: &ast::Expr) -> bool {
         self.ask_ownership(|_, facts| facts.is_affine(expr.id()))
+    }
+
+    /// `read`, of a local reify bound a value to ahead of where it is used,
+    /// standing in a position that takes the value: what the local owns moves
+    /// on.
+    fn handed_on(&self, read: TirExpr) -> TirExpr {
+        let affine = self.ask_ownership(|_, facts| {
+            self.tysys.is_affine(read.type_id, facts.affine_params)
+        });
+        if affine { read.moved() } else { read }
     }
 
     /// The body fact `map` records for `id` in the walk reify is replaying:
@@ -1719,7 +1745,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ty,
             global_name(&self.current_module_source, &global_decl.name),
         );
-        let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
+        let initializer = self.with_expr_ownership(&global_decl.initializer, |this| {
+            this.reify_expr(&global_decl.initializer, &mut ctx, Some(ty))
+        });
         let param = self.reify_param_attr(global_decl);
         let span = global_decl.span;
 
@@ -3808,6 +3836,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     elem_type,
                     span,
                 );
+                let field_access = if by_ref {
+                    field_access
+                } else {
+                    this.handed_on(field_access)
+                };
 
                 // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
                 // the field, matching `for v of &list` refiter semantics.
@@ -5175,7 +5208,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 let name = minted_name("field", ctx.fresh_serial());
                 TirStructField {
-                    value: bind_to_local(ctx, name, f.value, &mut base_binding),
+                    value: self.handed_on(bind_to_local(ctx, name, f.value, &mut base_binding)),
                     ..f
                 }
             })
@@ -5188,7 +5221,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let field_ty = substitute(self, *raw_ty);
                 fields.push(TirStructField {
                     name: name.clone(),
-                    value: TirExpr::new(
+                    value: self.handed_on(TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(base_ref.clone()),
                             field_index: *field_index,
@@ -5196,7 +5229,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         },
                         field_ty,
                         struct_lit.span,
-                    ),
+                    )),
                     field_index: *field_index,
                 });
             }
@@ -5214,7 +5247,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // A default's free names resolve in the struct's module.
                         let value = ctx.with_caller_bindings_hidden(|ctx| {
                             this.with_module_perspective(&struct_module, |this| {
-                                this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                                this.with_expr_ownership(default_expr, |this| {
+                                    this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                                })
                             })
                         });
                         fields.push(TirStructField {
@@ -6266,7 +6301,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     };
                     for (i, &et) in inner_elems.iter().enumerate() {
-                        elements.push(TirExpr::new(
+                        elements.push(self.handed_on(TirExpr::new(
                             TirExprKind::FieldAccess {
                                 expr: Box::new(spread_ref.clone()),
                                 field_index: i as u32,
@@ -6274,7 +6309,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             },
                             et,
                             elem.span(),
-                        ));
+                        )));
                         elem_types.push(et);
                     }
                 } else {
@@ -6781,6 +6816,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         struct_lit.span,
                     ),
                 };
+                let value = self.handed_on(value);
                 TirStructField {
                     name: uf.name.clone(),
                     value,
@@ -7219,7 +7255,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                         }
                                         mut_ref
                                     } else {
-                                        bind_param_to_local(ctx, name, value, &mut prelude)
+                                        this.handed_on(bind_param_to_local(
+                                            ctx,
+                                            name,
+                                            value,
+                                            &mut prelude,
+                                        ))
                                     };
                                 }
                             }
@@ -7230,14 +7271,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 // A trait method's default has no body for annotate to walk, so
                                 // without the parameter's type here it reifies untyped.
                                 let expected = param_types.get(i).copied();
-                                let mut resolved = this.reify_expr(default_ast, ctx, expected);
+                                let mut resolved = this.with_expr_ownership(default_ast, |this| {
+                                    this.reify_expr(default_ast, ctx, expected)
+                                });
                                 if let Some(expected) = expected {
                                     this.settle_packs_in_default(&mut resolved, expected);
                                 }
                                 mut_refs.visit_expr(&mut resolved);
                                 if *named {
                                     resolved =
-                                        bind_param_to_local(ctx, name, resolved, &mut prelude);
+                                        this.handed_on(bind_param_to_local(
+                                            ctx,
+                                            name,
+                                            resolved,
+                                            &mut prelude,
+                                        ));
                                 }
                                 // A default is a value synthesized here, with no caller storage
                                 // behind it for the callee to write.
@@ -8861,7 +8909,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             module, ty, value, ..
         } = assoc;
         let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-            self.with_module_perspective(&module, |this| this.reify_expr(&value, ctx, Some(ty)))
+            self.with_module_perspective(&module, |this| {
+                this.with_expr_ownership(&value, |this| this.reify_expr(&value, ctx, Some(ty)))
+            })
         });
         TirExpr::new(resolved.kind, ty, span)
     }
