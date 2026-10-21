@@ -303,15 +303,21 @@ global CM_BLOCKED: i32 = -1;
 /// `(count << 4) | status` packing the canonical returns directly.
 ///
 /// Whether a given copy blocks is the host's scheduling, so the test lives here,
-/// where every copy reaches it, rather than at each call.
-///
-/// The handle must be unjoined before the set is dropped; a set still holding a
-/// waitable cannot be deleted.
+/// where every copy reaches it, rather than at each call. It stays small enough
+/// to inline, so a copy that did not block pays no call.
 #[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
     if packed != CM_BLOCKED {
         return packed;
     }
+    return cm_await_copy(handle);
+}
+
+/// The packed result of the BLOCKED copy on `handle`, once the host reports it.
+///
+/// The handle must be unjoined before the set is dropped; a set still holding a
+/// waitable cannot be deleted.
+fn cm_await_copy(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
