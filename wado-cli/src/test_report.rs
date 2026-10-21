@@ -85,32 +85,39 @@ impl FailureRecap {
     }
 
     fn lines(&self) -> Vec<String> {
-        let files = [
-            ("compile failures:", &self.compile),
-            ("load failures:", &self.load),
-        ]
-        .map(|(header, section)| {
-            let mut section = lock(section);
-            section.sort();
-            let entries: Vec<(&str, Option<&str>)> = section
-                .iter()
-                .map(|(path, detail)| (path.as_str(), detail.as_deref()))
-                .collect();
-            test::failure_recap_lines(header, &entries)
-        });
-        let tests = [
-            ("test failures:", &self.test),
-            ("unexpectedly passed TODO tests:", &self.todo_resolved),
-        ]
-        .map(|(header, section)| {
-            let mut section = lock(section);
-            section.sort();
-            let entries: Vec<(&str, Option<&str>)> =
-                section.iter().map(|name| (name.as_str(), None)).collect();
-            test::failure_recap_lines(header, &entries)
-        });
-        files.into_iter().chain(tests).flatten().collect()
+        let mut lines = recap_section("compile failures:", &self.compile);
+        lines.extend(recap_section("load failures:", &self.load));
+        lines.extend(recap_section("test failures:", &self.test));
+        lines.extend(recap_section(
+            "unexpectedly passed TODO tests:",
+            &self.todo_resolved,
+        ));
+        lines
     }
+}
+
+/// A recap entry: what it names, and the detail shown under it.
+trait RecapEntry: Ord {
+    fn entry(&self) -> (&str, Option<&str>);
+}
+
+impl RecapEntry for (String, Option<String>) {
+    fn entry(&self) -> (&str, Option<&str>) {
+        (&self.0, self.1.as_deref())
+    }
+}
+
+impl RecapEntry for String {
+    fn entry(&self) -> (&str, Option<&str>) {
+        (self, None)
+    }
+}
+
+fn recap_section<T: RecapEntry>(header: &str, section: &Mutex<Vec<T>>) -> Vec<String> {
+    let mut section = lock(section);
+    section.sort();
+    let entries: Vec<(&str, Option<&str>)> = section.iter().map(RecapEntry::entry).collect();
+    test::failure_recap_lines(header, &entries)
 }
 
 /// Everything a reporter needs to render one package's final result.
