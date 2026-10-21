@@ -800,7 +800,7 @@ pub(crate) fn interpolation_dispatch_type(
         .expect("every format kind names a prelude trait");
     let mut dispatch = type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(dispatch)
-        && !written_impl_reaches(trait_env, trait_, dispatch, tt)
+        && !ref_impl_written(trait_env, trait_, dispatch, tt)
     {
         dispatch = *inner;
     }
@@ -951,7 +951,7 @@ fn method_call_info_for_type(
         }
         // An impl written on the reference answers before the blanket does.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
-            if !written_impl_reaches(
+            if !ref_impl_written(
                 ctx.trait_env,
                 trait_name.called_decl(),
                 type_id,
@@ -1203,6 +1203,16 @@ pub(crate) fn written_impl_reaches(
     trait_env
         .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
         .any(|block| tt.impl_reaches_instance(block, receiver))
+}
+
+/// Whether an impl written for this reference's own referent (`&R`) reaches
+/// `receiver`, which the universal `&T` blanket does not count as.
+fn ref_impl_written(trait_env: &TraitEnv, trait_: DefId, receiver: TypeId, tt: &TypeTable) -> bool {
+    trait_env
+        .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
+        .any(|block| {
+            trait_env.blanket_of_block(block).is_none() && tt.impl_reaches_instance(block, receiver)
+        })
 }
 
 /// The trait's `eq` emitted into the block of a `cmp` written alone.
