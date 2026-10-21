@@ -5074,9 +5074,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(SpreadElems::Open(_)) => None,
             })
             .sum::<Option<usize>>();
-        let expected_elem_types: Option<Vec<TypeId>> = expected_type
-            .zip(arity)
-            .and_then(|(ty, arity)| {
+        let expected_elem_types: Option<Vec<TypeId>> =
+            expected_type.zip(arity).and_then(|(ty, arity)| {
                 if let Some(elems) =
                     self.open_shape_at_pending_var(Some(ty), arity, TypeTable::make_tuple)
                 {
@@ -5093,7 +5092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (elem, spread) in tuple_lit.elements.iter().zip(spreads) {
             match spread {
                 Some(SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) => {
-                    elem_types.extend(elems)
+                    elem_types.extend(elems);
                 }
                 None => {
                     let elem_expected = expected_elem_types

@@ -2,7 +2,7 @@
 
 use super::Elaborator;
 use super::call::DefaultWalk;
-use super::infer::unify;
+use super::infer::{infer_var_answers, unify};
 use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -837,14 +837,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         // A pack's variable is no `InferVar`, and an element hint does not
         // reach a pack's literal anyway.
-        bindings
-            .into_iter()
-            .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer))
-            .filter_map(|(var, answer)| match *tt.get(var) {
-                ResolvedType::InferVar(id) => Some((id, answer)),
-                _ => None,
-            })
-            .collect()
+        infer_var_answers(
+            &tt,
+            bindings
+                .into_iter()
+                .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer)),
+        )
     }
 
     /// The type `arg` is checked against where it is a literal that takes its
@@ -1400,16 +1398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn instantiate_from_base(&mut self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, base, built, &mut bindings);
-        let answers: IndexMap<InferVarId, TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            bindings
-                .into_iter()
-                .filter_map(|(var, answer)| match tt.get(var) {
-                    ResolvedType::InferVar(id) => Some((*id, answer)),
-                    _ => None,
-                })
-                .collect()
-        };
+        let answers = infer_var_answers(&self.tysys.type_table.borrow(), bindings);
         self.tysys
             .type_table
             .borrow_mut()

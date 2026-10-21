@@ -167,7 +167,8 @@ impl Monomorphizer {
                 .receiver
                 .and_then(|receiver| {
                     // A newtype over a tuple dispatches to the tuple's impl.
-                    type_table.as_tuple(type_table.representation_head(type_table.peel_refs(receiver)))
+                    type_table
+                        .as_tuple(type_table.representation_head(type_table.peel_refs(receiver)))
                 })
                 .or_else(|| recorded.map(<[TypeId]>::to_vec));
         }
