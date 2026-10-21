@@ -1,31 +1,61 @@
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
-use { TcpSocket, IpAddressFamily, IpSocketAddress, Ipv4Address, Ipv4SocketAddress } from "wasi:sockets";
+use {
+    TcpSocket,
+    UdpSocket,
+    IpNameLookup,
+    IpAddressFamily,
+    IpSocketAddress,
+    Ipv4SocketAddress,
+} from "wasi:sockets";
 
-fn bind_loopback() -> String with TcpSocket {
+fn loopback() -> IpSocketAddress {
+    return IpSocketAddress::Ipv4(Ipv4SocketAddress { port: 0, address: [127, 0, 0, 1] });
+}
+
+fn bind_tcp() -> String with TcpSocket {
     let socket = match TcpSocket::create(IpAddressFamily::Ipv4) {
         Ok(socket) => socket,
         Err(e) => {
-            return `create: ${e:?}`;
+            return `tcp create: ${e:?}`;
         },
     };
-    let address = IpSocketAddress::Ipv4(Ipv4SocketAddress {
-        port: 0,
-        address: [127 as u8, 0 as u8, 0 as u8, 1 as u8] as Ipv4Address,
-    });
-    return match socket.bind(address) {
-        Ok(_) => "bound",
-        Err(e) => `bind: ${e:?}`,
+    return match socket.bind(loopback()) {
+        Ok(_) => "tcp bound",
+        Err(e) => `tcp bind: ${e:?}`,
     };
 }
 
-export async fn handle(_request: Request) -> Result<Response, ErrorCode> with TcpSocket {
+fn bind_udp() -> String with UdpSocket {
+    let socket = match UdpSocket::create(IpAddressFamily::Ipv4) {
+        Ok(socket) => socket,
+        Err(e) => {
+            return `udp create: ${e:?}`;
+        },
+    };
+    return match socket.bind(loopback()) {
+        Ok(_) => "udp bound",
+        Err(e) => `udp bind: ${e:?}`,
+    };
+}
+
+fn resolve_localhost() -> String with IpNameLookup {
+    return match IpNameLookup::resolve_addresses("localhost").wait() {
+        Ok(addresses) => if addresses.is_empty() { "no address" } else { "localhost resolved" },
+        Err(e) => `lookup: ${e:?}`,
+    };
+}
+
+export async fn handle(_request: Request) -> Result<Response, ErrorCode>
+    with (TcpSocket, UdpSocket, IpNameLookup)
+{
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
     response.set_status_code(200);
     task return Result::<Response, ErrorCode>::Ok(response);
-    body_tx.write_all(bind_loopback().bytes().collect());
+    let report = `${bind_tcp()}, ${bind_udp()}, ${resolve_localhost()}`;
+    body_tx.write_all(report.bytes().collect());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

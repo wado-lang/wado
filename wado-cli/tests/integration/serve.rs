@@ -168,9 +168,8 @@ fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
     read_response(send_get(port, path, timeout))
 }
 
-/// Parse `(status_code, raw_body)` from a raw HTTP/1.1 response. The body
-/// is returned exactly as it came off the wire — for chunked responses
-/// it still contains the chunk-size lines.
+/// Parse `(status_code, body)` from a raw HTTP/1.1 response, a chunked body
+/// decoded so a test compares what the service wrote rather than its framing.
 fn parse_response(response: &str) -> (u16, String) {
     let status_line = response
         .lines()
@@ -182,15 +181,37 @@ fn parse_response(response: &str) -> (u16, String) {
         .and_then(|s| s.parse().ok())
         .unwrap_or_else(|| panic!("could not parse status from: {status_line}"));
 
-    let body = response
-        .split_once("\r\n\r\n")
-        .map(|(_, b)| b.to_string())
-        .unwrap_or_default();
-
+    let (head, body) = response.split_once("\r\n\r\n").unwrap_or((response, ""));
+    let chunked = head
+        .to_lowercase()
+        .contains("transfer-encoding: chunked");
+    let body = if chunked {
+        decode_chunked(body)
+    } else {
+        body.to_string()
+    };
     (status, body)
 }
 
-/// Convenience wrapper for tests that don't care about chunk framing.
+/// The payload of a chunked body: each `<hex size>\r\n<data>\r\n` up to the
+/// zero-sized chunk. A body cut short (a test that hangs up mid-stream)
+/// yields what arrived.
+fn decode_chunked(mut wire: &str) -> String {
+    let mut payload = String::new();
+    while let Some((size_line, rest)) = wire.split_once("\r\n") {
+        let size_hex = size_line.split_once(';').map_or(size_line, |(size, _)| size);
+        let size = usize::from_str_radix(size_hex.trim(), 16)
+            .unwrap_or_else(|_| panic!("bad chunk size line: {size_line:?}"));
+        if size == 0 {
+            break;
+        }
+        let end = size.min(rest.len());
+        payload.push_str(&rest[..end]);
+        wire = rest[end..].strip_prefix("\r\n").unwrap_or(&rest[end..]);
+    }
+    payload
+}
+
 fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
     parse_response(&http_get_raw(port, path, timeout))
 }
@@ -257,8 +278,8 @@ fn a_service_has_a_program_name() {
     let (status, body) = http_get(port, "/", Duration::from_secs(10));
     assert_eq!(status, 200);
     let program = fixture_path("serve_args.wado");
-    let expected = format!("\r\nOption::Some({:?}) []\r\n", program.to_string_lossy());
-    assert!(body.contains(&expected), "body: {body:?}");
+    let expected = format!("Option::Some({:?}) []", program.to_string_lossy());
+    assert_eq!(body, expected);
 }
 
 /// A service reaches the host network, as a `wado run` program does.
@@ -267,7 +288,7 @@ fn a_service_may_use_sockets() {
     let (_guard, port, _stderr) = start_serve("serve_network.wado", &[]);
     let (status, body) = http_get(port, "/", Duration::from_secs(10));
     assert_eq!(status, 200);
-    assert!(body.contains("\r\nbound\r\n"), "body: {body:?}");
+    assert_eq!(body, "tcp bound, udp bound, localhost resolved");
 }
 
 /// The compiler lowers `ErrorContext` to the Component Model's error-context
