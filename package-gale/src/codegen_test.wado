@@ -988,6 +988,17 @@ a c d c d c d => (s (e (e a) c d c d c d))
 ";
 }
 
+// The simulator decides a `??` under every mode, so `verify` has nothing to
+// check there. The trees are the jar's.
+test "atn verify leaves a decision the simulator makes unchecked" {
+    let g4 = "grammar Q;\ns : (A B)?? A C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\nWS : ' ' -> skip ;\n";
+    let got = parses_each(g4, [
+        ["s", "a c"],
+        ["s", "a b a c"],
+    ], &GenerateOptions { atn: AtnMode::Verify });
+    assert got == "a c => (s a c)\na b a c => (s a b a c)\n";
+}
+
 // On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
 // to the suffix's `D`. The trees are the jar's.
 test "atn verify checks a contested repeat in a left-recursion suffix" {
