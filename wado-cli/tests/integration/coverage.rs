@@ -74,6 +74,28 @@ fn plans_merge_across_test_files() {
 }
 
 #[test]
+fn the_failure_recap_follows_the_coverage_summary() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_package(tmp.path());
+    fs::write(
+        tmp.path().join("fail_test.wado"),
+        "test \"fails\" {\n    assert 1 == 2;\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["test", "--coverage"])
+        .assert()
+        .failure()
+        .stdout(
+            predicate::str::is_match(
+                r"(?s)coverage: lines .*\ntest failures:\n    fail_test\.wado :: fails\n$",
+            )
+            .unwrap(),
+        );
+}
+
+#[test]
 fn tap_carries_the_summary_as_comments() {
     let tmp = tempfile::tempdir().unwrap();
     write_package(tmp.path());

@@ -2616,11 +2616,15 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
-    write_profile(&profile, profiler_slot.as_ref())?;
-    if let Some(run) = coverage_run {
-        let run = Arc::into_inner(run).expect("every stage holding the coverage run has finished");
-        run.finish(reporter.as_ref())?;
-    }
+    let reported = write_profile(&profile, profiler_slot.as_ref()).and_then(|()| {
+        coverage_run.map_or(Ok(()), |run| {
+            Arc::into_inner(run)
+                .expect("every stage holding the coverage run has finished")
+                .finish(reporter.as_ref())
+        })
+    });
+    reporter.on_recap();
+    reported?;
 
     if report_changed_inputs(&run_cache) {
         return Err(CliExit::silent_failure(1));
