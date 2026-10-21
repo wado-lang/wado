@@ -117,10 +117,9 @@ test "predict resolves a two-token shared-prefix decision" {
     assert adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
-// A numeric `type(N)` lexes a kind past the grammar's. The jar's prediction
-// matches a wildcard against the grammar's kinds alone, so no alternative takes
-// it, and the prediction falls back to the first.
-test "a wildcard predicts no kind past the grammar's" {
+// A numeric `type(N)` lexes a kind past the grammar's, which `.` and `~X` match
+// (see "Bugs in ANTLR4 itself").
+test "a wildcard predicts a kind past the grammar's" {
     let atn = build_atn(&parse("grammar T;\na : A X | . X | ~A X ;\nA : 'a' ;\nX : 'x' ;\n").unwrap());
     let sim = decode(&atn);
     let d = rule_block_decision(&atn, 0);
@@ -128,7 +127,7 @@ test "a wildcard predicts no kind past the grammar's" {
     let eof = 2;
     let foreign = atn.num_tokens + 5;
     assert adaptive_predict(&sim, d, &([x, x] as List<i32>).to_array(), 0, eof) == 1;
-    assert adaptive_predict(&sim, d, &([foreign, x] as List<i32>).to_array(), 0, eof) == 0;
+    assert adaptive_predict(&sim, d, &([foreign, x] as List<i32>).to_array(), 0, eof) == 1;
 }
 
 global K2_BRACE_G4: String = "

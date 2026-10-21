@@ -38,13 +38,29 @@ diverge.
 
 ### Bugs in ANTLR4 itself
 
-Gale does not reproduce a bug in ANTLR4. When an upstream bug report shows
-the jar's answer to be wrong, Gale's test pins the corrected answer and says
-which report it follows. Everywhere else the jar's answer is the expected one.
+Gale does not reproduce a bug in ANTLR4. The jar's answer is wrong where an
+upstream bug report shows it, or where the jar contradicts itself. Gale's test
+then pins the corrected answer and says why. Everywhere else the jar's answer
+is the expected one.
 
 Upstream parse-bug reports triaged so far are pinned in
 `tests/driver_cst_antlr4_issues_test.wado`, one issue number per test. The jar
 answers every one of them correctly, so none of them departs from it yet.
+
+Where Gale departs from the jar:
+
+- **A wildcard and a kind past the vocabulary.** A lexer's numeric
+  `-> type(N)` can give a token a kind that no rule declares. The jar's parser
+  matches such a token with `.` and `~X`: `r : . X EOF ;` parses `q x` as
+  `(r q x)`. Its prediction, though, matches a wildcard against the vocabulary
+  alone. So wherever the token decides between alternatives, the jar reports
+  no viable alternative, even for one that would match it. Gale predicts the
+  way it matches: `.` and `~X` take any kind but EOF. Each table the generator
+  builds over the vocabulary has to agree. The lookahead DFA and the LR loop
+  table leave such a kind to the simulator, and a sync set a wildcard
+  contributed to admits it. Pinned by "a wildcard takes a kind past the
+  grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
+  the grammar's" in `src/atn_sim_test.wado`. No upstream report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
 

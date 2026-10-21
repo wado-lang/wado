@@ -22,8 +22,10 @@ struct LrEnter {
     tokens: List<i32>,
 }
 
-/// An LR loop decision by token: the exit for a token no suffix admits.
+/// An LR loop decision by token kind `0..kinds`: the exit for a token no
+/// suffix admits.
 pub struct LrTable {
+    kinds: i32,
     exit: i32,
     enters: List<LrEnter>,
     /// The tokens two suffixes or more admit.
@@ -65,7 +67,7 @@ internal fn lr_table(sim: &AtnSim, decision: i32, kinds: i32, eof: i32) -> LrTab
             }
         }
     }
-    return LrTable { exit, enters, contested };
+    return LrTable { kinds, exit, enters, contested };
 }
 
 /// The function a parser decides LR loop decision `decision` through.
@@ -87,7 +89,9 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
     }
     f.set_return_type("i32");
     f.emit_begin(w);
-    w.begin("if pos < tokens.len()");
+    // A numeric `type(N)` lexes a kind past the table, which a wildcard suffix
+    // may still take.
+    w.begin(`if pos < tokens.len() && tokens[pos] < ${table.kinds}`);
     w.begin("match tokens[pos]");
     for let e of &table.enters {
         w.begin(`${analysis.token_names_of(&e.tokens).join(" | ")} =>`);

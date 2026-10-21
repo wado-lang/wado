@@ -791,28 +791,54 @@ test "atn verify checks the shortcuts against the simulator and parses as auto d
     assert parses(VERIFIED_LR_G4, "s", inputs, &verify) == parses(VERIFIED_LR_G4, "s", inputs);
 }
 
-// `type(99)` lexes a kind past the grammar's, which the jar predicts no
-// alternative for. The lookahead DFA's `_` is the wildcard's edge, whose
-// tokens are the grammar's.
+// `type(99)` lexes a kind past the grammar's, which only `.` takes (see "Bugs
+// in ANTLR4 itself"). Each table the generator builds covers the grammar's
+// kinds, so its `_` must leave this one to the simulator: the lookahead DFA's
+// widest edge here settles on the set, and the LR loop's `_` exits.
 global FOREIGN_KIND_G4: String = "grammar T;
-r : a EOF ;
-a : b (A | B | C | D | E) Y | b . X ;
+r : a X EOF ;
+a : b (A | B | C | D | E | F | G) | b . ;
 b : Z Z ;
 A : 'a' ;
 B : 'b' ;
 C : 'c' ;
 D : 'd' ;
 E : 'e' ;
+F : 'f' ;
+G : 'g' ;
 X : 'x' ;
-Y : 'y' ;
 Z : 'z' ;
 Q : 'q' -> type(99) ;
 WS : ' ' -> skip ;
 ";
 
-test "the lookahead DFA leaves a kind past the grammar's to the simulator" {
-    let inputs: List<String> = ["z z q x", "z z y x"];
-    assert parses(FOREIGN_KIND_G4, "r", inputs) == "z z q x => error\nz z y x => (r (a (b z z) y x))\n";
+global FOREIGN_KIND_LR_G4: String = "grammar L;
+s : e EOF ;
+e : e '+' e | e . INT | INT ;
+INT : [0-9]+ ;
+Q : 'q' -> type(99) ;
+WS : ' ' -> skip ;
+";
+
+global FOREIGN_KIND_STATIC_G4: String = "grammar S;
+r : (A X | . Y) EOF ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+Q : 'q' -> type(99) ;
+WS : ' ' -> skip ;
+";
+
+test "a wildcard takes a kind past the grammar's" {
+    let dfa: List<String> = ["z z q x", "z z a x"];
+    assert parses(FOREIGN_KIND_G4, "r", dfa) == "z z q x => (r (a (b z z) q) x)\nz z a x => (r (a (b z z) a) x)\n";
+    let lr: List<String> = ["1 q 2", "1 + 2"];
+    assert parses(FOREIGN_KIND_LR_G4, "s", lr) == "1 q 2 => (s (e (e 1) q 2))\n1 + 2 => (s (e (e 1) + (e 2)))\n";
+    let static: List<String> = ["q y", "a x"];
+    assert parses(FOREIGN_KIND_STATIC_G4, "r", static) == "q y => (r q y)\na x => (r a x)\n";
+    let loop_g4 = "grammar N;\nr : (~A)* A EOF ;\nA : 'a' ;\nB : 'b' ;\nQ : 'q' -> type(99) ;\nWS : ' ' -> skip ;\n";
+    let looped: List<String> = ["q b q a", "a"];
+    assert parses(loop_g4, "r", looped) == "q b q a => (r q b q a)\na => (r a)\n";
 }
 
 // Each repeat's body can start what follows it, so its first token does not say

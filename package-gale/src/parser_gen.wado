@@ -3532,9 +3532,13 @@ fn gen_decision_sync<S: AsStrSlice>(
     if !proven.is_empty() && proves(proven, &ids) {
         return;
     }
+    let open = ctx.analysis.holds_every_kind(&ids);
     let set = ctx.sync_set(ids);
     let bits = ctx.sync_bits_ref(set);
-    let syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", `&${bits}`, "p.kinds[p.pos]");
+    let mut syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", `&${bits}`, "p.kinds[p.pos]");
+    if open {
+        syncs = `(${syncs} || p.kinds[p.pos] >= ${ctx.analysis.token_kind_count()})`;
+    }
     w.line(
         `if !${syncs} { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
             set,

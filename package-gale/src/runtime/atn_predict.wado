@@ -10,7 +10,6 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
-    atn_any_takes,
     atn_set_contains,
     atn_tr_consumes,
 } from "./atn.wado";
@@ -799,9 +798,9 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             } else if k == ATN_TR_SET {
                 atn_set_contains(sim, label, token);
             } else if k == ATN_TR_WILDCARD {
-                atn_any_takes(sim, token, eof);
+                token != eof;
             } else if k == ATN_TR_NOT_ATOM {
-                token != label && atn_any_takes(sim, token, eof);
+                token != label && token != eof;
             } else {
                 false;
             };

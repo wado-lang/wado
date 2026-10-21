@@ -1035,7 +1035,8 @@ fn gen_sll_branch(
     let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
     // The widest edge takes `_` where the tokens that ask are fewer to name: a
     // DFA over an expression reads a keyword set at many nodes. A numeric
-    // `type(N)` lexes a kind past `kinds`, which `_` must leave asking.
+    // `type(N)` lexes a kind past `kinds`, which `_` must leave asking: a
+    // wildcard may take it where the widest edge does not.
     let asking = asking_tokens(edges, dfa.kinds);
     let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
     let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };

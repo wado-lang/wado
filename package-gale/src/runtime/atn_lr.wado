@@ -10,7 +10,6 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
-    atn_any_takes,
 } from "./atn.wado";
 use { AtnPredictor, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
@@ -264,7 +263,7 @@ fn atn_cont_first(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
 
 internal fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     let any_but = sim.state_cont_any_but[state];
-    if atn_any_takes(sim, t, eof) && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
+    if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
     }
     return t < sim.num_tokens && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
