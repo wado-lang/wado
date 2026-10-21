@@ -165,14 +165,11 @@ transposition above. That covers a rotation among subscripts, a transposition
 across two containers (`[xs[i], ys[j]] = [ys[j], xs[i]]`), and any permutation
 reached through a reference.
 
-Moving values there would need a container to give up a value and leave its
-slot empty until the value comes back, and the targets may be one slot. Two
-containers cannot be told apart either: two `&mut` to the same list are legal,
-so `xs` and `ys` may be one list.
-
-A transposition within one container avoids both problems. With `a == b`, the
-desugaring leaves the container unchanged, and so does a correct `index_swap`.
-The container sees both indices, so it can handle that case itself.
+Those targets may be one slot, as above. Moving values there would also need a
+container to give up a value and leave its slot empty until the value comes
+back. A transposition within one container is the exception: with `a == b` the
+desugaring leaves the container unchanged, and the container sees both indices,
+so `index_swap` can do the same.
 
 ### A fallback that copies is reported, an affine one is an error
 
