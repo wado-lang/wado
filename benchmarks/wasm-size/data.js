@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792553618956,
+  "lastUpdate": 1792569019020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68805,6 +68805,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e0326ce6472b39c913603849ce8826c00621f60",
+          "message": "Merge pull request #2398 from wado-lang/gale-ts-oracle\n\nfeat(gale): decide what static lookahead cannot through the ATN simulator, at static speed",
+          "timestamp": "2026-10-21T16:24:30+09:00",
+          "tree_id": "62e3805065df9a9d8c75306cf6e1ceb7bec090ae",
+          "url": "https://github.com/wado-lang/wado/commit/4e0326ce6472b39c913603849ce8826c00621f60"
+        },
+        "date": 1792569018341,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276874,
             "unit": "bytes"
           }
         ]
