@@ -1574,15 +1574,17 @@ impl MoveWalker<'_, '_> {
                     self.visit_block(eb);
                     self.flow = matched;
                 }
-                match &l.value {
-                    Some(value) => self.bind_to(&l.pattern, value),
-                    None => self.bind_pattern(&l.pattern),
+                if let Some(value) = &l.value {
+                    self.bind_to(&l.pattern, value);
+                    self.is_never(value)
+                } else {
+                    self.bind_pattern(&l.pattern);
+                    false
                 }
-                false
             }
             Stmt::Expr(e) => {
                 self.visit_at(&e.expr);
-                false
+                self.is_never(&e.expr)
             }
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
@@ -1600,10 +1602,7 @@ impl MoveWalker<'_, '_> {
                 self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None);
                 false
             }
-            Stmt::Loop(s) => {
-                self.visit_loop(&LoopHead::None, &s.body, None);
-                false
-            }
+            Stmt::Loop(s) => !self.visit_loop(&LoopHead::None, &s.body, None),
             Stmt::For(s) => {
                 self.in_scope(|walker| {
                     if let Some(init) = &s.init {
@@ -1677,8 +1676,9 @@ impl MoveWalker<'_, '_> {
     /// second reports what reads a value the first moved. Each iteration runs
     /// the head, the body, then `update`, as a C-style `for` does.
     /// The loop may also run no iteration, so what it leaves joins the state
-    /// it entered with, and what each `break` carried.
-    fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
+    /// it entered with, and what each `break` carried. Answers whether a
+    /// `break` leaves it.
+    fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) -> bool {
         let entry = self.flow.clone();
         self.loops.push(LoopJumps::default());
         self.suppress += 1;
@@ -1687,9 +1687,18 @@ impl MoveWalker<'_, '_> {
         self.visit_iteration(head, body, update);
         let jumps = self.loops.pop().expect("pushed above");
         self.flow.merge(entry);
-        if let Some(broken) = jumps.breaks {
-            self.flow.merge(broken);
-        }
+        let Some(broken) = jumps.breaks else {
+            return false;
+        };
+        self.flow.merge(broken);
+        true
+    }
+
+    /// Whether `expr` is of type `!`: evaluating it never falls through.
+    fn is_never(&self, expr: &Expr) -> bool {
+        self.sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| self.sem().types.is_never(ty))
     }
 
     /// The iteration's end is reached by a body that does not diverge and by
@@ -1819,7 +1828,7 @@ impl MoveWalker<'_, '_> {
             Expr::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
             other => {
                 self.visit_at(other);
-                false
+                self.is_never(other)
             }
         }
     }

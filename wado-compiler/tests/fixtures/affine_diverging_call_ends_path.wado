@@ -1,0 +1,74 @@
+// A path that reaches an expression of type `!` never falls through, so what
+// it moved stays in place on every path that does: a call to a `-> !`
+// function, `panic` as a `let` value or a match arm, and a `loop` no `break`
+// leaves.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn fail(message: String) -> ! {
+    panic(message);
+}
+
+fn call_stmt(flag: bool) -> i32 {
+    let t = Tok { id: 1 };
+    if flag {
+        eat(t);
+        fail("gone");
+    }
+    return t.id;
+}
+
+fn let_value(flag: bool) -> i32 {
+    let t = Tok { id: 2 };
+    if flag {
+        eat(t);
+        let never = panic("gone");
+    }
+    return t.id;
+}
+
+fn match_arm(flag: bool) -> i32 {
+    let t = Tok { id: 3 };
+    let n = match flag {
+        true => {
+            eat(t);
+            panic("gone")
+        },
+        false => 0,
+    };
+    return t.id + n;
+}
+
+fn endless(flag: bool) -> i32 {
+    let t = Tok { id: 4 };
+    if flag {
+        eat(t);
+        loop {
+        }
+    }
+    return t.id;
+}
+
+export fn run() with Stdout {
+    println(`${call_stmt(false)}`);
+    println(`${let_value(false)}`);
+    println(`${match_arm(false)}`);
+    println(`${endless(false)}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\n"}
