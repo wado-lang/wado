@@ -1262,15 +1262,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             };
             let local = &sem.decls.local;
-            for (def, info) in &local.struct_fields {
-                data.struct_fields.insert(*def, info.clone());
-            }
-            for (def, info) in &local.variant_cases {
-                data.variant_cases.insert(*def, info.clone());
-            }
-            for (def, base) in &local.newtypes {
-                data.newtypes.insert(*def, *base);
-            }
+            let defs = local
+                .struct_fields
+                .keys()
+                .chain(local.variant_cases.keys())
+                .chain(local.newtypes.keys());
+            data.publish(local, defs);
         }
     }
 

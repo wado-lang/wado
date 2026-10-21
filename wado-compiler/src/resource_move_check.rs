@@ -638,6 +638,23 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             suppress: 0,
         }
     }
+
+    /// A walker of a body nested in this one, which sees the state here.
+    fn sub_walker(&mut self) -> MoveWalker<'a, '_> {
+        let mut inner = MoveWalker::new(
+            &mut *self.checker,
+            Rc::clone(&self.modes),
+            self.affine_params.clone(),
+            self.drop_body,
+        );
+        inner.flow.clone_from(&self.flow);
+        inner.guard_bindings.clone_from(&self.guard_bindings);
+        inner.instances.clone_from(&self.instances);
+        inner.ended.clone_from(&self.ended);
+        inner.disturbances.clone_from(&self.disturbances);
+        inner.suppress = self.suppress;
+        inner
+    }
 }
 
 impl MoveWalker<'_, '_> {
@@ -1059,19 +1076,8 @@ impl MoveWalker<'_, '_> {
             .filter(|p| self.checker.is_mut_ref_local(p.id))
             .map(|p| (p.id, p.name.clone()))
             .collect();
-        let mut inner = MoveWalker::new(
-            &mut *self.checker,
-            Rc::clone(&self.modes),
-            self.affine_params.clone(),
-            self.drop_body,
-        );
-        inner.flow.clone_from(&self.flow);
-        inner.guard_bindings.clone_from(&self.guard_bindings);
+        let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
-        inner.instances.clone_from(&self.instances);
-        inner.ended.clone_from(&self.ended);
-        inner.disturbances.clone_from(&self.disturbances);
-        inner.suppress = self.suppress;
         inner.visit_at(&closure.body);
         if !matches!(closure.body, Expr::Block(_)) {
             inner.refuse_returned(&closure.body);
@@ -1578,23 +1584,17 @@ impl MoveWalker<'_, '_> {
     /// does reaches nothing: `walk` runs a walker of its own, which reports
     /// into the checker and is dropped, and its jumps land nowhere.
     fn visit_unreachable(&mut self, walk: impl FnOnce(&mut MoveWalker<'_, '_>)) {
-        let mut dead = MoveWalker::new(
-            &mut *self.checker,
-            Rc::clone(&self.modes),
-            self.affine_params.clone(),
-            self.drop_body,
-        );
-        dead.flow.clone_from(&self.flow);
-        dead.guard_bindings.clone_from(&self.guard_bindings);
-        dead.closure_locals.clone_from(&self.closure_locals);
-        dead.captures.clone_from(&self.captures);
-        dead.instances.clone_from(&self.instances);
-        dead.ended.clone_from(&self.ended);
-        dead.disturbances.clone_from(&self.disturbances);
-        dead.disturbed_captures.clone_from(&self.disturbed_captures);
-        dead.closure_owners.clone_from(&self.closure_owners);
-        dead.break_owners.clone_from(&self.break_owners);
-        dead.suppress = self.suppress;
+        let closure_locals = self.closure_locals.clone();
+        let captures = self.captures.clone();
+        let disturbed_captures = self.disturbed_captures.clone();
+        let closure_owners = self.closure_owners.clone();
+        let break_owners = self.break_owners.clone();
+        let mut dead = self.sub_walker();
+        dead.closure_locals = closure_locals;
+        dead.captures = captures;
+        dead.disturbed_captures = disturbed_captures;
+        dead.closure_owners = closure_owners;
+        dead.break_owners = break_owners;
         walk(&mut dead);
     }
 

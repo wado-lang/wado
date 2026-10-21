@@ -4179,7 +4179,11 @@ pub(crate) struct DataDecls {
 impl DataDecls {
     /// Take what `from` declares of the fields, cases and base of each of
     /// `defs`.
-    pub(crate) fn publish(&mut self, from: &DataDecls, defs: &[DefId]) {
+    pub(crate) fn publish<'d>(
+        &mut self,
+        from: &DataDecls,
+        defs: impl IntoIterator<Item = &'d DefId>,
+    ) {
         for def in defs {
             if let Some(info) = from.struct_fields.get(def) {
                 self.struct_fields.insert(*def, info.clone());

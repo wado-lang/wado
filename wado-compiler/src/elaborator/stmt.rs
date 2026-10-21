@@ -169,9 +169,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|item| self.tysys.def_at(item.id()))
             .collect();
         // What the rest of the walk asks of them, whether one is affine say,
-        // reads the program's tables.
-        Rc::make_mut(&mut self.tysys.data).publish(&self.sem.decls.local, &defs);
-        self.sem.decls.fn_local_defs.extend(&defs);
+        // reads the program's tables, which a publish copies while shared.
+        if !defs.is_empty() {
+            Rc::make_mut(&mut self.tysys.data).publish(&self.sem.decls.local, &defs);
+            self.sem.decls.fn_local_defs.extend(&defs);
+        }
         if let Some(solver) = &self.tysys.solver {
             solver
                 .borrow_mut()
