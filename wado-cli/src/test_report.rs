@@ -53,14 +53,15 @@ pub(crate) enum LoadEvent {
     Failed { detail: Option<String> },
 }
 
-/// What a streaming reporter names again after the summary: every outcome
-/// that fails the run, so the end of a long log says which one did.
+/// What a streaming reporter names again at the end of the run: every
+/// compile, load and test outcome that fails it, so the end of a long log
+/// says which one did. Sorted, since outcomes arrive in completion order.
 #[derive(Default)]
 struct FailureRecap {
     compile: Mutex<Vec<(String, Option<String>)>>,
     load: Mutex<Vec<(String, Option<String>)>>,
-    test: Mutex<Vec<(String, Option<String>)>>,
-    todo_resolved: Mutex<Vec<(String, Option<String>)>>,
+    test: Mutex<Vec<String>>,
+    todo_resolved: Mutex<Vec<String>>,
 }
 
 impl FailureRecap {
@@ -80,27 +81,35 @@ impl FailureRecap {
             TestOutcome::TodoResolved => &self.todo_resolved,
             TestOutcome::Pass | TestOutcome::TodoPending => return,
         };
-        let name = format!("{} :: {}", result.file_path, result.display_name);
-        lock(section).push((name, None));
+        lock(section).push(format!("{} :: {}", result.file_path, result.display_name));
     }
 
     fn lines(&self) -> Vec<String> {
-        [
+        let files = [
             ("compile failures:", &self.compile),
             ("load failures:", &self.load),
+        ]
+        .map(|(header, section)| {
+            let mut section = lock(section);
+            section.sort();
+            let entries: Vec<(&str, Option<&str>)> = section
+                .iter()
+                .map(|(path, detail)| (path.as_str(), detail.as_deref()))
+                .collect();
+            test::failure_recap_lines(header, &entries)
+        });
+        let tests = [
             ("test failures:", &self.test),
             ("unexpectedly passed TODO tests:", &self.todo_resolved),
         ]
-        .into_iter()
-        .flat_map(|(header, section)| {
-            let section = lock(section);
-            let entries: Vec<(&str, Option<&str>)> = section
-                .iter()
-                .map(|(name, detail)| (name.as_str(), detail.as_deref()))
-                .collect();
+        .map(|(header, section)| {
+            let mut section = lock(section);
+            section.sort();
+            let entries: Vec<(&str, Option<&str>)> =
+                section.iter().map(|name| (name.as_str(), None)).collect();
             test::failure_recap_lines(header, &entries)
-        })
-        .collect()
+        });
+        files.into_iter().chain(tests).flatten().collect()
     }
 }
 
@@ -131,6 +140,8 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_cached(&self, path: &str, tally: Tally);
     fn on_package_done(&self, args: PackageDoneArgs);
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
+    /// The last output of the run, after every summary.
+    fn on_recap(&self) {}
     /// The `--coverage` summary, after the run is done.
     fn on_coverage(&self, summary: &str) {
         print!("{summary}");
@@ -281,6 +292,9 @@ struct HeartbeatState {
     /// heartbeat loop can restart its wait — avoids printing a near-
     /// duplicate heartbeat right after an event that already reported.
     notify: Notify,
+    /// Held across the ticker's `stop` check and its print, and while
+    /// `stop` is set, so no heartbeat lands inside the final output.
+    printing: Mutex<()>,
     stop: AtomicBool,
 }
 
@@ -353,6 +367,7 @@ impl HeartbeatReporter {
             skip_files: AtomicUsize::new(0),
             pending_tests: Mutex::new(IndexMap::default()),
             notify: Notify::new(),
+            printing: Mutex::new(()),
             stop: AtomicBool::new(false),
         });
 
@@ -366,6 +381,7 @@ impl HeartbeatReporter {
                 // in the meantime — avoids an immediate near-duplicate line.
                 let notified =
                     tokio::time::timeout(HEARTBEAT_INTERVAL, ticker_state.notify.notified()).await;
+                let _printing = lock(&ticker_state.printing);
                 if ticker_state.stop.load(Ordering::Relaxed) {
                     break;
                 }
@@ -511,10 +527,15 @@ impl TestReporter for HeartbeatReporter {
     }
 
     fn on_run_done(&self, grand: &PackageTotals, _multi_pkg: bool, wall: Duration) {
+        let printing = lock(&self.state.printing);
         self.state.stop.store(true, Ordering::Relaxed);
+        drop(printing);
         self.state.notify.notify_one();
         println!();
         test::print_three_axis(grand, Some(&test::format_duration(wall)));
+    }
+
+    fn on_recap(&self) {
         for line in self.failures.lines() {
             println!("{line}");
         }
@@ -845,6 +866,9 @@ impl TestReporter for TapReporter {
         for line in test::format_three_axis_lines(grand, Some(&wall_str)) {
             self.comment(&line);
         }
+    }
+
+    fn on_recap(&self) {
         for line in self.failures.lines() {
             if !line.is_empty() {
                 self.comment(&line);
