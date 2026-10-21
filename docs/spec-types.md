@@ -1291,6 +1291,11 @@ export fn run() {
 }
 ```
 
+An associated type without the mark may be copied wherever a body projects
+it. An `impl` binding an affine type to one is an error at the binding, under
+the same code. `Iterator` and `IntoIterator` leave `Item` unmarked, so an
+affine element is walked through `for-of`, or by reference.
+
 An `impl` whose type parameter is unmarked does not apply to an affine
 argument, so its methods are not found on that instance. `List<affine T>`
 moves its elements in `push`, `pop` and `remove`, and copies them in `first`,

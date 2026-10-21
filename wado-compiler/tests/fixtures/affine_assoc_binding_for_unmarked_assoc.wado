@@ -1,0 +1,40 @@
+// An impl binding an affine type to an associated type not declared
+// `affine type` is a type error: a body generic over the trait may copy the
+// projection, as `twice` copies `I::Item` (WEP: Affine Types).
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+struct It {
+    done: bool,
+}
+
+impl Iterator for It {
+    type Item = Tok;
+
+    fn next(&mut self) -> Option<Tok> {
+        if self.done {
+            return null;
+        }
+        self.done = true;
+        return Option::Some(Tok { n: 1 });
+    }
+}
+
+fn twice<I: Iterator>(i: &mut I) -> [Option<I::Item>, Option<I::Item>] with _ {
+    let x = i.next();
+    return [x, x];
+}
+
+export fn run() {
+    let mut it = It { done: false };
+    let pair = twice(&mut it);
+}
+
+__DATA__
+{"compile_error": ":18:5: analysis error: affine type 'Tok' bound to 'Item', which may be copied; `affine type Item` would admit it"}
