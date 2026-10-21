@@ -1301,6 +1301,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
+        if let Some(coerced) = self.try_coerce_tuple_newtype(expr, ctx, target_type) {
+            return Some(coerced);
+        }
+
         // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
         // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
@@ -1366,6 +1370,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.resolve_expr(expr, ctx, Some(base));
         self.record_coercion(expr.id(), CoercionKind::StructNewtype, target_type);
+        self.record_expression_type(expr.id(), target_type);
+        Some(target_type)
+    }
+
+    /// A tuple literal against a newtype over a tuple, built as that tuple, as
+    /// [`Self::try_coerce_struct_newtype`] builds a struct.
+    fn try_coerce_tuple_newtype(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TypeId> {
+        if !matches!(expr, Expr::TupleLiteral(_)) {
+            return None;
+        }
+        let base = {
+            let tt = self.tysys.type_table.borrow();
+            tt.newtype_representation(target_type)
+                .filter(|&base| tt.as_tuple(base).is_some())?
+        };
+        // The base only steers the elements, so a literal that cannot be one
+        // (an arity or an element that does not fit) is reported here.
+        let built = self.resolve_expr(expr, ctx, Some(base));
+        let fits = check_assignable(built, base, &self.tysys.type_table.borrow());
+        if fits == TypeCheckResult::Incompatible {
+            let (expected, found) = {
+                let tt = self.tysys.type_table.borrow();
+                (tt.type_name(target_type), tt.type_name(built))
+            };
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected,
+                found,
+                span: expr.span(),
+            });
+        }
+        self.record_coercion(expr.id(), CoercionKind::TupleNewtype, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(target_type)
     }

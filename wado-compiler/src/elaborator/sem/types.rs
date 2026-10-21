@@ -91,6 +91,8 @@ pub(crate) enum CoercionKind {
     ClosureToFnNewtype,
     /// An unnamed struct literal built as the struct a newtype wraps.
     StructNewtype,
+    /// A tuple literal built as the tuple a newtype wraps.
+    TupleNewtype,
     /// A sequence literal built through `From<Array<E>>` (`List` and
     /// user-defined sequence types).
     TupleToSequence,

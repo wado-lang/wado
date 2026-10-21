@@ -1,0 +1,31 @@
+// A tuple literal coerces to a newtype over a tuple, as a struct literal does
+// to a newtype over a struct: in a `let`, a field, an argument and a return,
+// with each element taking the base's element type.
+use { println, Stdout } from "core:cli";
+
+type Quad = [u8, u8, u8, u8];
+type Wrapped = Quad;
+type Nested = [Quad, i64];
+
+struct Holder {
+    q: Quad,
+}
+
+fn sum(q: Quad) -> i32 {
+    return q.0 as i32 + q.1 as i32 + q.2 as i32 + q.3 as i32;
+}
+
+fn loopback() -> Quad {
+    return [127, 0, 0, 1];
+}
+
+export fn run() with Stdout {
+    let a: Quad = [255, 0, 0, 1];
+    let h = Holder { q: [10, 0, 0, 2] };
+    let w: Wrapped = [1, 2, 3, 4];
+    let n: Nested = [[5, 6, 7, 8], 9_000_000_000];
+    println(`${a.0} ${h.q.3} ${sum([1, 2, 3, 4])} ${loopback().0} ${w.3} ${n.0.1} ${n.1}`);
+}
+
+__DATA__
+{"stdout": "255 2 10 127 4 6 9000000000\n"}

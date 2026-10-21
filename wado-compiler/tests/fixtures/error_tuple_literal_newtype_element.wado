@@ -1,0 +1,10 @@
+// A tuple literal coerces to a newtype over a tuple only where each element
+// fits the base's element type.
+type Quad = [u8, u8, u8, u8];
+
+export fn run() {
+    let q: Quad = ["x", 2, 3, 4];
+}
+
+__DATA__
+{"compile_error": ":6:19: error: type mismatch: expected 'Quad', found '[String, u8, u8, u8]'"}

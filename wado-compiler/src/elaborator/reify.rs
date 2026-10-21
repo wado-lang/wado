@@ -2493,7 +2493,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
+                let newtype = self
+                    .ann_coercions(tuple_lit.id)
+                    .filter(|choice| choice.kind == CoercionKind::TupleNewtype)
+                    .map(|choice| choice.target_type);
+                let Some(newtype) = newtype else {
+                    return self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span);
+                };
+                let base = self.tysys.type_table.borrow().representation_head(newtype);
+                let built = self.reify_tuple_literal(tuple_lit, ctx, base, span);
+                cast_to_newtype(built, Some(newtype), span)
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
