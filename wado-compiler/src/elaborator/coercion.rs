@@ -1391,20 +1391,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|&base| tt.as_tuple(base).is_some())?
         };
         // The base only steers the elements, so a literal that cannot be one
-        // (an arity or an element that does not fit) is reported here.
+        // (an arity or an element that does not fit) is checked here.
         let built = self.resolve_expr(expr, ctx, Some(base));
-        let fits = check_assignable(built, base, &self.tysys.type_table.borrow());
-        if fits == TypeCheckResult::Incompatible {
-            let (expected, found) = {
-                let tt = self.tysys.type_table.borrow();
-                (tt.type_name(target_type), tt.type_name(built))
-            };
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected,
-                found,
-                span: expr.span(),
-            });
-        }
+        self.typecheck(built, base, expr.span());
         self.record_coercion(expr.id(), CoercionKind::TupleNewtype, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(target_type)
