@@ -482,7 +482,9 @@ impl TemplateShape {
 /// open shape's literal is held once substituted; holding twice is a no-op.
 pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
     let field_ty = tt.hole_field_type(hole_ty);
-    if tt.type_key(field.value.type_id) == tt.type_key(field_ty) {
+    if tt.type_key(field_ty) == tt.type_key(hole_ty)
+        || tt.type_key(field.value.type_id) == tt.type_key(field_ty)
+    {
         return None;
     }
     assert_eq!(
