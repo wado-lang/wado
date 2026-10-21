@@ -12,6 +12,13 @@ pub fn alt_is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> 
     return element_is_self_ref(&alt.elements[0], rule_name);
 }
 
+/// Whether a left-recursive alternative continues past its leading
+/// self-reference, which makes it an edge of the loop-entry decision.
+/// `expr : expr` does not.
+pub fn lr_alt_has_suffix(alt: &Alternative) -> bool {
+    return alt.elements.len() > 1;
+}
+
 /// Whether any alternative is directly left-recursive. ANTLR4 rewrites only
 /// direct LR (`vendor/antlr4/doc/left-recursion.md`).
 pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {

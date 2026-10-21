@@ -941,6 +941,133 @@ a b a b => (u a b a b)
 ";
 }
 
+test "atn verify checks a contested repeat against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let agreed = parses_each(CONTESTED_REPEATS_G4, [
+        ["s", "a b"],
+        ["s", "a a a b"],
+        ["t", "c d d"],
+    ], &verify);
+    assert agreed == "a b => (s (a a) b)\na a a b => (s (a a) (a a) (a a) b)\nc d d => (t c (c d) (c d))\n";
+    let source = gen_with(CONTESTED_REPEATS_G4, &verify).source;
+    for let [rule, input] of [
+        ["t", "c d d d"],
+        ["u", "a a b"],
+        ["u", "a b a b"],
+    ] {
+        let out = eval_beside(source, wado`show("${input}", parse_${rule}("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(": the repeat picks "), out.stderr;
+    }
+}
+
+// A loop in a left-recursion suffix whose body is decided by its own
+// alternatives, and which must leave the suffix's `D` behind. The trees are the
+// jar's.
+test "a decided loop in a left-recursion suffix leaves what follows it" {
+    let g4 = "grammar R;
+s : e EOF ;
+e : e C (D | D C)* D
+  | A
+  ;
+A : 'a' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+    let got = parses_each(g4, [
+        ["s", "a c d"],
+        ["s", "a c d d"],
+        ["s", "a c d c d"],
+        ["s", "a c d c d c d"],
+    ]);
+    assert got == "a c d => (s (e (e a) c d))
+a c d d => (s (e (e a) c d d))
+a c d c d => (s (e (e a) c d c d))
+a c d c d c d => (s (e (e a) c d c d c d))
+";
+}
+
+// The simulator decides a `??` under every mode, so `verify` has nothing to
+// check there. The trees are the jar's.
+test "atn verify leaves a decision the simulator makes unchecked" {
+    let g4 = "grammar Q;\ns : (A B)?? A C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\nWS : ' ' -> skip ;\n";
+    let got = parses_each(g4, [
+        ["s", "a c"],
+        ["s", "a b a c"],
+    ], &GenerateOptions { atn: AtnMode::Verify });
+    assert got == "a c => (s a c)\na b a c => (s a b a c)\n";
+}
+
+// On `a c d d` the jar enters the loop on the first `d`, and `never` leaves it
+// to the suffix's `D`. The trees are the jar's.
+test "atn verify checks a contested repeat in a left-recursion suffix" {
+    let g4 = "grammar R;
+s : e EOF ;
+e : e C (D | D D)* D
+  | A
+  ;
+A : 'a' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let agreed = parses_each(g4, [
+        ["s", "a c d"],
+        ["s", "a c d d d"],
+        ["s", "a c d c d"],
+    ], &verify);
+    assert agreed == "a c d => (s (e (e a) c d))
+a c d d d => (s (e (e a) c d d d))
+a c d c d => (s (e (e (e a) c d) c d))
+";
+    let input = "a c d d";
+    let out = eval_beside(gen_with(g4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains(": the repeat picks "), out.stderr;
+}
+
+// The atom choice between the two `new` alternatives is the simulator's under
+// `auto`, so the loop is too. The trees are the jar's.
+global CONTESTED_NEW_G4: String = "grammar L;
+s : e EOF ;
+e : e '.' ID
+  | 'new' e targs? '(' e? ')'
+  | 'new' e targs?
+  | e '(' e? ')'
+  | e '<' e
+  | e '>' e
+  | ID
+  ;
+targs : '<' ID '>' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify checks a left-recursion loop against the simulator" {
+    let inputs: List<[String, String]> = [
+        ["s", "new a < b > ( )"],
+        ["s", "new a < b > c"],
+        ["s", "new a < b"],
+        ["s", "new a < b > ( ) . c"],
+    ];
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses_each(CONTESTED_NEW_G4, inputs, &verify) == "new a < b > ( ) => (s (e new (e a) (targs < b >) ( )))
+new a < b > c => (s (e new (e (e (e a) < (e b)) > (e c))))
+new a < b => (s (e new (e (e a) < (e b))))
+new a < b > ( ) . c => (s (e (e new (e a) (targs < b >) ( )) . c))
+";
+    let input = "new a < b > . c";
+    let out = eval_beside(
+        gen_with(CONTESTED_NEW_G4, &verify).source,
+        wado`show("${input}", parse_s("${input}"));\n`,
+        SHOW_FN,
+    );
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains(": the left-recursion loop picks "), out.stderr;
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;

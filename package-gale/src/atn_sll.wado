@@ -883,17 +883,23 @@ pub global ATN_VERIFIED: String = "atn_verified";
 /// discriminant, and only the panic spells it out.
 pub enum AtnPicker {
     Tournament,
+    Repeat,
     LookaheadDfa,
     LrTable,
+    LrLoop,
 }
 
-global ATN_PICKERS: List<AtnPicker> = [AtnPicker::Tournament, AtnPicker::LookaheadDfa, AtnPicker::LrTable];
+global ATN_PICKERS: List<AtnPicker> = [
+    AtnPicker::Tournament, AtnPicker::Repeat, AtnPicker::LookaheadDfa, AtnPicker::LrTable, AtnPicker::LrLoop,
+];
 
 fn atn_picker_name(picker: AtnPicker) -> String {
     return match picker {
         Tournament => "the tournament",
+        Repeat => "the repeat",
         LookaheadDfa => "the lookahead DFA",
         LrTable => "the LR table",
+        LrLoop => "the left-recursion loop",
     };
 }
 
