@@ -71,9 +71,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The template's shape, or `None` where a hole cannot be a member of one:
-    /// an error, an undecided inference variable, or a type parameter of the
-    /// enclosing item. A hole also carries its source text, which only a tag
-    /// reads.
+    /// an error or an undecided inference variable. A hole also carries its
+    /// source text, which only a tag reads.
     fn resolve_template_shape(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -106,9 +105,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Whether `ty` can be a hole of a shape: decided, and free of the
-    /// enclosing item's type parameters, until WEP 2026-01-10's roadmap opens a
-    /// template shape.
+    /// Whether `ty` can be a hole of a shape: decided, and free of a type pack.
+    /// One mentioning the enclosing item's type parameters makes the shape
+    /// open; a pack's element would need a shape per element.
     fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
@@ -121,9 +120,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return false;
         }
-        if self.tysys.type_table.borrow().contains_type_param(ty) {
+        if self.tysys.type_table.borrow().mentions_type_pack(ty) {
             let type_name = self.tysys.type_table.borrow().type_name(ty);
-            let _ = self.emit(TypeError::TemplateHoleGeneric { type_name, span });
+            let _ = self.emit(TypeError::TemplateHolePackElement { type_name, span });
             return false;
         }
         true
