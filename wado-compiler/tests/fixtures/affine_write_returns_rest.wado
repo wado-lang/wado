@@ -10,13 +10,13 @@ export fn run() with Stdout {
 
     let [srx, stx] = Stream::<i32>::new();
     srx.drop();
-    let sent = stx.write([1, 2, 3]);
+    let [stx, sent] = stx.start_write([1, 2, 3]).finish();
     println(`${sent.result:?} ${sent.rest:?}`);
     stx.drop();
 
     let [brx, btx] = Stream::<u8>::new();
     brx.drop();
-    let bytes = btx.write([7, 8]);
+    let [btx, bytes] = btx.start_write([7, 8]).finish();
     println(`${bytes.result:?} ${bytes.rest:?}`);
     btx.drop();
 }

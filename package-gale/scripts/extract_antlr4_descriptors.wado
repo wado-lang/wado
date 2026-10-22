@@ -33,8 +33,6 @@ use { to_snake_case } from "../src/ident.wado";
 
 // ===== Constants =====
 
-/// Directory entries per `Stream<DirectoryEntry>::read` when listing a dir.
-global DIR_READ_CHUNK: i32 = 64;
 
 fn descriptors_root() -> String {
     return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
@@ -526,15 +524,9 @@ fn open_dir<S: AsStrSlice>(parent: &Descriptor, name: S, mutate: bool) -> Result
 fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(DIR_READ_CHUNK);
-        for let e of chunk.items {
-            if e.type matches { RegularFile } && e.name.ends_with(suffix) {
-                out.push(e.name);
-            }
-        }
-        if chunk.result != CopyResult::Completed {
-            break;
+    for let e of stream.read_to_end() {
+        if e.type matches { RegularFile } && e.name.ends_with(suffix) {
+            out.push(e.name);
         }
     }
     stream.drop();
@@ -546,15 +538,9 @@ fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<St
 fn list_subdirs(dir: &Descriptor) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(DIR_READ_CHUNK);
-        for let e of chunk.items {
-            if e.type matches { Directory } {
-                out.push(e.name);
-            }
-        }
-        if chunk.result != CopyResult::Completed {
-            break;
+    for let e of stream.read_to_end() {
+        if e.type matches { Directory } {
+            out.push(e.name);
         }
     }
     stream.drop();

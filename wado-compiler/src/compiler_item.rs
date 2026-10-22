@@ -701,6 +701,10 @@ pub enum CompilerItem {
     StreamWrite,
     /// `core:prelude/types::FutureWrite`, likewise for `FutureWritable::write`.
     FutureWrite,
+    /// `core:prelude/types::StartedRead`, a `stream.read` not yet settled.
+    StartedRead,
+    /// `core:prelude/types::StartedWrite`, a `stream.write` not yet settled.
+    StartedWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
     /// `core:rt::cm_future_write_result`.
@@ -713,6 +717,8 @@ pub enum CompilerItem {
     CmPackedCount,
     /// `core:rt::cm_stream_read_u8`.
     CmStreamReadU8,
+    /// `core:rt::cm_stream_lift_u8`.
+    CmStreamLiftU8,
     /// `core:rt::cm_stream_write_u8`.
     CmStreamWriteU8,
     /// `core:rt::cm_stream_write_raw_all_u8`.
@@ -779,6 +785,8 @@ impl CompilerItem {
         Self::StreamChunk,
         Self::StreamWrite,
         Self::FutureWrite,
+        Self::StartedRead,
+        Self::StartedWrite,
         Self::CaseStyle,
         Self::Default,
         Self::Drop,
@@ -984,6 +992,7 @@ impl CompilerItem {
         Self::CmBufferBytes,
         Self::CmPackedCount,
         Self::CmStreamReadU8,
+        Self::CmStreamLiftU8,
         Self::CmStreamWriteU8,
         Self::CmStreamWriteRawAllU8,
         Self::CmErrorContextNew,
@@ -1032,6 +1041,8 @@ impl CompilerItem {
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
             Self::FutureWrite => "future_write",
+            Self::StartedRead => "started_read",
+            Self::StartedWrite => "started_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
             Self::Drop => "drop",
@@ -1180,6 +1191,7 @@ impl CompilerItem {
             Self::CmBufferBytes => "cm_buffer_bytes",
             Self::CmPackedCount => "cm_packed_count",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
+            Self::CmStreamLiftU8 => "cm_stream_lift_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
             Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
             Self::CmErrorContextNew => "cm_error_context_new",
@@ -1293,6 +1305,7 @@ impl CompilerItem {
             | Self::CmBufferBytes
             | Self::CmPackedCount
             | Self::CmStreamReadU8
+            | Self::CmStreamLiftU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
@@ -1334,6 +1347,8 @@ impl CompilerItem {
             | Self::StreamChunk
             | Self::StreamWrite
             | Self::FutureWrite
+            | Self::StartedRead
+            | Self::StartedWrite
             | Self::CaseStyle
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
@@ -1586,6 +1601,7 @@ impl CompilerItem {
             | Self::CmBufferBytes
             | Self::CmPackedCount
             | Self::CmStreamReadU8
+            | Self::CmStreamLiftU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
@@ -1631,7 +1647,11 @@ impl CompilerItem {
             | Self::CaseStyle
             | Self::CopyResult
             | Self::FutureWriteResult => CompilerItemKind::Enum,
-            Self::StreamChunk | Self::StreamWrite | Self::FutureWrite => CompilerItemKind::Struct,
+            Self::StreamChunk
+            | Self::StreamWrite
+            | Self::FutureWrite
+            | Self::StartedRead
+            | Self::StartedWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,

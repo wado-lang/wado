@@ -6,6 +6,6 @@ fn keep<affine T>(value: T) {
 test {
     let [rx, tx] = Stream::<u8>::new();
     keep(rx);
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
     keep(1);
 }

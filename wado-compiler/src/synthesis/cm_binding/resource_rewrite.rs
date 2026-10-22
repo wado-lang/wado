@@ -14,8 +14,9 @@ use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::name::{
-    LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
-    cm_stream_read_value_func_name, cm_stream_write_func_name, minted_name, to_cm_name,
+    LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_lift_func_name,
+    cm_stream_lift_value_func_name, cm_stream_read_func_name, cm_stream_read_value_func_name,
+    cm_stream_write_func_name, minted_name, to_cm_name,
 };
 use crate::package::Package;
 use crate::tir::{
@@ -29,7 +30,7 @@ use crate::type_table::TypeTable;
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, generic_method_call, handle_scalar, i32_const, i64_const, if_stmt,
+    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt,
     internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     return_stmt, struct_literal, synth_span,
 };
@@ -57,11 +58,6 @@ const CM_BLOCKED: i32 = -1;
 /// The `CopyResult` status of a copy whose reader or writer dropped first.
 const CM_DROPPED: i32 = 1;
 
-/// `cm_packed_count(result)`: the element count of a packed CM async result.
-fn packed_count(result: TirExpr) -> TirExpr {
-    internal_call("cm_packed_count", vec![result], TypeTable::I32)
-}
-
 /// `cm_copy_count(count)`: the part of `count` one CM copy may move.
 fn copy_count(count: TirExpr) -> TirExpr {
     internal_call("cm_copy_count", vec![count], TypeTable::I32)
@@ -77,18 +73,6 @@ fn packed_status(result: TirExpr) -> TirExpr {
     )
 }
 
-/// `cm_copy_result(packed)`: the `CopyResult` a packed copy reports.
-fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
-    let copy_result = type_table
-        .borrow_mut()
-        .make_compiler_enum(CompilerItem::CopyResult);
-    internal_call(
-        CompilerItem::CmCopyResult.attr_name(),
-        vec![packed],
-        copy_result,
-    )
-}
-
 /// `cm_future_write_result(packed)`: how a future write ended, a BLOCKED one
 /// pending.
 fn future_write_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
@@ -99,57 +83,6 @@ fn future_write_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> T
         CompilerItem::CmFutureWriteResult.attr_name(),
         vec![packed],
         result,
-    )
-}
-
-/// `StreamChunk { items, result }` / `StreamWrite { rest, result }` — what a
-/// copy moved or left, paired with how it ended. Field order follows the
-/// declaration.
-fn copy_report_literal(
-    type_id: TypeId,
-    item: CompilerItem,
-    moved_field: &str,
-    moved: TirExpr,
-    result: TirExpr,
-    type_table: &RefCell<TypeTable>,
-) -> TirExpr {
-    let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
-    struct_literal(
-        type_id,
-        struct_name,
-        [(moved_field, moved), ("result", result)],
-    )
-}
-
-fn stream_chunk_literal(
-    chunk_type_id: TypeId,
-    items: TirExpr,
-    result: TirExpr,
-    type_table: &RefCell<TypeTable>,
-) -> TirExpr {
-    copy_report_literal(
-        chunk_type_id,
-        CompilerItem::StreamChunk,
-        "items",
-        items,
-        result,
-        type_table,
-    )
-}
-
-fn stream_write_literal(
-    write_type_id: TypeId,
-    rest: TirExpr,
-    result: TirExpr,
-    type_table: &RefCell<TypeTable>,
-) -> TirExpr {
-    copy_report_literal(
-        write_type_id,
-        CompilerItem::StreamWrite,
-        "rest",
-        rest,
-        result,
-        type_table,
     )
 }
 
@@ -264,7 +197,7 @@ impl<'a> BindingSites<'a> {
 fn synthesize_bindings<K>(
     sites: &BindingSites<'_>,
     find: impl Fn(&TypeTable, &TirExpr) -> Option<(String, K)>,
-    synthesize: impl Fn(K, &SynthCtx) -> TirFunction,
+    synthesize: impl Fn(K, &SynthCtx) -> Vec<TirFunction>,
 ) -> Vec<Rc<RefCell<TirFunction>>> {
     let mut needed: IndexMap<String, K> = IndexMap::default();
     {
@@ -293,7 +226,8 @@ fn synthesize_bindings<K>(
     };
     needed
         .into_iter()
-        .map(|(_, key)| Rc::new(RefCell::new(synthesize(key, &ctx))))
+        .flat_map(|(_, key)| synthesize(key, &ctx))
+        .map(|func| Rc::new(RefCell::new(func)))
         .collect()
 }
 
@@ -316,7 +250,7 @@ fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<Ti
     )
 }
 
-fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
+fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Vec<TirFunction> {
     let registry = ctx.cm_interface_registry;
     let elem_name = ctx.type_table.borrow().base_type_name(elem_type_id);
     let source = registry
@@ -352,17 +286,18 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         .get_struct_cm_name_by_source(&source, &elem_name)
         .map_or_else(|| to_cm_name(&elem_name), str::to_string);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
-    synthesize_stream_read_func(
-        cm_stream_read_func_name(&elem_name),
+    synthesize_stream_read_funcs(
+        StreamReadNames {
+            begin: cm_stream_read_func_name(&elem_name),
+            lift: cm_stream_lift_func_name(&elem_name),
+        },
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
         elem_size,
         elem_align,
         &ast_type,
         elem_pkg,
-        registry,
-        ctx.type_table,
-        ctx.interner,
+        ctx,
     )
 }
 
@@ -382,7 +317,7 @@ fn synthesize_future_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFuncti
             Some((future_read_func_name(tt, payload), (payload, option)))
         },
         |(payload_type_id, option_type_id), ctx| {
-            synthesize_future_read_func(payload_type_id, option_type_id, ctx)
+            vec![synthesize_future_read_func(payload_type_id, option_type_id, ctx)]
         },
     )
 }
@@ -401,7 +336,7 @@ fn synthesize_future_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
             let payload = future_write_payload(tt, expr)?;
             Some((future_write_func_name(tt, payload), payload))
         },
-        synthesize_future_write_func,
+        |payload, ctx| vec![synthesize_future_write_func(payload, ctx)],
     )
 }
 
@@ -436,7 +371,7 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
             let elem = stream_write_value_element(tt, expr)?;
             Some((stream_write_func_name(tt, elem), elem))
         },
-        synthesize_stream_write_func,
+        |elem, ctx| vec![synthesize_stream_write_func(elem, ctx)],
     )
 }
 
@@ -612,146 +547,50 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     );
     stmts.extend(lower_stmts);
 
-    // One copy. A reader may take only a prefix, and the rest is returned;
-    // `StreamWritable::write_all` is the loop that finishes a buffer.
-    let result_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("result".to_string()),
+    // One copy, started. A reader may take only a prefix, and
+    // `StartedWrite::settle` returns the rest of `data`.
+    let started_type_id = type_table.borrow_mut().make_started_write(elem_type_id);
+    let count = || local_ref(count_local, "$list_len", TypeTable::I32);
+    let packed = cm_canonical_call(
+        write_name,
+        vec![
+            local_ref(handle_idx, "handle", TypeTable::I32),
+            local_ref(ptr_local, "$list_base", TypeTable::I32),
+            copy_count(count()),
+        ],
         TypeTable::I32,
-        false,
     );
-    stmts.push(let_stmt(
-        "result",
-        result_idx,
-        TypeTable::I32,
-        settled(
-            cm_canonical_call(
-                write_name,
-                vec![
-                    local_ref(handle_idx, "handle", TypeTable::I32),
+    let byte_count = binary(TirBinaryOp::Mul, count(), i32_const(elem_size), TypeTable::I32);
+    stmts.push(return_stmt(Some(started_copy_literal(
+        started_type_id,
+        CompilerItem::StartedWrite,
+        vec![
+            (
+                "buffer",
+                result_buffer_literal(
                     local_ref(ptr_local, "$list_base", TypeTable::I32),
-                    copy_count(local_ref(count_local, "$list_len", TypeTable::I32)),
-                ],
-                TypeTable::I32,
+                    byte_count,
+                    elem_align,
+                    type_table,
+                ),
             ),
-            handle_idx,
-        ),
-    ));
-    let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
-
-    // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
-    let byte_count = binary(
-        TirBinaryOp::Mul,
-        local_ref(count_local, "$list_len", TypeTable::I32),
-        i32_const(elem_size),
-        TypeTable::I32,
-    );
-    let freed_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("$freed".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    stmts.push(let_stmt(
-        "$freed",
-        freed_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                local_ref(ptr_local, "$list_base", TypeTable::I32),
-                byte_count,
-                i32_const(elem_align),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ),
-    ));
-
-    // The delivered prefix now belongs to the reader, so `data` keeps it and
-    // is never dropped: a binding is synthesized after drops are elaborated.
-    let (write_type_id, list_head, split_off) = {
-        let mut tt = type_table.borrow_mut();
-        let write_type_id = tt.make_stream_write(elem_type_id);
-        let list_head = tt.compiler_struct_fq_name(CompilerItem::List);
-        let split_off = tt
-            .compiler_items()
-            .require_template(CompilerItem::ListSplitOff);
-        (write_type_id, list_head, split_off)
-    };
-    let rest = generic_method_call(
-        local_ref(data_idx, "data", list_type_id),
-        &list_head,
-        "split_off",
-        ModuleSource::list(),
-        split_off,
-        vec![packed_count(result_ref())],
-        list_type_id,
-    );
-    stmts.push(return_stmt(Some(stream_write_literal(
-        write_type_id,
-        rest,
-        copy_result_of(result_ref(), type_table),
+            ("packed", packed),
+            ("data", local_ref(data_idx, "data", list_type_id)),
+        ],
         type_table,
     ))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "data".to_string(),
-                local_index: data_idx,
-                type_id: list_type_id,
-                is_mut: true,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
+    binding_function(
+        func_name,
+        vec![
+            binding_param("handle", handle_idx, TypeTable::I32),
+            binding_param("data", data_idx, list_type_id),
         ],
-        return_type: write_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
+        started_type_id,
+        stmts,
+        next_local,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: true,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
+    )
 }
 
 /// `cm_await_blocked(handle, <copy>)`: the packed result of `copy`, awaited
@@ -978,13 +817,17 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         block(vec![expr_stmt(assign(rest(), some))]),
         None,
     ));
-    stmts.push(return_stmt(Some(copy_report_literal(
+    let write_name = type_table
+        .borrow()
+        .compiler_struct_name(CompilerItem::FutureWrite)
+        .to_string();
+    stmts.push(return_stmt(Some(struct_literal(
         write_type_id,
-        CompilerItem::FutureWrite,
-        "rest",
-        rest(),
-        future_write_result_of(written(), type_table),
-        type_table,
+        write_name,
+        [
+            ("rest", rest()),
+            ("result", future_write_result_of(written(), type_table)),
+        ],
     ))));
 
     TirFunction {
@@ -1303,50 +1146,47 @@ fn cm_name_of(expr: &TirExpr) -> Option<&str> {
     func.method_info.as_ref()?.cm_name.as_deref()
 }
 
-/// The element type of a `stream-read` call, or `None` for anything else and
-/// for the `u8` stream, which `core:rt` binds by hand.
+/// The element type of a `stream-read` or `stream-lift` call, the two halves
+/// one synthesized pair binds, or `None` for anything else and for the `u8`
+/// stream, which `core:rt` binds by hand.
 fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    if cm_name_of(expr) != Some("stream-read") {
+    if !matches!(cm_name_of(expr), Some("stream-read" | "stream-lift")) {
         return None;
     }
     let elem = stream_receiver_element(tt, expr)?;
     (!is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
-/// Shared stream-read loop generator. `func_name` / `stream_read_name` /
-/// `payload_ast` / `cm_package` are precomputed by the caller so this body
-/// serves both the WASI-record path ([`synthesize_record_stream_reads`]) and
-/// the value-payload path ([`synthesize_stream_reads`]).
-fn synthesize_stream_read_func(
-    func_name: String,
+/// The names of the two functions a stream read binds to.
+struct StreamReadNames {
+    /// Starts the copy: `(handle, max) -> StartedRead<T>`.
+    begin: String,
+    /// Lifts what it copied: `(ptr, count) -> List<T>`.
+    lift: String,
+}
+
+/// Shared stream-read generator. `names` / `stream_read_name` / `payload_ast` /
+/// `cm_package` are precomputed by the caller so this body serves both the
+/// WASI-record path ([`synthesize_record_stream_reads`]) and the value-payload
+/// path ([`synthesize_stream_reads`]). The begin function issues the copy into a
+/// buffer and returns it unsettled, with the lift function `StartedRead::settle`
+/// calls once it has.
+fn synthesize_stream_read_funcs(
+    names: StreamReadNames,
     stream_read_name: CanonicalIntrinsic,
     elem_type_id: TypeId,
     elem_size: i32,
     elem_align: i32,
     payload_ast: &Type,
     cm_package: &str,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &RefCell<TypeTable>,
-    interner: &RefCell<ModuleSourceInterner>,
-) -> TirFunction {
-    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
-    let chunk_type_id = type_table.borrow_mut().make_stream_chunk(elem_type_id);
-    // `List` is a declaration, so the receiver its methods are named after
-    // carries it rather than the spelling `List` happens to have.
-    let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
-    let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
-    let list_template = |item| type_table.borrow().compiler_items().require_template(item);
-    // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
-    let list_method = |method: &str| {
-        LocalMethodName::new(list_fq.clone(), None, method.to_string())
-            .with_struct_type_args(std::slice::from_ref(&elem_fq))
-    };
+    ctx: &SynthCtx,
+) -> Vec<TirFunction> {
+    let type_table = ctx.type_table;
+    let started_type_id = type_table.borrow_mut().make_started_read(elem_type_id);
 
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut stmts: Vec<TirStmt> = Vec::new();
-
-    // Params: handle (i32), max (i32)
     let handle_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1361,24 +1201,6 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-
-    // let room = cm_copy_count(max)
-    let room_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("room".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    stmts.push(let_stmt(
-        "room",
-        room_idx,
-        TypeTable::I32,
-        copy_count(local_ref(max_idx, "max", TypeTable::I32)),
-    ));
-    let room = || local_ref(room_idx, "room", TypeTable::I32);
-
-    // let byte_count = cm_buffer_bytes(room, elem_size)
     let byte_count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1386,15 +1208,16 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let byte_count = buffer_bytes(room(), elem_size);
     stmts.push(let_stmt(
         "byte_count",
         byte_count_idx,
         TypeTable::I32,
-        byte_count,
+        buffer_bytes(
+            copy_count(local_ref(max_idx, "max", TypeTable::I32)),
+            elem_size,
+        ),
     ));
-
-    // let ptr = realloc(0, 0, elem_align, byte_count)
+    let byte_count = || local_ref(byte_count_idx, "byte_count", TypeTable::I32);
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1402,42 +1225,101 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let alloc_call = builtin_call(
-        "realloc",
-        vec![
-            i32_const(0),
-            i32_const(0),
-            i32_const(elem_align),
-            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
-        ],
+    stmts.push(let_stmt(
+        "ptr",
+        ptr_idx,
         TypeTable::I32,
-    );
-    stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
-
-    let result_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("result".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let stream_read_call = cm_canonical_call(
+        builtin_call(
+            "realloc",
+            vec![i32_const(0), i32_const(0), i32_const(elem_align), byte_count()],
+            TypeTable::I32,
+        ),
+    ));
+    let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
+    let packed = cm_canonical_call(
         stream_read_name,
         vec![
             local_ref(handle_idx, "handle", TypeTable::I32),
-            local_ref(ptr_idx, "ptr", TypeTable::I32),
-            room(),
+            ptr(),
+            copy_count(local_ref(max_idx, "max", TypeTable::I32)),
         ],
         TypeTable::I32,
     );
-    stmts.push(let_stmt(
-        "result",
-        result_idx,
-        TypeTable::I32,
-        settled(stream_read_call, handle_idx),
-    ));
+    let started = started_copy_literal(
+        started_type_id,
+        CompilerItem::StartedRead,
+        vec![
+            (
+                "buffer",
+                result_buffer_literal(ptr(), byte_count(), elem_align, type_table),
+            ),
+            ("packed", packed),
+        ],
+        type_table,
+    );
+    stmts.push(return_stmt(Some(started)));
+    let begin = binding_function(
+        names.begin,
+        vec![
+            binding_param("handle", handle_idx, TypeTable::I32),
+            binding_param("max", max_idx, TypeTable::I32),
+        ],
+        started_type_id,
+        stmts,
+        next_local,
+        locals,
+    );
+    let lift = synthesize_stream_lift_func(
+        names.lift,
+        elem_type_id,
+        elem_size,
+        payload_ast,
+        cm_package,
+        ctx,
+    );
+    vec![begin, lift]
+}
 
-    // let count = packed count of result
+/// `$cm_stream_lift_*(handle, ptr, count) -> List<T>`: the `count` elements a
+/// read on `handle` copied to `ptr`, lifted one by one.
+fn synthesize_stream_lift_func(
+    name: String,
+    elem_type_id: TypeId,
+    elem_size: i32,
+    payload_ast: &Type,
+    cm_package: &str,
+    ctx: &SynthCtx,
+) -> TirFunction {
+    let type_table = ctx.type_table;
+    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    // `List` is a declaration, so the receiver its methods are named after
+    // carries it rather than the spelling `List` happens to have.
+    let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
+    let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
+    let list_template = |item| type_table.borrow().compiler_items().require_template(item);
+    // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
+    let list_method = |method: &str| {
+        LocalMethodName::new(list_fq.clone(), None, method.to_string())
+            .with_struct_type_args(std::slice::from_ref(&elem_fq))
+    };
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let mut stmts: Vec<TirStmt> = Vec::new();
+    let handle_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("handle".to_string()),
+        TypeTable::I32,
+        false,
+    );
+    let ptr_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("ptr".to_string()),
+        TypeTable::I32,
+        false,
+    );
     let count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1445,10 +1327,7 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let count_expr = packed_count(local_ref(result_idx, "result", TypeTable::I32));
-    stmts.push(let_stmt("count", count_idx, TypeTable::I32, count_expr));
 
-    // let mut arr = List::<T>::with_capacity(count), filled element by element
     let arr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1456,8 +1335,6 @@ fn synthesize_stream_read_func(
         array_type_id,
         false,
     );
-
-    // Create empty array via List<T>::with_capacity(count)
     let with_capacity = list_method("with_capacity");
     let empty_arr = TirExpr::new(
         TirExprKind::Call {
@@ -1484,7 +1361,6 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_mut_stmt("arr", arr_idx, array_type_id, empty_arr));
 
-    // let mut i = 0
     let i_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1494,10 +1370,7 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_mut_stmt("i", i_idx, TypeTable::I32, i32_const(0)));
 
-    // Loop body: while i < count
     let mut loop_body_stmts = Vec::new();
-
-    // if i >= count { break; }
     let break_cond = binary(
         TirBinaryOp::GtEq,
         local_ref(i_idx, "i", TypeTable::I32),
@@ -1513,7 +1386,6 @@ fn synthesize_stream_read_func(
         None,
     ));
 
-    // let addr = ptr + i * elem_size
     let addr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1530,12 +1402,11 @@ fn synthesize_stream_read_func(
     let addr = binary_add(local_ref(ptr_idx, "ptr", TypeTable::I32), offset);
     loop_body_stmts.push(let_stmt("addr", addr_idx, TypeTable::I32, addr));
 
-    // Lift each element from linear memory at addr.
     let lift_ctx = LiftContext {
-        cm_interface_registry,
+        cm_interface_registry: ctx.cm_interface_registry,
         type_table,
         cm_package,
-        interner,
+        interner: ctx.interner,
     };
     let lifted_elem = synthesize_lift(
         payload_ast,
@@ -1545,8 +1416,6 @@ fn synthesize_stream_read_func(
         &mut locals,
         &lift_ctx,
     );
-
-    // arr.push(elem)
     let elem_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1582,49 +1451,82 @@ fn synthesize_stream_read_func(
         synth_span(),
     );
     loop_body_stmts.push(expr_stmt(push_call));
-
-    // i += 1
-    let increment = assign(
+    loop_body_stmts.push(expr_stmt(assign(
         local_ref(i_idx, "i", TypeTable::I32),
         binary_add(local_ref(i_idx, "i", TypeTable::I32), i32_const(1)),
-    );
-    loop_body_stmts.push(expr_stmt(increment));
-
+    )));
     stmts.push(loop_stmt(TirBlock {
         stmts: loop_body_stmts,
         span: synth_span(),
     }));
+    stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
 
-    // Free buffer: realloc(ptr, byte_count, elem_align, 0)
-    let free_call = builtin_call(
-        "realloc",
+    binding_function(
+        name,
         vec![
-            local_ref(ptr_idx, "ptr", TypeTable::I32),
-            local_ref(byte_count_idx, "byte_count", TypeTable::I32),
-            i32_const(elem_align),
-            i32_const(0),
+            binding_param("handle", handle_idx, TypeTable::I32),
+            binding_param("ptr", ptr_idx, TypeTable::I32),
+            binding_param("count", count_idx, TypeTable::I32),
         ],
-        TypeTable::I32,
-    );
-    let freed_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("$freed".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    stmts.push(let_stmt("$freed", freed_idx, TypeTable::I32, free_call));
+        array_type_id,
+        stmts,
+        next_local,
+        locals,
+    )
+}
 
-    stmts.push(return_stmt(Some(stream_chunk_literal(
-        chunk_type_id,
-        local_ref(arr_idx, "arr", array_type_id),
-        copy_result_of(local_ref(result_idx, "result", TypeTable::I32), type_table),
-        type_table,
-    ))));
+/// `ResultBuffer { ptr, size, align }`: the linear memory a started copy holds
+/// until it settles, freed as the buffer drops.
+fn result_buffer_literal(
+    ptr: TirExpr,
+    size: TirExpr,
+    align: i32,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    let buffer_type = type_table.borrow_mut().make_result_buffer();
+    struct_literal(
+        buffer_type,
+        "ResultBuffer",
+        vec![("ptr", ptr), ("size", size), ("align", i32_const(align))],
+    )
+}
 
+/// `StartedRead { buffer, packed }` / `StartedWrite { buffer, packed, data }`
+/// — a copy the canonical answered `packed` for, not yet settled. Field order
+/// follows the declaration.
+fn started_copy_literal(
+    type_id: TypeId,
+    item: CompilerItem,
+    fields: Vec<(&str, TirExpr)>,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
+    struct_literal(type_id, struct_name, fields)
+}
+
+fn binding_param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
+    TirParam {
+        name: name.to_string(),
+        local_index,
+        type_id,
+        is_mut: false,
+        is_mut_ref: false,
+        span: synth_span(),
+    }
+}
+
+/// A synthesized binding function of the entry module.
+fn binding_function(
+    name: String,
+    params: Vec<TirParam>,
+    return_type: TypeId,
+    stmts: Vec<TirStmt>,
+    local_count: u32,
+    locals: Vec<TirLocal>,
+) -> TirFunction {
     TirFunction {
         module_source: ModuleSource::default(),
-        name: func_name,
+        name,
         def_id: None,
         visibility: Visibility::Private,
         is_export: false,
@@ -1634,25 +1536,8 @@ fn synthesize_stream_read_func(
         impl_origin: None,
         monomorph_info: None,
         method_info: None,
-        params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "max".to_string(),
-                local_index: max_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-        ],
-        return_type: chunk_type_id,
+        params,
+        return_type,
         task_return_type: None,
         effects: vec![],
         immediates: vec![],
@@ -1662,7 +1547,7 @@ fn synthesize_stream_read_func(
             span: synth_span(),
         }),
         span: synth_span(),
-        local_count: next_local,
+        local_count,
         locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
@@ -1675,7 +1560,6 @@ fn synthesize_stream_read_func(
         export_name: None,
         allocator_tag: None,
         kind: FunctionKind::Regular,
-
         return_abi: tir::ReturnAbi::default(),
     }
 }
@@ -1684,30 +1568,31 @@ fn synthesize_stream_read_func(
 /// value-payload element type, delegating the read loop to the shared
 /// [`synthesize_stream_read_func`]. The canonical name matches the `val-`
 /// naming the codegen builds for `CmStreamPayload::Value`.
-fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
+fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Vec<TirFunction> {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, read_name, payload_ast, elem_size, elem_align) = {
+    let (names, read_name, payload_ast, elem_size, elem_align) = {
         let tt = type_table.borrow();
-        let func_name = stream_read_value_func_name(&tt, elem_type_id);
+        let names = StreamReadNames {
+            begin: stream_read_value_func_name(&tt, elem_type_id),
+            lift: cm_stream_lift_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id)),
+        };
         let payload = classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload);
         let payload_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        (func_name, read_name, payload_ast, size, align)
+        (names, read_name, payload_ast, size, align)
     };
 
-    synthesize_stream_read_func(
-        func_name,
+    synthesize_stream_read_funcs(
+        names,
         read_name,
         elem_type_id,
         elem_size,
         elem_align,
         &payload_ast,
         "cli",
-        cm_interface_registry,
-        type_table,
-        ctx.interner,
+        ctx,
     )
 }
 
@@ -1727,6 +1612,7 @@ enum BindingTarget {
 fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
     Some(match cm_name {
         "stream-read" => CompilerItem::CmStreamReadU8,
+        "stream-lift" => CompilerItem::CmStreamLiftU8,
         "stream-write" => CompilerItem::CmStreamWriteU8,
         "stream-write-raw-all" => CompilerItem::CmStreamWriteRawAllU8,
         "error-context-new" => CompilerItem::CmErrorContextNew,
@@ -1869,19 +1755,26 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             }
             return;
         }
-        // Value-payload stream reads call a generated per-element binding;
-        // WASI-record reads fall through to the `$cm_stream_read_<record>` path.
+        // Value-payload stream reads and lifts call a generated per-element
+        // pair; WASI-record ones fall through to the `$cm_stream_read_<record>`
+        // path.
+        let lifts = cm_name == "stream-lift";
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
-            let func_name = stream_read_value_func_name(self.tt, elem_type_id);
+            let func_name = if lifts {
+                cm_stream_lift_value_func_name(&self.tt.mangle_type_arg_for_generic(elem_type_id))
+            } else {
+                stream_read_value_func_name(self.tt, elem_type_id)
+            };
             self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
-        // WASI-record stream reads call a generated binding function.
-        if cm_name == "stream-read"
-            && let Some(elem_type_id) = record_stream_read_element(self.tt, expr)
-        {
+        if let Some(elem_type_id) = record_stream_read_element(self.tt, expr) {
             let elem_name = self.tt.base_type_name(elem_type_id);
-            let func_name = cm_stream_read_func_name(&elem_name);
+            let func_name = if lifts {
+                cm_stream_lift_func_name(&elem_name)
+            } else {
+                cm_stream_read_func_name(&elem_name)
+            };
             self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
@@ -2236,6 +2129,7 @@ mod cm_binding_tests {
         ("future-drop-writable", None),
         ("stream-new", None),
         ("stream-read", Some("internal cm_stream_read_u8")),
+        ("stream-lift", Some("internal cm_stream_lift_u8")),
         ("stream-write", Some("internal cm_stream_write_u8")),
         (
             "stream-write-raw-all",
@@ -2273,7 +2167,7 @@ mod cm_binding_tests {
         })
     }
 
-    /// Every `#[cm("…")]` the prelude declares on a resource method — the same
+    /// Every `#[cm("…")]` the prelude declares on a method — the same
     /// attribute reader the elaborator records `cm_name` from.
     fn declared_primitives() -> Vec<String> {
         let source = all_core_modules()
@@ -2287,6 +2181,7 @@ mod cm_binding_tests {
             .iter()
             .filter_map(|item| match item {
                 Item::Resource(decl) => Some(&decl.methods),
+                Item::Impl(block) => Some(&block.methods),
                 _ => None,
             })
             .flatten()

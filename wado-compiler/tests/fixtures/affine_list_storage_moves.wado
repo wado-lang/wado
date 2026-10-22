@@ -9,9 +9,9 @@ test "remove leaves no copy for the drop" {
     ends.push(b);
     let first = ends.remove(0);
     first.drop();
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
     builtin::drop(ends);
-    assert tb.write([1]).result == CopyResult::Dropped;
+    assert tb.write_all([1]) == CopyResult::Dropped;
 }
 
 test "insert shifts without a copy" {
@@ -23,9 +23,9 @@ test "insert shifts without a copy" {
     assert ends.len() == 2;
     let last = ends.pop();
     builtin::drop(last);
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
     builtin::drop(ends);
-    assert tb.write([1]).result == CopyResult::Dropped;
+    assert tb.write_all([1]) == CopyResult::Dropped;
 }
 
 test "truncate drops what it releases" {
@@ -35,9 +35,9 @@ test "truncate drops what it releases" {
     ends.push(a);
     ends.push(b);
     ends.truncate(1);
-    assert tb.write([1]).result == CopyResult::Dropped;
+    assert tb.write_all([1]) == CopyResult::Dropped;
     ends.clear();
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
 }
 
 test "a store drops what the slot held" {
@@ -46,9 +46,9 @@ test "a store drops what the slot held" {
     let mut ends: List<Stream<u8>> = [];
     ends.push(a);
     ends[0] = b;
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
     builtin::drop(ends);
-    assert tb.write([1]).result == CopyResult::Dropped;
+    assert tb.write_all([1]) == CopyResult::Dropped;
 }
 
 test "swap keeps both" {
@@ -60,9 +60,9 @@ test "swap keeps both" {
     ends.swap(0, 1);
     let last = ends.pop();
     builtin::drop(last);
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
     builtin::drop(ends);
-    assert tb.write([1]).result == CopyResult::Dropped;
+    assert tb.write_all([1]) == CopyResult::Dropped;
 }
 
 test "inspecting reads each element in place" {
@@ -75,5 +75,5 @@ test "inspecting reads each element in place" {
     let kept = ends.pop();
     assert kept matches { Some(_) };
     builtin::drop(kept);
-    assert ta.write([1]).result == CopyResult::Dropped;
+    assert ta.write_all([1]) == CopyResult::Dropped;
 }

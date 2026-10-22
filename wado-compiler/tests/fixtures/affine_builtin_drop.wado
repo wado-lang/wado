@@ -4,5 +4,5 @@
 test {
     let [rx, tx] = Stream::<u8>::new();
     builtin::drop(tx);
-    assert rx.read(1).result == CopyResult::Dropped;
+    assert rx.start_read(1).finish().1.result == CopyResult::Dropped;
 }

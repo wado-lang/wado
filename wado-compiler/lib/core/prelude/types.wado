@@ -300,24 +300,33 @@ pub resource Stream<T> {
     #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
 
-    /// One Component Model copy of up to `max` elements, blocking until at
-    /// least one arrives or the writable end drops. A `Dropped` result can
-    /// carry elements of its own, and reading an end whose result was `Dropped`
-    /// traps, so a loop breaks on the result, never on an empty chunk.
-    /// `read_to_end` is that loop.
-    #[cm("stream-read")]
-    fn read(&self, max: i32) -> StreamChunk<T>;
-
-    /// Cancel an in-progress read. Blocks until cancellation completes.
-    #[cm("stream-cancel-read")]
-    fn cancel_read(&self);
-
     /// Drop the readable end of the stream.
     #[cm("stream-drop-readable")]
     fn drop(self);
 }
 
 impl<T> Stream<T> {
+    /// One Component Model copy of up to `max` elements, started and not
+    /// waited for.
+    #[cm("stream-read")]
+    internal fn begin_read(&self, max: i32) -> StartedRead<T>;
+
+    /// Cancel the copy in flight, blocking until it settles, and return the
+    /// packed result it settled on.
+    #[cm("stream-cancel-read")]
+    internal fn cancel_read(&self) -> u32;
+
+    /// The `count` elements a read on this end copied to `ptr`, lifted.
+    #[cm("stream-lift")]
+    internal fn lift_copied(&self, ptr: i32, count: i32) -> List<T>;
+
+    /// Start one copy of up to `max` elements without waiting for it. The end
+    /// moves into the copy, and `ReadCopy::finish` hands it back.
+    pub fn start_read(self, max: i32) -> ReadCopy<T> {
+        let started = self.begin_read(max);
+        return ReadCopy { end: Option::Some(self), started: Option::Some(started) };
+    }
+
     /// Read until the writable end drops, and return everything it wrote.
     /// Only the result stops it: an empty `Completed` copy is the writer
     /// offering nothing this time, and more can still follow.
@@ -331,7 +340,7 @@ impl<T> Stream<T> {
     pub fn read_to_end_sized(&self, expected: i32) -> List<T> {
         let mut all = List::<T>::with_capacity(expected);
         loop {
-            let chunk = self.read(STREAM_CHUNK_ELEMENTS);
+            let chunk = self.begin_read(STREAM_CHUNK_ELEMENTS).settle(self);
             all.extend(&chunk.items);
             if chunk.result != CopyResult::Completed {
                 return all;
@@ -351,26 +360,79 @@ impl Stream<u8> {
 /// until the peer moves, so this bounds the buffer, not the throughput.
 internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 
+/// A `stream.read` the host may still be copying into `buffer`. `packed` is
+/// what the canonical answered, BLOCKED where the copy has not settled.
+#[compiler_item("started_read")]
+internal affine struct StartedRead<T> {
+    internal buffer: ResultBuffer,
+    internal packed: i32,
+}
+
+impl<T> StartedRead<T> {
+    /// What the copy on `end` moved, once it has settled. The buffer frees as
+    /// this returns.
+    internal fn settle(self, end: &Stream<T>) -> StreamChunk<T> {
+        let packed = settled_copy(builtin::resource_handle(end), self.packed);
+        return StreamChunk {
+            items: end.lift_copied(self.buffer.ptr, cm_packed_upper(packed)),
+            result: copy_result(packed),
+        };
+    }
+}
+
+/// One copy started on a stream end, holding the end until it is finished.
+/// Dropping one in flight cancels it, and drops what it had copied.
+pub affine struct ReadCopy<T> {
+    end: Option<Stream<T>>,
+    started: Option<StartedRead<T>>,
+}
+
+impl<T> ReadCopy<T> {
+    /// The end and what the copy moved. Waits for a copy that has not settled,
+    /// so a copy that never joined a set finishes as well.
+    pub fn finish(self) -> [Stream<T>, StreamChunk<T>] {
+        let mut copy = self;
+        let end = copy.end.take().unwrap();
+        let chunk = copy.started.take().unwrap().settle(&end);
+        return [end, chunk];
+    }
+}
+
+impl<T> Drop for ReadCopy<T> {
+    fn drop(self) {
+        let Some(end) = self.end else {
+            return;
+        };
+        if let Some(started) = self.started {
+            let mut started = started;
+            let handle = builtin::resource_handle(&end);
+            if copy_in_flight(handle, started.packed) {
+                // A synchronous cancel traps on an end still in a set. Joining
+                // set 0 leaves whatever set it is in.
+                builtin::waitable_join(handle, 0);
+                started.packed = end.cancel_read() as i32;
+            }
+            builtin::drop(started.settle(&end));
+        }
+    }
+}
+
+impl<T> Waitable for ReadCopy<T> {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        if let Some(started) = &self.started && started.packed == CM_BLOCKED && let Some(end) = &self.end {
+            return Option::Some(ResourceId::of(end));
+        }
+        return null;
+    }
+}
+
 /// Writable end of an async sequence (WASI Component Model stream).
 #[compiler_item("stream_writable")]
 pub resource StreamWritable<T> {
-    /// One Component Model copy of `data`, blocking until the reader takes at
-    /// least one element or drops. The reader may take a prefix, and what it
-    /// left comes back as `rest`. Writing to an end whose result was
-    /// `Dropped` traps, and an empty `data` is the CM's readiness signal, which
-    /// blocks until a reader rendezvouses rather than writing nothing.
-    /// `write_all` is the loop that finishes the buffer.
-    #[cm("stream-write")]
-    fn write(&self, data: List<T>) -> StreamWrite<T>;
-
     /// `write_all` for a byte view, lowered once with no value-semantics copy.
     /// Any element type but a byte is a compile error.
     #[cm("stream-write-raw-all")]
     fn write_raw_all(&self, data: Slice<T>) -> CopyResult;
-
-    /// Cancel an in-progress write. Blocks until cancellation completes.
-    #[cm("stream-cancel-write")]
-    fn cancel_write(&self);
 
     /// Drop the writable end, signaling end-of-stream.
     #[cm("stream-drop-writable")]
@@ -384,6 +446,24 @@ internal fn write_copy_is_final(result: CopyResult, delivered: i32) -> bool {
 }
 
 impl<T> StreamWritable<T> {
+    /// One Component Model copy of `data`, started and not waited for. An
+    /// empty `data` is the CM's readiness signal: it settles once a reader
+    /// rendezvouses, having written nothing.
+    #[cm("stream-write")]
+    internal fn begin_write(&self, data: List<T>) -> StartedWrite<T>;
+
+    /// Cancel the copy in flight, blocking until it settles, and return the
+    /// packed result it settled on.
+    #[cm("stream-cancel-write")]
+    internal fn cancel_write(&self) -> u32;
+
+    /// Start one copy of `data` without waiting for it. The end moves into the
+    /// copy, and `WriteCopy::finish` hands it back.
+    pub fn start_write(self, data: List<T>) -> WriteCopy<T> {
+        let started = self.begin_write(data);
+        return WriteCopy { end: Option::Some(self), started: Option::Some(started) };
+    }
+
     /// Write every element, or stop early when the readable end drops.
     /// Returns the result of the copy that ended the loop.
     pub fn write_all(&self, data: List<T>) -> CopyResult {
@@ -393,7 +473,7 @@ impl<T> StreamWritable<T> {
         let mut pending = data;
         loop {
             let offered = pending.len();
-            let written = self.write(pending);
+            let written = self.begin_write(pending).settle(self);
             let delivered = offered - written.rest.len();
             if write_copy_is_final(written.result, delivered) || written.rest.is_empty() {
                 return written.result;
@@ -403,12 +483,147 @@ impl<T> StreamWritable<T> {
     }
 }
 
+/// A `stream.write` the host may still be copying out of `buffer`, which holds
+/// `data` lowered. `packed` is what the canonical answered, BLOCKED where the
+/// copy has not settled.
+#[compiler_item("started_write")]
+internal affine struct StartedWrite<T> {
+    internal buffer: ResultBuffer,
+    internal packed: i32,
+    internal data: List<T>,
+}
+
+impl<T> StartedWrite<T> {
+    /// What the copy on `end` left of `data`, once it has settled. The buffer
+    /// frees as this returns.
+    internal fn settle(self, end: &StreamWritable<T>) -> StreamWrite<T> {
+        let packed = settled_copy(builtin::resource_handle(end), self.packed);
+        let mut data = self.data;
+        return StreamWrite { rest: data.split_off(cm_packed_upper(packed)), result: copy_result(packed) };
+    }
+}
+
+/// One copy started on a writable end, holding the end until it is finished.
+/// Dropping one in flight cancels it.
+pub affine struct WriteCopy<T> {
+    end: Option<StreamWritable<T>>,
+    started: Option<StartedWrite<T>>,
+}
+
+impl<T> WriteCopy<T> {
+    /// The end and what the copy left of its data. Waits for a copy that has
+    /// not settled, so a copy that never joined a set finishes as well.
+    pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>] {
+        let mut copy = self;
+        let end = copy.end.take().unwrap();
+        let written = copy.started.take().unwrap().settle(&end);
+        return [end, written];
+    }
+}
+
+impl<T> Drop for WriteCopy<T> {
+    fn drop(self) {
+        let Some(end) = self.end else {
+            return;
+        };
+        if let Some(started) = self.started {
+            let mut started = started;
+            let handle = builtin::resource_handle(&end);
+            if copy_in_flight(handle, started.packed) {
+                builtin::waitable_join(handle, 0);
+                started.packed = end.cancel_write() as i32;
+            }
+            builtin::drop(started.settle(&end));
+        }
+    }
+}
+
+impl<T> Waitable for WriteCopy<T> {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        if let Some(started) = &self.started && started.packed == CM_BLOCKED && let Some(end) = &self.end {
+            return Option::Some(ResourceId::of(end));
+        }
+        return null;
+    }
+}
+
+/// What a stream or future copy answers when it must wait for the other end.
+internal global CM_BLOCKED: i32 = -1;
+
+/// The `CopyResult` a packed CM copy reports (`CanonicalABI.md`): the low
+/// nibble of `(count << 4) | status`.
+internal fn copy_result(packed: i32) -> CopyResult {
+    return match packed & 0xf {
+        0 => CopyResult::Completed,
+        1 => CopyResult::Dropped,
+        2 => CopyResult::Cancelled,
+        _ => unreachable(),
+    };
+}
+
+/// A copy a set reported, by its end's handle, with the packed result the host
+/// reported it on.
+struct CopySettlement {
+    handle: i32,
+    packed: i32,
+}
+
+/// The copies sets reported that no `finish` or drop has taken yet. The host
+/// reports a copy once, so waiting on it again would block for good, and
+/// cancelling it traps. The end stays alive inside its copy until the entry is
+/// taken, so the host cannot reuse the handle meanwhile.
+global mut SETTLED_COPIES: List<CopySettlement> = [];
+
+fn settled_copy_at(handle: i32) -> Option<i32> {
+    for let mut at = 0; at < SETTLED_COPIES.len(); at += 1 {
+        if SETTLED_COPIES[at].handle == handle {
+            return Option::Some(at);
+        }
+    }
+    return null;
+}
+
+/// Whether the copy on `handle` that answered `packed` is still in flight: it
+/// blocked, and no set has reported it.
+fn copy_in_flight(handle: i32, packed: i32) -> bool {
+    return packed == CM_BLOCKED && settled_copy_at(handle) matches { None };
+}
+
+/// The packed result of the copy on `handle` that answered `packed`: that
+/// answer, the one a set reported, or the one the host reports once this
+/// waits for it.
+internal fn settled_copy(handle: i32, packed: i32) -> i32 {
+    if packed != CM_BLOCKED {
+        return packed;
+    }
+    if let Some(at) = settled_copy_at(handle) {
+        return SETTLED_COPIES.remove(at).packed;
+    }
+    return cm_await_copy(handle);
+}
+
+/// The packed result of the BLOCKED copy on `handle`, once the host reports it.
+///
+/// The handle must be unjoined before the set is dropped; a set still holding a
+/// waitable cannot be deleted.
+internal fn cm_await_copy(handle: i32) -> i32 {
+    let ws = builtin::waitable_set_new();
+    builtin::waitable_join(handle, ws);
+    let evt_ptr = builtin::realloc(0, 0, 4, 8);
+    let code = builtin::waitable_set_wait(ws, evt_ptr);
+    let status = builtin::i32_load(evt_ptr + 4);
+    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
+    builtin::waitable_join(handle, 0);
+    builtin::waitable_set_drop(ws);
+    return status;
+}
+
 /// What a `WaitableSet` waits on: a value the host reports events for by its
 /// handle. It is sealed, so a set joins only what it can account for: the
 /// standard library implements it on the calls, and a variant whose cases each
-/// hold one derives it with `impl Waitable for V;`. A stream or future end is
-/// none: each copy on one waits inside the binding, so the host never has an
-/// event left to report for it.
+/// hold one derives it with `impl Waitable for V;`. A bare stream or future end
+/// is none, since no copy on it is in flight: a copy started on a stream end,
+/// `ReadCopy` or `WriteCopy`, is one.
 #[compiler_item("waitable")]
 pub affine trait Waitable with () {
     /// The handle the host reports this value by, or None where it is ready
@@ -451,12 +666,17 @@ pub variant ReadyEvent {
     /// without one.
     Unreported,
     Call(CallState),
+    /// A started stream copy settled, ending as this says.
+    Copied(CopyResult),
 }
 
 /// An event the host reports for a waitable handle.
 internal struct WaitEvent {
     internal handle: i32,
     internal event: ReadyEvent,
+    /// What the host reported with the event: a copy's packed result, or a
+    /// subtask's state.
+    internal payload: i32,
 }
 
 /// A subtask whose resolution a set delivered, by its handle, with the state it
@@ -561,6 +781,11 @@ impl<affine W: Waitable> WaitableSet<W> {
             self.ready.push(Ready { member, event: ReadyEvent::Call(state) });
             return;
         }
+        if let Some(at) = settled_copy_at(id.handle) {
+            let result = copy_result(SETTLED_COPIES[at].packed);
+            self.ready.push(Ready { member, event: ReadyEvent::Copied(result) });
+            return;
+        }
         builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
         self.members.push(member);
     }
@@ -600,8 +825,14 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
         builtin::waitable_join(reported.handle, 0);
-        if let Call(state) = reported.event && state.is_resolved() {
-            DELIVERED.push(Resolution { handle: reported.handle, state });
+        match reported.event {
+            Call(state) => {
+                if state.is_resolved() {
+                    DELIVERED.push(Resolution { handle: reported.handle, state });
+                }
+            },
+            Copied(_) => SETTLED_COPIES.push(CopySettlement { handle: reported.handle, packed: reported.payload }),
+            Unreported => unreachable(),
         }
         let mut at = 0;
         for let member of self.members.iter_ref() {
@@ -749,9 +980,9 @@ impl<affine T> Waitable for AsyncCall<T> {
 /// drops.
 #[compiler_item("result_buffer")]
 internal affine struct ResultBuffer {
-    ptr: i32,
-    size: i32,
-    align: i32,
+    internal ptr: i32,
+    internal size: i32,
+    internal align: i32,
 }
 
 impl Drop for ResultBuffer {

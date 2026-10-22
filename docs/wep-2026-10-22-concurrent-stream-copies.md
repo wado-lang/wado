@@ -25,6 +25,9 @@ joins a `WaitableSet` like a call does, and finishing it hands back the stream
 end with what the copy moved.
 
 ```wado
+affine variant Pipe { Out(ReadCopy<u8>), Err(ReadCopy<u8>) }
+impl Waitable for Pipe;
+
 let mut set = WaitableSet::<Pipe>::new();
 set.join(Pipe::Out(stdout.start_read(4096)));
 set.join(Pipe::Err(stderr.start_read(4096)));
