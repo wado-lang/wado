@@ -474,7 +474,8 @@ impl<T> List<T> {
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
-    /// handed references to the elements themselves, not to copies.
+    /// handed references as `iter_ref` hands them out: a `Ref` element in
+    /// place, a scalar as a read-only snapshot.
     pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _ {
         let n = self.used;
         if n <= 1 {
