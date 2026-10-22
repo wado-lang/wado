@@ -1,25 +1,30 @@
-# WEP: Destructuring Assignment and Copy-Free Swap
+# WEP: Destructuring Assignment and a Swap Without Value Copies
 
 ## Context
 
-Assignment copies, so exchanging two values the obvious way copies both:
+A _value copy_ is the deep copy value semantics calls for: a call to the
+synthesized `$value_copy$T` helper, or an `array_clone` of a backing array
+([WEP: Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md)). Its cost
+grows with the value. Writing a scalar, or repointing a handle, is not one.
+
+Exchanging two values the obvious way makes a value copy of each:
 
 ```wado
-let t = xs[i];   // copies the element out
-xs[i] = xs[j];   // copies again
+let t = xs[i];   // a value copy of the element
+xs[i] = xs[j];   // another
 xs[j] = t;
 ```
 
-For a composite element (a `struct`, `String`, `List`, tuple) each copy is a
-deep copy, and a sort written this way spends most of its time copying. The
-ownership analysis turns the same three lines into moves where the places are
-locals ([WEP: Reference Liveness](./wep-2026-10-13-referenced-places.md) says
-the double buffer swap moves both lists). It cannot do so for an element. `xs[i]`
-reads through `IndexValue`, which hands back a copy, and `xs[j] = t` writes
-through `IndexAssign`. Nothing tells the analysis that the two calls reach one
-slot.
+For a composite element (a `struct`, `String`, `List`, tuple), a sort written
+this way spends most of its time in value copies. The ownership analysis turns
+the same three lines into moves where the places are locals
+([WEP: Reference Liveness](./wep-2026-10-13-referenced-places.md) says the
+double buffer swap moves both lists). It cannot do so for an element. `xs[i]`
+reads through `IndexValue`, which hands back a value copy, and `xs[j] = t`
+writes through `IndexAssign`. Nothing tells the analysis that the two calls
+reach one slot.
 
-`List::swap(a, b)` already exchanges two elements without a copy, through
+`List::swap(a, b)` already exchanges two elements without a value copy, through
 `builtin::array_take`. That covers a list, but no other container.
 
 Rust's answer is `std::mem::swap(&mut a, &mut b)`. That shape does not fit Wado:
@@ -70,14 +75,14 @@ The right side is evaluated in full before any target is written, so
 subscript's container and index, are evaluated when that target is assigned.
 
 Copies are as-if ([spec-memory § Value Semantics](./spec-memory.md#value-semantics)).
-The desugaring states the result, not the number of copies. The rest of this
-decision says where the result is guaranteed to come without a copy.
+The desugaring states the result, not how many value copies produce it. The
+rest of this decision says where the result is guaranteed to come with none.
 
 ### Which targets can be one slot
 
-Moving instead of copying keeps the desugaring's meaning only while no two
-targets are one slot. Where two are, the desugaring may copy one value into
-both, and moving values cannot produce that result.
+Exchanging values instead of copying them keeps the desugaring's meaning only
+while no two targets are one slot. Where two are, the desugaring may put one
+value in both, and exchanging values cannot produce that result.
 
 A target is _owned_ when it is a local, or a field path from a local, reached
 through no reference and no subscript. Two owned targets that differ as paths
@@ -85,15 +90,28 @@ are never one slot. Any other target may be: `*r`, `r.f` and `self.f` reach
 through a reference, two `&mut` to one value are legal, and two subscripts may
 name one element.
 
-### Owned targets move
+### A permutation of owned targets makes no value copy
 
-A destructuring assignment whose targets are all owned is assigned by the
-existing ownership analysis. The temporaries the desugaring introduces are dead
-after their one read, and each source is overwritten before it is read again.
-So any permutation of owned targets moves its values: a transposition
-(`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one over fields
-(`[s.x, s.y] = [s.y, s.x]`). That is the analysis already in place, applied to
-the desugared form.
+Any permutation of owned targets is assigned without a value copy: a
+transposition (`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one
+over fields (`[s.x, s.y] = [s.y, s.x]`). A permutation is a product of
+transpositions, and each transposition is lowered one of two ways.
+
+Where no reference to either target is readable after the statement, the
+existing ownership analysis moves the values. The temporaries the desugaring
+introduces are dead after their one read, and each source is overwritten before
+it is read again.
+
+Where one is readable, an assignment to that target writes in place
+([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
+The desugaring would then make a value copy of the target before writing over
+it. The transposition exchanges the two storages' leaves instead. The leaves are
+the ones that in-place write would write, and each is a scalar or a handle, so
+exchanging one copies no value. Each storage keeps its identity, so a reference
+to either target reads the new value, as the in-place write guarantees. Where
+only one target is referenced, the other is given a new object holding the
+referenced target's old leaves: one allocation per in-place level, and no value
+copy.
 
 ### A transposition within one container is `IndexSwap`
 
@@ -130,7 +148,7 @@ It is that call where all of these hold:
 
 The call evaluates `c`, `i` and `j` once each. The transposition is recognized
 before the desugared right side is typed. Typing `c[j]` as a read first would
-report a copy of an affine element, so the order matters.
+report a value copy of an affine element, so the order matters.
 
 An impl must behave as the desugaring does wherever the desugaring is defined.
 It must leave the container as the desugaring would, `a == b` included, and fail
@@ -138,7 +156,7 @@ where the desugaring fails. The desugaring reads `c[b]` before `c[a]`, so an
 impl checks `b` first, then `a`, each as `IndexValue` checks a read.
 
 The standard containers implement it. Each exchanges the values in place and
-copies nothing:
+makes no value copy:
 
 | Container       | `IndexSwap`           | How                                             |
 | --------------- | --------------------- | ----------------------------------------------- |
@@ -160,8 +178,8 @@ so its impls take a copyable `V`.
 ### What is not guaranteed, and why
 
 A destructuring assignment with a target that is not owned keeps the
-desugaring's meaning, but gets no copy-free guarantee unless it is the
-transposition above. That covers a rotation among subscripts, a transposition
+desugaring's meaning, but is not guaranteed to make no value copy unless it is
+the transposition above. That covers a rotation among subscripts, a transposition
 across two containers (`[xs[i], ys[j]] = [ys[j], xs[i]]`), and any permutation
 reached through a reference.
 
@@ -171,13 +189,13 @@ back. A transposition within one container is the exception: with `a == b` the
 desugaring leaves the container unchanged, and the container sees both indices,
 so `index_swap` can do the same.
 
-### A fallback that copies is reported, an affine one is an error
+### A fallback that makes a value copy is reported, an affine one is an error
 
-A destructuring assignment that copies a composite value is reported by the
-surviving value-copy remark
+A destructuring assignment that makes a value copy is reported by the surviving
+value-copy remark
 ([WEP: Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md)). That is the
-remark's purpose, and a copy here is the cost the statement was written to
-avoid. The remark covers what it covers elsewhere, the entry package's
+remark's purpose, and a value copy here is the cost the statement was written
+to avoid. The remark covers what it covers elsewhere, the entry package's
 functions. It anchors to the statement and adds a note that names the cause:
 
 - a target is not owned, and the statement is not a transposition within one
@@ -187,7 +205,7 @@ functions. It anchors to the statement and adds a note that names the cause:
 - an index may change when the first element is assigned;
 - the container's type does not implement `IndexSwap`.
 
-A copy of a scalar costs nothing, so it is never reported.
+A scalar has no value copy, so a scalar target is never reported.
 
 An affine value cannot be copied, so an affine destructuring assignment that
 falls back is not a remark. It is the compile error that copying an affine
@@ -206,8 +224,11 @@ well.
 
 - [ ] Parse and type a destructuring assignment, desugar it, and state its
   evaluation order and arity error in fixtures.
-- [ ] Show that a permutation of owned targets moves, a rotation included: a
-  fixture whose `wir_expect` finds no value copy.
+- [ ] Show that a permutation of owned targets with no readable reference
+  moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
+- [ ] Lower a transposition of owned targets with a readable reference as a
+  leaf exchange. Fixtures show a reference to each target, and to one of the
+  two, reading the new value, with no value copy in `wir_expect`.
 - [ ] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
   `HashMap` and `TreeMap`.
 - [ ] Recognize the transposition before typing the desugared form and lower
@@ -225,3 +246,13 @@ well.
 
 The left side takes only a flat tuple of targets. `_`, a rest `..`, a nested
 tuple and a struct pattern (`{ x, y } = p`) are not accepted.
+
+### A leaf exchange touches every leaf an in-place write would
+
+A transposition with a readable reference exchanges the leaves that an in-place
+write of either target would write. That inherits the in-place write's
+imprecision
+([WEP: Reference Liveness § An in-place write writes every leaf](./wep-2026-10-13-referenced-places.md#an-in-place-write-writes-every-leaf)):
+a reference that names no field counts as one to every field, so the exchange
+walks the whole in-place structure where the referenced part would do. The
+exchange makes no value copy either way. The cost is the number of leaves.
