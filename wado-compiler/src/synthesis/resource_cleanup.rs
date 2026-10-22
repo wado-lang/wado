@@ -1425,7 +1425,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
         // binding takes drop once the bindings hold theirs.
         TirStmtKind::LetDestructure { pattern, mut value } => {
             let bindings = cx.resources.pattern_bindings(&pattern);
-            let entry = consumed_scrutinee(&mut value, !bindings.is_empty(), cx)
+            let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], cx)
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
             for live in bindings {
                 cx.declare(live);
@@ -2504,8 +2504,9 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             }
         })
         .collect();
-    let binds = bindings.iter().any(|arm_bindings| !arm_bindings.is_empty());
-    let place = consumed_scrutinee(scrutinee, binds, cx);
+    let patterns: Vec<(&TirPattern, bool)> =
+        arms.iter().map(|arm| (&arm.pattern, arm.consumes)).collect();
+    let place = consumed_scrutinee(scrutinee, &patterns, cx);
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
         let consumed = place.clone().filter(|_| arm.consumes);
         cx.open_scope(Vec::new(), TemporaryScope::Statement);
@@ -2532,11 +2533,17 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
     }
 }
 
-/// Elaborate the scrutinee of a pattern, answering the place a consuming
-/// pattern empties: the place a move names, or the local a value no place
-/// holds spills into. A place read without a move is only borrowed, so `binds`,
-/// whether a consuming pattern binds a resource out of it, must be false.
-fn consumed_scrutinee(scrutinee: &mut TirExpr, binds: bool, cx: &mut Cx) -> Option<TirExpr> {
+/// Elaborate the scrutinee of `patterns`, each paired with whether it
+/// consumes, answering the place a consuming pattern empties: the place a move
+/// names, or the local a value no place holds spills into. A place read without
+/// a move is only borrowed, so no consuming pattern may bind a resource out of
+/// it. A temporary every pattern consumes whole, binding all it holds, needs no
+/// local.
+fn consumed_scrutinee(
+    scrutinee: &mut TirExpr,
+    patterns: &[(&TirPattern, bool)],
+    cx: &mut Cx,
+) -> Option<TirExpr> {
     // A moved place stays put until a pattern consuming it is entered.
     let moved = matches!(scrutinee.kind, TirExprKind::Move { .. });
     if moved {
@@ -2548,7 +2555,10 @@ fn consumed_scrutinee(scrutinee: &mut TirExpr, binds: bool, cx: &mut Cx) -> Opti
     }
     if is_place(scrutinee, cx) {
         assert!(
-            moved || !binds,
+            moved
+                || !patterns.iter().any(|(pattern, consumes)| {
+                    *consumes && !cx.resources.pattern_bindings(pattern).is_empty()
+                }),
             "a scrutinee a resource moves out of is marked `Move`: {:?}",
             scrutinee.span
         );
@@ -2556,8 +2566,14 @@ fn consumed_scrutinee(scrutinee: &mut TirExpr, binds: bool, cx: &mut Cx) -> Opti
         return moved.then(|| scrutinee.clone());
     }
     assert!(!moved, "only a place moves: {:?}", scrutinee.span);
+    // `drop_unbound` reads its place only to build the drops, so a probe
+    // answers whether there are any.
+    let probe = TirExpr::new(TirExprKind::Null, scrutinee.type_id, synth_span());
+    let leaves = patterns.iter().any(|(pattern, consumes)| {
+        !consumes || !drop_unbound(pattern, probe.clone(), cx).is_empty()
+    });
     elab_expr(scrutinee, true, cx);
-    Some(spill_temporary(scrutinee, cx))
+    leaves.then(|| spill_temporary(scrutinee, cx))
 }
 
 /// What entering `pattern`, which matched `place`, does to it: the parts no
