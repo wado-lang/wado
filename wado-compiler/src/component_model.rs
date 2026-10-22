@@ -307,11 +307,7 @@ pub fn cm_payload_type_from_type_id(
                 &to_cm_name(&type_table.struct_head_name(*def)),
             )))
         }
-        ResolvedType::Enum { def }
-        | ResolvedType::Variant { def }
-        | ResolvedType::Flags { def }
-            if !is_cm_owned_source(type_table.def_module(*def)) =>
-        {
+        ResolvedType::Enum { def } | ResolvedType::Variant { def } | ResolvedType::Flags { def } => {
             Some(CmPayloadType::Named(CmDecl::new(
                 type_table.defs(),
                 *def,

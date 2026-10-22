@@ -1,0 +1,23 @@
+// A future may carry a type a bundled interface declares, here `core:process`'s
+// `ExitStatus` and `ErrorCode`. The program imports no `core:process` function,
+// so no import aliases the types in, and the component defines them itself.
+//
+// Reaching wasmtime's refusal of an intra-component future with a non-numeric
+// payload is what pins this: the component validated and ran up to the read.
+
+use { println, Stdout } from "core:cli";
+use { ExitStatus, ErrorCode } from "core:process/types.wado";
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<Result<ExitStatus, ErrorCode>>::new();
+    tx.write(Result::Ok(ExitStatus::Exited(3)));
+    println("built");
+    println(`${rx.read():?}`);
+}
+
+__DATA__
+{
+  "stdout": "built\n",
+  "stderr_contains": ["non-numeric payload"],
+  "trapped": true
+}

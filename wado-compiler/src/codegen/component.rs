@@ -1394,12 +1394,12 @@ fn canonical_decl_type_idx(
 }
 
 /// The distinct declarations the canonicals reach as a value.
-fn canonical_value_decls(canonical_intrinsics: &[CanonicalIntrinsic]) -> IndexSet<DefId> {
-    let mut out = IndexSet::default();
+fn canonical_value_decls(canonical_intrinsics: &[CanonicalIntrinsic]) -> IndexMap<DefId, CmDecl> {
+    let mut out = IndexMap::default();
     for intrinsic in canonical_intrinsics {
         intrinsic.for_each_decl(&mut |decl: &CmDecl, at: CmDeclKind| {
             if at == CmDeclKind::Value {
-                out.insert(decl.def());
+                out.entry(decl.def()).or_insert_with(|| decl.clone());
             }
         });
     }
@@ -1409,6 +1409,10 @@ fn canonical_value_decls(canonical_intrinsics: &[CanonicalIntrinsic]) -> IndexSe
 /// Define the named types a `Value(Named)` payload references, before the
 /// `future<T>` / `stream<T>` wrapping them. Going through the shared
 /// `lib_type_gen` keeps the export-signature type and the canonical type one.
+///
+/// A bundled interface's type is aliased from its import where the program
+/// imports one. A program that only moves the type through its own futures
+/// imports none, so the type is defined here, structurally.
 fn prebuild_value_named_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1416,20 +1420,28 @@ fn prebuild_value_named_types(
     lib_type_gen: &mut Option<CmTypeGen>,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) {
-    let Some(type_gen) = lib_type_gen.as_mut() else {
-        return;
-    };
+    let registry = &project.cm_interface_registry;
+    let mut local_type_gen = CmTypeGen::new();
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for def in canonical_value_decls(canonical_intrinsics) {
+    for (def, decl) in canonical_value_decls(canonical_intrinsics) {
         if ctx.has_decl_type(def) {
             continue;
         }
+        let declaring = registry.interface_declaring_cm_name(decl.module(), decl.cm_name());
+        if declaring.is_some_and(|fq| export_alias_idx(ctx, fq, decl.cm_name()).is_some()) {
+            continue;
+        }
+        let type_gen = match (lib_type_gen.as_mut(), declaring) {
+            (Some(type_gen), _) => type_gen,
+            (None, Some(_)) => &mut local_type_gen,
+            (None, None) => continue,
+        };
         let wado_name = project.type_table.borrow().defs().name(def).to_string();
-        let named = Type::Named(NamedType::new(
-            AstId::fresh(),
-            wado_name,
-            Span::new(0, 0, 1, 1),
-        ));
+        let named_type = NamedType::new(AstId::fresh(), wado_name, Span::new(0, 0, 1, 1));
+        if let Some(fq) = declaring {
+            registry.set_source_interface(named_type.id, fq.to_string());
+        }
+        let named = Type::Named(named_type);
         let mut sink = TopLevelSink { builder, ctx };
         let val = type_gen.ast_type_to_cm(
             &mut sink,
