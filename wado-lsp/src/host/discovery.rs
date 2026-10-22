@@ -350,10 +350,16 @@ pub fn cache_root() -> Option<PathBuf> {
     if let Some(root) = std::env::var_os("WADO_ROOT").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(root));
     }
-    std::env::var_os("HOME")
-        .filter(|v| !v.is_empty())
-        .map(|home| PathBuf::from(home).join("wado"))
+    home_dir().map(|home| home.join("wado"))
 }
+
+/// The user's home directory, as the platform names it (`%USERPROFILE%` on
+/// Windows, where `HOME` is normally unset). An empty `HOME` names none.
+#[must_use]
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::home_dir().filter(|home| !home.as_os_str().is_empty())
+}
+
 /// The entry module of a source dependency: the file itself for a path naming
 /// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
 /// and inline-git resolution paths so all three locate an entry the same way.

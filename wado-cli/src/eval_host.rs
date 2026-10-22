@@ -6,6 +6,7 @@
 
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -103,19 +104,20 @@ pub struct EvalHost {
     strandable: Arc<Semaphore>,
     /// The threads of compiles past the limit, joined when the host drops so
     /// a panic on one still ends the run.
-    stranded: Mutex<Vec<JoinHandle<()>>>,
+    stranded: Mutex<Vec<CompileThread>>,
 }
 
 impl Drop for EvalHost {
-    /// A compile still running when the run ends is not waited for.
+    /// A compile still running when the run ends is not waited for, but one
+    /// already panicking is.
     fn drop(&mut self) {
         let stranded = std::mem::take(
             self.stranded
                 .get_mut()
                 .unwrap_or_else(PoisonError::into_inner),
         );
-        for thread in stranded.into_iter().filter(JoinHandle::is_finished) {
-            join_in_drop(thread);
+        for compile in stranded.into_iter().filter(CompileThread::has_ended) {
+            join_in_drop(compile.thread);
         }
     }
 }
@@ -286,6 +288,7 @@ impl EvalHost {
             Ok(Ok(compiled)) => compiled,
             Ok(Err(_unsent)) => resume_unwind(
                 thread
+                    .thread
                     .join()
                     .expect_err("only a panic ends the compile thread unreported"),
             ),
@@ -298,7 +301,7 @@ impl EvalHost {
 
     /// Leave `held` to a compile past the limit, with a strand permit beside its
     /// CPU permit, or with neither once [`Self::strandable`] runs out.
-    fn abandon(&self, held: &Mutex<Vec<OwnedSemaphorePermit>>, thread: JoinHandle<()>) {
+    fn abandon(&self, held: &Mutex<Vec<OwnedSemaphorePermit>>, thread: CompileThread) {
         match Arc::clone(&self.strandable).try_acquire_owned() {
             Ok(strand) => lock(held).push(strand),
             Err(TryAcquireError::NoPermits) => lock(held).clear(),
@@ -527,14 +530,17 @@ fn spawn_compile(
     options: CompilerOptions,
     deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> (oneshot::Receiver<(Compiled, Vec<Input>)>, JoinHandle<()>) {
+) -> (oneshot::Receiver<(Compiled, Vec<Input>)>, CompileThread) {
     let (report, compiled) = oneshot::channel();
+    let panicked = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&panicked);
     let thread =
         std::thread::Builder::new()
             .name("eval-compile".to_string())
             .stack_size(COMPILER_STACK_SIZE)
             .spawn(move || {
                 let _held = held;
+                let _flag = PanicFlag(flag);
                 let host = DependencyHost::new(deps);
                 let compiled = current_thread_runtime().block_on(
                     wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
@@ -547,7 +553,31 @@ fn spawn_compile(
                 let _ = report.send((compiled, std::mem::take(&mut *lock(&host.read))));
             })
             .expect("spawning the eval compile thread");
-    (compiled, thread)
+    (compiled, CompileThread { thread, panicked })
+}
+
+/// A compile's thread, and whether a panic is unwinding out of it.
+struct CompileThread {
+    thread: JoinHandle<()>,
+    panicked: Arc<AtomicBool>,
+}
+
+impl CompileThread {
+    /// Whether joining it now waits at most for the end of an unwind.
+    fn has_ended(&self) -> bool {
+        self.thread.is_finished() || self.panicked.load(Ordering::Acquire)
+    }
+}
+
+/// Raised as a panic unwinds out of the thread that holds it.
+struct PanicFlag(Arc<AtomicBool>);
+
+impl Drop for PanicFlag {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.0.store(true, Ordering::Release);
+        }
+    }
 }
 
 fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {

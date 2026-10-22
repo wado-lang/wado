@@ -214,6 +214,7 @@ fn main() {
             eprintln!("Error: failed to create tokio runtime: {e}");
             process::exit(1);
         });
+    let runtime = DriverRuntime(Some(runtime));
     let driver = std::thread::Builder::new()
         .name("main".to_string())
         .stack_size(COMPILER_STACK_SIZE)
@@ -226,6 +227,29 @@ fn main() {
         .join()
         .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
     outcome.exit();
+}
+
+/// The CLI's runtime. Dropped by a panic, it leaves its blocking tasks behind
+/// rather than waiting on them: tokio waits with no limit, and a compile still
+/// running would hold the process open after the panic that ends the run.
+struct DriverRuntime(Option<tokio::runtime::Runtime>);
+
+impl DriverRuntime {
+    fn block_on<F: Future>(&self, future: F) -> F::Output {
+        self.0
+            .as_ref()
+            .expect("the runtime is taken only on drop")
+            .block_on(future)
+    }
+}
+
+impl Drop for DriverRuntime {
+    fn drop(&mut self) {
+        let runtime = self.0.take().expect("the runtime is taken only on drop");
+        if std::thread::panicking() {
+            runtime.shutdown_background();
+        }
+    }
 }
 
 async fn async_main() -> CliExit {

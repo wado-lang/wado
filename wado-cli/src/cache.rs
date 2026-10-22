@@ -20,6 +20,7 @@
 
 use crate::build_dep::GENERATOR_WORLD_SEGMENT;
 use std::path::PathBuf;
+use wado_lsp::host::discovery::home_dir;
 
 /// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
 /// with the language server so both agree on where the cache lives.
@@ -79,12 +80,6 @@ fn expand_tilde(path: &str) -> PathBuf {
         return home.join(rest);
     }
     PathBuf::from(path)
-}
-
-pub(crate) fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
 }
 
 /// The cached component path for a registry coordinate at a version, under the

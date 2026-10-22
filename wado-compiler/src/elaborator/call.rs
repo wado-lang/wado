@@ -5077,9 +5077,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver_param = match method_info_result.self_kind {
                 ast::SelfKind::None => None,
                 ast::SelfKind::Value => Some(type_param_type_id),
-                ast::SelfKind::Ref => {
-                    Some(self.tysys.type_table.borrow_mut().make_ref(type_param_type_id))
-                }
+                ast::SelfKind::Ref => Some(
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_ref(type_param_type_id),
+                ),
                 ast::SelfKind::MutRef => Some(
                     self.tysys
                         .type_table
