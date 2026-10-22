@@ -771,10 +771,6 @@ Three runs:
 - A tag that is not a function or a static method — a variant case, a
   closure-typed binding — is a diagnostic. Reify rebuilds a tag call only from
   a static dispatch, and neither records one.
-- A tag on a type parameter (`` T::tag`…` ``) works, but a mismatch between the
-  template and the method's parameter is not reported: that path checks no
-  argument, whatever the call's spelling. Pinned as
-  `type_param_static_call_arg_check_todo.wado`.
 - Whether `match type` gains a `template` arm for the `Template` case
   [Total Reflection](./wep-2026-09-05-total-reflection.md) gives the type.
 - A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by

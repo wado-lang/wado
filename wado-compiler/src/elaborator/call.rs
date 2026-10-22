@@ -4960,6 +4960,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
+            // A parameter still carrying a type param is the instantiation's to
+            // settle, as `check_static_call_args` leaves it.
+            for (i, (arg, &expected)) in args[receiver..]
+                .iter()
+                .zip(&method_info_result.param_types)
+                .enumerate()
+            {
+                if !self.tysys.type_table.borrow().contains_type_param(expected) {
+                    self.typecheck_arg(
+                        *arg,
+                        expected,
+                        ArgSite::of(&call.args, receiver + i, call.span),
+                    );
+                }
+            }
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
