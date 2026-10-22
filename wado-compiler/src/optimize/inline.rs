@@ -2806,14 +2806,11 @@ fn inline_top_level(
         body, value, candidates, frame, type_table, labels, reval, site,
     );
     if let Some((new_id, inlined_key)) = result {
-        if !inlined_funcs.contains(&inlined_key) {
-            inlined_funcs.push(inlined_key);
-        }
-        let left = Cell::new(candidates.rescan_cap);
-        inline_calls_in_expr(
+        rescan_splice(
             body,
             new_id,
-            candidates.rescanning(&left),
+            inlined_key,
+            candidates,
             descriptors,
             frame,
             type_table,
@@ -2838,6 +2835,39 @@ fn inline_top_level(
         );
         value
     }
+}
+
+/// Records `inlined_key` as spliced at `at`, then scans the spliced body for
+/// calls to splice, as far as the re-scan cap pays for.
+fn rescan_splice(
+    body: &mut Body,
+    at: ExprId,
+    inlined_key: FuncId,
+    candidates: Candidates<'_>,
+    descriptors: &[FunctionRef],
+    frame: &mut CallerFrame<'_>,
+    type_table: &TypeTable,
+    inlined_funcs: &mut Vec<FuncId>,
+    labels: &mut InlineLabels,
+    reval: &mut Vec<InlineRevalInfo>,
+    site: Site,
+) {
+    if !inlined_funcs.contains(&inlined_key) {
+        inlined_funcs.push(inlined_key);
+    }
+    let left = Cell::new(candidates.rescan_cap);
+    inline_calls_in_expr(
+        body,
+        at,
+        candidates.rescanning(&left),
+        descriptors,
+        frame,
+        type_table,
+        inlined_funcs,
+        labels,
+        reval,
+        site,
+    );
 }
 
 /// The expression and block children of `e`, excluding patterns, in the order
@@ -3879,9 +3909,6 @@ fn inline_calls_in_expr(
     if let Some((new_id, inlined_key)) =
         try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
     {
-        if !inlined_funcs.contains(&inlined_key) {
-            inlined_funcs.push(inlined_key);
-        }
         // Move the inlined labeled-block node into the call slot and null out
         // the now-dead `new_id`, so the inner block is owned by exactly one node
         // (`e`). Cloning would leave `new_id` as an orphan sharing the same
@@ -3896,11 +3923,11 @@ fn inline_calls_in_expr(
             },
         );
         body.exprs[e] = moved;
-        let left = Cell::new(candidates.rescan_cap);
-        inline_calls_in_expr(
+        rescan_splice(
             body,
             e,
-            candidates.rescanning(&left),
+            inlined_key,
+            candidates,
             descriptors,
             frame,
             type_table,
