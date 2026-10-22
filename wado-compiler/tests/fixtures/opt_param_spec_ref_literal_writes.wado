@@ -1,0 +1,36 @@
+// `param_spec` roots a reference bound to a struct literal, and a write through
+// it, a store over it, or a callee writing it takes the field back off the
+// root. `d` is never written, so `show` is specialized on it.
+use { println, Stdout } from "core:cli";
+
+struct Fmt { alt: bool, width: i32 }
+
+#[inline(never)]
+fn show(f: &mut Fmt) -> i32 {
+    if f.alt { return f.width + 100; }
+    return f.width;
+}
+
+#[inline(never)]
+fn flip(f: &mut Fmt) {
+    f.alt = !f.alt;
+}
+
+export fn run() with Stdout {
+    let a = &mut Fmt { alt: false, width: 1 };
+    a.alt = builtin::black_box(true);
+    let b = &mut Fmt { alt: false, width: 2 };
+    *b = Fmt { alt: true, width: builtin::black_box(3) };
+    let c = &mut Fmt { alt: false, width: 4 };
+    flip(c);
+    let d = &mut Fmt { alt: false, width: 5 };
+    println(`${show(a)} ${show(b)} ${show(c)} ${show(d)}`);
+}
+
+__DATA__
+{
+    "stdout": "101 103 104 5\n",
+    "wir_expect:O2": [
+        "show$spec"
+    ]
+}

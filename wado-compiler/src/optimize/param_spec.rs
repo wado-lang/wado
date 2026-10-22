@@ -280,12 +280,10 @@ impl Signatures {
 }
 
 /// Whether the parameter's slot holds exactly what the argument gave it for the
-/// whole body, so every read of it is that constant.
+/// whole body, so every read of it is that constant. A reference to an
+/// immutable slot cannot write it, so taking one leaves it fixed.
 fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
-    !param.is_mut
-        && !param.is_mut_ref
-        && !func.address_taken_locals.contains(&param.local_index)
-        && !func.stores_aliased_locals.contains(&param.local_index)
+    !param.is_mut && !param.is_mut_ref && !func.stores_aliased_locals.contains(&param.local_index)
 }
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.
@@ -559,17 +557,28 @@ fn summarize_params(
 // Caller-side roots
 // ---------------------------------------------------------------------------
 
-/// The constant fields of a struct-literal operand, or `None` when the operand
-/// is not one. `expected` guards against reading field indices off a literal of
-/// a different struct than the local's declared type — a local slot reused for
-/// two shapes would otherwise mix their field numbering.
+/// The constant fields of a struct-literal operand, or of a reference to one,
+/// or `None` when the operand is neither. A cast names the storage its operand
+/// does, so either side of the reference may carry one. A reference to a
+/// literal is the only name its object has, so a reference local bound to one
+/// roots it as a struct local roots its own. `expected` guards against reading
+/// field indices off a literal of a different struct than the local's declared
+/// type — a local slot reused for two shapes would otherwise mix their field
+/// numbering.
 fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
     value: Operand,
     expected: Option<TypeId>,
 ) -> Option<FieldConsts> {
-    let expr = value.as_expr()?;
+    let mut expr = body.strip_casts(value.as_expr()?);
+    if let ExprKind::Unary {
+        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+        expr: inner,
+    } = &body.exprs[expr].kind
+    {
+        expr = body.strip_casts(inner.as_expr()?);
+    }
     let ExprKind::StructLiteral {
         struct_type,
         fields,
@@ -673,6 +682,13 @@ fn collect_roots(
         roots.swap_remove(local);
     }
     let (mut alias_of, alias_reads) = settle_aliases(&alias_defs, &defined, &invalid);
+    // A binding settled as no alias still binds the local to another object, so
+    // a literal it is bound to elsewhere is not its only one.
+    for def in &alias_defs {
+        if !alias_of.contains_key(&def.local) {
+            roots.swap_remove(&def.local);
+        }
+    }
     flatten_aliases(&mut alias_of);
     for (alias, base) in &alias_of {
         if let Some(consts) = roots.get(base).cloned() {

@@ -542,18 +542,20 @@ pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
     out
 }
 
-/// The functions no hot site reaches, indexed by store position: every path
-/// into one passes a `cold_path()` marker, so whatever runs in it runs only once
-/// a cold path is taken. A function no call site reaches is reached some other
-/// way (an export, a global initializer, a function reference), so it counts as
-/// hot. `call_sites` counts each function's sites, and `hot_callees` names what
-/// a function calls from a site no marker covers.
-pub(super) fn cold_functions<'a>(
+/// The functions no entry reaches through `edges`, indexed by store position:
+/// every path into one passes a site `edges` leaves out. A function no call site
+/// reaches is reached some other way (an export, a global initializer, a
+/// function reference), so it is an entry. `call_sites` counts each function's
+/// sites, and `edges` names what a function calls from the sites that count.
+///
+/// Over the sites no `cold_path()` marker covers, it answers the cold
+/// functions: whatever runs in one runs only once a cold path is taken.
+pub(super) fn unreached_through<'a>(
     project: &NirPackage,
     call_sites: &[usize],
-    hot_callees: impl Fn(usize) -> &'a IndexSet<FuncId>,
+    edges: impl Fn(usize) -> &'a IndexSet<FuncId>,
 ) -> Vec<bool> {
-    let mut hot: Vec<bool> = project
+    let mut reached: Vec<bool> = project
         .functions
         .iter()
         .zip(call_sites)
@@ -562,19 +564,20 @@ pub(super) fn cold_functions<'a>(
             sites == 0 || f.is_export || f.is_cm_export
         })
         .collect();
-    let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
+    let mut work: Vec<usize> = (0..reached.len()).filter(|&i| reached[i]).collect();
     while let Some(caller) = work.pop() {
-        for callee in hot_callees(caller) {
-            if !hot[callee.index()] {
-                hot[callee.index()] = true;
+        for callee in edges(caller) {
+            if !reached[callee.index()] {
+                reached[callee.index()] = true;
                 work.push(callee.index());
             }
         }
     }
-    hot.into_iter().map(|hot| !hot).collect()
+    reached.into_iter().map(|reached| !reached).collect()
 }
 
-/// [`cold_functions`] over a fresh walk of every live body.
+/// The cold functions, by [`unreached_through`] over a fresh walk of every live
+/// body.
 pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>) -> Vec<bool> {
     let mut call_sites = vec![0usize; project.functions.len()];
     let hot_callees: Vec<IndexSet<FuncId>> = project
@@ -600,7 +603,7 @@ pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>)
             hot
         })
         .collect();
-    cold_functions(project, &call_sites, |caller| &hot_callees[caller])
+    unreached_through(project, &call_sites, |caller| &hot_callees[caller])
 }
 
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.

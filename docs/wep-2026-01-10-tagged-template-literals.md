@@ -683,20 +683,40 @@ below close that, in this order.
   the declared bounds, and `` format`${x}` `` reports the missing bound
   `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
-- [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
-  direct lowering does four things a `format` site does not:
-  - It sizes the buffer from the segment lengths (`String::with_capacity`).
-    `format` starts from `""` and grows.
-  - It appends a `String` hole with no specifier directly. `format` goes
-    through `Display::fmt` and `Formatter::pad`.
-  - It inlines a radix renderer (`${i:#x}`) at the site. `format` calls
-    `u64::fmt_base`, building the radix prefix as a `String` on each call.
-  - `optimize::tmpl_hoist` reuses its buffer across loop iterations, and
-    recognizes only the direct lowering's `$tmpl` block.
+- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, a
+  `format` site cost more than the direct lowering in the places below. Each
+  is closed where it arose:
+  - The direct lowering sizes the buffer from the segment lengths. `format`
+    sums `tail().len()` and, per hole, `lit().len()` plus a guess of 16 for
+    the rendered hole. That folds to a constant, and `format` starts from
+    `String::with_capacity` of it.
+  - A `String` hole with no specifier is a plain append. `format` reaches it
+    through `Display::fmt` and `Formatter::pad`, which fold to the same append
+    once `param_spec` specializes `pad` on the `Formatter`'s constant fields.
+    `$hole_fmt` hands the formatter on as `&mut Formatter { … }`, so
+    `param_spec` roots a reference local bound to a struct literal as it roots
+    a struct local.
+  - The radix renderer (`${i:#x}`) is spliced into the site. Its call sits in
+    a `break` value in `$hole_fmt`, and `inline` rescans every splice it makes,
+    not only one at a statement, so the chain reaches `u64::fmt_base` while it
+    still fits.
+  - `optimize::tmpl_hoist` lifts the direct lowering's buffer out of a loop.
+    A `format` call at a loop site stays a call, so there is nothing to lift,
+    and the benchmark below runs the same with the pass skipped
+    (`WADO_SKIP_PASS=nir/tmpl_hoist`).
+  - A `format` call stays a call, since its body allocates. It runs once per
+    iteration of the loop holding its site, so `inline` starts a function only
+    loops reach at a loop site, and its callees splice as they would in the
+    loop. A one-hole template's struct reaches `format` as the hole itself:
+    `sroa_param` reads a parameter's uses off the body rather than the
+    address-taken mark lowering left, which outlives the `&t` it recorded.
 
-  Done when a `wir_expect` fixture holds a `format` site to what the direct
-  lowering emits for the same template, and the measurement below shows no
-  gap.
+  Done: `tagged_template_format_direct_cost.wado` holds a `format` site to a
+  constant-sized buffer, no `Formatter`, no `fmt_base` or `pad` call, and the
+  radix prefix a constant. `tagged_template_format_loop_site.wado` holds one in
+  a loop to no template struct and no call to the radix helpers. A
+  single-hole site still pays its call into `format`, which the measurement
+  below shows as up to 1.11.
 
 - [ ] One path. An untagged template reifies as the `format` call, and the
   direct lowering (`synthesis::template::build_template_block`) is deleted.
@@ -718,7 +738,12 @@ export fn run() with (Stdout, MonotonicClock) {
     let mut bench = Benchmark { name: "template" };
     bench.work_per_iter = Option::Some(100000.0);
     bench.unit = "templates";
-    bench.run("untagged", || {
+    bench.run("warm-up", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `i=${i}`.len(); }
+        return total;
+    });
+    bench.run("untagged all", || {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
@@ -726,7 +751,7 @@ export fn run() with (Stdout, MonotonicClock) {
         }
         return total;
     });
-    bench.run("format", || {
+    bench.run("format all", || {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
@@ -734,15 +759,65 @@ export fn run() with (Stdout, MonotonicClock) {
         }
         return total;
     });
+    bench.run("untagged i05", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `i=${i:05} end`.len(); }
+        return total;
+    });
+    bench.run("format i05", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`i=${i:05} end`.len(); }
+        return total;
+    });
+    bench.run("untagged f.2", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `f=${(i as f64) / 3.0:.2} end`.len(); }
+        return total;
+    });
+    bench.run("format f.2", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`f=${(i as f64) / 3.0:.2} end`.len(); }
+        return total;
+    });
+    bench.run("untagged #x", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `h=${i:#x} end`.len(); }
+        return total;
+    });
+    bench.run("format #x", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`h=${i:#x} end`.len(); }
+        return total;
+    });
+    bench.run("untagged p?", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += `p=${p:?} end`.len();
+        }
+        return total;
+    });
+    bench.run("format p?", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += format`p=${p:?} end`.len();
+        }
+        return total;
+    });
 }
 ```
 
-Three runs:
+The first phase a program runs is slower and varies between runs, so a
+warm-up phase takes that cost. Three runs:
 
-| Phase           | Time per iteration, untagged = 1 |
-| --------------- | -------------------------------- |
-| untagged        | 1                                |
-| `` format`…` `` | 1.2 to 1.3                       |
+| Template        | `format` time per iteration, untagged = 1 |
+| --------------- | ----------------------------------------- |
+| the four holes  | 0.80 to 0.82                              |
+| `${i:05}` alone | 1.03 to 1.04                              |
+| `${f:.2}` alone | 1.03 to 1.06                              |
+| `${i:#x}` alone | 1.06 to 1.11                              |
+| `${p:?}` alone  | 0.99 to 1.04                              |
 
 ## Known gaps
 

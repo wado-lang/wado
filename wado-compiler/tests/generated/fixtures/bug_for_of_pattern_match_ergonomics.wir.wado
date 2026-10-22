@@ -519,16 +519,16 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_7_enumerate_over__list"() {
     $sroa_$iter_0_count_29 = 0;
     b39: block {
         l40: loop {
-            if ref.is_null(local.tee $match_9($inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: block -> ref null "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" {
-                $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_5: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_5 $sroa_self_index_31 >= 2;
+            if ref.is_null(local.tee $match_9($inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_5: block -> ref null "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" {
+                $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_6: block {
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_6 $sroa_self_index_31 >= 2;
                     ref_val = builtin::array_get_value<ref "bug_for_of_pattern_match_ergonomics.wado//P">($sroa_self_repr_30, $sroa_self_index_31);
                     $sroa_self_index_31 = $sroa_self_index_31 + 1;
                     idx = $sroa_$iter_0_count_29;
                     $sroa_$iter_0_count_29 = $sroa_$iter_0_count_29 + 1;
-                    break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: struct.new "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" { 0: idx, 1: ref_val };
+                    break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_5: struct.new "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" { 0: idx, 1: ref_val };
                 };
-                break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: ref.null none;
+                break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_5: ref.null none;
             })) == 0 {
                 let $variant_payload_1: ref "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]";
                 i = local.tee $variant_payload_1(ref.as_non_null($match_9)).0;
@@ -1394,9 +1394,9 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_19: i32;
-    let ptr_23: i32;
-    let count_24: i32;
     let i: i32;
+    let ptr_28: i32;
+    let count_29: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -1414,10 +1414,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l78: loop {
-            ptr_23 = ptr_19 + i;
-            count_24 = $mv$data$end - i;
-            count_24 = local.tee written($inline_cm_await_blocked_3: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_23, select i32(count_24 < 268435455, count_24, 268435455))) != -1 {
+            ptr_28 = ptr_19 + i;
+            count_29 = $mv$data$end - i;
+            count_29 = local.tee written($inline_cm_await_blocked_3: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_28, select i32(count_29 < 268435455, count_29, 268435455))) != -1 {
                     break $inline_cm_await_blocked_3: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
@@ -1430,18 +1430,18 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(ws);
                 break $inline_cm_await_blocked_3: status;
             }) >>u 4;
-            ptr_23 = (if local.tee ptr_23(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_28 = (if local.tee ptr_28(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_23 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_28 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_24;
-            if ((ptr_23 != 0) | (count_24 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_29;
+            if ((ptr_28 != 0) | (count_29 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_19, $mv$data$end, 1, 0));
-                return ptr_23;
+                return ptr_28;
             }
             continue l78;
         };

@@ -423,48 +423,48 @@ fn "http_routing_created.wado/$cm_task_entry__handle"(request) {
     let $moved_8: i32;
     let $moved_10: ref null "core:prelude//$Resource";
     let $cm_pair_183: i64;
-    let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let $sroa_$pattern_temp_0_0_188: i32;
-    let $sroa_$pattern_temp_0_1_189: i32;
-    let $sroa_$task_ret_1_191: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
+    let $local_185: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let a: ref Array<u8>;
     let b: ref Array<u8>;
+    let $sroa_$pattern_temp_0_0_196: i32;
+    let $sroa_$pattern_temp_0_1_197: i32;
+    let $sroa_$task_ret_1_199: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
     path = "http_routing_created.wado/$cm_binding__Request_get_path_with_query"(request);
-    $sroa_$pattern_temp_0_0_188 = builtin::i32_wrap_i64(local.tee $cm_pair_183("wasi/future-new"()));
-    $sroa_$pattern_temp_0_1_189 = builtin::i32_wrap_i64($cm_pair_183 >> 32_i64);
-    response = local.tee $pattern_temp_1("http_routing_created.wado/$cm_binding__Response_new"($moved_8 = "http_routing_created.wado/$cm_binding__Fields_new"(); $moved_8, global:http_routing_created.wado::$const_obj_1, $moved_8 = $sroa_$pattern_temp_0_0_188; $sroa_$pattern_temp_0_0_188 = 0; $moved_8)).0;
-    _tx_future = $pattern_temp_1.1;
+    $sroa_$pattern_temp_0_0_196 = builtin::i32_wrap_i64(local.tee $cm_pair_183("wasi/future-new"()));
+    $sroa_$pattern_temp_0_1_197 = builtin::i32_wrap_i64($cm_pair_183 >> 32_i64);
+    response = local.tee $local_185("http_routing_created.wado/$cm_binding__Response_new"($moved_8 = "http_routing_created.wado/$cm_binding__Fields_new"(); $moved_8, global:http_routing_created.wado::$const_obj_1, $moved_8 = $sroa_$pattern_temp_0_0_196; $sroa_$pattern_temp_0_0_196 = 0; $moved_8)).0;
+    _tx_future = $local_185.1;
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
-        if $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             a = p.repr;
             $moved_8 = p.used;
             b = global:http_routing_created.wado::$const_obj_0;
             if $moved_8 != 8 {
-                break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $sroa_$pattern_temp_0_0_188 = 0;
+            $sroa_$pattern_temp_0_0_196 = 0;
             b9: block {
                 l10: loop {
-                    break_if b9 $sroa_$pattern_temp_0_0_188 >= $moved_8;
-                    if builtin::array_get_value<u8>(a, $sroa_$pattern_temp_0_0_188) != builtin::array_get_value<u8>(b, $sroa_$pattern_temp_0_0_188) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                    break_if b9 $sroa_$pattern_temp_0_0_196 >= $moved_8;
+                    if builtin::array_get_value<u8>(a, $sroa_$pattern_temp_0_0_196) != builtin::array_get_value<u8>(b, $sroa_$pattern_temp_0_0_196) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
-                    $sroa_$pattern_temp_0_0_188 = $sroa_$pattern_temp_0_0_188 + 1;
+                    $sroa_$pattern_temp_0_0_196 = $sroa_$pattern_temp_0_0_196 + 1;
                     continue l10;
                 };
             };
-            break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         } {
             drop("http_routing_created.wado/$cm_binding__Response_set_status_code"(response, 201));
         }
     } else {
     }
-    $sroa_$task_ret_1_191 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_10 = response; response = ref.null none; $moved_10 };
+    $sroa_$task_ret_1_199 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_10 = response; response = ref.null none; $moved_10 };
     $moved_8 = 0;
-    $moved_8 = local.tee $moved_10(ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_191).payload_0)).value;
+    $moved_8 = local.tee $moved_10(ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_199).payload_0)).value;
     "wasi/task-return:handle"(0, $moved_8, 0, 0_i64, 0, 0, 0, 0);
-    drop("http_routing_created.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_8 = $sroa_$pattern_temp_0_1_189; $sroa_$pattern_temp_0_1_189 = 0; $moved_8, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
+    drop("http_routing_created.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_8 = $sroa_$pattern_temp_0_1_197; $sroa_$pattern_temp_0_1_197 = 0; $moved_8, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi/http/types.wado#error-code"(_tx_future.value);
     }

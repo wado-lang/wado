@@ -1,0 +1,29 @@
+// A `format` site in a loop costs the direct lowering's work per iteration.
+// `format` stays a call, but it runs once per iteration, so its own sites splice
+// what a site in the loop would. Its one hole arrives as the hole itself, with
+// no template struct built for it.
+use { println, Stdout } from "core:cli";
+
+fn total(n: i32) -> i32 {
+    let mut sum = 0;
+    for let i of 0..<n {
+        sum += format`h=${i:#x} end`.len();
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    if total(builtin::black_box(20)) == 184 {
+        println("ok");
+    }
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "\"core:prelude/primitive.wado/write_u64_base_digits\"(",
+        "Formatter::prepare_int_write",
+        "struct.new \"tagged_template_format_loop_site.wado//$tmpl"
+    ]
+}

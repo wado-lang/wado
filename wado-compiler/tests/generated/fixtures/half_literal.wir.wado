@@ -202,14 +202,14 @@ fn "half_literal.wado/run"() {
             break $inline_bf16__from_f32_29: (((used >>u 16) & 65535) | 64) & 65535;
         }
         self_123 = (used >>u 16) & 65535;
-        break $inline_bf16__from_f32_29: local.tee self_123($inline_round_to_even_33: block -> u16 {
+        break $inline_bf16__from_f32_29: local.tee self_123($inline_round_to_even_34: block -> u16 {
             if local.tee used(used & 65535) >u 32768 {
-                break $inline_round_to_even_33: (self_123 + 1) & 65535;
+                break $inline_round_to_even_34: (self_123 + 1) & 65535;
             }
             if (used == 32768) & ((self_123 & 1) == 1) {
-                break $inline_round_to_even_33: (self_123 + 1) & 65535;
+                break $inline_round_to_even_34: (self_123 + 1) & 65535;
             }
-            break $inline_round_to_even_33: self_123;
+            break $inline_round_to_even_34: self_123;
         });
     };
     if @unlikely(16256 != self_123) {
