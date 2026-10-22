@@ -22,8 +22,6 @@ use {
     FutureWritable,
     FutureWriteResult,
     Stream,
-    StreamChunk,
-    StreamWrite,
     StreamWritable,
     ReadyEvent,
     ResultBuffer,
@@ -316,12 +314,6 @@ internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
     return cm_await_copy(handle);
 }
 
-/// The `CopyResult` a packed CM copy reports.
-#[compiler_item("cm_copy_result")]
-internal fn cm_copy_result(packed: i32) -> CopyResult {
-    return copy_result(packed);
-}
-
 /// How a future write whose packed result is `packed` ended, a BLOCKED one
 /// pending. Cancellation is unreachable: no binding cancels a write.
 #[compiler_item("cm_future_write_result")]
@@ -329,7 +321,7 @@ internal fn cm_future_write_result(packed: i32) -> FutureWriteResult {
     if packed == CM_BLOCKED {
         return FutureWriteResult::Pending;
     }
-    return match cm_copy_result(packed) {
+    return match copy_result(packed) {
         Completed => FutureWriteResult::Completed,
         Dropped => FutureWriteResult::Dropped,
         Cancelled => unreachable(),
@@ -356,12 +348,6 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
         panic("a buffer's length is negative or past what linear memory can address");
     }
     return count * elem_size;
-}
-
-/// The element count of a packed CM copy result.
-#[compiler_item("cm_packed_count")]
-internal fn cm_packed_count(packed: i32) -> i32 {
-    return cm_packed_upper(packed);
 }
 
 /// CM adapter for stream.read(max) on Stream<u8>: one copy, started.
@@ -413,8 +399,8 @@ internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResu
     let mut taken = 0;
     loop {
         let written = cm_stream_write_once(handle, ptr + taken, len - taken);
-        let delivered = cm_packed_count(written);
-        let result = cm_copy_result(written);
+        let delivered = cm_packed_upper(written);
+        let result = copy_result(written);
         taken += delivered;
         if write_copy_is_final(result, delivered) || taken >= len {
             let freed = builtin::realloc(ptr, len, 1, 0);

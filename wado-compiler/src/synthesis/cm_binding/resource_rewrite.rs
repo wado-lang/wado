@@ -30,9 +30,9 @@ use crate::type_table::TypeTable;
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    return_stmt, struct_literal, synth_span,
+    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, return_stmt,
+    struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -317,7 +317,11 @@ fn synthesize_future_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFuncti
             Some((future_read_func_name(tt, payload), (payload, option)))
         },
         |(payload_type_id, option_type_id), ctx| {
-            vec![synthesize_future_read_func(payload_type_id, option_type_id, ctx)]
+            vec![synthesize_future_read_func(
+                payload_type_id,
+                option_type_id,
+                ctx,
+            )]
         },
     )
 }
@@ -497,6 +501,10 @@ fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
     cm_stream_read_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
+fn stream_lift_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
+    cm_stream_lift_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
+}
+
 fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
@@ -560,7 +568,12 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         ],
         TypeTable::I32,
     );
-    let byte_count = binary(TirBinaryOp::Mul, count(), i32_const(elem_size), TypeTable::I32);
+    let byte_count = binary(
+        TirBinaryOp::Mul,
+        count(),
+        i32_const(elem_size),
+        TypeTable::I32,
+    );
     stmts.push(return_stmt(Some(started_copy_literal(
         started_type_id,
         CompilerItem::StartedWrite,
@@ -1161,7 +1174,7 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 struct StreamReadNames {
     /// Starts the copy: `(handle, max) -> StartedRead<T>`.
     begin: String,
-    /// Lifts what it copied: `(ptr, count) -> List<T>`.
+    /// Lifts what it copied: `(handle, ptr, count) -> List<T>`.
     lift: String,
 }
 
@@ -1231,7 +1244,12 @@ fn synthesize_stream_read_funcs(
         TypeTable::I32,
         builtin_call(
             "realloc",
-            vec![i32_const(0), i32_const(0), i32_const(elem_align), byte_count()],
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(elem_align),
+                byte_count(),
+            ],
             TypeTable::I32,
         ),
     ));
@@ -1585,9 +1603,9 @@ fn binding_function(
     }
 }
 
-/// Synthesize `$cm_stream_read_val_<mangle>(handle, max) -> List<T>` for a
-/// value-payload element type, delegating the read loop to the shared
-/// [`synthesize_stream_read_func`]. The canonical name matches the `val-`
+/// Synthesize `$cm_stream_read_val_<mangle>(handle, max) -> StartedRead<T>` and
+/// its lift for a value-payload element type, through the shared
+/// [`synthesize_stream_read_funcs`]. The canonical name matches the `val-`
 /// naming the codegen builds for `CmStreamPayload::Value`.
 fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Vec<TirFunction> {
     let cm_interface_registry = ctx.cm_interface_registry;
@@ -1596,7 +1614,7 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ve
         let tt = type_table.borrow();
         let names = StreamReadNames {
             begin: stream_read_value_func_name(&tt, elem_type_id),
-            lift: cm_stream_lift_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id)),
+            lift: stream_lift_value_func_name(&tt, elem_type_id),
         };
         let payload = classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload);
@@ -1782,7 +1800,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         let lifts = cm_name == "stream-lift";
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = if lifts {
-                cm_stream_lift_value_func_name(&self.tt.mangle_type_arg_for_generic(elem_type_id))
+                stream_lift_value_func_name(self.tt, elem_type_id)
             } else {
                 stream_read_value_func_name(self.tt, elem_type_id)
             };
