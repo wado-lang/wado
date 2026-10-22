@@ -280,12 +280,10 @@ impl Signatures {
 }
 
 /// Whether the parameter's slot holds exactly what the argument gave it for the
-/// whole body, so every read of it is that constant.
+/// whole body, so every read of it is that constant. A reference to an
+/// immutable slot cannot write it, so taking one leaves it fixed.
 fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
-    !param.is_mut
-        && !param.is_mut_ref
-        && !func.address_taken_locals.contains(&param.local_index)
-        && !func.stores_aliased_locals.contains(&param.local_index)
+    !param.is_mut && !param.is_mut_ref && !func.stores_aliased_locals.contains(&param.local_index)
 }
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.

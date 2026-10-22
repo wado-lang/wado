@@ -35,7 +35,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, cold_functions, cold_path_id};
+use super::arena_query::{self, cold_exprs, cold_path_id, unreached_through};
 use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
@@ -1024,6 +1024,8 @@ struct BodyScan {
     hot_callees: IndexSet<FuncId>,
     /// The callees called from at least one site a `cold_path()` marker covers.
     cold_callees: IndexSet<FuncId>,
+    /// The callees called from at least one site outside every loop.
+    unlooped_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -1038,18 +1040,18 @@ pub(super) struct InlineScans {
 }
 
 /// What a sweep reads about a function that its own body does not decide:
-/// as a callee, whether a site admits it; as a caller, whether its sites are
-/// cold. Each moves with call sites anywhere in the program.
+/// as a callee, whether a site admits it; as a caller, which [`Site`] its body
+/// starts at. Each moves with call sites anywhere in the program.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct SweepRead {
     reach: Reach,
     shrinks: bool,
-    cold: bool,
+    entry: Site,
 }
 
 /// Have the inliner revisit each function whose sweep would read something
-/// new: a caller of a callee whose admission moved, and a function that turned
-/// cold or hot. The gate re-dirties only a changed body's neighbours, so a
+/// new: a caller of a callee whose admission moved, and a function whose body
+/// starts at another site. The gate re-dirties only a changed body's neighbours, so a
 /// callee left with one site after a splice elsewhere would otherwise wait on
 /// an unrelated change to reach its last caller. A function new this round is
 /// dirty already.
@@ -1060,7 +1062,7 @@ fn revisit_moved_reads(
     gate: &mut FunctionGate,
 ) {
     let pair = |i: usize| before.get(i).map(|b| (b, &after[i]));
-    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.cold != a.cold);
+    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.entry != a.entry);
     let readmitted =
         |i: usize| pair(i).is_some_and(|(b, a)| (b.reach, b.shrinks) != (a.reach, a.shrinks));
     for (caller, scan) in scans.iter().enumerate() {
@@ -1090,6 +1092,7 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
         return scan;
     };
     let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+    let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
@@ -1130,12 +1133,32 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
                 } else {
                     scan.hot_callees.insert(*func_id);
                 }
+                if !looped.contains(&e) {
+                    scan.unlooped_callees.insert(*func_id);
+                }
             }
             _ => {}
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
     scan
+}
+
+/// Every expression under a `loop`.
+fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
+    let mut out = IndexSet::default();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(st) = node
+            && let StmtKind::Loop { body: b } = &body.stmts[st].kind
+        {
+            body.for_each_live_node_under(NodeRef::Block(*b), |n| {
+                if let NodeRef::Expr(e) = n {
+                    out.insert(e);
+                }
+            });
+        }
+    });
+    out
 }
 
 /// Locals a body binds once, to a constant, and never writes — the shape a
@@ -2094,7 +2117,12 @@ pub fn inline_functions(
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(scans);
-    let cold = cold_functions(project, &call_sites, |caller| &scans[caller].hot_callees);
+    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
+    // A function only loops reach runs once per iteration of one, so each of
+    // its sites pays its call edge on every iteration, as a site in a loop does.
+    let looped = unreached_through(project, &call_sites, |caller| {
+        &scans[caller].unlooped_callees
+    });
     let called_cold = called_cold(scans, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
@@ -2369,11 +2397,18 @@ pub fn inline_functions(
             SweepRead {
                 reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
                 shrinks: shrinking.contains(&id),
-                cold: cold[i],
+                entry: if cold[i] {
+                    Site::Cold
+                } else if looped[i] {
+                    Site::Loop
+                } else {
+                    Site::Plain
+                },
             }
         })
         .collect();
     revisit_moved_reads(read, &now, scans, gate);
+    let entries: Vec<Site> = now.iter().map(|r| r.entry).collect();
     *read = now;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
@@ -2430,6 +2465,13 @@ pub fn inline_functions(
         {
             let body = func.body.as_mut().unwrap();
             let root = body.root();
+            let entry = entries[fid.index()];
+            // The body is one iteration of the loops that reach it, so a callee
+            // admitted at its only site in a loop is admitted at its only site
+            // here.
+            if entry == Site::Loop {
+                frame.loop_calls.push(call_counts(body, root, &carried));
+            }
             inline_calls_in_block(
                 body,
                 root,
@@ -2440,11 +2482,7 @@ pub fn inline_functions(
                 &mut inlined_funcs,
                 &mut labels,
                 &mut reval,
-                if cold[fid.index()] {
-                    Site::Cold
-                } else {
-                    Site::Plain
-                },
+                entry,
             );
         }
         func.address_taken_locals = frame.address_taken;
