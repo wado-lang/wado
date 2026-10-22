@@ -66,7 +66,7 @@ use wado_host::kiln::driver::{
     GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, generator_compile_options,
     generator_cycle,
 };
-use wado_host::sync::lock;
+use wado_host::sync::{joined, lock};
 
 /// Compiled generator components, each named by the hash of its sources.
 /// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the
@@ -385,26 +385,27 @@ impl CliGeneratorProvider {
         // On a blocking thread with its own runtime, as the compile below is
         // and for the same reason: the pipeline holds a `Logger` whose future
         // is `!Send`, and the driver's runtime is multi-threaded.
-        let started = tokio::task::spawn_blocking(move || {
-            let mut host = FilesystemCompilerHost::with_log_level(base, log_level);
-            // The run's own cache, so the generated modules this produces are
-            // marked as its output rather than read as a tree moving under it,
-            // and so the AOT components the outer run holds are reused.
-            if let Some(cache) = shared_cache {
-                host = host.with_shared_run_cache(cache);
-            }
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| ProviderError::Internal {
-                    message: format!(
-                        "kiln: failed to start inner runtime for a nested generator: {e}"
-                    ),
-                })?;
-            Ok(rt.block_on(run_nested_pipeline(&entry, &entry_identity, &host, &run)))
-        })
-        .await
-        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
+        let started = joined(
+            tokio::task::spawn_blocking(move || {
+                let mut host = FilesystemCompilerHost::with_log_level(base, log_level);
+                // The run's own cache, so the generated modules this produces are
+                // marked as its output rather than read as a tree moving under it,
+                // and so the AOT components the outer run holds are reused.
+                if let Some(cache) = shared_cache {
+                    host = host.with_shared_run_cache(cache);
+                }
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| ProviderError::Internal {
+                        message: format!(
+                            "kiln: failed to start inner runtime for a nested generator: {e}"
+                        ),
+                    })?;
+                Ok(rt.block_on(run_nested_pipeline(&entry, &entry_identity, &host, &run)))
+            })
+            .await,
+        );
         started?.map_err(failed)
     }
 
@@ -442,7 +443,7 @@ impl CliGeneratorProvider {
         // async compile on a blocking thread with its own current-thread
         // runtime so the multi-thread driver runtime only sees a `Send`-
         // able `spawn_blocking` future.
-        let artifacts: Result<CompileArtifacts, ProviderError> =
+        let artifacts: Result<CompileArtifacts, ProviderError> = joined(
             tokio::task::spawn_blocking(move || {
                 let host = SilentHost {
                     inner: FilesystemCompilerHost::with_log_level(base_path, log_level),
@@ -484,8 +485,8 @@ impl CliGeneratorProvider {
                     }),
                 }
             })
-            .await
-            .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
+            .await,
+        );
 
         let mut artifacts = artifacts?;
 

@@ -830,10 +830,13 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
             }
             Err(err) => {
                 // A `test-todo-*` export that returned Ok signals a resolved TODO via
-                // `TodoResolved`. Re-raise it so the test framework reports the failure;
-                // everything else is treated as a still-pending TODO.
+                // `TodoResolved`. Re-raise it, and a compiler crash, so the test
+                // framework reports the failure; everything else is a still-pending TODO.
                 if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
                     panic!("{}", resolved.report(TodoMark::Module));
+                }
+                if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
+                    panic!("{ice}");
                 }
                 let msg = common::panic_message(err.as_ref()).unwrap_or("(unknown panic)");
                 eprintln!("[{test_id}] #![TODO] module pending: {msg}");
@@ -842,14 +845,17 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }
     }
 
-    // Only the sentinel is caught: it would otherwise reach the test framework
-    // as an opaque `Box<dyn Any>`.
+    // Only the sentinels are caught: they would otherwise reach the test
+    // framework as an opaque `Box<dyn Any>`.
     let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
     }));
     if let Err(err) = test_result {
         if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
             panic!("{}", resolved.report(TodoMark::Test));
+        }
+        if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
+            panic!("{ice}");
         }
         std::panic::resume_unwind(err);
     }

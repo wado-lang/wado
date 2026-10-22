@@ -13,6 +13,7 @@ use crate::compile::empty_manifest;
 use crate::git::{fetch_manifest, resolve_ref};
 use crate::manifest::resolve_manifest;
 use crate::{git, oci};
+use wado_host::sync::joined;
 
 /// Parse an image tag into a semver [`Version`], stripping an optional leading
 /// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule
@@ -71,9 +72,7 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, ProviderError> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
+    joined(tokio::task::spawn_blocking(f).await)
 }
 
 impl DependencyProvider for FilesystemProvider {

@@ -634,8 +634,11 @@ impl Drop for Ticker {
         let (stopped, wake) = &*self.stop;
         *lock(stopped) = true;
         wake.notify_all();
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = self.handle.take()
+            && let Err(panic) = handle.join()
+            && !std::thread::panicking()
+        {
+            std::panic::resume_unwind(panic);
         }
     }
 }

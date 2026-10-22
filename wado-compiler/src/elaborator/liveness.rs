@@ -1232,21 +1232,10 @@ impl CompilerNamed {
 
 #[cfg(test)]
 mod last_use_tests {
+    use futures::executor::block_on;
+
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::semantics::semantics;
-
-    fn block_on<F: std::future::Future>(future: F) -> F::Output {
-        use std::future::Future;
-        use std::pin::Pin;
-        use std::task::{Context, Poll, Waker};
-        let mut cx = Context::from_waker(Waker::noop());
-        let mut fut = Box::pin(future);
-        loop {
-            if let Poll::Ready(v) = Pin::new(&mut fut).as_mut().poll(&mut cx) {
-                return v;
-            }
-        }
-    }
 
     /// Return a sorted list of the identifier texts that the analysis marked as
     /// final uses, one entry per marked use.

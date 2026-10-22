@@ -30,6 +30,7 @@ use wado_host::kiln::driver::{
     Harvested, PipelineError, PipelineOutcome, ProviderError, emit_counting_errors,
     harvest_invocations, merge_across_packages, run_pipeline,
 };
+use wado_host::sync::joined;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -671,9 +672,7 @@ async fn materialize_git_dependencies(
             continue;
         };
         let (url, version, sha) = (url.clone(), version.clone(), sha.clone());
-        tokio::task::spawn_blocking(move || materialize(&url, &version, &sha))
-            .await
-            .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?
+        joined(tokio::task::spawn_blocking(move || materialize(&url, &version, &sha)).await)
             .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?;
     }
     Ok(())

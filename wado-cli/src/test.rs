@@ -11,6 +11,7 @@ use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
+use tokio::task::JoinHandle;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, Registered, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
@@ -33,7 +34,7 @@ use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
-use wado_host::sync::lock;
+use wado_host::sync::{joined, lock};
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
@@ -614,8 +615,8 @@ struct LoadedModule {
 /// takes it back out to write.
 type GuestProfilerSlot = Arc<Mutex<Option<GuestProfiler>>>;
 
-/// Non-TODO module that failed `Component::new`/`create_linker` or whose
-/// load worker panicked. Counted on the `load` axis; does not abort the run.
+/// Non-TODO module that failed `Component::new`/`create_linker`. Counted on the
+/// `load` axis; does not abort the run.
 pub(crate) struct LoadFailure {
     pub(crate) path: String,
 }
@@ -856,6 +857,17 @@ impl ParsedTest {
             .clone()
             .unwrap_or_else(|| self.parsed.display.clone())
     }
+}
+
+/// What the task working on the file at `path` returned. A panic in it names
+/// the file before it ends the run: the panic's own message names only the
+/// code that raised it.
+async fn joined_testing<T>(task: JoinHandle<T>, path: String) -> T {
+    let result = task.await;
+    if result.is_err() {
+        eprintln!("error: a panic ended the run while testing {path}");
+    }
+    joined(result)
 }
 
 /// **Stage 1 worker** — run the wado compiler over one source file and
@@ -1103,12 +1115,13 @@ async fn run_compile_stage(
             let cpu_budget = Arc::clone(&cpu_budget);
             let run_cache = Arc::clone(&run_cache);
             let reporter = Arc::clone(&reporter);
+            let testing = path.clone();
             // Spawn each per-fixture worker as an independent task so
             // its progress is not gated by `buffer_unordered`'s outer
             // polling state. If the outer loop is briefly parked on
             // `artifact_tx.send` (channel full), the spawned tasks
             // still progress and release their CPU permit on completion.
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 // Acquire one CPU permit (shared across all three
                 // stages) — held for the entire compile body so the
                 // pipeline's total in-flight CPU work is `≤ cpus`,
@@ -1117,42 +1130,43 @@ async fn run_compile_stage(
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                tokio::task::spawn_blocking(move || {
-                    match tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                    {
-                        Ok(rt) => rt.block_on(compile_artifact(
-                            path,
-                            flags,
-                            observer_inner,
-                            run_cache,
-                            reporter,
-                        )),
-                        Err(e) => {
-                            let message = format!("unable to create compile runtime: {e}");
-                            reporter.on_compile(
-                                &path,
-                                CompileEvent::Failed {
-                                    detail: Some(message.clone()),
-                                },
-                                Duration::ZERO,
-                            );
-                            CompileOutcome::CompileFailure(CompileFailure {
+                joined(
+                    tokio::task::spawn_blocking(move || {
+                        match tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                        {
+                            Ok(rt) => rt.block_on(compile_artifact(
                                 path,
-                                message: Some(message),
-                            })
+                                flags,
+                                observer_inner,
+                                run_cache,
+                                reporter,
+                            )),
+                            Err(e) => {
+                                let message = format!("unable to create compile runtime: {e}");
+                                reporter.on_compile(
+                                    &path,
+                                    CompileEvent::Failed {
+                                        detail: Some(message.clone()),
+                                    },
+                                    Duration::ZERO,
+                                );
+                                CompileOutcome::CompileFailure(CompileFailure {
+                                    path,
+                                    message: Some(message),
+                                })
+                            }
                         }
-                    }
-                })
-                .await
-                .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
-            })
+                    })
+                    .await,
+                )
+            });
+            joined_testing(task, testing)
         })
         .buffer_unordered(parallelism.max(1));
 
-    while let Some(join_result) = stream.next().await {
-        let outcome = join_result.expect("compile task panicked");
+    while let Some(outcome) = stream.next().await {
         match outcome {
             CompileOutcome::Compiled(a) => {
                 compiled_count += 1;
@@ -1215,9 +1229,10 @@ async fn run_load_stage(
             let profile_for_load = profile.clone();
             let slot_for_load = profiler_slot.clone();
             let coverage_for_load = coverage_run.clone();
+            let testing = artifact.path.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 // `modules` permit caps simultaneously-live wasmtime
                 // `Component`s globally; acquired here so the wait
                 // shows as channel backpressure (small in-flight set
@@ -1233,27 +1248,28 @@ async fn run_load_stage(
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                tokio::task::spawn_blocking(move || {
-                    load_module(
-                        artifact,
-                        opt_level,
-                        &profile_for_load,
-                        runtime_knobs,
-                        slot_for_load.as_ref(),
-                        coverage_for_load.as_ref(),
-                        module_permit,
-                        observer_inner,
-                        &reporter,
-                    )
-                })
-                .await
-                .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
-            })
+                joined(
+                    tokio::task::spawn_blocking(move || {
+                        load_module(
+                            artifact,
+                            opt_level,
+                            &profile_for_load,
+                            runtime_knobs,
+                            slot_for_load.as_ref(),
+                            coverage_for_load.as_ref(),
+                            module_permit,
+                            observer_inner,
+                            &reporter,
+                        )
+                    })
+                    .await,
+                )
+            });
+            joined_testing(task, testing)
         })
         .buffer_unordered(parallelism.max(1));
 
-    while let Some(join_result) = stream.next().await {
-        let outcome = join_result.expect("load task panicked");
+    while let Some(outcome) = stream.next().await {
         match outcome {
             LoadOutcome::Loaded(mut module) => {
                 tally.ok += 1;
@@ -1342,6 +1358,7 @@ async fn run_execute_stage(
         .map(|job| {
             observer.record_input();
             let cpu_budget = Arc::clone(&cpu_budget);
+            let testing = job.module.path.clone();
             // Spawn each test as an independent task. Dropping the
             // outer stream does NOT cancel a running guest wasm
             // function — but `EpochTicker`'s background epoch
@@ -1354,7 +1371,7 @@ async fn run_execute_stage(
             // loop on `result_tx.send` no longer freezes the
             // in-flight test futures (which hold `Arc<LoadedModule>`
             // and thus modules-budget permits).
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 // CPU permit (shared with compile + load) so that
                 // CPU-bound tests don't compete with simultaneously
                 // streaming compile / load work. Held for the full
@@ -1370,12 +1387,12 @@ async fn run_execute_stage(
                     .await
                     .expect("cpu semaphore closed");
                 run_single_test(&job, cpu_permit).await
-            })
+            });
+            joined_testing(task, testing)
         })
         .buffer_unordered(parallelism.max(1));
 
-    while let Some(join_result) = stream.next().await {
-        let result = join_result.expect("test task panicked");
+    while let Some(result) = stream.next().await {
         observer.add_work(result.duration);
         reporter.on_test_result(&result);
         if result_tx.send(result).await.is_ok() {
@@ -1599,25 +1616,17 @@ async fn run_pipeline(
 
     // All seven tasks (3 stages + 4 collectors) run concurrently as
     // independent runtime tasks. A panic in any of them is a bug in the
-    // compiler or the runner, and ends the run. Sequential
-    // `.await` of the handles is fine for concurrency (the tasks
-    // progress in parallel on the runtime; await just gathers their
-    // results) and lets us avoid the `tokio::macros` feature.
-    let compile_task = tokio::spawn(compile_future);
-    let load_task = tokio::spawn(load_future);
-    let execute_task = tokio::spawn(execute_future);
-    let todo_task = tokio::spawn(collect_into_vec(todo_rx));
-    let cfail_task = tokio::spawn(collect_into_vec(cfail_rx));
-    let lfail_task = tokio::spawn(collect_into_vec(lfail_rx));
-    let result_task = tokio::spawn(collect_into_vec(result_rx));
-
-    let compiled_count = compile_task.await.expect("compile stage panicked");
-    let load = load_task.await.expect("load stage panicked");
-    execute_task.await.expect("execute stage panicked");
-    let todos = todo_task.await.expect("todo collector panicked");
-    let cfails = cfail_task.await.expect("cfail collector panicked");
-    let lfails = lfail_task.await.expect("lfail collector panicked");
-    let results = result_task.await.expect("result collector panicked");
+    // compiler or the runner, and `try_join!` ends the run at the first
+    // one rather than once the stages ahead of it drain.
+    let (compiled_count, load, (), todos, cfails, lfails, results) = joined(futures::try_join!(
+        tokio::spawn(compile_future),
+        tokio::spawn(load_future),
+        tokio::spawn(execute_future),
+        tokio::spawn(collect_into_vec(todo_rx)),
+        tokio::spawn(collect_into_vec(cfail_rx)),
+        tokio::spawn(collect_into_vec(lfail_rx)),
+        tokio::spawn(collect_into_vec(result_rx)),
+    ));
 
     drop(epoch_ticker); // Stops the tick thread.
 
@@ -2313,11 +2322,7 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         })
         .collect();
     for handle in handles {
-        // A snapshot the stdlib cannot build is a bug every compile would hit.
-        // Nothing aborts these tasks, so a join error is that panic.
-        if let Err(join_err) = handle.await {
-            std::panic::resume_unwind(join_err.into_panic());
-        }
+        joined(handle.await);
     }
 }
 

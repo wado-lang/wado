@@ -1,6 +1,8 @@
 use std::fs;
+use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 
@@ -88,6 +90,22 @@ fn install_alt_stack() {
             ss_size: ALT_STACK_SIZE,
         };
         libc::sigaltstack(&raw const ss, std::ptr::null_mut());
+    }
+}
+
+/// Names the fixture a worker panicked on, which the panic's own message does
+/// not, and stops the reader feeding the rest of the run.
+struct Compiling<'a> {
+    path: &'a str,
+    failed: &'a AtomicBool,
+}
+
+impl Drop for Compiling<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.failed.store(true, Ordering::Relaxed);
+            eprintln!("error: a panic ended the run while compiling {}", self.path);
+        }
     }
 }
 
@@ -213,18 +231,23 @@ pub fn run_pipeline(
     let (read_tx, read_rx) = mpsc::sync_channel::<ReadItem>(2 * num_workers);
     let (write_tx, write_rx) = mpsc::sync_channel::<WriteBatch>(num_workers);
 
+    let failed = Arc::new(AtomicBool::new(false));
+
     // Reader thread: sends pre-read items
-    let reader = std::thread::spawn(move || {
-        for item in read_items {
-            if read_tx.send(item).is_err() {
-                break;
+    let reader = std::thread::spawn({
+        let failed = Arc::clone(&failed);
+        move || {
+            for item in read_items {
+                if failed.load(Ordering::Relaxed) || read_tx.send(item).is_err() {
+                    break;
+                }
             }
+            // drop read_tx to signal EOF
         }
-        // drop read_tx to signal EOF
     });
 
     // Shared receiver for work-stealing among dump workers
-    let read_rx = std::sync::Arc::new(std::sync::Mutex::new(read_rx));
+    let read_rx = Arc::new(std::sync::Mutex::new(read_rx));
 
     // Dump worker threads
     let mut workers = Vec::with_capacity(num_workers);
@@ -234,6 +257,7 @@ pub fn run_pipeline(
         let emit_templates = emit_templates.clone();
         let distinct_phases = distinct_phases.clone();
         let default_world = default_world.clone();
+        let failed = Arc::clone(&failed);
 
         workers.push(
             std::thread::Builder::new()
@@ -265,6 +289,10 @@ pub fn run_pipeline(
                             *slot.lock().unwrap() = Some((input_path.clone(), t0));
                         }
 
+                        let compiling = Compiling {
+                            path: &input_path,
+                            failed: &failed,
+                        };
                         let rendered = rt.block_on(render_phases(
                             &item.source,
                             &item.input_path,
@@ -272,6 +300,7 @@ pub fn run_pipeline(
                             opt_level,
                             default_world.as_deref(),
                         ));
+                        drop(compiling);
                         let compile_time = t0.elapsed();
 
                         // Clear active file
@@ -307,8 +336,10 @@ pub fn run_pipeline(
                 .expect("failed to spawn dump worker"),
         );
     }
-    // Drop the original write_tx so writer sees EOF when all workers finish
+    // Drop the original write_tx so writer sees EOF when all workers finish,
+    // and the original read_rx so the reader stops if they all panicked.
     drop(write_tx);
+    drop(read_rx);
 
     // Collect results, writing each output in place. No file is removed here:
     // every golden file is overwritten where it already lives, so there is no
@@ -375,9 +406,8 @@ pub fn run_pipeline(
         }
     }
 
-    reader.join().expect("reader thread panicked");
-    for w in workers {
-        w.join().expect("dump worker panicked");
+    for thread in std::iter::once(reader).chain(workers) {
+        thread.join().unwrap_or_else(|panic| resume_unwind(panic));
     }
 
     // Prune stale golden files: anything matching an emit's pattern whose

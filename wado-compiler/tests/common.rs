@@ -241,15 +241,24 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
         .expect("a compile worker outlives the job handed to it");
     match receiver.recv().expect("a compile worker answers every job") {
         Ok(value) => value,
-        Err(payload) => {
-            // libtest captures output per thread, so the worker's own panic
-            // message landed on stderr under no test. Re-panicking files it
-            // under the failing one.
-            if let Some(message) = panic_message(payload.as_ref()) {
-                panic!("compile worker panicked: {message}");
-            }
-            std::panic::resume_unwind(payload)
-        }
+        Err(payload) => std::panic::panic_any(InternalCompilerError(
+            panic_message(payload.as_ref())
+                .unwrap_or("(non-string panic payload)")
+                .to_string(),
+        )),
+    }
+}
+
+/// A panic in the compiler, raised as a typed payload so a `#![TODO]` module's
+/// catch can tell it from the failure the mark expects: an ICE is never
+/// pending. Whoever catches it re-panics with [`Display`], since libtest
+/// captures output per thread and the worker's own message landed under no test.
+#[derive(Debug)]
+pub struct InternalCompilerError(pub String);
+
+impl std::fmt::Display for InternalCompilerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "compile worker panicked: {}", self.0)
     }
 }
 
@@ -1358,7 +1367,8 @@ pub fn run_wasm_with_full_options(
 /// `anyhow::bail!`) so the outer `#![TODO]` module wrapper can distinguish a
 /// resolved-but-still-marked TODO (hard failure) from a genuine pending test
 /// (silent OK). The runner identifies it by downcasting the panic payload;
-/// all other panics fall back to the "pending" path. It names the test only:
+/// every panic but this and [`InternalCompilerError`] falls back to the
+/// "pending" path. It names the test only:
 /// whoever catches it knows whether the mark came from the test or its module.
 #[derive(Debug)]
 pub struct TodoResolved(pub String);
