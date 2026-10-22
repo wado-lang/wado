@@ -153,7 +153,9 @@ It is that call where all of these hold:
   contents, never which container `c` names.
 - `c`'s type implements `IndexSwap` at the index type.
 
-The call evaluates `c`, `i` and `j` once each. The transposition is recognized
+The call evaluates `c`, `j` and `i` once each, in that order: the order in which
+the desugaring's right side first reads them, so an index that traps (a
+division by zero) fails as it would there. The transposition is recognized
 before the desugared right side is typed. Typing `c[j]` as a read first would
 report a value copy of an affine element, so the order matters.
 
