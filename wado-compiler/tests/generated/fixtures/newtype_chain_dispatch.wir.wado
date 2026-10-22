@@ -117,7 +117,7 @@ fn "newtype_chain_dispatch.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    let $sroa_v_repr_330: ref Array<i32>;
+    let $sroa_v_repr_338: ref Array<i32>;
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"(3, 0, $local_22);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
@@ -127,13 +127,13 @@ fn "newtype_chain_dispatch.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14(builtin::array_get_value<i32>(local.tee $sroa_v_repr_330(array.new_fixed<i32>(1, 2, 3)), 0)) != 1) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14(builtin::array_get_value<i32>(local.tee $sroa_v_repr_338(array.new_fixed<i32>(1, 2, 3)), 0)) != 1) {
         cold_path;
         "newtype_chain_dispatch.wado/run$cold3"($sroa_$pattern_temp_0_1_14);
         unreachable;
     }
-    builtin::array_set<i32>($sroa_v_repr_330, 0, 9);
-    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14(builtin::array_get_value<i32>($sroa_v_repr_330, 0)) != 9) {
+    builtin::array_set<i32>($sroa_v_repr_338, 0, 9);
+    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14(builtin::array_get_value<i32>($sroa_v_repr_338, 0)) != 9) {
         cold_path;
         "newtype_chain_dispatch.wado/run$cold1"($sroa_$pattern_temp_0_1_14);
         unreachable;
@@ -351,9 +351,9 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_15: i32;
-    let ptr_17: i32;
-    let count_18: i32;
     let i: i32;
+    let ptr_24: i32;
+    let count_25: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -371,11 +371,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l29: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+            ptr_24 = ptr_15 + i;
+            count_25 = $mv$data$end - i;
+            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_9: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -385,20 +385,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_6: status;
+                break $inline_cm_await_blocked_9: status;
             }) >>u 4;
-            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_18;
-            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_25;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return ptr_17;
+                return ptr_24;
             }
             continue l29;
         };

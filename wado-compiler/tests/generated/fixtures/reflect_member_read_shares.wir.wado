@@ -76,7 +76,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "reflect_member_read_shares.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
     let n_14: i32;
-    let is_negative_35: bool;
+    let is_negative_37: bool;
     let x: i64;
     let $sroa_h_xs_60: ref "core:prelude//List<i32>";
     let $sroa_h_ys_61: ref "core:prelude//List<i32>";
@@ -85,15 +85,15 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     $sroa_h_ys_61 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     n_14 = 0;
-    is_negative_35 = local.tee n_14(local.tee n_14($sroa_h_xs_60.used) + $sroa_h_ys_61.used) < 0;
+    is_negative_37 = local.tee n_14(local.tee n_14($sroa_h_xs_60.used) + $sroa_h_ys_61.used) < 0;
     n_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n_14); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_35 {
-        if @unlikely(local.tee is_negative_35(0 + 1) > builtin::array_len($local_3.repr)) {
+    if is_negative_37 {
+        if @unlikely(local.tee is_negative_37(0 + 1) > builtin::array_len($local_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_35);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_37);
         }
         start_98 = $local_3.used;
-        $local_3.used = is_negative_35;
+        $local_3.used = is_negative_37;
         builtin::array_set_u8($local_3.repr, start_98, 45);
     } else {
     }
@@ -101,16 +101,16 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_98);
     }
-    is_negative_35 = $local_3.used;
+    is_negative_37 = $local_3.used;
     $local_3.used = start_98;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_35, x, n_14);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_37, x, n_14);
     n_14 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_35 = builtin::i32_wrap_i64(x >> 32_i64);
+    is_negative_37 = builtin::i32_wrap_i64(x >> 32_i64);
     start_98 = "reflect_member_read_shares.wado/$cm_binding__Stdout_write_via_stream"(start_98 = n_14; n_14 = 0; start_98);
-    n_14 = is_negative_35;
-    is_negative_35 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_35 = n_14; n_14 = 0; is_negative_35, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_35 = start_98; start_98 = 0; is_negative_35);
+    n_14 = is_negative_37;
+    is_negative_37 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_37 = n_14; n_14 = 0; is_negative_37, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_37 = start_98; start_98 = 0; is_negative_37);
 }
 
 fn "reflect_member_read_shares.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -226,9 +226,9 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_15: i32;
-    let ptr_17: i32;
-    let count_18: i32;
     let i: i32;
+    let ptr_24: i32;
+    let count_25: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -246,11 +246,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l30: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+            ptr_24 = ptr_15 + i;
+            count_25 = $mv$data$end - i;
+            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_9: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -260,20 +260,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_6: status;
+                break $inline_cm_await_blocked_9: status;
             }) >>u 4;
-            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_18;
-            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_25;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return ptr_17;
+                return ptr_24;
             }
             continue l30;
         };

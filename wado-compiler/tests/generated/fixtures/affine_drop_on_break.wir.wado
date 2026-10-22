@@ -406,9 +406,9 @@ fn "core:rt/cm_stream_write_u8"(handle, data) {
             continue l36;
         };
     }; builtin::i64_extend_i32_u(ptr_12) | (builtin::i64_extend_i32_s(len_3) << 32_i64));
-    status = $inline_cm_await_blocked_5: block -> i32 {
+    status = $inline_cm_await_blocked_8: block -> i32 {
         if local.tee i("wasi/stream-write"(handle, ptr_12, select i32(len_3 < 268435455, len_3, 268435455))) != -1 {
-            break $inline_cm_await_blocked_5: i;
+            break $inline_cm_await_blocked_8: i;
         }
         i = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, i);
@@ -418,7 +418,7 @@ fn "core:rt/cm_stream_write_u8"(handle, data) {
         drop("mem/realloc"(evt_ptr, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
         "wasi/waitable-set-drop"(i);
-        break $inline_cm_await_blocked_5: status;
+        break $inline_cm_await_blocked_8: status;
     };
     drop("mem/realloc"(ptr_12, len_3, 1, 0));
     return ptr_12 = status >>u 4; i = select i32(i > 0, local.tee i(len_3 - ptr_12), 0); out = builtin::array_new<u8>(select i32(len_3 > 0, local.tee len_3(len_3 - ptr_12), 0)); if len_3 > 0 {

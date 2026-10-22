@@ -127,18 +127,18 @@ fn "generic_assoc_type_family_survives_dce.wado/$test_0_a_projected_payload_keep
     let $load_2: i32;
     let v_0: ref null "generic_assoc_type_family_survives_dce.wado//Box2<i32>";
     let repr: ref Array<i32>;
-    let v_30: ref "core:prelude//List<i32>";
-    repr = local.tee v_30(local.tee v_0(struct.new "generic_assoc_type_family_survives_dce.wado//Box2<i32>" { items: builtin::array_fill<i32>(local.tee repr(builtin::array_new<i32>(3)), 0, 1, 3); struct.new "core:prelude//List<i32>" { repr: repr, used: 3 } }).items).repr;
-    $load_2 = v_30.used;
+    let v_20: ref "core:prelude//List<i32>";
+    repr = local.tee v_20(local.tee v_0(struct.new "generic_assoc_type_family_survives_dce.wado//Box2<i32>" { items: builtin::array_fill<i32>(local.tee repr(builtin::array_new<i32>(3)), 0, 1, 3); struct.new "core:prelude//List<i32>" { repr: repr, used: 3 } }).items).repr;
+    $load_2 = v_20.used;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, repr, 0, $load_2);
-    v_30 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee repr(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); repr, used: $load_2 };
-    if @unlikely($load_2 >= builtin::array_len(v_30.repr)) {
+    v_20 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee repr(builtin::array_new<i32>($load_2)), 0, $array_clone_dst_2, 0, $load_2); repr, used: $load_2 };
+    if @unlikely($load_2 >= builtin::array_len(v_20.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_30);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_20);
     }
-    builtin::array_set<i32>(v_30.repr, $load_2, 1);
-    v_30.used = $load_2 + 1;
+    builtin::array_set<i32>(v_20.repr, $load_2, 1);
+    v_20.used = $load_2 + 1;
     if @likely(ref.is_null(v_0) == 0) {
         if @unlikely(local.tee $load_2(v_0.items.used) != 3) {
             cold_path;

@@ -502,9 +502,9 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_15: i32;
-    let ptr_17: i32;
-    let count_18: i32;
     let i: i32;
+    let ptr_24: i32;
+    let count_25: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -522,11 +522,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l34: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+            ptr_24 = ptr_15 + i;
+            count_25 = $mv$data$end - i;
+            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_9: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -536,20 +536,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_6: status;
+                break $inline_cm_await_blocked_9: status;
             }) >>u 4;
-            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_18;
-            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_25;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return ptr_17;
+                return ptr_24;
             }
             continue l34;
         };
@@ -559,7 +559,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 fn "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]"(input) {
     let de: ref "core:cbor//CborDeserializer";
     let $qm_e: ref "core:serde//DeserializeError";
-    let self_8: ref "core:prelude/slice.wado//Slice<u8>";
+    let self_12: ref "core:prelude/slice.wado//Slice<u8>";
     de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0, depth: 0, max_depth: 100, strict: 1 };
     let $mv$$vr_7$0: i32;
     let $mv$$vr_7$1: u64;
@@ -574,7 +574,7 @@ fn "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>$sroa[re
     } else {
         unreachable;
     });
-    if @unlikely(local.tee $mv$$vr_7$0(de.pos) < local.tee self_8(de.input).end - self_8.start) {
+    if @unlikely(local.tee $mv$$vr_7$0(de.pos) < local.tee self_12(de.input).end - self_12.start) {
         cold_path;
         return 1, 0_i64, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s($mv$$vr_7$0));
     }
