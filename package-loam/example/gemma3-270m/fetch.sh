@@ -21,6 +21,4 @@ EOF
 
 # The weights outgrow the copying collector's half of the heap.
 "${WADO:-wado}" run --collector drc ../../tools/onnx_split.wado -- build/model.onnx build/gemma3
-# The build reads only the checkpoint's header: its length, then the JSON.
-head -c "$((8 + $(od -An -t u8 -N 8 build/gemma3.safetensors)))" build/gemma3.safetensors > gemma3-header.safetensors
 cp build/gemma3.onnxtext gemma3.onnxtext
