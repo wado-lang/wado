@@ -89,6 +89,24 @@ library's types import the same way from source and from a component. The
 exception follows from the interface's name, not from whether anything
 collides.
 
+### An interface's body declares its types
+
+Wado source declares a type inside its interface's body, as WIT does:
+
+```wado
+pub interface Types {
+    variant Method { Get, Post }
+    resource Request { ... }
+
+    fn send(request: Request) -> Method;
+}
+```
+
+The body is a scope. An operation names a member type bare, and a type of
+another interface by path. A member takes the interface's visibility and
+writes none of its own, since WIT gives a member none. A member is one of WIT's
+type kinds: a `struct`, `variant`, `enum`, `flags`, `resource` or newtype.
+
 ### Each WIT scope is one Wado scope
 
 The bindings synthesized for a component keep each interface in a scope of its
@@ -114,22 +132,15 @@ module, and its diagnostic, have nothing left to cover.
   leaving it out, and its diagnostic are in place, and each package's
   bindings form one module. The fixture from issue #2421 imports both
   `Trip`s.
-- [ ] An interface's types are its members. `Iface::Type` and
-  `use { Iface::{Type} }` resolve, a component's bindings declare each type
-  under its interface, and two interfaces declaring one type name import
-  together.
+- [ ] An interface's types are its members. An `interface` body declares
+  types, `Iface::Type` and `use { Iface::{Type} }` resolve, a component's
+  bindings declare each type in its interface's body, and two interfaces
+  declaring one type name import together.
 - [ ] The `wasi:*` standard library follows the rule. `wado-from-idl` stops
   flattening a package's types, and the corpus imports them through their
   interfaces.
 - [ ] An operation is bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.
-
-## Open question: how Wado source declares an interface's types
-
-The standard library's bindings are Wado source, generated from WIT, so they
-need a way to say which interface a type belongs to. So does a hand-written
-`#[cm(…)]` binding. WIT writes a type inside its interface's body. A Wado
-`interface` body holds operations only today.
 
 ## References
 
