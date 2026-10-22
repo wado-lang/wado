@@ -561,9 +561,10 @@ fn summarize_params(
 /// or `None` when the operand is neither. A cast names the storage its operand
 /// does, so either side of the reference may carry one. A reference to a
 /// literal is the only name its object has, so a reference local bound to one
-/// roots it as a struct local roots its own. `expected` guards against reading field indices off a
-/// literal of a different struct than the local's declared type — a local slot
-/// reused for two shapes would otherwise mix their field numbering.
+/// roots it as a struct local roots its own. `expected` guards against reading
+/// field indices off a literal of a different struct than the local's declared
+/// type — a local slot reused for two shapes would otherwise mix their field
+/// numbering.
 fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,

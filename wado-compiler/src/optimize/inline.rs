@@ -1053,8 +1053,8 @@ struct SweepRead {
 /// new: a caller of a callee whose admission moved, and a function whose body
 /// starts at another site. The gate re-dirties only a changed body's
 /// neighbours, so a callee left with one site after a splice elsewhere would
-/// otherwise wait on an unrelated change to reach its last caller. A function new this round is
-/// dirty already.
+/// otherwise wait on an unrelated change to reach its last caller. A function
+/// new this round is dirty already.
 fn revisit_moved_reads(
     before: &[SweepRead],
     after: &[SweepRead],
