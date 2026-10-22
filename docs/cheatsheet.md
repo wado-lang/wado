@@ -1251,31 +1251,31 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 trait Add<Rhs = Self> with () { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 
 // For == and != operators
-trait Eq<Rhs = Self> with () { fn eq(&self, other: &Rhs) -> bool; }
+affine trait Eq<Rhs = Self> with () { fn eq(&self, other: &Rhs) -> bool; }
 
 // A total order: what `<` `<=` `>` `>=`, `sort()`, `TreeMap` and a `T: Ord`
 // bound read, on every type. `a == b` exactly when `cmp` answers `Equal`.
 // A float is IEEE except that every NaN is one value, equal to itself and
 // greatest, and -0.0 == 0.0: -Inf < … < +Inf < NaN. Test a NaN with is_nan().
-trait Ord: Eq with () { fn cmp(&self, other: &Self) -> Ordering; }
+affine trait Ord: Eq with () { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
-trait Default with () { fn default() -> Self; }
+affine trait Default with () { fn default() -> Self; }
 
 // For [] operators. List's and Slice's impls require the index in range, so
 // `unchecked xs[i]` on one skips the range check as a marked call does.
-trait IndexRef<I> with () { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
-trait IndexRefMut<I> with () { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
+affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
+affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
-trait IndexAssign<I> with () { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 
 // For string template interpolation
-pub trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
+pub affine trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
 
 // What every error type is. It adds nothing to Display, so `E: Error` says
 // only that the failure has a readable reason.
-pub trait Error: Display with () { }
+pub affine trait Error: Display with () { }
 
 // For parsing a value from a string. The parameter takes a `StrSlice` among
 // the rest, so parsing a field out of a larger buffer allocates no substring.
@@ -1296,8 +1296,8 @@ pub trait LenientFromStr with () {
 
 // Value-to-value conversion. `Err: Error` for the same reason FromStr's is.
 // The stdlib impls all use `ConvertError`.
-pub trait From<T> with () { fn from(value: T) -> Self; }
-pub trait TryFrom<T> with () {
+pub affine trait From<T> with () { fn from(value: T) -> Self; }
+pub affine trait TryFrom<T> with () {
     type Err: Error;
     fn try_from(value: T) -> Result<Self, Self::Err>;
 }
