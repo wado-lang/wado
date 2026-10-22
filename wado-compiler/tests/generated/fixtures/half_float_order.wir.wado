@@ -4361,20 +4361,18 @@ fn "half_float_order.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0$d
     let i: i32;
     let j: i32;
     let k: i32;
+    let a_10: u16;
+    let b_11: u16;
     let b_14: i32;
-    let value_34: u16;
-    let value_39: u16;
-    let $sroa_self_value_43: f32;
-    let $sroa_other_value_44: f32;
-    let $licm_repr_44: ref Array<f16>;
-    let $sroa_a_value_45: u16;
-    let $sroa_b_value_46: u16;
+    let $sroa_self_value_23: f32;
+    let $sroa_other_value_24: f32;
+    let $licm_repr_24: ref Array<f16>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<u16>(n);
     width = 1;
-    $licm_repr_44 = self.repr;
+    $licm_repr_24 = self.repr;
     b319: block {
         l320: loop {
             start = 0;
@@ -4390,40 +4388,38 @@ fn "half_float_order.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0$d
                             break_if b323 k >= end;
                             if i < mid {
                                 if j < end {
-                                    $sroa_a_value_45 = builtin::array_get_value<u16>($licm_repr_44, i);
-                                    $sroa_b_value_46 = builtin::array_get_value<u16>($licm_repr_44, j);
-                                    if $inline_f32_core_prelude_traits_wado_Ord__cmp_5: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        $sroa_self_value_43 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_a_value_45);
-                                        $sroa_other_value_44 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_b_value_46);
-                                        if (($sroa_self_value_43 >= $sroa_other_value_44) | ($sroa_self_value_43 != $sroa_self_value_43)) == 0 {
-                                            break $inline_f32_core_prelude_traits_wado_Ord__cmp_5: 0;
+                                    a_10 = builtin::array_get_value<u16>($licm_repr_24, i);
+                                    b_11 = builtin::array_get_value<u16>($licm_repr_24, j);
+                                    if $inline_f32_core_prelude_traits_wado_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        $sroa_self_value_23 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(a_10);
+                                        $sroa_other_value_24 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(b_11);
+                                        if (($sroa_self_value_23 >= $sroa_other_value_24) | ($sroa_self_value_23 != $sroa_self_value_23)) == 0 {
+                                            break $inline_f32_core_prelude_traits_wado_Ord__cmp_3: 0;
                                         }
-                                        if (($sroa_self_value_43 <= $sroa_other_value_44) | ($sroa_other_value_44 != $sroa_other_value_44)) == 0 {
-                                            break $inline_f32_core_prelude_traits_wado_Ord__cmp_5: 2;
+                                        if (($sroa_self_value_23 <= $sroa_other_value_24) | ($sroa_other_value_24 != $sroa_other_value_24)) == 0 {
+                                            break $inline_f32_core_prelude_traits_wado_Ord__cmp_3: 2;
                                         }
-                                        break $inline_f32_core_prelude_traits_wado_Ord__cmp_5: 1;
+                                        break $inline_f32_core_prelude_traits_wado_Ord__cmp_3: 1;
                                     } == 2 {
-                                        builtin::array_set<u16>(buf, k, $sroa_b_value_46);
+                                        builtin::array_copy<u16>(buf, k, $licm_repr_24, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<u16>(buf, k, $sroa_a_value_45);
+                                        builtin::array_copy<u16>(buf, k, $licm_repr_24, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_34 = builtin::array_get_value<u16>($licm_repr_44, i);
-                                    builtin::array_set<u16>(buf, k, value_34);
+                                    builtin::array_copy<u16>(buf, k, $licm_repr_24, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_39 = builtin::array_get_value<u16>($licm_repr_44, j);
-                                builtin::array_set<u16>(buf, k, value_39);
+                                builtin::array_copy<u16>(buf, k, $licm_repr_24, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l324;
                         };
                     };
-                    builtin::array_copy<u16>($licm_repr_44, start, buf, start, end - start);
+                    builtin::array_copy<u16>($licm_repr_24, start, buf, start, end - start);
                     start = end;
                     continue l322;
                 };
