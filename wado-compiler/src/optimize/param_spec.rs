@@ -560,7 +560,8 @@ fn summarize_params(
 // ---------------------------------------------------------------------------
 
 /// The constant fields of a struct-literal operand, or of a reference to one,
-/// or `None` when the operand is neither. A reference to a literal is the only
+/// or `None` when the operand is neither. A cast names the storage its operand
+/// does, so either side of the reference may carry one. A reference to a literal is the only
 /// name its object has, so a reference local bound to one roots it as a struct
 /// local roots its own. `expected` guards against reading field indices off a
 /// literal of a different struct than the local's declared type — a local slot
@@ -571,13 +572,13 @@ fn struct_literal_consts(
     value: Operand,
     expected: Option<TypeId>,
 ) -> Option<FieldConsts> {
-    let mut expr = value.as_expr()?;
+    let mut expr = body.strip_casts(value.as_expr()?);
     if let ExprKind::Unary {
         op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
         expr: inner,
     } = &body.exprs[expr].kind
     {
-        expr = inner.as_expr()?;
+        expr = body.strip_casts(inner.as_expr()?);
     }
     let ExprKind::StructLiteral {
         struct_type,
@@ -682,6 +683,13 @@ fn collect_roots(
         roots.swap_remove(local);
     }
     let (mut alias_of, alias_reads) = settle_aliases(&alias_defs, &defined, &invalid);
+    // A binding settled as no alias still binds the local to an object other
+    // than its literal.
+    for def in &alias_defs {
+        if !alias_of.contains_key(&def.local) {
+            roots.swap_remove(&def.local);
+        }
+    }
     flatten_aliases(&mut alias_of);
     for (alias, base) in &alias_of {
         if let Some(consts) = roots.get(base).cloned() {

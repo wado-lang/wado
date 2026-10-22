@@ -2625,11 +2625,10 @@ fn carried_calls(
     out
 }
 
-/// Inline function calls in a block, each statement processed in place: a
-/// `Let` / `Expr` / `Return` value gets a top-level attempt that then re-scans
-/// the inlined body, while others recurse. `site` is the context the block's
-/// calls sit in; a `cold_path()` marker turns it [`Site::Cold`] for the rest of
-/// the block, and a loop body is a [`Site::Loop`].
+/// Inline function calls in a block, each statement processed in place. `site`
+/// is the context the block's calls sit in; a `cold_path()` marker turns it
+/// [`Site::Cold`] for the rest of the block, and a loop body is a
+/// [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
@@ -2643,8 +2642,7 @@ fn inline_calls_in_block(
     mut site: Site,
 ) {
     enum Shape {
-        TopLevel(ExprId),
-        Nested(ExprId),
+        Value(ExprId),
         If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         Loop(BlockId),
@@ -2657,9 +2655,13 @@ fn inline_calls_in_block(
             site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
-            StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
-            StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::TopLevel),
-            StmtKind::Return { value: Some(v) } => v.as_expr().map_or(Shape::None, Shape::TopLevel),
+            StmtKind::Let { value, .. }
+            | StmtKind::LetDestructure { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::Return { value: Some(value) }
+            | StmtKind::Break {
+                value: Some(value), ..
+            } => value.as_expr().map_or(Shape::None, Shape::Value),
             StmtKind::If {
                 condition,
                 then_block,
@@ -2667,38 +2669,10 @@ fn inline_calls_in_block(
             } => Shape::If(condition.as_expr(), *then_block, *else_block),
             StmtKind::Loop { body: b } => Shape::Loop(*b),
             StmtKind::LabeledBlock { block: b, .. } => Shape::Block(*b),
-            StmtKind::Break { value: Some(v), .. } => {
-                v.as_expr().map_or(Shape::None, Shape::Nested)
-            }
-            StmtKind::LetDestructure { value, .. } => {
-                value.as_expr().map_or(Shape::None, Shape::Nested)
-            }
             _ => Shape::None,
         };
         match shape {
-            Shape::TopLevel(value) => {
-                let new_value = inline_top_level(
-                    body,
-                    value,
-                    candidates,
-                    descriptors,
-                    frame,
-                    type_table,
-                    inlined_funcs,
-                    labels,
-                    reval,
-                    site,
-                );
-                if new_value != value {
-                    match &mut body.stmts[stmt_id].kind {
-                        StmtKind::Let { value, .. } => *value = new_value.into(),
-                        StmtKind::Expr(expr) => *expr = new_value.into(),
-                        StmtKind::Return { value } => *value = Some(new_value.into()),
-                        _ => {}
-                    }
-                }
-            }
-            Shape::Nested(value) => inline_calls_in_expr(
+            Shape::Value(value) => inline_calls_in_expr(
                 body,
                 value,
                 candidates,
@@ -2784,56 +2758,6 @@ fn inline_calls_in_block(
             }
             Shape::None => {}
         }
-    }
-}
-
-/// Top-level inline of a statement value: try to inline the call, and if it
-/// fires, re-scan the inlined body for nested opportunities, as far as the
-/// re-scan cap pays for. Returns the (possibly new) value expression id.
-fn inline_top_level(
-    body: &mut Body,
-    value: ExprId,
-    candidates: Candidates<'_>,
-    descriptors: &[FunctionRef],
-    frame: &mut CallerFrame<'_>,
-    type_table: &TypeTable,
-    inlined_funcs: &mut Vec<FuncId>,
-    labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
-    site: Site,
-) -> ExprId {
-    let result = try_inline_call_expr(
-        body, value, candidates, frame, type_table, labels, reval, site,
-    );
-    if let Some((new_id, inlined_key)) = result {
-        rescan_splice(
-            body,
-            new_id,
-            inlined_key,
-            candidates,
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-        new_id
-    } else {
-        inline_calls_in_expr(
-            body,
-            value,
-            candidates,
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-        value
     }
 }
 
@@ -3840,7 +3764,9 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
     })
 }
 
-/// Recursively inline calls within an expression
+/// Inline calls within an expression. A call is tried before its arguments:
+/// once spliced, the re-scan of its body reaches them, so each node is walked
+/// once and the whole splice stays within one re-scan cap.
 fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
@@ -3853,59 +3779,6 @@ fn inline_calls_in_expr(
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) {
-    let args: Option<Vec<Operand>> = match &body.exprs[e].kind {
-        ExprKind::Call { args, .. } => Some(args.iter().map(|a| a.expr).collect()),
-        _ => None,
-    };
-    let Some(args) = args else {
-        let (exprs, blocks) = inline_expr_children(body, e);
-        for ex in exprs {
-            inline_calls_in_expr(
-                body,
-                ex,
-                candidates,
-                descriptors,
-                frame,
-                type_table,
-                inlined_funcs,
-                labels,
-                reval,
-                site,
-            );
-        }
-        for b in blocks {
-            inline_calls_in_block(
-                body,
-                b,
-                candidates,
-                descriptors,
-                frame,
-                type_table,
-                inlined_funcs,
-                labels,
-                reval,
-                site,
-            );
-        }
-        return;
-    };
-
-    // Recurse into arguments first, then attempt to inline this call.
-    for a in args {
-        let Some(a) = a.as_expr() else { continue };
-        inline_calls_in_expr(
-            body,
-            a,
-            candidates,
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-    }
     if let Some((new_id, inlined_key)) =
         try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
     {
@@ -3927,6 +3800,36 @@ fn inline_calls_in_expr(
             body,
             e,
             inlined_key,
+            candidates,
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
+        return;
+    }
+    let (exprs, blocks) = inline_expr_children(body, e);
+    for ex in exprs {
+        inline_calls_in_expr(
+            body,
+            ex,
+            candidates,
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
+    }
+    for b in blocks {
+        inline_calls_in_block(
+            body,
+            b,
             candidates,
             descriptors,
             frame,
