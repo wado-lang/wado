@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792634127708,
+  "lastUpdate": 1792637923710,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69269,6 +69269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/abe826435160eeeb6e4f4ef74633078de361bf5a"
         },
         "date": 1792634126688,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4deec87bf7ee17c1fbaf404d46ca99f7473451e7",
+          "message": "Merge pull request #2413 from wado-lang/compile-speed\n\nperf(optimize): compile gale_gen 25% faster by parallelizing heap effects",
+          "timestamp": "2026-10-22T11:38:00+09:00",
+          "tree_id": "f6744015f75f8ce102a925f34d8c8c00e362675b",
+          "url": "https://github.com/wado-lang/wado/commit/4deec87bf7ee17c1fbaf404d46ca99f7473451e7"
+        },
+        "date": 1792637923256,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
