@@ -26,28 +26,29 @@ use std::rc::Rc;
 /// What a move can retire in one body.
 #[derive(Default)]
 pub struct MoveEligible {
-    /// Whole locals whose every read is final.
+    /// Whole locals whose every read is final. A single read that moves is
+    /// marked on its node instead ([`ExprMarks::moves`]).
     pub locals: IndexSet<u32>,
-    /// Field and whole-value materializations that alias a dead aggregate out
-    /// at a literal, keyed by the materialized expression's span.
-    pub place_spans: IndexSet<Span>,
-    /// Whole-local value reads the elaborator found final (`moved_local_spans`),
-    /// of locals no kept reference pins, and not reaching storage the same call
-    /// mutates, keyed by the read's span.
-    pub read_spans: IndexSet<Span>,
 }
 
 /// What one backward walk over a body decides: which locals a move can retire,
 /// and which read-only bindings may alias the storage they were read out of.
+/// What it decides of a single expression it marks on the node
+/// ([`ExprMarks`]):
+///
+/// - `moves` on a field or whole-value materialization that aliases a dead
+///   aggregate out at a literal, and on a whole-local value read the
+///   elaborator found final, of a local no kept reference pins, and not
+///   reaching storage the same call writes;
+/// - `written` on a by-value argument whose storage the call's evaluation may
+///   write before the callee is done with it;
+/// - `in_place` on an assignment that writes into the storage its place holds.
 #[derive(Default)]
 pub struct Ownership {
     pub move_eligible: MoveEligible,
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
-    /// By-value call arguments, by span, whose storage may be written before
-    /// the callee is done with them: a confined parameter still copies these.
-    pub written_args: IndexSet<Span>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -111,14 +112,13 @@ pub fn analyze_ownership(
         frame: points_to
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
-        written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
-        value_reads: IndexMap::default(),
+        value_reads: Vec::new(),
         mutations: Vec::new(),
         assign_sites: Vec::new(),
         reach,
@@ -169,27 +169,22 @@ pub fn analyze_ownership(
         })
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
-    let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
-    let read_spans = a
-        .value_reads
-        .iter()
-        .filter(|(span, local)| {
-            final_reads.contains(*span)
-                && !shared_params.contains(*local)
-                && !a.place_escaped(**local, None)
-                && !a.written_args.contains(*span)
-        })
-        .map(|(span, _)| *span)
-        .collect();
+    for site in &moved_places {
+        site.node.mark(|marks| marks.moves = true);
+    }
+    for &(read, local) in &a.value_reads {
+        if final_reads.contains(&read.span)
+            && !shared_params.contains(&local)
+            && !a.place_escaped(local, None)
+            && !read.marks().written
+        {
+            read.mark(|marks| marks.moves = true);
+        }
+    }
 
     Ownership {
-        move_eligible: MoveEligible {
-            locals: owned,
-            place_spans,
-            read_spans,
-        },
+        move_eligible: MoveEligible { locals: owned },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
-        written_args: a.written_args,
     }
 }
 
@@ -204,11 +199,12 @@ enum Storage {
     Unnamed,
 }
 
-/// A by-value argument rooted at `root`, read at `span`, checked once the
-/// alias chains are whole.
-struct WriteCheck {
+/// A by-value argument rooted at `root`, checked once the alias chains are
+/// whole.
+struct WriteCheck<'a> {
     root: u32,
-    span: Span,
+    /// The argument, under any newtype casts.
+    arg: &'a TirExpr,
     /// The locations written while the callee holds the argument, beyond
     /// [`PointsTo::global_reach`].
     written: Rc<IndexSet<u32>>,
@@ -237,12 +233,12 @@ enum Lands<'a> {
 
 /// A materialization that may take its aggregate's storage rather than copy it,
 /// and the locals live where it runs.
-struct PlaceMove {
+struct PlaceMove<'a> {
     base: u32,
     /// The one selector the materialization reaches through, `None` for the
     /// whole aggregate.
     top: Option<u32>,
-    span: Span,
+    node: &'a TirExpr,
     live: IndexSet<u32>,
 }
 
@@ -942,7 +938,9 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
 #[derive(Default)]
 struct ReferencePoints {
     first: IndexMap<u32, usize>,
-    sites: IndexMap<Span, usize>,
+    /// Each assignment site's position, by the node's address: the walks that
+    /// ask hold the same body by reference, so the node is its own key.
+    sites: IndexMap<*const TirExpr, usize>,
 }
 
 impl ReferencePoints {
@@ -957,12 +955,12 @@ impl ReferencePoints {
         walk.points
     }
 
-    /// Whether a reference to `local` may exist where the assignment at `site`
+    /// Whether a reference to `local` may exist where the assignment `site`
     /// runs.
-    fn referenced_at(&self, local: u32, site: Span) -> bool {
+    fn referenced_at(&self, local: u32, site: &TirExpr) -> bool {
         let at = self
             .sites
-            .get(&site)
+            .get(&std::ptr::from_ref(site))
             .expect("the walk meets every assignment site");
         self.first.get(&local).is_some_and(|first| first <= at)
     }
@@ -1052,10 +1050,10 @@ impl TirRefVisitor for ReferenceWalk<'_> {
                 .contains(&func.module_source, &func.name),
             _ => false,
         };
-        // A span several sites share answers for the latest of them, which every
-        // reference before the others also precedes.
         if is_site {
-            self.points.sites.insert(expr.span, self.position);
+            self.points
+                .sites
+                .insert(std::ptr::from_ref(expr), self.position);
         }
     }
 }
@@ -1085,7 +1083,7 @@ pub fn mark_unanalyzed_in_place_assigns(
             &self,
             place: &TirExpr,
             owner: Option<(TypeId, u32)>,
-            site: Span,
+            site: &TirExpr,
         ) -> bool {
             match place::place_root(place) {
                 None => true,
@@ -1126,14 +1124,14 @@ pub fn mark_unanalyzed_in_place_assigns(
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
                     let list = place::unwrap_ref(receiver);
                     if in_place_elements
-                        && self.writes_in_place(list, self.owning_field(list), expr.span)
+                        && self.writes_in_place(list, self.owning_field(list), expr)
                     {
                         expr.mark(|marks| marks.in_place = true);
                     }
                 }
                 TirExprKind::Assign { target, .. }
                     if can_write_in_place(expr, self.type_table)
-                        && self.writes_in_place(target, self.owning_field(target), expr.span) =>
+                        && self.writes_in_place(target, self.owning_field(target), expr) =>
                 {
                     expr.mark(|marks| marks.in_place = true);
                 }
@@ -1265,20 +1263,17 @@ struct Analyzer<'a> {
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
     /// Resolved once the alias chains are complete.
-    pending_writes: Vec<WriteCheck>,
+    pending_writes: Vec<WriteCheck<'a>>,
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
     handed: Vec<&'a LocSet>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
-    /// [`Ownership::written_args`].
-    written_args: IndexSet<Span>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
-    /// Place-level move sites `(root, top-level field, span)` found at literals,
-    /// filtered after the walk. A `None` field is a whole-value materialization.
-    place_cands: Vec<PlaceMove>,
+    /// Place-level move sites found at literals, filtered after the walk.
+    place_cands: Vec<PlaceMove<'a>>,
     /// Locals bound by a `LetStorage::Taken` `let` — storage handed over by the
     /// binding's producer, so owned without a source to prove it.
     declared_owned: IndexSet<u32>,
@@ -1287,10 +1282,10 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a reference's referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
-    /// Each of those reads by span, with the local it reads. A final read
-    /// elsewhere — a reference's referent, a projection base — takes no value, so
-    /// it moves nothing.
-    value_reads: IndexMap<Span, u32>,
+    /// Each of those reads, with the local it reads. A final read elsewhere — a
+    /// reference's referent, a projection base — takes no value, so it moves
+    /// nothing.
+    value_reads: Vec<(&'a TirExpr, u32)>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation<'a>>,
     /// Assignments to a place of an in-place type, decided once every reference
@@ -1369,11 +1364,11 @@ enum FieldEscape {
 impl<'a> Analyzer<'a> {
     /// A read in a value position: the whole local is taken, so the value can
     /// leave this binding, and where that happens decides who still sees it.
-    fn read(&mut self, index: u32, span: Span, live: &mut IndexSet<u32>, record: bool) {
+    fn read(&mut self, index: u32, read: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if record {
             let at = self.consumed.entry(index).or_default();
             at.extend(live.iter().copied());
-            self.value_reads.insert(span, index);
+            self.value_reads.push((read, index));
         }
         self.read_base(index, live, record);
     }
@@ -1762,7 +1757,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             };
             let external = site.through_ref || is_reference_local(func, root, self.type_table);
-            if !external && !references.referenced_at(root, site.node.span) {
+            if !external && !references.referenced_at(root, site.node) {
                 continue;
             }
             let readable = readable_storage(paths, &site.live);
@@ -2152,7 +2147,7 @@ impl<'a> Analyzer<'a> {
             };
             if written {
                 self.aliases_live.insert(check.root);
-                self.written_args.insert(check.span);
+                check.arg.mark(|marks| marks.written = true);
             }
         }
     }
@@ -2164,7 +2159,7 @@ impl<'a> Analyzer<'a> {
     /// arguments make after `arg` is taken.
     fn defer_write_check(
         &mut self,
-        arg: &TirExpr,
+        arg: &'a TirExpr,
         call_writes: usize,
         handed_from: usize,
         own: usize,
@@ -2180,7 +2175,7 @@ impl<'a> Analyzer<'a> {
         if is_ref || !needs_value_copy(arg.type_id, self.type_table) {
             return;
         }
-        let span = strip_casts(arg).span;
+        let stripped = strip_casts(arg);
         let mut storages = Vec::new();
         self.storage_roots(arg, &mut storages);
         if storages.is_empty() {
@@ -2191,7 +2186,7 @@ impl<'a> Analyzer<'a> {
             match storage {
                 Storage::Local(root) => self.pending_writes.push(WriteCheck {
                     root,
-                    span,
+                    arg: stripped,
                     written: Rc::clone(&written),
                 }),
                 Storage::Referent(reference) => {
@@ -2199,12 +2194,10 @@ impl<'a> Analyzer<'a> {
                         .points_to
                         .reaches_written(self.frame, reference, &written)
                     {
-                        self.written_args.insert(span);
+                        stripped.mark(|marks| marks.written = true);
                     }
                 }
-                Storage::Unnamed => {
-                    self.written_args.insert(span);
-                }
+                Storage::Unnamed => stripped.mark(|marks| marks.written = true),
             }
         }
     }
@@ -2276,15 +2269,15 @@ impl<'a> Analyzer<'a> {
 
     /// Record place-level move candidates at a literal or `let`: a child
     /// materializing an aggregate root left dead and undisturbed after it.
-    fn collect_place_moves(&mut self, children: &[&TirExpr], live_out: &IndexSet<u32>) {
-        let mut mats: IndexMap<u32, Vec<(Option<u32>, Span)>> = IndexMap::default();
+    fn collect_place_moves(&mut self, children: &[&'a TirExpr], live_out: &IndexSet<u32>) {
+        let mut mats: IndexMap<u32, Vec<(Option<u32>, &'a TirExpr)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();
         for child in children {
             let child = strip_casts(child);
             if let Some((base, top)) =
                 as_materialize(child).or_else(|| self.accessor_materialize(child, &mut conflict))
             {
-                mats.entry(base).or_default().push((top, child.span));
+                mats.entry(base).or_default().push((top, child));
             } else {
                 self.scan_place_uses(child, &mut conflict);
             }
@@ -2302,11 +2295,11 @@ impl<'a> Analyzer<'a> {
             if tops.windows(2).any(|w| w[0] == w[1]) {
                 continue;
             }
-            for (top, span) in sites {
+            for &(top, node) in sites {
                 self.place_cands.push(PlaceMove {
                     base: *base,
-                    top: *top,
-                    span: *span,
+                    top,
+                    node,
                     live: live_out.clone(),
                 });
             }
@@ -2484,13 +2477,47 @@ impl<'a> Analyzer<'a> {
             .unwrap_or_else(|| self.all_locals.clone())
     }
 
+    /// A run of `let`s each taking a distinct field of one aggregate, as a
+    /// destructuring lowers to, hands its fields over as one literal would: each
+    /// field is read only by its own `let`, so the aggregate is dead after all
+    /// of them rather than after each.
     fn walk_block(&mut self, block: &'a TirBlock, live: &mut IndexSet<u32>, record: bool) {
-        for stmt in block.stmts.iter().rev() {
-            self.walk_stmt(stmt, live, record);
+        let stmts = &block.stmts;
+        let mut end = stmts.len();
+        while end > 0 {
+            let run = field_let_run(stmts, end);
+            let start = run.unwrap_or(end - 1);
+            if record && run.is_some() {
+                let mut live_out = live.clone();
+                let mut values = Vec::new();
+                for stmt in &stmts[start..end] {
+                    let TirStmtKind::Let {
+                        local_index, value, ..
+                    } = &stmt.kind
+                    else {
+                        unreachable!("a field run holds only `let`s");
+                    };
+                    live_out.swap_remove(local_index);
+                    values.push(value);
+                }
+                self.collect_place_moves(&values, &live_out);
+            }
+            for stmt in stmts[start..end].iter().rev() {
+                self.walk_stmt(stmt, live, record, run.is_none());
+            }
+            end = start;
         }
     }
 
-    fn walk_stmt(&mut self, stmt: &'a TirStmt, live: &mut IndexSet<u32>, record: bool) {
+    /// `place_moves`: whether a `let` records its own place-move candidate,
+    /// rather than the field run holding it.
+    fn walk_stmt(
+        &mut self,
+        stmt: &'a TirStmt,
+        live: &mut IndexSet<u32>,
+        record: bool,
+        place_moves: bool,
+    ) {
         match &stmt.kind {
             TirStmtKind::Let {
                 local_index,
@@ -2513,7 +2540,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
                 live.swap_remove(local_index);
-                if record {
+                if record && place_moves {
                     self.collect_place_moves(&[value], live);
                 }
                 self.walk_stored_value(*local_index, value, live, record);
@@ -2739,7 +2766,7 @@ impl<'a> Analyzer<'a> {
 
     fn walk_expr(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => self.read(*index, expr.span, live, record),
+            TirExprKind::Local { index, .. } => self.read(*index, expr, live, record),
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind {
                     if record {
@@ -3118,6 +3145,32 @@ fn clean_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
+/// The start of the run of at least two `let`s ending before `end` that each
+/// take a distinct field of one local, none binding that local.
+fn field_let_run(stmts: &[TirStmt], end: usize) -> Option<usize> {
+    let field_let = |stmt: &TirStmt| match &stmt.kind {
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => match as_materialize(strip_casts(value)) {
+            Some((base, Some(top))) if base != *local_index => Some((base, top)),
+            _ => None,
+        },
+        _ => None,
+    };
+    let (base, top) = field_let(&stmts[end - 1])?;
+    let mut tops = vec![top];
+    let mut start = end - 1;
+    while start > 0
+        && let Some((b, t)) = field_let(&stmts[start - 1])
+        && b == base
+        && !tops.contains(&t)
+    {
+        tops.push(t);
+        start -= 1;
+    }
+    (start + 1 < end).then_some(start)
+}
+
 /// The field index a projection chain applies directly to its root local
 /// (`base.top.f.g` → `top`). `None` for a whole local or any other shape.
 fn top_field_of(expr: &TirExpr) -> Option<u32> {
@@ -3244,13 +3297,10 @@ impl MoveEligible {
     /// over the same storage, so it does not hide the read underneath it.
     pub fn is_move(&self, value: &TirExpr) -> bool {
         let value = strip_casts(value);
-        if self.place_spans.contains(&value.span) {
+        if value.marks().moves {
             return true;
         }
-        let TirExprKind::Local { index, .. } = &value.kind else {
-            return false;
-        };
-        self.locals.contains(index) || self.read_spans.contains(&value.span)
+        matches!(&value.kind, TirExprKind::Local { index, .. } if self.locals.contains(index))
     }
 
     /// The value locals `value` reads once, where that read is a move: no other

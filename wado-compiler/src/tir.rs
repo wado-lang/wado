@@ -818,6 +818,12 @@ pub struct ExprMarks {
     /// storage its place holds rather than repointing the place: a holder of
     /// that storage may read it afterwards (WEP 2026-10-13).
     pub in_place: bool,
+    /// A value read, a whole local's or a materialization out of an aggregate,
+    /// that hands its storage over, so it needs no copy (WEP 2026-05-21).
+    pub moves: bool,
+    /// A by-value argument whose storage the call's evaluation may write before
+    /// the callee is done with it: a confined parameter still copies it.
+    pub written: bool,
 }
 
 impl TirExpr {

@@ -425,9 +425,10 @@ struct FunctionTranslator<'a, 'p> {
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
-    /// [`value_copy::last_use::Ownership::written_args`], `None` where the
-    /// ownership walk did not run, which leaves every argument copied.
-    written_args: Option<IndexSet<Span>>,
+    /// Whether the ownership walk marked which arguments are written
+    /// ([`tir::ExprMarks::written`]). Where it did not run, every argument is
+    /// copied.
+    args_checked: bool,
     /// Locals declared without a value that an assignment writing in place
     /// ([`tir::ExprMarks::in_place`]) replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
@@ -543,7 +544,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             IndexSet::default()
         };
-        let written_args = analyzed.then_some(ownership.written_args);
         // Keyed on the *return* type rather than `needs_copy_analysis`: the
         // payload is read out of the receiver, so it need not be any local's
         // type.
@@ -564,7 +564,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals,
             ref_targets,
             moved_roots,
-            written_args,
+            args_checked: analyzed,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -590,7 +590,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
-            written_args: None,
+            args_checked: false,
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -2979,10 +2979,8 @@ impl FunctionTranslator<'_, '_> {
                 .value_copy
                 .confined_params
                 .is_confined(c, param_index)
-        }) && self
-            .written_args
-            .as_ref()
-            .is_some_and(|written| !written.contains(&value_copy::last_use::strip_casts(arg).span))
+        }) && self.args_checked
+            && !value_copy::last_use::strip_casts(arg).marks().written
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's
