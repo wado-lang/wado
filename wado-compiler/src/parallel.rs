@@ -63,10 +63,17 @@ impl Executor {
         }
     }
 
+    /// The pool to visit `len` items on: none for one item, which the calling
+    /// thread visits without a round trip through the pool.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn pool_for(&self, len: usize) -> Option<&rayon::ThreadPool> {
+        self.pool.as_deref().filter(|_| len > 1)
+    }
+
     /// `f` of each item, in item order.
     pub fn map<T: Sync, R: Send>(&self, items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pool) = &self.pool {
+        if let Some(pool) = self.pool_for(items.len()) {
             return pool.install(|| items.par_iter().map(f).collect());
         }
         items.iter().map(f).collect()
@@ -82,7 +89,7 @@ impl Executor {
         f: impl Fn(&mut S, &T) -> R + Sync + Send,
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pool) = &self.pool {
+        if let Some(pool) = self.pool_for(items.len()) {
             return pool.install(|| items.par_iter().map_init(init, f).collect());
         }
         let mut state = init();
@@ -92,7 +99,7 @@ impl Executor {
     /// `f` of each index below `len`, in index order.
     pub fn map_indices<R: Send>(&self, len: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pool) = &self.pool {
+        if let Some(pool) = self.pool_for(len) {
             return pool.install(|| (0..len).into_par_iter().map(f).collect());
         }
         (0..len).map(f).collect()
@@ -105,7 +112,7 @@ impl Executor {
         f: impl Fn(&T) -> Option<R> + Sync + Send,
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pool) = &self.pool {
+        if let Some(pool) = self.pool_for(items.len()) {
             return pool.install(|| items.par_iter().filter_map(f).collect());
         }
         items.iter().filter_map(f).collect()
@@ -118,7 +125,7 @@ impl Executor {
         f: impl Fn(usize) -> Option<R> + Sync + Send,
     ) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(pool) = &self.pool {
+        if let Some(pool) = self.pool_for(len) {
             return pool.install(|| (0..len).into_par_iter().filter_map(f).collect());
         }
         (0..len).filter_map(f).collect()
