@@ -473,7 +473,8 @@ impl<T> List<T> {
         return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 
-    /// In-place sort with comparator. Stable, O(n log n) worst case.
+    /// In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
+    /// handed references to the elements themselves, not to copies.
     pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _ {
         let n = self.used;
         if n <= 1 {

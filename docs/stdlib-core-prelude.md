@@ -5545,7 +5545,8 @@ addressable cell, so a write through the reference would be lost.
 
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _`
 
-In-place sort with comparator. Stable, O(n log n) worst case.
+In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
+handed references to the elements themselves, not to copies.
 
 #### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
 

@@ -1,0 +1,23 @@
+// `sort_by` hands its comparator references to the list's own elements, as
+// `iter_ref` does, not to copies. A comparator that keeps one sees a later
+// write to that element, wherever the sort moved it.
+
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32, name: String }
+
+export fn run() with Stdout {
+    let mut ps: List<P> = [P { x: 2, name: "b" }, P { x: 1, name: "a" }];
+    let mut seen: List<&P> = [];
+    ps.sort_by(|l, r| {
+        seen.push(l);
+        return l.x.cmp(&r.x);
+    });
+    ps[1].x = 77;
+    println(`${ps[0].name} ${ps[1].name} ${seen[0].name} ${seen[0].x}`);
+}
+
+__DATA__
+{
+    "stdout": "a b b 77\n"
+}
