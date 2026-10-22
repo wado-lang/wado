@@ -619,23 +619,25 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         &mut locals,
         Some("result".to_string()),
         TypeTable::I32,
-        true,
+        false,
     );
-    stmts.push(let_mut_stmt(
+    stmts.push(let_stmt(
         "result",
         result_idx,
         TypeTable::I32,
-        cm_canonical_call(
-            write_name,
-            vec![
-                local_ref(handle_idx, "handle", TypeTable::I32),
-                local_ref(ptr_local, "$list_base", TypeTable::I32),
-                copy_count(local_ref(count_local, "$list_len", TypeTable::I32)),
-            ],
-            TypeTable::I32,
+        settled(
+            cm_canonical_call(
+                write_name,
+                vec![
+                    local_ref(handle_idx, "handle", TypeTable::I32),
+                    local_ref(ptr_local, "$list_base", TypeTable::I32),
+                    copy_count(local_ref(count_local, "$list_len", TypeTable::I32)),
+                ],
+                TypeTable::I32,
+            ),
+            handle_idx,
         ),
     ));
-    stmts.push(await_if_blocked(result_idx, "result", handle_idx));
     let result_ref = || local_ref(result_idx, "result", TypeTable::I32);
 
     // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
@@ -752,23 +754,13 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     }
 }
 
-/// `if <status> == BLOCKED { <status> = cm_await_blocked(handle) }` — re-reads
-/// the packed result after the host signals readiness.
-fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
-    if_stmt(
-        is_blocked(local_ref(status_idx, status_name, TypeTable::I32)),
-        TirBlock {
-            stmts: vec![expr_stmt(assign(
-                local_ref(status_idx, status_name, TypeTable::I32),
-                internal_call(
-                    CompilerItem::CmAwaitBlocked.attr_name(),
-                    vec![local_ref(handle_idx, "handle", TypeTable::I32)],
-                    TypeTable::I32,
-                ),
-            ))],
-            span: synth_span(),
-        },
-        None,
+/// `cm_await_blocked(handle, <copy>)`: the packed result of `copy`, awaited
+/// first if it answered BLOCKED.
+fn settled(copy: TirExpr, handle_idx: u32) -> TirExpr {
+    internal_call(
+        CompilerItem::CmAwaitBlocked.attr_name(),
+        vec![local_ref(handle_idx, "handle", TypeTable::I32), copy],
+        TypeTable::I32,
     )
 }
 
@@ -893,21 +885,26 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         &mut locals,
         Some("$written".to_string()),
         TypeTable::I32,
-        true,
+        false,
     );
     let written = || local_ref(written_idx, "$written", TypeTable::I32);
-    stmts.push(let_mut_stmt(
+    let write = cm_canonical_call(
+        write_name,
+        vec![
+            local_ref(handle_idx, "handle", TypeTable::I32),
+            local_ref(ptr_idx, "ptr", TypeTable::I32),
+        ],
+        TypeTable::I32,
+    );
+    stmts.push(let_stmt(
         "$written",
         written_idx,
         TypeTable::I32,
-        cm_canonical_call(
-            write_name,
-            vec![
-                local_ref(handle_idx, "handle", TypeTable::I32),
-                local_ref(ptr_idx, "ptr", TypeTable::I32),
-            ],
-            TypeTable::I32,
-        ),
+        if awaits_reader {
+            settled(write, handle_idx)
+        } else {
+            write
+        },
     ));
 
     // The write consumes the end (WEP: Affine Types).
@@ -917,7 +914,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         TypeTable::UNIT,
     ));
     if awaits_reader {
-        stmts.push(await_if_blocked(written_idx, "$written", handle_idx));
         stmts.push(free_cm_buffer(
             ptr_idx,
             size,
@@ -1142,29 +1138,29 @@ fn synthesize_future_read_func(
         ),
     ));
 
-    // let mut status = future-read:<payload>(handle, ptr)
     let status_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
         Some("status".to_string()),
         TypeTable::I32,
-        true,
+        false,
     );
-    stmts.push(let_mut_stmt(
+    stmts.push(let_stmt(
         "status",
         status_idx,
         TypeTable::I32,
-        cm_canonical_call(
-            read_name,
-            vec![
-                local_ref(handle_idx, "handle", TypeTable::I32),
-                local_ref(ptr_idx, "ptr", TypeTable::I32),
-            ],
-            TypeTable::I32,
+        settled(
+            cm_canonical_call(
+                read_name,
+                vec![
+                    local_ref(handle_idx, "handle", TypeTable::I32),
+                    local_ref(ptr_idx, "ptr", TypeTable::I32),
+                ],
+                TypeTable::I32,
+            ),
+            handle_idx,
         ),
     ));
-
-    stmts.push(await_if_blocked(status_idx, "status", handle_idx));
 
     // let mut result: Option<T> = None
     let result_idx = alloc_named_local(
@@ -1418,7 +1414,6 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
 
-    // let mut result = stream-read:directory-entry(handle, ptr, room)
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1435,14 +1430,12 @@ fn synthesize_stream_read_func(
         ],
         TypeTable::I32,
     );
-    stmts.push(let_mut_stmt(
+    stmts.push(let_stmt(
         "result",
         result_idx,
         TypeTable::I32,
-        stream_read_call,
+        settled(stream_read_call, handle_idx),
     ));
-
-    stmts.push(await_if_blocked(result_idx, "result", handle_idx));
 
     // let count = packed count of result
     let count_idx = alloc_named_local(

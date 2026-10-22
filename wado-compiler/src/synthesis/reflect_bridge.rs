@@ -11,12 +11,12 @@ use std::rc::Rc;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, StructDef, TirFunction, TypeId};
+use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeId};
 
 use super::resource_cleanup;
 use super::traits::{
     REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
-    generate_variant_instance_discriminant_fn,
+    generate_hole_bridge_helpers, generate_variant_instance_discriminant_fn,
 };
 use crate::hashmap;
 use crate::name::variant_tag_helper_name;
@@ -35,7 +35,8 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
 }
 
 /// `$field_get$S$F` for each monomorphized struct instantiated from a
-/// `ReflectStruct`-derived generic base.
+/// `ReflectStruct`-derived generic base, and for each anonymous shape only a
+/// substitution reached; `$hole_get$S$V` where that shape is a template's.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     let targets: Vec<usize> = {
         let tt = flat.type_table.borrow();
@@ -43,9 +44,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .iter()
             .enumerate()
             .filter(|(_, s)| match s.def {
-                StructDef::Anon(shape) => {
-                    !tt.anon_struct_is_written(shape) && tt.template_shape(shape).is_none()
-                }
+                StructDef::Anon(shape) => !tt.anon_struct_is_written(shape),
                 StructDef::Decl(decl) => {
                     s.monomorph_info.is_some()
                         && tt.has_generic_assoc_type_def_for_decl(
@@ -87,17 +86,31 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
         if !seen_subjects.insert(subject_mangle) {
             continue;
         }
-        push_helpers(
-            generate_field_bridge_helpers(
+        let hole_types: Option<Vec<TypeId>> = match decl.def {
+            StructDef::Anon(shape) => flat
+                .type_table
+                .borrow()
+                .template_shape(shape)
+                .map(TemplateShape::hole_types),
+            StructDef::Decl(_) => None,
+        };
+        let helpers = match hole_types {
+            Some(hole_types) => generate_hole_bridge_helpers(
+                &flat.type_table,
+                &fields,
+                &hole_types,
+                subject,
+                decl.span,
+            ),
+            None => generate_field_bridge_helpers(
                 &flat.type_table,
                 &fields,
                 subject,
                 ref_subject,
                 decl.span,
             ),
-            &decl.module_source,
-            generated,
-        );
+        };
+        push_helpers(helpers, &decl.module_source, generated);
     }
 }
 

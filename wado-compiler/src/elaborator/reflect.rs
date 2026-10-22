@@ -6,7 +6,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::{FunctionRef, ResolvedType, TypeId};
+use crate::tir::{FunctionRef, ResolvedType, TemplateShape, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -1699,9 +1699,10 @@ impl TypeSystem {
     /// The hole types of the template shape `self_ty` denotes, or `None` where
     /// it denotes none.
     pub(super) fn reflect_template_holes(&self, self_ty: TypeId) -> Option<Vec<TypeId>> {
-        let tt = self.type_table.borrow();
-        let shape = tt.template_shape_of_type(self_ty)?;
-        Some(shape.holes.iter().map(|hole| hole.ty).collect())
+        self.type_table
+            .borrow()
+            .template_shape_of_type(self_ty)
+            .map(TemplateShape::hole_types)
     }
 
     /// Per-parameter mutability of a scalar-kind member's dispatch record:
