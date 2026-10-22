@@ -93,6 +93,37 @@ test "a copy one set reported joins another ready" {
     assert chunk.items == [7];
 }
 
+test "copies a set reported finish in any order" {
+    let [reader_a, writer_a] = Stream::<u8>::new();
+    let [reader_b, writer_b] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader_a.start_read(4));
+    set.join(reader_b.start_read(4));
+    let writing_a = writer_a.start_write([1]);
+    let writing_b = writer_b.start_write([2]);
+    let first = set.wait().member;
+    let second = set.wait().member;
+    let [rx2, chunk2] = second.finish();
+    let [rx1, chunk1] = first.finish();
+    rx1.drop();
+    rx2.drop();
+    let [tx_a, _] = writing_a.finish();
+    tx_a.drop();
+    let [tx_b, _] = writing_b.finish();
+    tx_b.drop();
+    assert chunk1.items.len() + chunk2.items.len() == 2;
+}
+
+test "write_all ends once a waiting reader takes everything" {
+    let [reader, writer] = Stream::<u8>::new();
+    let reading = reader.start_read(4);
+    assert writer.write_all([1, 2]) == CopyResult::Completed;
+    writer.drop();
+    let [rx, chunk] = reading.finish();
+    rx.drop();
+    assert chunk.items == [1, 2];
+}
+
 test "write_all stops where the reader drops" {
     let [rx, tx] = Stream::<u8>::new();
     rx.drop();
