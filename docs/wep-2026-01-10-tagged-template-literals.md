@@ -324,8 +324,8 @@ the optimizer's gap to close, not a reason to move the segments into a runtime
 value.
 
 Each distinct template shape instantiates the tag once, as inlining a builder at
-each site would. Two sites with the same shape share one instantiation; two
-that differ only in how a hole is spelled do not.
+each site would. Two sites with the same shape share one instantiation, even
+where they spell a hole differently.
 
 ### Compile-time evaluation
 
