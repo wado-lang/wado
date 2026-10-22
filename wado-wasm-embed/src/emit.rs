@@ -271,6 +271,8 @@ fn name_section(
             | wasmparser::Name::Data(_)
             | wasmparser::Name::Tag(_)
             | wasmparser::Name::Field(_)
+            | wasmparser::Name::Parameter(_)
+            | wasmparser::Name::TagParameter(_)
             | wasmparser::Name::Unknown { .. } => {}
         }
     }

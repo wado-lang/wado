@@ -390,7 +390,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
     /// impl's bindings (`type X = Concrete`), skipping still-parametric
     /// bindings. Only the bound's trait is checked, not its associated-type
-    /// equality constraints (`Iterator<Item = Self::Item>`).
+    /// equality constraints (`Iterator<Item = Self::Item>`). An affine binding
+    /// needs `affine type X`, parametric or not.
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
         let Some(impl_site) = self.impl_family_site(impl_block) else {
             return;
@@ -409,9 +410,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .assoc_type_sig(*owner, &binding.name)
                 .expect("an impl is checked outside any signature's build");
             self.check_assoc_binding_params(*owner, &decl, &sig, site, binding);
-            if sig.bounds.is_empty() {
-                continue;
-            }
             let type_id = self
                 .annotate_ctx
                 .trait_ctx
@@ -420,7 +418,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get(&binding.name)
                 .copied()
                 .unwrap_or_else(|| self.resolve_assoc_binding(Some(&impl_site), binding));
-            if !self.tysys.type_table.borrow().binding_is_concrete(type_id) {
+            if !decl.is_affine
+                && self
+                    .tysys
+                    .is_affine(type_id, &self.annotate_ctx.trait_ctx.affine_params())
+            {
+                let _ = self.emit(TypeError::AffineAssocBinding {
+                    type_name: self.tysys.type_id_to_string(type_id),
+                    assoc_name: binding.name.clone(),
+                    span: binding.span,
+                });
+            }
+            if sig.bounds.is_empty() || !self.tysys.type_table.borrow().binding_is_concrete(type_id)
+            {
                 continue;
             }
             // The binding answers for every argument the declaration admits,

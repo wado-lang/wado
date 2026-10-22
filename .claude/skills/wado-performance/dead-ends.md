@@ -18,6 +18,34 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Keeping pool memory resident for `wado serve` (wasmtime 50, 2026-10-22)
+
+`create_serve_engine` sets no `PoolingAllocationConfig::linear_memory_keep_resident`,
+so it is 0. A freed slot is then decommitted at once, and
+`Engine::release_idle_pool_memory` (new in wasmtime 50) finds nothing to
+release: it measured 0 bytes. A GC heap sits in a memory slot of the pool, so
+raising the budget keeps the GC heap of each recycled worker resident. The idea
+was to keep it resident for speed and release it once the server goes idle.
+
+It is a pure loss. One worker, `GET /user`, `oha -z 10s -c 200`, release after
+10 s with no request:
+
+| keep_resident | req/s  | RSS after load | RSS after idle | Released  |
+| ------------- | ------ | -------------- | -------------- | --------- |
+| 0             | 33,388 | 246 MiB        | 248 MiB        | 0 MiB     |
+| 16 MiB        | 24,706 | 798 MiB        | 258 MiB        | 544 MiB   |
+| 64 MiB        | 14,975 | 2,479 MiB      | 307 MiB        | 2,176 MiB |
+| 256 MiB       | 2,239  | 9,196 MiB      | 496 MiB        | 8,704 MiB |
+
+A worker recycles every 200 requests (`DEFAULT_RECYCLE_REQUESTS`), so each slot
+it frees is reset again and again. The released bytes show warm slots piling up
+to about 34 times the budget. The release itself works, but it only undoes a
+budget that should stay at 0. The cause of the slowdown was not profiled.
+
+```sh
+OHA_CORE_COUNT=2 mise run -C benchmark http-routing-wado
+```
+
 ## Fusing `write_plain_key`'s appends across the key name (2026-10-03)
 
 `nir/string_push` opens a new group at a run-time-length piece, because the

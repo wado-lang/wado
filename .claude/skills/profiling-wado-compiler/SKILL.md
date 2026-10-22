@@ -129,6 +129,11 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
 # Split one function's inclusive cost by the frames it calls
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   scratchpad/prof.json --under 'container_sroa::movers_of'
+
+# Keep one thread: `main` drives the compile, and what it runs outside the
+# `wado-opt-*` sweeps is the serial part of the wall time
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
+  scratchpad/prof.json --thread '^main$'
 ```
 
 ## Memory

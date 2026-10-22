@@ -51,15 +51,21 @@ impl LocSet {
 
     /// Ascending.
     pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        let (small, words) = match &self.repr {
-            Repr::Small(locs) => (locs.as_slice(), [].as_slice()),
-            Repr::Words { words, .. } => ([].as_slice(), words.as_slice()),
-        };
+        let (small, words) = self.forms();
         small.iter().copied().chain(
             words
                 .iter()
                 .flat_map(|&(i, w)| Bits(w).map(move |b| i * 64 + b)),
         )
+    }
+
+    /// The locations of a small set and the words of a large one: the other
+    /// is empty.
+    fn forms(&self) -> (&[u32], &[(u32, u64)]) {
+        match &self.repr {
+            Repr::Small(locs) => (locs, &[]),
+            Repr::Words { words, .. } => (&[], words),
+        }
     }
 
     pub fn insert(&mut self, loc: u32) -> bool {
@@ -68,27 +74,47 @@ impl LocSet {
 
     /// Add each location of `other`, and each one new here to `added`.
     pub fn union_into(&mut self, other: &LocSet, added: &mut LocSet) {
-        match &other.repr {
-            Repr::Small(locs) => {
-                for &loc in locs {
-                    if self.insert(loc) {
-                        added.insert(loc);
-                    }
-                }
+        if let (Repr::Words { words: ours, len }, Repr::Words { words: theirs, .. }) =
+            (&mut self.repr, &other.repr)
+            && theirs.len() > SMALL_MAX
+        {
+            *len += merge_words(ours, theirs, added);
+            return;
+        }
+        for (i, w) in other.words() {
+            let new = self.insert_word(i, w);
+            if new != 0 {
+                added.insert_word(i, new);
             }
-            Repr::Words { words: theirs, .. } => {
-                if let Repr::Words { words: ours, len } = &mut self.repr
-                    && theirs.len() > SMALL_MAX
-                {
-                    *len += merge_words(ours, theirs, added);
-                    return;
-                }
-                for &(i, w) in theirs {
-                    let new = self.insert_word(i, w);
-                    if new != 0 {
-                        added.insert_word(i, new);
-                    }
-                }
+        }
+    }
+
+    /// The non-empty words, by ascending index.
+    fn words(&self) -> impl Iterator<Item = (u32, u64)> + '_ {
+        let (small, words) = self.forms();
+        let mut small = small.iter().copied().peekable();
+        std::iter::from_fn(move || {
+            let first = small.next()?;
+            let (i, mut w) = (first / 64, 1 << (first % 64));
+            while let Some(loc) = small.next_if(|&loc| loc / 64 == i) {
+                w |= 1 << (loc % 64);
+            }
+            Some((i, w))
+        })
+        .chain(words.iter().copied())
+    }
+
+    /// Add to `out` each location here that `other` lacks.
+    pub fn difference_into(&self, other: &LocSet, out: &mut LocSet) {
+        let mut theirs = other.words().peekable();
+        for (i, w) in self.words() {
+            while theirs.next_if(|&(j, _)| j < i).is_some() {}
+            let missing = match theirs.peek() {
+                Some(&(j, v)) if j == i => w & !v,
+                Some(_) | None => w,
+            };
+            if missing != 0 {
+                out.insert_word(i, missing);
             }
         }
     }
@@ -140,33 +166,59 @@ impl LocSet {
 
 /// Merge `theirs` into `ours`, both ascending, recording each new bit in
 /// `added`; answers how many bits were new.
+///
+/// Merges in place: a set that has settled gains few words, so the words it
+/// already holds are updated where they stand and only the new ones move.
 fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut LocSet) -> usize {
-    let mut merged = Vec::with_capacity(ours.len().max(theirs.len()));
     let mut gained = 0;
-    let (mut a, mut b) = (0, 0);
-    while a < ours.len() || b < theirs.len() {
-        let take_ours = b == theirs.len() || (a < ours.len() && ours[a].0 < theirs[b].0);
-        if take_ours {
-            merged.push(ours[a]);
+    let mut fresh = 0;
+    let mut a = 0;
+    for &(i, w) in theirs {
+        while a < ours.len() && ours[a].0 < i {
             a += 1;
-            continue;
         }
-        let (i, w) = theirs[b];
-        b += 1;
-        let old = if a < ours.len() && ours[a].0 == i {
-            a += 1;
-            ours[a - 1].1
-        } else {
-            0
+        let new = match ours.get_mut(a) {
+            Some((j, old)) if *j == i => {
+                let new = w & !*old;
+                *old |= new;
+                new
+            }
+            Some(_) | None => {
+                fresh += 1;
+                w
+            }
         };
-        let new = w & !old;
         if new != 0 {
             gained += new.count_ones() as usize;
             added.insert_word(i, new);
         }
-        merged.push((i, old | w));
     }
-    *ours = merged;
+    if fresh > 0 {
+        // Fill from the back: each word lands at or past where it stood, so
+        // none is overwritten before it moves, and once the last new word is
+        // placed the rest already stand where they belong.
+        let mut a = ours.len();
+        ours.resize(a + fresh, (0, 0));
+        let mut out = ours.len();
+        for &(i, w) in theirs.iter().rev() {
+            if out == a {
+                break;
+            }
+            while a > 0 && ours[a - 1].0 > i {
+                a -= 1;
+                out -= 1;
+                ours[out] = ours[a];
+            }
+            out -= 1;
+            if a > 0 && ours[a - 1].0 == i {
+                a -= 1;
+                ours[out] = ours[a];
+            } else {
+                ours[out] = (i, w);
+            }
+        }
+        assert_eq!(out, a, "the merge fills every slot it opened");
+    }
     gained
 }
 
@@ -217,8 +269,15 @@ mod tests {
     #[test]
     fn union_reports_only_new_locations_across_every_form() {
         // Small into small, words into words by insertion, and words into
-        // words by merge.
-        for (step_a, step_b, end) in [(37, 41, 1000), (3, 2, 100), (3, 2, 100_000)] {
+        // words by merge: into every word already held, and interleaving new
+        // words with held ones from either side.
+        for (step_a, step_b, end) in [
+            (37, 41, 1000),
+            (3, 2, 100),
+            (3, 2, 100_000),
+            (200, 130, 100_000),
+            (130, 200, 100_000),
+        ] {
             let mut a = set((0..end).step_by(step_a));
             let b = set((0..end).step_by(step_b));
             let mut added = LocSet::default();
@@ -231,6 +290,27 @@ mod tests {
             let new: Vec<u32> = (0..end).filter(|n| is_b(n) && !is_a(n)).collect();
             assert_eq!(added.iter().collect::<Vec<_>>(), new);
             assert_eq!(added.len(), new.len());
+        }
+    }
+
+    #[test]
+    fn difference_adds_what_the_other_lacks_across_every_form() {
+        // Small less small, small less words, words less small, words less words.
+        for (step_a, step_b, end) in [(3, 2, 60), (50, 3, 1000), (3, 50, 1000), (2, 3, 100_000)] {
+            let a = set((0..end).step_by(step_a));
+            let b = set((0..end).step_by(step_b));
+            let mut out = set([1, end + 1]);
+            a.difference_into(&b, &mut out);
+            let is_b = |n: &u32| n.is_multiple_of(step_b as u32);
+            let mut expected: Vec<u32> = (0..end)
+                .step_by(step_a)
+                .filter(|n| !is_b(n))
+                .chain([1, end + 1])
+                .collect();
+            expected.sort_unstable();
+            expected.dedup();
+            assert_eq!(out.iter().collect::<Vec<_>>(), expected);
+            assert_eq!(out.len(), expected.len());
         }
     }
 

@@ -126,6 +126,12 @@ example names the test that holds it.
   example has a fixture of its own.
 - A fixture is excluded from the formatter (`[format] exclude`), so its layout
   stays as the specification quotes it.
+- A block that states a standard library declaration quotes the library through
+  `source`, and only the lines it needs: a trait's head and the members the
+  prose discusses, say. A fixture's copy of the declaration drifts, since
+  nothing compares the copy with the library. The `affine` modifiers the
+  prelude's traits gained went unnoticed in such copies, and so did a missing
+  `with _` and two missing contracts.
 
 ### The checker
 
@@ -200,5 +206,8 @@ The last two are what this WEP is for. The migration will find them.
   fixture exercises it. A block quoted from a function no test calls passes.
 - A `source` quotation is held to its file alone. Nothing asks that the file is
   compiled or run.
+- Nothing makes a block that states a standard library declaration quote the
+  library. One that quotes a fixture's copy instead passes the check and
+  drifts.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.

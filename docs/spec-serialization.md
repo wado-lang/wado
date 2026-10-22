@@ -4,21 +4,19 @@
 its traits, the shape a derived impl writes each type in, and the formats the
 standard library provides. One pair of traits serves every format:
 
-<!-- {"fixture":"spec_serialization_traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/serde.wado"} -->
 
 ```wado
-pub trait Serialize with () {
+pub affine trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
+```
 
-pub trait Deserialize with () {
+<!-- {"source": "wado-compiler/lib/core/serde.wado"} -->
+
+```wado
+pub affine trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
-}
-
-test {
-    assert json::to_string(&Reading { c: Celsius { deg: 21 } }).unwrap() == "21";
-    assert json::from_string::<Reading>("21").unwrap().c.deg == 21;
-}
 ```
 
 A format implements `Serializer`, `Deserializer`, or both, and a value's
