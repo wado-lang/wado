@@ -116,7 +116,7 @@ in a weaker form:
 - macOS: Seatbelt.
 - Windows: WSL2 only. Under WSL2, the Linux build of `wado` uses the Linux
   backend, so there is no Windows-specific code. The native Windows build does
-  not offer spawning, and its error points to WSL2.
+  not offer spawning, and its trap message points to WSL2.
 
 ABI 6 shuts out some current long-term-support kernels. Ubuntu 24.04's general
 availability kernel (6.8) does not qualify; its hardware enablement kernel
@@ -132,12 +132,17 @@ links the interface wherever its world imports it, also under `--deny-process`
 and on a kernel that falls short.
 
 There, the interface answers at run time. `get-availability` returns
-`available`, `not-permitted` (the host denied it) or `unsupported` (the OS
-cannot confine a child), with no side effect. The two refusals call for
-different remedies, a host flag for one and a newer OS for the other, so an
-`option` getter in the style of `wasi:cli`'s `get-terminal-stdin`, which merges
-them into `none`, says too little. `spawn` answers the same two cases as its
-`error-code`.
+`available`, `denied` (the host turned it off) or `unsupported` (the OS cannot
+confine a child), with no side effect. The two refusals call for different
+remedies, a host flag for one and a newer OS for the other, so an `option`
+getter in the style of `wasi:cli`'s `get-terminal-stdin`, which merges them into
+`none`, says too little.
+
+Every other function of the interface requires `get-availability` to answer
+`available`, and traps otherwise. The answer is fixed when the host starts, so
+one query settles it for the instance's lifetime, and `spawn`'s `error-code`
+carries only failures of the one spawn. The WIT cannot state this as a contract,
+so its documentation does.
 
 ### System baseline
 
@@ -200,9 +205,10 @@ interface types {
 
     variant exit-status { exited(u8), signaled(u8), timed-out }
 
-    enum availability { available, not-permitted, unsupported }
+    enum availability { available, denied, unsupported }
 
-    enum error-code { not-found, not-permitted, unsupported, resource-exhausted, io }
+    /// `not-permitted`: the sandbox refused to execute this program.
+    enum error-code { not-found, not-permitted, resource-exhausted, io }
 
     variant input { null, inherit, piped(stream<u8>) }
     enum output { null, inherit, piped }
@@ -274,7 +280,9 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 
 - One effect, `Process`. `spawn`, `output`, `status` and `read` declare it, and
   so does `process::availability()`, which returns an `Availability` mirroring
-  the WIT enum.
+  the WIT enum. The others require it to be `Available` and trap otherwise. A
+  `contract` clause cannot perform an effect, so this one is documented rather
+  than written as a clause.
 - `inherit_stdin`, `inherit_stdout`, `inherit_stderr` and `inherit_stdio` also
   declare `Stdin`, `Stdout` and `Stderr`: a guest passes on only a capability
   it holds.
@@ -292,8 +300,7 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
   stderr keeps its tail. Stdout past it is an `OutputTooLarge` error, since
   output with its middle cut out (JSON, say) is wrong rather than short.
 - `ProcessError { program, kind }` names the program as `FsError` names its
-  path. The kinds are `NotFound`, `NotPermitted`, `Unsupported`,
-  `Io(ErrorCode)`, `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only
+  path. The kinds are `NotFound`, `NotPermitted`, `Io(ErrorCode)`, `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only
   `read` returns `Failed`: `output` and `status` hand the exit status back as a
   value, while `read` returns only text and has nowhere else to report it.
 
