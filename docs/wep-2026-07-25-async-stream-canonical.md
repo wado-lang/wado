@@ -103,10 +103,22 @@ Emit `CanonicalOption::Async` for `stream.read` and `stream.write`, matching
 
 Replace `wait_for_blocked` and `future_await_blocked` with one `core:rt` helper,
 `cm_await_blocked`. The two bodies are identical apart from the unjoin, which
-both need:
+both need.
+
+Every copy settles through it, the BLOCKED test included. Whether a given copy
+blocks is the host's scheduling, so a test at each call site ran in one coverage
+run and not the next. The test stays small enough to inline, so a copy that did
+not block pays no call, and the wait is a function of its own:
 
 ```wado
-internal fn cm_await_blocked(handle: i32) -> i32 {
+internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
+    if packed != CM_BLOCKED {
+        return packed;
+    }
+    return cm_await_copy(handle);
+}
+
+fn cm_await_copy(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
@@ -151,8 +163,9 @@ not alter that. `cancel_copy` traps unless the end is `COPYING`:
 trap_if(e.state != CopyState.COPYING or e.has_sync_waiter)
 ```
 
-The synthesized bindings await BLOCKED inline — `if result == BLOCKED { result = cm_await_blocked(handle) }` — so control only returns to user code once the copy
-has settled to `IDLE` or `DONE`. Asynchronous canonicals move where the wait
+The synthesized bindings settle each copy as they bind its result
+(`let result = cm_await_blocked(handle, <copy>)`), so control only returns to
+user code once the copy has settled to `IDLE` or `DONE`. Asynchronous canonicals move where the wait
 happens, not whether user code can observe a copy in flight.
 
 Making cancel reachable is a separate change: the binding would have to return

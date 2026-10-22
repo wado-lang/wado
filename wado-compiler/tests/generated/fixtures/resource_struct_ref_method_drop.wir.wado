@@ -752,43 +752,46 @@ fn "resource_struct_ref_method_drop.wado/$cm_future_write_core:prelude/types.wad
             }
         }
     }
-    if local.tee $load_2("wasi/future-write"(handle, ptr_2)) == -1 {
-        self_90 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(handle, self_90);
-        ptr_89 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(self_90, ptr_89));
-        i_96 = builtin::load_i32(ptr_89 + 4);
-        drop("mem/realloc"(ptr_89, 8, 4, 0));
+    ptr_89 = $inline_cm_await_blocked_45: block -> i32 {
+        if local.tee $load_2("wasi/future-write"(handle, ptr_2)) != -1 {
+            break $inline_cm_await_blocked_45: $load_2;
+        }
+        $load_2 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(handle, $load_2);
+        self_90 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"($load_2, self_90));
+        ptr_89 = builtin::load_i32(self_90 + 4);
+        drop("mem/realloc"(self_90, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
-        "wasi/waitable-set-drop"(self_90);
-        $load_2 = i_96;
-    }
+        "wasi/waitable-set-drop"($load_2);
+        break $inline_cm_await_blocked_45: ptr_89;
+    };
     drop("mem/realloc"(ptr_2, 40, 8, 0));
     "wasi/future-drop-writable"(handle);
     $rest = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0;
-    if ($load_2 & 15) == 1 {
+    if (ptr_89 & 15) == 1 {
         $rest = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { value: value } };
     }
-    return struct.new "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>" { rest: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" { value: $rest }, result: $inline_cm_future_write_result_46: block -> "core:prelude/types.wado//enum:FutureWriteResult" {
-        if $load_2 == -1 {
-            break $inline_cm_future_write_result_46: 2;
+    return struct.new "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>" { rest: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>" { value: $rest }, result: $inline_cm_future_write_result_47: block -> "core:prelude/types.wado//enum:FutureWriteResult" {
+        if ptr_89 == -1 {
+            break $inline_cm_future_write_result_47: 2;
         }
-        if local.tee $load_2((if local.tee $load_2($load_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+        if local.tee ptr_89((if local.tee ptr_89(ptr_89 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
             0;
-        } else if @likely($load_2 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+        } else if @likely(ptr_89 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
             1;
         } else {
             "core:rt/unreachable"();
             unreachable;
         })) == 0 -> "core:prelude/types.wado//enum:FutureWriteResult" {
             0;
-        } else if @likely($load_2 == 1) -> "core:prelude/types.wado//enum:FutureWriteResult" {
+        } else if @likely(ptr_89 == 1) -> "core:prelude/types.wado//enum:FutureWriteResult" {
             1;
         } else {
             "core:rt/unreachable"();
             unreachable;
         }
-        break $inline_cm_future_write_result_46;
+        break $inline_cm_future_write_result_47;
     } };
 }
 

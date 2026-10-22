@@ -1528,8 +1528,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A tagged template hole whose type mentions a type parameter.
-    TemplateHoleGeneric {
+    /// A tagged template hole whose type mentions a type pack.
+    TemplateHolePackElement {
         type_name: String,
         span: Span,
     },
@@ -1933,11 +1933,11 @@ impl TypeError {
                 "a template tag must name a function or a static method".to_string(),
                 *span,
             ),
-            TypeError::TemplateHoleGeneric { type_name, span } => (
+            TypeError::TemplateHolePackElement { type_name, span } => (
                 Code::UnsupportedFeature,
                 format!(
-                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template shape generic over the enclosing item is not implemented yet"
+                    "a tagged template hole of type `{type_name}` mentions a type pack; \
+                     a template shape over a pack's element is not implemented yet"
                 ),
                 *span,
             ),

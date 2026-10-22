@@ -25,6 +25,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::synthesis::resource_cleanup;
 use crate::synthesis::resource_cleanup::Generics;
+use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
@@ -350,6 +351,12 @@ impl Monomorphizer {
 
         // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
         let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
+        // Only an instantiated body substitutes into a template shape: no
+        // field can name one. Phase 9 gives each its `$hole_fmt`.
+        assert!(new_structs.iter().all(|s| match s.def {
+            StructDef::Anon(shape) => module.type_table.borrow().template_shape(shape).is_none(),
+            StructDef::Decl(_) => true,
+        }));
         module.structs.extend(new_structs);
 
         // Phase 5: Remove generic structs and open shapes from the concrete
@@ -444,6 +451,13 @@ impl Monomorphizer {
                 made_progress = true;
                 self.alias_canonical_keys(&mut module.type_table.borrow_mut());
             }
+            // A shape only a substitution reaches has no `$hole_fmt` from
+            // synthesis; built here, what it calls is instantiated in turn.
+            batch.extend(hole_fmt_helpers(
+                &new_structs,
+                &module.type_table,
+                &self.functions.trait_env,
+            ));
             module.structs.extend(new_structs);
             for (shape, index) in std::mem::take(&mut self.structs.pending_shapes) {
                 let instances = self.instantiate_shape_substitution(
