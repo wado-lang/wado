@@ -307,13 +307,13 @@ pub fn cm_payload_type_from_type_id(
                 &to_cm_name(&type_table.struct_head_name(*def)),
             )))
         }
-        ResolvedType::Enum { def } | ResolvedType::Variant { def } | ResolvedType::Flags { def } => {
-            Some(CmPayloadType::Named(CmDecl::new(
-                type_table.defs(),
-                *def,
-                &to_cm_name(type_table.def_name(*def)),
-            )))
-        }
+        ResolvedType::Enum { def }
+        | ResolvedType::Variant { def }
+        | ResolvedType::Flags { def } => Some(CmPayloadType::Named(CmDecl::new(
+            type_table.defs(),
+            *def,
+            &to_cm_name(type_table.def_name(*def)),
+        ))),
         // Unlike the records above, a WASI-owned resource is included: its
         // component type is aliased from the defining interface, so `own<…>`
         // has one to point at.

@@ -1434,7 +1434,9 @@ fn prebuild_value_named_types(
         let type_gen = match (lib_type_gen.as_mut(), declaring) {
             (Some(type_gen), _) => type_gen,
             (None, Some(_)) => &mut local_type_gen,
-            (None, None) => continue,
+            (None, None) => unreachable!(
+                "synthesis rejects a program's own type as a payload outside a library"
+            ),
         };
         let wado_name = project.type_table.borrow().defs().name(def).to_string();
         let named_type = NamedType::new(AstId::fresh(), wado_name, Span::new(0, 0, 1, 1));
