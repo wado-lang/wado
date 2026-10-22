@@ -838,7 +838,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
                     panic!("{ice}");
                 }
-                let msg = common::panic_message(err.as_ref()).unwrap_or("(unknown panic)");
+                let msg = common::panic_message(err.as_ref());
                 eprintln!("[{test_id}] #![TODO] module pending: {msg}");
                 return;
             }

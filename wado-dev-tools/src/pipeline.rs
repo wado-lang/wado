@@ -217,15 +217,14 @@ pub fn run_pipeline(
 
     // Output templates shared with every worker, parsed once and reused for
     // both per-fixture path building and the end-of-run stale prune.
-    let emit_templates: std::sync::Arc<Vec<(Phase, Template)>> = std::sync::Arc::new(
+    let emit_templates: Arc<Vec<(Phase, Template)>> = Arc::new(
         emits
             .iter()
             .map(|e| (e.phase, Template::parse(&e.out_template)))
             .collect(),
     );
-    let distinct_phases = std::sync::Arc::new(distinct_phases);
-    let default_world: std::sync::Arc<Option<String>> =
-        std::sync::Arc::new(default_world.map(str::to_string));
+    let distinct_phases = Arc::new(distinct_phases);
+    let default_world = Arc::new(default_world.map(str::to_string));
 
     // Channels
     let (read_tx, read_rx) = mpsc::sync_channel::<ReadItem>(2 * num_workers);

@@ -242,9 +242,7 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
     match receiver.recv().expect("a compile worker answers every job") {
         Ok(value) => value,
         Err(payload) => std::panic::panic_any(InternalCompilerError(
-            panic_message(payload.as_ref())
-                .unwrap_or("(non-string panic payload)")
-                .to_string(),
+            panic_message(payload.as_ref()).to_string(),
         )),
     }
 }
@@ -262,13 +260,14 @@ impl std::fmt::Display for InternalCompilerError {
     }
 }
 
-/// The text a panic payload carries, for the two shapes `panic!` produces.
-/// [`None`] for anything else, such as the `panic_any` sentinel [`TodoResolved`].
-pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> Option<&str> {
+/// The text a panic payload carries, for the two shapes `panic!` produces,
+/// and a placeholder for anything else.
+pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
     payload
         .downcast_ref::<String>()
         .map(String::as_str)
         .or_else(|| payload.downcast_ref::<&str>().copied())
+        .unwrap_or("(non-string panic payload)")
 }
 
 /// What a fixture compile carries back off the worker.

@@ -5,7 +5,7 @@ description: "Workspace-specific Rust rules that override common habits: panic i
 
 - Manage dependencies in the workspace `Cargo.toml`.
 - Use the `panic!` macro instead of falling back to meaningless dummy values or no-op implementations.
-- Never catch a panic in production code. A panic is a bug, and it ends the run. So there is no `catch_unwind`, and a task's `JoinError` is raised again with `resume_unwind(e.into_panic())` rather than turned into an error value. Tests may catch one.
+- Never catch a panic in production code. A panic is a bug, and it ends the run. So there is no `catch_unwind`, a task is joined through `wado_host::sync::joined` rather than its `JoinError` turned into an error value, and a thread's panic is resumed where it is joined. Tests may catch one.
 - Take an `enum` rather than a `bool` where the call site would not say what the flag means. `f(x, true)` makes the reader open `f`, and `f(x, Mode::Strict)` does not.
 - Use the `2024` edition.
 - Keep the code free of compiler warnings and Clippy lints. `mise run clippy` runs `-D warnings`, so any warning or lint fails it.
