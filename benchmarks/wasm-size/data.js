@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792637923710,
+  "lastUpdate": 1792649268972,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69313,6 +69313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4deec87bf7ee17c1fbaf404d46ca99f7473451e7"
         },
         "date": 1792637923256,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "10e9289b37513ec052bdf3c37c8263df42b8322f",
+          "message": "Merge pull request #2414 from wado-lang/ccr-8dca5f71-587irx\n\ndocs: propose destructuring assignment with a copy-free swap",
+          "timestamp": "2026-10-22T14:47:07+09:00",
+          "tree_id": "b058f53c2098ea9133f8aca0947342c656c5635f",
+          "url": "https://github.com/wado-lang/wado/commit/10e9289b37513ec052bdf3c37c8263df42b8322f"
+        },
+        "date": 1792649268319,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
