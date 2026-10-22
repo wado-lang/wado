@@ -4,7 +4,6 @@
 //!
 //! See WEP 2026-09-26 (Eval).
 
-use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -253,7 +252,7 @@ impl EvalHost {
     /// share one budget, as far as [`Self::abandon`] lets them.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
-    /// the host, so it carries on into the calling test, which reports it.
+    /// the host, so it ends the run.
     async fn compile(&self, source: String, deps: Arc<Dependencies>) -> (Compiled, Vec<Input>) {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
@@ -270,11 +269,7 @@ impl EvalHost {
                 self.abandon(&held);
                 (Compiled::TimedOut, Vec::new())
             },
-            |report| {
-                report
-                    .expect("the compile thread reports before it exits")
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-            },
+            |report| report.expect("the compile thread panicked"),
         )
     }
 
@@ -501,33 +496,33 @@ struct Entry {
 }
 
 /// Compile `source` on a thread that holds `held` until it ends, and report
-/// the outcome and the files it read, or the panic that ended it, on the
-/// returned channel.
+/// the outcome and the files it read on the returned channel. A panic drops
+/// the sender unsent.
 fn spawn_compile(
     source: String,
     options: CompilerOptions,
     deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> oneshot::Receiver<std::thread::Result<(Compiled, Vec<Input>)>> {
+) -> oneshot::Receiver<(Compiled, Vec<Input>)> {
     let (report, compiled) = oneshot::channel();
     std::thread::Builder::new()
         .name("eval-compile".to_string())
         .stack_size(COMPILER_STACK_SIZE)
         .spawn(move || {
             let _held = held;
-            let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                let host = DependencyHost::new(deps);
-                let compiled = current_thread_runtime().block_on(
-                    wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
-                );
-                let compiled = match compiled {
-                    Ok(result) => Compiled::Wasm(result.wasm),
-                    Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
-                };
-                (compiled, std::mem::take(&mut *lock(&host.read)))
-            }));
+            let host = DependencyHost::new(deps);
+            let compiled = current_thread_runtime().block_on(wado_compiler::compile_with_options(
+                &source,
+                &host,
+                Some(EVAL_FILE),
+                options,
+            ));
+            let compiled = match compiled {
+                Ok(result) => Compiled::Wasm(result.wasm),
+                Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
+            };
             // Past the limit nobody is listening, and the outcome is dropped.
-            let _ = report.send(outcome);
+            let _ = report.send((compiled, std::mem::take(&mut *lock(&host.read))));
         })
         .expect("spawning the eval compile thread");
     compiled

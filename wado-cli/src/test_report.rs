@@ -39,9 +39,8 @@ pub(crate) enum CompileEvent {
     Ok,
     /// A `#![TODO]` module whose compile error fired as expected.
     TodoModule,
-    /// `detail` carries a message for the rare host-side failures (worker
-    /// panic, blocking-task join error) that have no per-file compiler
-    /// diagnostic of their own.
+    /// `detail` carries a message for the rare host-side failures (no compile
+    /// runtime) that have no per-file compiler diagnostic of their own.
     Failed {
         detail: Option<String>,
     },

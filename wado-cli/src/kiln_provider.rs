@@ -404,9 +404,7 @@ impl CliGeneratorProvider {
             Ok(rt.block_on(run_nested_pipeline(&entry, &entry_identity, &host, &run)))
         })
         .await
-        .map_err(|e| ProviderError::Internal {
-            message: format!("kiln: nested generator pipeline panicked or was cancelled: {e}"),
-        })?;
+        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
         started?.map_err(failed)
     }
 
@@ -487,9 +485,7 @@ impl CliGeneratorProvider {
                 }
             })
             .await
-            .map_err(|e| ProviderError::Internal {
-                message: format!("kiln: generator compile task panicked or was cancelled: {e}"),
-            })?;
+            .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
 
         let mut artifacts = artifacts?;
 

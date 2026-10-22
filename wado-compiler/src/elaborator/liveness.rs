@@ -1238,19 +1238,8 @@ mod last_use_tests {
     fn block_on<F: std::future::Future>(future: F) -> F::Output {
         use std::future::Future;
         use std::pin::Pin;
-        use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-        fn raw() -> RawWaker {
-            fn no_op(_: *const ()) {}
-            fn clone(_: *const ()) -> RawWaker {
-                raw()
-            }
-            RawWaker::new(
-                std::ptr::null(),
-                &RawWakerVTable::new(clone, no_op, no_op, no_op),
-            )
-        }
-        let waker = unsafe { Waker::from_raw(raw()) };
-        let mut cx = Context::from_waker(&waker);
+        use std::task::{Context, Poll, Waker};
+        let mut cx = Context::from_waker(Waker::noop());
         let mut fut = Box::pin(future);
         loop {
             if let Poll::Ready(v) = Pin::new(&mut fut).as_mut().poll(&mut cx) {

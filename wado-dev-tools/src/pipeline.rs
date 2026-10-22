@@ -104,10 +104,6 @@ struct WriteBatch {
     name: String,
     outputs: Vec<EmitOutput>,
     compile_time: Duration,
-    /// The dump panicked (internal compiler crash) rather than returning a clean
-    /// compile error. A panic is always fatal; a compile error is skippable under
-    /// `--skip-empty` (format-only fixtures that intentionally don't compile).
-    panicked: bool,
 }
 
 struct EmitOutput {
@@ -269,31 +265,13 @@ pub fn run_pipeline(
                             *slot.lock().unwrap() = Some((input_path.clone(), t0));
                         }
 
-                        let render_result =
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                rt.block_on(render_phases(
-                                    &item.source,
-                                    &item.input_path,
-                                    &distinct_phases,
-                                    opt_level,
-                                    default_world.as_deref(),
-                                ))
-                            }));
-                        let panicked = render_result.is_err();
-                        let rendered: IndexMap<Phase, Result<String, String>> = render_result
-                            .unwrap_or_else(|panic_val| {
-                                let msg = match panic_val.downcast_ref::<String>() {
-                                    Some(s) => s.clone(),
-                                    None => match panic_val.downcast_ref::<&str>() {
-                                        Some(s) => (*s).to_string(),
-                                        None => "unknown panic".to_string(),
-                                    },
-                                };
-                                distinct_phases
-                                    .iter()
-                                    .map(|p| (*p, Err(format!("panic in {input_path}: {msg}"))))
-                                    .collect()
-                            });
+                        let rendered = rt.block_on(render_phases(
+                            &item.source,
+                            &item.input_path,
+                            &distinct_phases,
+                            opt_level,
+                            default_world.as_deref(),
+                        ));
                         let compile_time = t0.elapsed();
 
                         // Clear active file
@@ -322,7 +300,6 @@ pub fn run_pipeline(
                                 name: item.name.clone(),
                                 outputs,
                                 compile_time,
-                                panicked,
                             })
                             .is_err()
                         {
@@ -386,7 +363,7 @@ pub fn run_pipeline(
                     generated += 1;
                 }
                 Err(e) => {
-                    if skip_empty && !batch.panicked {
+                    if skip_empty {
                         eprintln!("  Skipped {display} ({e})");
                         skipped += 1;
                         continue;

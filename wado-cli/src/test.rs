@@ -1,15 +1,12 @@
-use std::any::Any;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::future::Future;
-use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use futures::FutureExt;
 use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
@@ -688,18 +685,6 @@ impl StageObserver {
     }
 }
 
-// Recovers `&'static str` and `String` payloads (what `panic!` produces);
-// anything else collapses to a placeholder.
-fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
-    if let Some(s) = payload.downcast_ref::<&'static str>() {
-        (*s).to_string()
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "<non-string panic payload>".to_string()
-    }
-}
-
 struct TestJob {
     module: Arc<LoadedModule>,
     /// What the test's store preopens, resolved once for its module.
@@ -873,22 +858,9 @@ impl ParsedTest {
     }
 }
 
-/// Does the file at `path` carry a module-level `#![TODO]`?
-///
-/// A file that cannot be read or parsed is not one, so an unreadable path
-/// stays a hard failure rather than being downgraded to pending.
-fn todo_module_at(path: &str) -> bool {
-    std::fs::read_to_string(path).is_ok_and(|source| wado_compiler::parse(&source).ast.has_todo())
-}
-
 /// **Stage 1 worker** — run the wado compiler over one source file and
 /// emit the wasm bytes. No wasmtime touched here, so `--no-run` can cut
 /// the pipeline immediately after this stage and pay zero Cranelift cost.
-///
-/// Wrapped in `catch_unwind` so a panic in `compile::try_compile`
-/// (allocator OOM, a real compiler bug surfacing on one input) is
-/// downgraded to a per-file `CompileFailure` — the other fixtures in
-/// the run still get a chance to compile and report.
 ///
 /// Per-file log lines are emitted as compilation finishes; under parallel
 /// scheduling they interleave across workers, but the leading `[elapsed]`
@@ -902,39 +874,10 @@ async fn compile_artifact(
 ) -> CompileOutcome {
     let compile_start = Instant::now();
     let scope = run_cache.scoped();
-    let panic_or_result = AssertUnwindSafe(compile::try_compile_with_run_cache(
-        &path,
-        &flags,
-        Some(Arc::clone(&scope)),
-    ))
-    .catch_unwind()
-    .await;
+    let compile_result =
+        compile::try_compile_with_run_cache(&path, &flags, Some(Arc::clone(&scope))).await;
     let compile_duration = compile_start.elapsed();
     observer.add_work(compile_duration);
-
-    let compile_result = match panic_or_result {
-        Ok(r) => r,
-        Err(payload) => {
-            // An ICE is what a `#![TODO]` module is most likely to hit, and it
-            // belongs on the same pending axis as the compile error below.
-            if todo_module_at(&path) {
-                reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
-                return CompileOutcome::TodoCompileError(TodoCompileError { path });
-            }
-            let message = format!("panicked: {}", format_panic_payload(&payload));
-            reporter.on_compile(
-                &path,
-                CompileEvent::Failed {
-                    detail: Some(message.clone()),
-                },
-                compile_duration,
-            );
-            return CompileOutcome::CompileFailure(CompileFailure {
-                path,
-                message: Some(message),
-            });
-        }
-    };
 
     match compile_result {
         Ok(result) => {
@@ -975,10 +918,6 @@ async fn compile_artifact(
 /// as backpressure on the load channel, not as inflated `load_duration`)
 /// and moved into the resulting `LoadedModule` so the budget slot is
 /// held for the module's entire downstream lifetime.
-///
-/// Wrapped in `catch_unwind` so a `Component::new` panic on malformed
-/// wasm (debug-build assertions in wasmtime/cranelift) becomes a per-file
-/// `LoadFailure` rather than aborting the whole pipeline.
 fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
@@ -991,7 +930,7 @@ fn load_module(
     reporter: &Arc<dyn TestReporter>,
 ) -> LoadOutcome {
     let load_start = Instant::now();
-    let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
+    let load_result = (|| -> Result<_> {
         let engine = Arc::new(runtime::create_test_engine(
             opt_level,
             profile,
@@ -1014,26 +953,9 @@ fn load_module(
             _ => None,
         };
         Ok((engine, component, linker, profiler))
-    }));
+    })();
     let load_duration = load_start.elapsed();
     observer.add_work(load_duration);
-
-    let load_result = match panic_or_result {
-        Ok(r) => r,
-        Err(payload) => {
-            let cause = format_panic_payload(&payload);
-            reporter.on_load(
-                &artifact.path,
-                LoadEvent::Failed {
-                    detail: Some(format!("panicked: {cause}")),
-                },
-                load_duration,
-            );
-            return LoadOutcome::LoadFailure(LoadFailure {
-                path: artifact.path,
-            });
-        }
-    };
 
     match load_result {
         Ok((engine, component, linker, profiler)) => {
@@ -1176,41 +1098,20 @@ async fn run_compile_stage(
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                let path_for_failure = path.clone();
-                let reporter_for_join_err = Arc::clone(&reporter);
                 tokio::task::spawn_blocking(move || {
-                    let panic_or_runtime = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                    }));
-                    match panic_or_runtime {
-                        Ok(Ok(rt)) => rt.block_on(compile_artifact(
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => rt.block_on(compile_artifact(
                             path,
                             flags,
                             observer_inner,
                             run_cache,
                             reporter,
                         )),
-                        Ok(Err(e)) => {
+                        Err(e) => {
                             let message = format!("unable to create compile runtime: {e}");
-                            reporter.on_compile(
-                                &path,
-                                CompileEvent::Failed {
-                                    detail: Some(message.clone()),
-                                },
-                                Duration::ZERO,
-                            );
-                            CompileOutcome::CompileFailure(CompileFailure {
-                                path,
-                                message: Some(message),
-                            })
-                        }
-                        Err(payload) => {
-                            let message = format!(
-                                "compile worker panicked: {}",
-                                format_panic_payload(&payload)
-                            );
                             reporter.on_compile(
                                 &path,
                                 CompileEvent::Failed {
@@ -1226,20 +1127,7 @@ async fn run_compile_stage(
                     }
                 })
                 .await
-                .unwrap_or_else(|join_err| {
-                    let message = format!("blocking-task join error: {join_err}");
-                    reporter_for_join_err.on_compile(
-                        &path_for_failure,
-                        CompileEvent::Failed {
-                            detail: Some(message.clone()),
-                        },
-                        Duration::ZERO,
-                    );
-                    CompileOutcome::CompileFailure(CompileFailure {
-                        path: path_for_failure,
-                        message: Some(message),
-                    })
-                })
+                .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1304,9 +1192,7 @@ async fn run_load_stage(
             let cpu_budget = Arc::clone(&cpu_budget);
             let modules_budget = Arc::clone(&modules_budget);
             let observer_inner = Arc::clone(&observer);
-            let path_for_failure = artifact.path.clone();
             let reporter = Arc::clone(&reporter);
-            let reporter_for_join_err = Arc::clone(&reporter);
             let profile_for_load = profile.clone();
             let slot_for_load = profiler_slot.clone();
             let coverage_for_load = coverage_run.clone();
@@ -1342,18 +1228,7 @@ async fn run_load_stage(
                     )
                 })
                 .await
-                .unwrap_or_else(|join_err| {
-                    reporter_for_join_err.on_load(
-                        &path_for_failure,
-                        LoadEvent::Failed {
-                            detail: Some(format!("blocking-task join error: {join_err}")),
-                        },
-                        Duration::ZERO,
-                    );
-                    LoadOutcome::LoadFailure(LoadFailure {
-                        path: path_for_failure,
-                    })
-                })
+                .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1475,7 +1350,7 @@ async fn run_execute_stage(
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                run_single_test_safe(job, cpu_permit).await
+                run_single_test(&job, cpu_permit).await
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1704,9 +1579,8 @@ async fn run_pipeline(
     };
 
     // All seven tasks (3 stages + 4 collectors) run concurrently as
-    // independent runtime tasks. Per-fixture panics are already caught
-    // by `compile_artifact` / `load_module` / `run_single_test_safe`,
-    // so the stage drivers themselves return cleanly. Sequential
+    // independent runtime tasks. A panic in any of them is a bug in the
+    // compiler or the runner, and ends the run. Sequential
     // `.await` of the handles is fine for concurrency (the tasks
     // progress in parallel on the runtime; await just gathers their
     // results) and lets us avoid the `tokio::macros` feature.
@@ -1764,20 +1638,6 @@ fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) 
         stdout: String::new(),
         stderr: String::new(),
     }
-}
-
-/// `run_single_test` wrapped in `catch_unwind` so a panic anywhere
-/// inside (host-side bug, wasmtime debug assertion, allocator OOM)
-/// becomes a per-test `Fail` rather than aborting the whole pipeline.
-async fn run_single_test_safe(job: TestJob, cpu_permit: OwnedSemaphorePermit) -> TestResult {
-    let start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(run_single_test(&job, cpu_permit))
-        .catch_unwind()
-        .await;
-    panic_or_result.unwrap_or_else(|payload| {
-        let cause = format_panic_payload(&payload);
-        fail_result(&job, format!("test worker panicked: {cause}"), start, None)
-    })
 }
 
 /// Run a single test in its own Store
@@ -2424,17 +2284,12 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         .map(|_| {
             let barrier = Arc::clone(&barrier);
             tokio::task::spawn_blocking(move || {
-                // A task that panicked before the barrier would leave the rest
-                // waiting on a party count that can never be met.
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    wado_compiler::prewarm_stdlib_snapshot();
-                }));
                 // Every task running at once is what makes tokio's pool allocate
                 // `parallelism` threads, which run_compile_stage then reuses.
+                // Waiting first means a task that panics in the build cannot
+                // leave the rest short of the party count.
                 barrier.wait();
-                if let Err(panic) = result {
-                    std::panic::resume_unwind(panic);
-                }
+                wado_compiler::prewarm_stdlib_snapshot();
             })
         })
         .collect();
@@ -2656,22 +2511,6 @@ mod tests {
         assert_eq!(prewarm_workers(16, 4000), 16);
         // A run with nothing to compile still warms the thread that finds out.
         assert_eq!(prewarm_workers(16, 0), 1);
-    }
-
-    #[test]
-    fn only_a_readable_todo_module_is_one() {
-        let dir = std::env::temp_dir().join("wado-todo-module-at");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let todo = dir.join("todo.wado");
-        let plain = dir.join("plain.wado");
-        std::fs::write(&todo, "#![TODO]\ntest \"t\" {\n    assert false;\n}\n").expect("write");
-        std::fs::write(&plain, "test \"t\" {\n    assert true;\n}\n").expect("write");
-
-        assert!(todo_module_at(todo.to_str().expect("utf-8 path")));
-        assert!(!todo_module_at(plain.to_str().expect("utf-8 path")));
-        assert!(!todo_module_at(
-            dir.join("absent.wado").to_str().expect("utf-8 path")
-        ));
     }
 
     #[test]

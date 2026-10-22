@@ -65,19 +65,15 @@ impl FilesystemProvider {
     }
 }
 
-// Run a blocking git operation on the blocking pool, flattening the join error.
+// Run a blocking git operation on the blocking pool.
 async fn on_blocking<T, F>(f: F) -> Result<T, ProviderError>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, ProviderError> + Send + 'static,
 {
-    match tokio::task::spawn_blocking(f).await {
-        Ok(result) => result,
-        Err(e) => Err(ProviderError::IoError {
-            path: "git".to_string(),
-            message: e.to_string(),
-        }),
-    }
+    tokio::task::spawn_blocking(f)
+        .await
+        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
 }
 
 impl DependencyProvider for FilesystemProvider {
