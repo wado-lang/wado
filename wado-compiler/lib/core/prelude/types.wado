@@ -423,7 +423,7 @@ impl<T> Drop for ReadCopy<T> {
 impl<T> Waitable for ReadCopy<T> {
     fn waitable_id(&self) -> Option<ResourceId> {
         let Some([_, started]) = &self.copy else {
-            return null;
+            unreachable();
         };
         return started.buffer.waitable_id();
     }
@@ -551,7 +551,7 @@ impl<T> Drop for WriteCopy<T> {
 impl<T> Waitable for WriteCopy<T> {
     fn waitable_id(&self) -> Option<ResourceId> {
         let Some([_, started]) = &self.copy else {
-            return null;
+            unreachable();
         };
         return started.buffer.waitable_id();
     }
@@ -1057,13 +1057,6 @@ internal affine struct ResultBuffer {
     internal ptr: i32,
     internal size: i32,
     internal align: i32,
-}
-
-impl ResultBuffer {
-    /// A buffer holding no memory, which frees nothing.
-    internal fn empty() -> ResultBuffer {
-        return ResultBuffer { ptr: 0, size: 0, align: 1 };
-    }
 }
 
 impl Drop for ResultBuffer {

@@ -53,6 +53,54 @@ test "a copy a set reported drops without a cancel" {
     assert written.rest.is_empty();
 }
 
+test "a write copy a set reported drops without a cancel" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<WriteCopy<u8>>::new();
+    set.join(writer.start_write([5]));
+    let [rx, chunk] = reader.start_read(4).finish();
+    rx.drop();
+    builtin::drop(set.wait().member);
+    assert chunk.items == [5];
+}
+
+test "a copy that settled as it started is ready the moment it joins" {
+    let [reader, writer] = Stream::<u8>::new();
+    let writing = writer.start_write([6]);
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let ready = set.wait();
+    assert ready.event matches { Unreported };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [6];
+}
+
+test "a copy one set reported joins another ready" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut first = WaitableSet::<ReadCopy<u8>>::new();
+    first.join(reader.start_read(4));
+    let writing = writer.start_write([7]);
+    let mut second = WaitableSet::<ReadCopy<u8>>::new();
+    second.join(first.wait().member);
+    let ready = second.wait();
+    assert ready.event matches { Copied(Completed) };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [7];
+}
+
+test "write_all stops where the reader drops" {
+    let [rx, tx] = Stream::<u8>::new();
+    rx.drop();
+    assert tx.write_all([]) == CopyResult::Completed;
+    assert tx.write_all([1, 2]) == CopyResult::Dropped;
+    tx.drop();
+}
+
 test "a copy a handler settled reports what the handler said" {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
