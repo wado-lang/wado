@@ -412,16 +412,34 @@ struct Mark {
     on_stack: bool,
 }
 
-/// What a node merged into another had carried along its own edges: every
-/// location of `pts` but those in `pending`. Its loads, stores and calls sit
-/// at these ranges of the merging node's lists.
-struct Carried {
-    pts: LocSet,
-    pending: LocSet,
+/// Where some node's edges sit in its lists, or in those of the node it
+/// merged into.
+struct Edges {
+    copy_to: Range<usize>,
     loads: Range<usize>,
     stores: Range<usize>,
     sites: Range<usize>,
-    copy_to: Vec<u32>,
+}
+
+impl Edges {
+    /// These edges, once appended to lists holding `held`.
+    fn placed_after(self, held: &Edges) -> Edges {
+        let shift = |at: Range<usize>, by: &Range<usize>| at.start + by.end..at.end + by.end;
+        Edges {
+            copy_to: shift(self.copy_to, &held.copy_to),
+            loads: shift(self.loads, &held.loads),
+            stores: shift(self.stores, &held.stores),
+            sites: shift(self.sites, &held.sites),
+        }
+    }
+}
+
+/// What a node merged into another had carried along its own `edges`: every
+/// location of `pts` but those in `pending`.
+struct Carried {
+    pts: LocSet,
+    pending: LocSet,
+    edges: Edges,
 }
 
 #[derive(Default)]
@@ -631,16 +649,23 @@ impl Graph {
         }
     }
 
-    /// What `node`'s own edges have carried, and where they sit in its lists.
-    fn carried(&mut self, node: u32) -> Carried {
+    /// All of `node`'s own edges.
+    fn edges(&self, node: u32) -> Edges {
         let n = node as usize;
-        Carried {
-            pts: self.pts[n].clone(),
-            pending: std::mem::take(&mut self.delta[n]),
+        Edges {
+            copy_to: 0..self.copy_to[n].len(),
             loads: 0..self.loads[n].len(),
             stores: 0..self.stores[n].len(),
             sites: 0..self.sites[n].len(),
-            copy_to: self.copy_to[n].clone(),
+        }
+    }
+
+    /// What `node`'s own edges have carried, given the set they carried it from.
+    fn carried(&mut self, node: u32, pts: LocSet) -> Carried {
+        Carried {
+            pts,
+            pending: std::mem::take(&mut self.delta[node as usize]),
+            edges: self.edges(node),
         }
     }
 
@@ -649,9 +674,11 @@ impl Graph {
         let (r, m) = (root as usize, member as usize);
         self.rep.link(member, root);
         if !self.merged.contains_key(&root) {
-            let own = self.carried(root);
+            let own = self.carried(root, self.pts[r].clone());
             self.merged.insert(root, vec![own]);
         }
+        let pts = std::mem::take(&mut self.pts[m]);
+        self.pts[r].union_into(&pts, &mut LocSet::default());
         let carried = match self.merged.swap_remove(&member) {
             Some(theirs) => {
                 assert!(
@@ -660,22 +687,13 @@ impl Graph {
                 );
                 theirs
             }
-            None => vec![self.carried(member)],
+            None => vec![self.carried(member, pts)],
         };
-        let (loads, stores, sites) = (
-            self.loads[r].len(),
-            self.stores[r].len(),
-            self.sites[r].len(),
-        );
-        let shift = |range: Range<usize>, by: usize| range.start + by..range.end + by;
+        let held = self.edges(root);
         self.merged[&root].extend(carried.into_iter().map(|c| Carried {
-            loads: shift(c.loads, loads),
-            stores: shift(c.stores, stores),
-            sites: shift(c.sites, sites),
+            edges: c.edges.placed_after(&held),
             ..c
         }));
-        let pts = std::mem::take(&mut self.pts[m]);
-        self.pts[r].union_into(&pts, &mut LocSet::default());
         let copy_to = std::mem::take(&mut self.copy_to[m]);
         self.copy_to[r].extend(copy_to);
         let loads = std::mem::take(&mut self.loads[m]);
@@ -691,8 +709,9 @@ impl Graph {
     /// had not carried: the merged set's locations it lacked, and its delta.
     fn settle(&mut self, root: u32) {
         let r = root as usize;
+        let merged_copy_to = std::mem::take(&mut self.copy_to[r]);
         let mut copy_to: IndexSet<u32> = IndexSet::default();
-        for to in std::mem::take(&mut self.copy_to[r]) {
+        for &to in &merged_copy_to {
             let to = self.find(to);
             if to != root && copy_to.insert(to) {
                 self.edges.insert((root, to));
@@ -717,8 +736,8 @@ impl Graph {
             if missing.is_empty() {
                 continue;
             }
-            self.carry(root, &missing, c.loads, c.stores, c.sites);
-            for to in c.copy_to {
+            self.carry(root, &missing, &c.edges);
+            for &to in &merged_copy_to[c.edges.copy_to] {
                 let to = self.find(to);
                 if to != root {
                     self.add_all(to, &missing);
@@ -727,27 +746,20 @@ impl Graph {
         }
     }
 
-    /// Carry `locs`, new in `node`'s set, along its loads, stores and calls in
-    /// the ranges given.
-    fn carry(
-        &mut self,
-        node: u32,
-        locs: &LocSet,
-        loads: Range<usize>,
-        stores: Range<usize>,
-        sites: Range<usize>,
-    ) {
+    /// Carry `locs`, new in `node`'s set, along the loads, stores and calls of
+    /// `edges`; its copies are left to the caller.
+    fn carry(&mut self, node: u32, locs: &LocSet, edges: &Edges) {
         let n = node as usize;
         for loc in locs.iter() {
-            for i in loads.clone() {
+            for i in edges.loads.clone() {
                 let to = self.loads[n][i];
                 self.copy(loc, to);
             }
-            for i in stores.clone() {
+            for i in edges.stores.clone() {
                 let from = self.stores[n][i];
                 self.copy(from, loc);
             }
-            for at in sites.clone() {
+            for at in edges.sites.clone() {
                 self.bind(node, at, loc);
             }
         }
@@ -761,12 +773,8 @@ impl Graph {
             }
             let delta = std::mem::take(&mut self.delta[node as usize]);
             let n = node as usize;
-            let (loads, stores, sites) = (
-                0..self.loads[n].len(),
-                0..self.stores[n].len(),
-                0..self.sites[n].len(),
-            );
-            self.carry(node, &delta, loads, stores, sites);
+            let edges = self.edges(node);
+            self.carry(node, &delta, &edges);
             let mut equal_ends = Vec::new();
             for i in 0..self.copy_to[n].len() {
                 let to = self.find(self.copy_to[n][i]);
@@ -1683,6 +1691,35 @@ impl Builder<'_> {
                 let values: Vec<Option<u32>> = children.into_iter().map(|c| self.eval(c)).collect();
                 self.join(values)
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Graph;
+
+    #[test]
+    fn a_node_merged_twice_carries_along_its_own_edges() {
+        // `z -> a -> b`, each the only copy into its end, so `b` merges into
+        // `a` and then `a`, carrying `b`, into `z`. Only `z` holds a location,
+        // `l`, and only `b` loads through it, so `w` gains what `l` holds
+        // only if `b`'s load is found past the one `z` already held.
+        let mut g = Graph::default();
+        let [z, a, b, v, w, l, m] = [(); 7].map(|()| g.node());
+        g.add(l, m);
+        g.add(z, l);
+        g.load(z, v);
+        g.load(b, w);
+        g.copy(a, b);
+        g.copy(z, a);
+        g.solve();
+        for node in [z, a, b] {
+            assert_eq!(g.find(node), z);
+        }
+        for node in [v, w] {
+            let node = g.find(node);
+            assert_eq!(g.pts[node as usize].iter().collect::<Vec<_>>(), [m]);
         }
     }
 }

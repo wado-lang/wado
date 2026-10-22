@@ -51,8 +51,21 @@ impl LocSet {
 
     /// Ascending.
     pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        self.words()
-            .flat_map(|(i, w)| Bits(w).map(move |b| i * 64 + b))
+        let (small, words) = self.forms();
+        small.iter().copied().chain(
+            words
+                .iter()
+                .flat_map(|&(i, w)| Bits(w).map(move |b| i * 64 + b)),
+        )
+    }
+
+    /// The locations of a small set and the words of a large one: the other
+    /// is empty.
+    fn forms(&self) -> (&[u32], &[(u32, u64)]) {
+        match &self.repr {
+            Repr::Small(locs) => (locs, &[]),
+            Repr::Words { words, .. } => (&[], words),
+        }
     }
 
     pub fn insert(&mut self, loc: u32) -> bool {
@@ -78,10 +91,7 @@ impl LocSet {
 
     /// The non-empty words, by ascending index.
     fn words(&self) -> impl Iterator<Item = (u32, u64)> + '_ {
-        let (small, words) = match &self.repr {
-            Repr::Small(locs) => (locs.as_slice(), [].as_slice()),
-            Repr::Words { words, .. } => ([].as_slice(), words.as_slice()),
-        };
+        let (small, words) = self.forms();
         let mut small = small.iter().copied().peekable();
         std::iter::from_fn(move || {
             let first = small.next()?;
@@ -101,7 +111,7 @@ impl LocSet {
             while theirs.next_if(|&(j, _)| j < i).is_some() {}
             let missing = match theirs.peek() {
                 Some(&(j, v)) if j == i => w & !v,
-                _ => w,
+                Some(_) | None => w,
             };
             if missing != 0 {
                 out.insert_word(i, missing);
@@ -173,7 +183,7 @@ fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut Lo
                 *old |= new;
                 new
             }
-            _ => {
+            Some(_) | None => {
                 fresh += 1;
                 w
             }
