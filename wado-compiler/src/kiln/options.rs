@@ -168,7 +168,10 @@ pub fn extract_options_descriptor(
     }
 
     // A host supplies a probe's parameters by name, so it can supply only these.
-    if let Some(probe) = tir_module.find_function("probe") {
+    if let Some(probe) = tir_module
+        .find_function("probe")
+        .filter(|probe| probe.borrow().is_export)
+    {
         for param in &probe.borrow().params {
             if !["path", "content", "type", "options"].contains(&param.name.as_str()) {
                 diagnostics.push(Diagnostic {

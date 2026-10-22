@@ -578,12 +578,11 @@ pub trait CompilerHost: Send + Sync {
     }
 
     /// Ask a generator how many leading bytes of each input determine its
-    /// output, one answer per file in declaration order, each shorter than the
-    /// file. `None` in a slot means the whole file, as an extent reaching its
-    /// end does, and so does the empty answer of a generator exporting no
-    /// `probe`, which the default gives. A host opens the files with
-    /// [`Self::open_source`] only once it knows the generator probes them.
-    /// Protocol: WEP 2026-04-12.
+    /// output, one answer per file in declaration order: an extent shorter than
+    /// the file, or `None` for the whole file. A generator exporting no `probe`
+    /// answers empty, as the default does, which is every file whole. A host
+    /// opens the files with [`Self::open_source`] only once it knows the
+    /// generator probes them. Protocol: WEP 2026-04-12.
     fn probe_generator(
         &self,
         _component_wasm: &[u8],
