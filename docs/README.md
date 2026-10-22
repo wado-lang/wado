@@ -206,6 +206,7 @@
 - [Reference Liveness and Assignment to a Referenced Place](./wep-2026-10-13-referenced-places.md)
 - [Affine Types — Swift's Noncopyable Discipline for Resources](./wep-2026-10-17-affine-types.md)
 - [Destructuring Assignment and a Swap Without Value Copies](./wep-2026-10-21-destructuring-assignment.md)
+- [A Component's Packages Are Modules, an Interface's Types Are Its Members](./wep-2026-10-22-component-packages.md)
 
 ## Standard Library
 
