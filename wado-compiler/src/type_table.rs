@@ -1285,7 +1285,6 @@ impl TypeTable {
                         }
                         None => h.update([0u8]),
                     }
-                    digest_str(&mut h, &hole.source);
                 }
                 let bytes: [u8; 32] = h.finalize().into();
                 let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
