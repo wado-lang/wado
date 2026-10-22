@@ -8,23 +8,24 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
+use crate::name::{cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TypeId,
+    EffectRef, FunctionKind, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirParam, TirStmt, TypeId,
 };
 use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    cm_raw_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
     if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
     option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
 use super::lower::{
-    buffer_bytes, synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory,
+    buffer_bytes, list_element, list_len, synthesize_flatten_value_to_flat_args,
+    synthesize_lower_wasi_type_to_memory,
 };
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
@@ -35,7 +36,7 @@ use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
-use crate::name::{FqTypeName, cm_wrap_async_func_name};
+use crate::name::cm_wrap_async_func_name;
 use crate::tir;
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:
@@ -896,16 +897,10 @@ impl<'a> AdapterBuilder<'a> {
             (elem_tid, list_tid)
         };
 
-        // $len = List<T>::len(param)
         let len_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
-        let len_expr = generic_method_call(
+        let len_expr = list_len(
             local_ref(param_local, param_name, array_type_id),
-            &self.lower_ctx.names.array_fq,
-            "len",
-            ModuleSource::list(),
-            self.lower_ctx.names.list_len.clone(),
-            vec![],
-            TypeTable::I32,
+            &self.lower_ctx,
         );
         self.body_stmts.push(let_stmt(
             &format!("${param_name}_len"),
@@ -973,42 +968,16 @@ impl<'a> AdapterBuilder<'a> {
                 TypeTable::I32,
             ),
         ));
-        // $elem = param[$i] (IndexValue trait method)
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
-        let iv_info = LocalMethodName::new(
-            self.lower_ctx.names.array_fq.clone(),
-            Some(
-                self.lower_ctx
-                    .names
-                    .index_value
-                    .clone()
-                    .with_args(vec![FqTypeName::builtin("i32")]),
-            ),
-            "index_value".to_string(),
-        );
-        let iv_mangled = iv_info.to_mangled_name();
         loop_body.push(let_stmt(
             &format!("${param_name}_elem"),
             elem_local,
             elem_type_id,
-            TirExpr::new(
-                TirExprKind::method_call(
-                    Box::new(local_ref(param_local, param_name, array_type_id)),
-                    FunctionRef {
-                        module_source: ModuleSource::list(),
-                        name: iv_mangled,
-                        template: Some(self.lower_ctx.names.list_index_value.clone()),
-                        monomorph_info: None,
-                        method_info: Some(iv_info),
-                    },
-                    vec![],
-                    vec![CallArg::new(
-                        local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
-                        false,
-                    )],
-                ),
+            list_element(
+                local_ref(param_local, param_name, array_type_id),
+                local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
                 elem_type_id,
-                synth_span(),
+                &self.lower_ctx,
             ),
         ));
         // Use the full memory lowerer so aggregate elements lay out their

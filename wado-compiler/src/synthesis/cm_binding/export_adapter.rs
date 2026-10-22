@@ -14,7 +14,7 @@ use crate::cm_abi;
 use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{LocalMethodName, cm_export_func_name, cm_post_return_func_name};
+use crate::name::{cm_export_func_name, cm_post_return_func_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -25,7 +25,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_canonical_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    cm_canonical_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     param_local, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
@@ -36,6 +36,7 @@ use super::cm_free::{
 use super::import_adapter::make_binding_function;
 use super::lift::{lift_string_and_free, materialize_if_needed, synthesize_lift_into};
 use super::lower::buffer_bytes;
+use super::lower::{list_element, list_len};
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
@@ -48,7 +49,6 @@ use crate::ast::Visibility;
 use crate::cm_abi::layout_tuple_with_registry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
-use crate::name::FqTypeName;
 
 /// Lower a Wado-typed value to flat CM ABI args (i32 / i64 / f32 / f64).
 ///
@@ -198,21 +198,12 @@ fn lower_to_flat_inner(
             let arr_local = alloc_local(next_local, locals, type_id);
             stmts.push(let_stmt("$arr_val", arr_local, type_id, value));
 
-            // $len = List::len($arr)
             let len_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
                 "$arr_len",
                 len_local,
                 TypeTable::I32,
-                generic_method_call(
-                    local_ref(arr_local, "$arr_val", type_id),
-                    &names.array_fq,
-                    "len",
-                    ModuleSource::list(),
-                    names.list_len.clone(),
-                    vec![],
-                    TypeTable::I32,
-                ),
+                list_len(local_ref(arr_local, "$arr_val", type_id), &lower_ctx),
             ));
 
             // $bytes = cm_buffer_bytes($len, elem_size)
@@ -273,40 +264,16 @@ fn lower_to_flat_inner(
                 None,
             ));
 
-            // $elem = ($arr[$i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
-            let iv_info = LocalMethodName::new(
-                names.array_fq.clone(),
-                Some(
-                    names
-                        .index_value
-                        .with_args(vec![FqTypeName::builtin("i32")]),
-                ),
-                "index_value".to_string(),
-            );
-            let iv_mangled = iv_info.to_mangled_name();
             loop_stmts.push(let_stmt(
                 "$arr_elem",
                 elem_local,
                 elem_type_id,
-                TirExpr::new(
-                    TirExprKind::method_call(
-                        Box::new(local_ref(arr_local, "$arr_val", type_id)),
-                        FunctionRef {
-                            module_source: ModuleSource::list(),
-                            name: iv_mangled,
-                            template: Some(names.list_index_value),
-                            monomorph_info: None,
-                            method_info: Some(iv_info),
-                        },
-                        vec![],
-                        vec![CallArg::new(
-                            local_ref(i_local, "$arr_i", TypeTable::I32),
-                            false,
-                        )],
-                    ),
+                list_element(
+                    local_ref(arr_local, "$arr_val", type_id),
+                    local_ref(i_local, "$arr_i", TypeTable::I32),
                     elem_type_id,
-                    synth_span(),
+                    &lower_ctx,
                 ),
             ));
 
