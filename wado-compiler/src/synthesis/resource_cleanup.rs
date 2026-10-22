@@ -2652,12 +2652,12 @@ fn drop_unbound_fields<'p>(
         unreachable!("a struct or tuple pattern matches a holder of fields");
     };
     let mut stmts = Vec::new();
-    for (index, name, field_ty) in fields {
-        if !cx.carries_resource(field_ty) {
-            continue;
-        }
-        let field = common::field_access(place.clone(), index, name, field_ty, synth_span());
-        stmts.extend(match listed(index) {
+    for field in affine_fields(place, &fields, cx) {
+        let TirExprKind::FieldAccess { field_index, .. } = field.kind else {
+            unreachable!("`affine_fields` projects each field");
+        };
+        let field_ty = field.type_id;
+        stmts.extend(match listed(field_index) {
             Some(pattern) => drop_unbound(pattern, field, cx),
             None => drop_if_held(field, field_ty, cx),
         });
