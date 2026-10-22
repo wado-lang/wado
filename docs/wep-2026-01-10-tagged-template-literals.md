@@ -687,8 +687,9 @@ below close that, in this order.
   `format` site cost more than the direct lowering in the places below. Each
   is closed where it arose:
   - The direct lowering sizes the buffer from the segment lengths. `format`
-    sums `lit().len()` and `tail().len()` over the holes, which folds to a
-    constant, and starts from `String::with_capacity` of it.
+    sums `tail().len()` and, per hole, `lit().len()` plus a guess of 16 for
+    the rendered hole. That folds to a constant, and `format` starts from
+    `String::with_capacity` of it.
   - A `String` hole with no specifier is a plain append. `format` reaches it
     through `Display::fmt` and `Formatter::pad`, which fold to the same append
     once `param_spec` specializes `pad` on the `Formatter`'s constant fields.
