@@ -59,7 +59,10 @@ element of the right side:
 
 Each target is anything that may stand alone on the left of `=`: a local, a
 field, a subscript, or a dereference. The right side is any expression of a
-tuple type whose arity matches. A mismatched arity is a compile error.
+tuple type whose arity matches. A mismatched arity is a compile error. The
+tuple of the targets' types is the right side's expected type, so
+`[a, b] = [1, 2]` with `i64` targets types the literals as `i64`, and
+`[xs, ys] = [[], []]` types them as the lists' types.
 
 The statement means what this desugaring means, as Rust's destructuring
 assignment does:
@@ -86,9 +89,10 @@ value in both, and exchanging values cannot produce that result.
 
 A target is _owned_ when it is a local, or a field path from a local, reached
 through no reference and no subscript. Two owned targets that differ as paths
-are never one slot. Any other target may be: `*r`, `r.f` and `self.f` reach
-through a reference, two `&mut` to one value are legal, and two subscripts may
-name one element.
+are never one slot. A by-value `self` is a local, so `self.f` under a
+`fn f(self)` receiver is owned. Any other target may be one slot: `*r`, `r.f`,
+and `self.f` under a `&self` or `&mut self` receiver reach through a reference,
+two `&mut` to one value are legal, and two subscripts may name one element.
 
 ### A permutation of owned targets makes no value copy
 
@@ -136,14 +140,15 @@ It is that call where all of these hold:
 - The right side is a tuple literal whose two elements are the two targets, in
   the other order.
 - `c` is one path written twice: a local, a field path from a local
-  (`self.items`), or a dereference of one. Evaluated once, it names one
-  container whatever references it passes through. A call, or any other
-  expression that could yield a different container, falls back.
-- Neither index can change when the first element is assigned. A literal, a
-  constant, a local the body never takes a reference to, and arithmetic over
-  them qualify. A local with a reference taken does not, since an
-  `index_assign` may write through that reference. Neither does an index read
-  out of `c` (`c[c[0]]`).
+  (`self.items`), or a dereference of one. A call, or any other expression that
+  could yield a different container, falls back.
+- Each index is a literal, a constant, a local, or arithmetic over them. An
+  index read out of `c` (`c[c[0]]`) falls back.
+- No local that `c` or an index reads is referenced or captured by reference
+  anywhere in the body. The desugaring's first `index_assign` could otherwise
+  write through that reference, and its second target would then name another
+  slot, or another container through a rebound `*r`. A closure capturing the
+  local counts, though it writes no `&`.
 - `c`'s type implements `IndexSwap` at the index type.
 
 The call evaluates `c`, `i` and `j` once each. The transposition is recognized
@@ -160,7 +165,7 @@ makes no value copy:
 
 | Container       | `IndexSwap`           | How                                             |
 | --------------- | --------------------- | ----------------------------------------------- |
-| `List<T>`       | every `T`, affine too | two `array_take`s, as `List::swap` does         |
+| `List<T>`       | every `T`, affine too | two `array_take`s                               |
 | `Array<T>`      | every `T`, affine too | two `array_take`s                               |
 | `HashMap<K, V>` | every copyable `V`    | two lookups, then two `array_take`s on `values` |
 | `TreeMap<K, V>` | every copyable `V`    | two lookups, then two `array_take`s on `values` |
@@ -175,6 +180,9 @@ values exchanges elements this way. A map holds no affine value yet
 ([WEP: Affine Types § Maps and sets of affine values](./wep-2026-10-17-affine-types.md#maps-and-sets-of-affine-values)),
 so its impls take a copyable `V`.
 
+`List::swap` moves elements the same way, but it is not that impl: its contract
+checks `a` before `b`, the reverse of the desugaring's order.
+
 ### What is not guaranteed, and why
 
 A destructuring assignment with a target that is not owned keeps the
@@ -185,9 +193,9 @@ reached through a reference.
 
 Those targets may be one slot, as above. Moving values there would also need a
 container to give up a value and leave its slot empty until the value comes
-back. A transposition within one container is the exception: with `a == b` the
-desugaring leaves the container unchanged, and the container sees both indices,
-so `index_swap` can do the same.
+back. A transposition within one container is the exception: the container
+sees both indices, so `index_swap` can tell `a == b` from `a != b` and do what
+the desugaring does in each case, which the impl contract above requires.
 
 ### A fallback that makes a value copy is reported, an affine one is an error
 
@@ -198,11 +206,13 @@ remark's purpose, and a value copy here is the cost the statement was written
 to avoid. The remark covers what it covers elsewhere, the entry package's
 functions. It anchors to the statement and adds a note that names the cause:
 
+- the right side is not a permutation of the targets (`[a, b] = [b, b]`,
+  `[a, b] = [c, a]`);
 - a target is not owned, and the statement is not a transposition within one
   container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
-- an index may change when the first element is assigned;
+- a local the container or an index reads is referenced or captured;
 - the container's type does not implement `IndexSwap`.
 
 A scalar has no value copy, so a scalar target is never reported.
@@ -235,7 +245,9 @@ well.
   it to `index_swap`. Fixtures cover each condition that makes it fall back,
   an affine list, and an out-of-range index failing as the desugaring does.
 - [ ] Extend the surviving value-copy remark with the cause note for a
-  destructuring assignment.
+  destructuring assignment, and report an affine fallback as the compile error
+  carrying the same note. Fixtures cover each cause, for the remark and for
+  the error.
 - [ ] Write the rules into `spec-expressions.md` (the assignment) and
   `spec-standard-traits.md` (`IndexSwap` and its dispatch), and add both to
   the cheatsheet.
@@ -245,7 +257,14 @@ well.
 ### Other target patterns
 
 The left side takes only a flat tuple of targets. `_`, a rest `..`, a nested
-tuple and a struct pattern (`{ x, y } = p`) are not accepted.
+tuple and a struct pattern (`{ x, y } = p`) are not accepted. Neither is a
+compound assignment to a tuple (`[a, b] += [1, 2]`).
+
+### `unchecked` on a transposition
+
+`unchecked xs[i]` vouches for a `List` index contract. Nothing says where
+`unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
+always checks both indices.
 
 ### A leaf exchange touches every leaf an in-place write would
 
