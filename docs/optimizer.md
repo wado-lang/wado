@@ -105,9 +105,9 @@ Allocation and aggregates:
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
   back: at its only call site, or at its only site in a loop. A function only
-  loops reach runs once per iteration, so its body counts as a loop's. A call is tried
-  before its arguments, and a spliced body, arguments included, is scanned
-  again for calls to splice, wherever the call it replaced sat.
+  loops reach runs once per iteration, so its body counts as a loop's. A call
+  is tried before its arguments, and a spliced body, arguments included, is
+  scanned again for calls to splice, wherever the call it replaced sat.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
 - `sroa` — split into scalar locals a struct, tuple, or array local used only

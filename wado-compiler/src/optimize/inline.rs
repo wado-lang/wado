@@ -1051,9 +1051,9 @@ struct SweepRead {
 
 /// Have the inliner revisit each function whose sweep would read something
 /// new: a caller of a callee whose admission moved, and a function whose body
-/// starts at another site. The gate re-dirties only a changed body's neighbours, so a
-/// callee left with one site after a splice elsewhere would otherwise wait on
-/// an unrelated change to reach its last caller. A function new this round is
+/// starts at another site. The gate re-dirties only a changed body's
+/// neighbours, so a callee left with one site after a splice elsewhere would
+/// otherwise wait on an unrelated change to reach its last caller. A function new this round is
 /// dirty already.
 fn revisit_moved_reads(
     before: &[SweepRead],
@@ -2408,8 +2408,8 @@ pub fn inline_functions(
         })
         .collect();
     revisit_moved_reads(read, &now, scans, gate);
-    let entries: Vec<Site> = now.iter().map(|r| r.entry).collect();
     *read = now;
+    let read = &*read;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
@@ -2465,7 +2465,7 @@ pub fn inline_functions(
         {
             let body = func.body.as_mut().unwrap();
             let root = body.root();
-            let entry = entries[fid.index()];
+            let entry = read[fid.index()].entry;
             // The body is one iteration of the loops that reach it, so a callee
             // admitted at its only site in a loop is admitted at its only site
             // here.
