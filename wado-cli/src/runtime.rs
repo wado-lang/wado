@@ -26,7 +26,7 @@ use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
 use wado_host::engine::default_config;
-use wado_host::sync::lock;
+use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
@@ -634,11 +634,8 @@ impl Drop for Ticker {
         let (stopped, wake) = &*self.stop;
         *lock(stopped) = true;
         wake.notify_all();
-        if let Some(handle) = self.handle.take()
-            && let Err(panic) = handle.join()
-            && !std::thread::panicking()
-        {
-            std::panic::resume_unwind(panic);
+        if let Some(handle) = self.handle.take() {
+            join_in_drop(handle);
         }
     }
 }

@@ -829,15 +829,8 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 );
             }
             Err(err) => {
-                // A `test-todo-*` export that returned Ok signals a resolved TODO via
-                // `TodoResolved`. Re-raise it, and a compiler crash, so the test
-                // framework reports the failure; everything else is a still-pending TODO.
-                if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
-                    panic!("{}", resolved.report(TodoMark::Module));
-                }
-                if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
-                    panic!("{ice}");
-                }
+                // Every failure but a sentinel is a still-pending TODO.
+                reraise_sentinel(err.as_ref(), TodoMark::Module);
                 let msg = common::panic_message(err.as_ref());
                 eprintln!("[{test_id}] #![TODO] module pending: {msg}");
                 return;
@@ -845,19 +838,25 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }
     }
 
-    // Only the sentinels are caught: they would otherwise reach the test
-    // framework as an opaque `Box<dyn Any>`.
     let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
     }));
     if let Err(err) = test_result {
-        if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
-            panic!("{}", resolved.report(TodoMark::Test));
-        }
-        if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
-            panic!("{ice}");
-        }
+        reraise_sentinel(err.as_ref(), TodoMark::Test);
         std::panic::resume_unwind(err);
+    }
+}
+
+/// Re-raise a typed sentinel panic ([`common::TodoResolved`] for a resolved
+/// TODO, [`common::InternalCompilerError`] for a compiler crash) as the message
+/// it stands for, which the test framework would otherwise report as an opaque
+/// `Box<dyn Any>`.
+fn reraise_sentinel(err: &(dyn std::any::Any + Send), mark: TodoMark) {
+    if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
+        panic!("{}", resolved.report(mark));
+    }
+    if let Some(ice) = err.downcast_ref::<common::InternalCompilerError>() {
+        panic!("{ice}");
     }
 }
 

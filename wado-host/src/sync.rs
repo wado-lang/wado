@@ -2,6 +2,7 @@
 
 use std::panic::resume_unwind;
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::thread::JoinHandle;
 
 use tokio::task::JoinError;
 
@@ -18,4 +19,14 @@ pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// whose result is joined here.
 pub fn joined<T>(task: Result<T, JoinError>) -> T {
     task.unwrap_or_else(|e| resume_unwind(e.into_panic()))
+}
+
+/// Join `thread` from a `Drop`. Its panic continues here, unless the drop is
+/// itself part of an unwind, where a second panic would abort the process.
+pub fn join_in_drop(thread: JoinHandle<()>) {
+    if let Err(panic) = thread.join()
+        && !std::thread::panicking()
+    {
+        resume_unwind(panic);
+    }
 }

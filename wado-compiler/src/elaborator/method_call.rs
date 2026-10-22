@@ -2623,13 +2623,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return false;
         }
-        for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
-            if self.tysys.type_table.borrow().contains_type_param(expected) {
-                continue;
-            }
-            self.typecheck_arg(*arg, expected, arg_sites[i]);
-        }
+        self.typecheck_settled_args(param_types, args, |i| arg_sites[i]);
         true
+    }
+
+    /// Check each argument against its parameter, but one whose parameter still
+    /// carries a type param, which the instantiation settles.
+    pub(super) fn typecheck_settled_args(
+        &mut self,
+        param_types: &[TypeId],
+        args: &[TypeId],
+        arg_site: impl Fn(usize) -> ArgSite,
+    ) {
+        for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
+            if !self.tysys.type_table.borrow().contains_type_param(expected) {
+                self.typecheck_arg(*arg, expected, arg_site(i));
+            }
+        }
     }
 
     /// The value blanket impl carrying a static `method_name` whose receiver

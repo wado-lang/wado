@@ -38,7 +38,7 @@ use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
-use wado_host::sync::{joined, lock};
+use wado_host::sync::{join_in_drop, joined, lock};
 
 wasmtime::component::bindgen!({
     inline: "package wado:eval-runner; world runner { import core:eval/eval-host@0.1.0; }",
@@ -115,11 +115,7 @@ impl Drop for EvalHost {
                 .unwrap_or_else(PoisonError::into_inner),
         );
         for thread in stranded.into_iter().filter(JoinHandle::is_finished) {
-            if let Err(panic) = thread.join()
-                && !std::thread::panicking()
-            {
-                resume_unwind(panic);
-            }
+            join_in_drop(thread);
         }
     }
 }
