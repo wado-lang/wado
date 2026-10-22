@@ -427,5 +427,7 @@ cannot be taken back.
   rule `program` resolution reuses.
 - [Kiln](./wep-2026-04-12-kiln.md) — the deterministic generators that never
   spawn.
+- [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md) —
+  how `output` and `read` read stdout and stderr together.
 - [Affine Types](./wep-2026-10-17-affine-types.md) — the discipline `Child`
   follows.

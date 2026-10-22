@@ -20,7 +20,7 @@ a parent feeding a child's stdin while reading its stdout has the same problem.
 
 ## Decision
 
-A copy can be started without waiting for it. The started copy is a value that
+A copy is started without waiting for it. The started copy is a value that
 joins a `WaitableSet` like a call does, and finishing it hands back the stream
 end with what the copy moved.
 
@@ -28,36 +28,50 @@ end with what the copy moved.
 let mut set = WaitableSet::<Pipe>::new();
 set.join(Pipe::Out(stdout.start_read(4096)));
 set.join(Pipe::Err(stderr.start_read(4096)));
-loop {
-    let ready = set.wait();
-    match ready.member {
-        Out(read) => {
-            let [end, chunk] = read.finish();
+while !set.is_empty() {
+    match set.wait().member {
+        Out(copy) => {
+            let [end, chunk] = copy.finish();
             out.extend(&chunk.items);
-            if chunk.result == CopyResult::Completed { set.join(Pipe::Out(end.start_read(4096))); }
+            if chunk.result == CopyResult::Completed {
+                set.join(Pipe::Out(end.start_read(4096)));
+            }
         },
-        Err(read) => { ... },
+        Err(copy) => { ... },
     }
-    if set.is_empty() { break; }
 }
 ```
 
+Everything here is the Component Model's own: `stream.read` and `stream.write`
+with `async`, `waitable.join`, `waitable-set.wait`, and `stream.cancel-read` and
+`stream.cancel-write`. No host extension is involved, and no feature gate past
+the one Wado's streams already require.
+
 ### The surface
 
-- `Stream<u8>::start_read(self, max: i32) -> ReadCopy` starts one copy of up
-  to `max` bytes.
-- `ReadCopy::finish(self) -> [Stream<u8>, StreamChunk<u8>]` returns the end
+- `Stream<T>::start_read(self, max: i32) -> ReadCopy<T>` starts one copy of up
+  to `max` elements.
+- `ReadCopy<T>::finish(self) -> [Stream<T>, StreamChunk<T>]` returns the end
   and what the copy moved. It waits for the copy where the copy has not
   settled, so a program that never joins a set still reads correctly.
-- `StreamWritable<u8>::start_write(self, data: ByteList) -> WriteCopy`
-  and `WriteCopy::finish(self) -> [StreamWritable<u8>, StreamWrite<u8>]`
-  are the writing side.
+- `StreamWritable<T>::start_write(self, data: List<T>) -> WriteCopy<T>` and
+  `WriteCopy<T>::finish(self) -> [StreamWritable<T>, StreamWrite<T>]` are the
+  writing side.
 - Both started copies implement `Waitable`, so a variant holding them derives
   it with `impl Waitable for V;`.
 - `ReadyEvent` gains `Copied(CopyResult)`, the event the host reported for a
   copy.
-- `Stream::read` and `StreamWritable::write` keep their signatures. They are a
-  started copy finished at once.
+- Every element type takes them. The compiler synthesizes the start and the
+  finish per element type, as it synthesizes the copy today.
+
+### One way to copy
+
+`Stream::read` and `StreamWritable::write` are removed. Each was a started copy
+finished at once, and keeping both would leave two implementations of one copy.
+The loops stay, rebuilt on the started copy: `read_to_end`,
+`read_to_end_sized`, `read_to_end_bytes`, `write_all` and `write_raw_all`. They
+borrow the end as before, so a program that reads a stream to its end reads it
+as it did.
 
 ### Ownership
 
@@ -81,20 +95,24 @@ against an end in a waitable set. A copy whose event a set already delivered is
 not cancelled, since the Component Model traps on cancelling an end that is no
 longer copying. Either way the end drops with it.
 
-This makes `Stream::cancel_read` and `StreamWritable::cancel_write` reachable
-for the first time, from the drop alone. They stay uncallable from a program
-holding the end, since it holds no copy in flight.
+This makes the cancels reachable for the first time, from the drop alone. A
+program holding an end holds no copy in flight, so it never cancels one itself.
 
 ## Roadmap
 
-1. `start_read` / `start_write` on byte streams, `Copied`, the delivered copy
-   table, cancel on drop, and e2e fixtures for a read that blocks, two reads
-   settled out of order, and a dropped copy in flight.
-2. `core:process`'s `output` and `read` read stdout and stderr through one set.
+1. The started copy for every element type: `start_read`, `start_write`,
+   `Copied`, the delivered copy table and cancel on drop, with e2e fixtures for
+   a read that blocks, two reads settled out of order, a dropped copy in
+   flight, and a record element type.
+2. `read` and `write` removed, the loops rebuilt on the started copy, and every
+   caller in the repository moved to a loop or to the started copy.
+3. `waitable_set_rejects_stream.wado` kept, since a bare end stays not
+   `Waitable`, beside a fixture that waits on a started copy.
+
+[`core:process`](./wep-2026-10-21-core-process.md) builds on this: its `output`
+and `read` read stdout and stderr through one set.
 
 ## Known gaps
 
-- Only byte streams start a copy. A stream of any other element type lifts its
-  elements through bindings the compiler synthesizes per type, and those still
-  wait inside.
-- A future's read cannot be started either.
+- A future's read cannot be started. A future is read once, so nothing has
+  needed to wait on one beside a stream yet.
