@@ -80,38 +80,32 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"() with Api {
 }
 
 fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
-    let $load_1: i32;
+    let $items_len: i32;
     let $items_base: i32;
     let $items_i: i32;
     let $items_addr: i32;
     let $items_elem: ref null "core:prelude//$Resource";
-    let $licm_used_25: i32;
-    let $array_clone_src_1: ref "Array<&cm_list_of_borrows_param.wado/Item>";
-    $array_clone_src_1 = items.repr;
-    $load_1 = items.used;
-    let $array_clone_dst_2: ref "Array<&cm_list_of_borrows_param.wado/Item>";
-    builtin::array_copy<ref null "core:prelude//$Resource">(local.tee $array_clone_dst_2(builtin::array_new<ref null "core:prelude//$Resource">($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    if @unlikely(536870911 <u $load_1) {
+    let $licm_repr_23: ref "Array<&cm_list_of_borrows_param.wado/Item>";
+    $items_len = items.used;
+    if @unlikely(536870911 <u $items_len) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
-    $items_base = "mem/realloc"(0, 0, 4, $load_1 * 4);
+    $items_base = "mem/realloc"(0, 0, 4, $items_len * 4);
     $items_i = 0;
-    $array_clone_src_1 = items.repr;
-    $licm_used_25 = items.used;
+    $licm_repr_23 = items.repr;
     b1: block {
         l2: loop {
-            break_if b1 $items_i >= $load_1;
+            break_if b1 $items_i >= $items_len;
             $items_addr = $items_base + ($items_i * 4);
-            builtin::array_copy<ref null "core:prelude//$Resource">(local.tee $array_clone_dst_2(builtin::array_new<ref null "core:prelude//$Resource">($licm_used_25)), 0, $array_clone_src_1, 0, $licm_used_25);
-            $items_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($array_clone_dst_2, $items_i);
+            $items_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_23, $items_i);
             builtin::store_i32($items_addr, $items_elem.value);
             $items_i = $items_i + 1;
             continue l2;
         };
     };
-    "wasi/wasi:demo/Api::submit"($items_base, $load_1);
+    "wasi/wasi:demo/Api::submit"($items_base, $items_len);
 }
 
 fn "cm_list_of_borrows_param.wado/$cm_export__run"() {
