@@ -418,8 +418,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// program cannot reach, which downstream phases would discard anyway.
     /// `None` reifies everything.
     pub(crate) emit_live: Option<&'a IndexSet<AstId>>,
-    /// [`Liveness::last_uses`], stamped on the reads it names.
-    last_uses: &'a IndexSet<AstId>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
     /// `let $caN` before the read/write. Reify returns the bound `Local` for
@@ -557,7 +555,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         emit_live: Option<&'a IndexSet<AstId>>,
-        last_uses: &'a IndexSet<AstId>,
     ) -> Self {
         Self {
             tysys,
@@ -573,7 +570,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             emit_live,
-            last_uses,
             compound_overrides: IndexMap::default(),
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
@@ -8241,11 +8237,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    the parent's `AstIdSpace` + counter, see
         //    `parse_interpolation_expr`.)
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            let read = var_ref_expr(var_ref, &ident.name, ident.span);
-            if self.last_uses.contains(&ident.id) {
-                read.mark(|marks| marks.final_read = true);
-            }
-            return read;
+            return var_ref_expr(var_ref, &ident.name, ident.span);
         }
 
         // 2. Current-module global.

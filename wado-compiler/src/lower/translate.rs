@@ -840,7 +840,7 @@ impl FunctionTranslator<'_, '_> {
         };
         // `dead.unwrap()` is as fresh as `dead`: a call handing its argument
         // back hands over whatever the argument's read hands over.
-        wrap(&IndexSet::default()) && wrap(&self.moves.sole_moved_reads(value, &type_table))
+        wrap(&IndexSet::default()) && wrap(&self.moves.moved_reads(value, &type_table))
     }
 
     /// Whether an immutable binding may alias `value`'s storage instead of

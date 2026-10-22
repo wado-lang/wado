@@ -811,12 +811,9 @@ pub struct TirExpr {
     marks: Cell<ExprMarks>,
 }
 
-/// What the ownership passes decided about one expression.
+/// What lowering's ownership walk decided about one expression.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ExprMarks {
-    /// A local's read that no path reads it again after, by the source-level
-    /// last-use liveness reify stamps (WEP 2026-05-21).
-    pub final_read: bool,
     /// An assignment, or a `List::index_assign` call, that writes into the
     /// storage its place holds rather than repointing the place: a holder of
     /// that storage may read it afterwards (WEP 2026-10-13).

@@ -36,9 +36,9 @@ pub struct MoveEligible {
 /// ([`tir::ExprMarks`]):
 ///
 /// - `moves` on a field or whole-value materialization that aliases a dead
-///   aggregate out at a literal, and on a whole-local value read the
-///   elaborator found final, of a local no kept reference pins, and not
-///   reaching storage the same call writes;
+///   aggregate out at a literal, and on a whole-local value read no path reads
+///   again after, of a local no kept reference pins, and not reaching storage
+///   the same call writes;
 /// - `written` on a by-value argument whose storage the call's evaluation may
 ///   write before the callee is done with it;
 /// - `in_place` on an assignment that writes into the storage its place holds.
@@ -51,10 +51,9 @@ pub struct Ownership {
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
-/// liveness this walk computes. A read reify marked final
-/// ([`tir::ExprMarks::final_read`]) was judged by names only: a reference a call
-/// takes to its receiver without a `&` is out of its sight, so this walk's pins
-/// veto it, and so is a parameter the callers pass uncopied.
+/// liveness this walk computes over the body as lowering sees it, synthesized
+/// reads included. A final read moves unless a kept reference pins its local,
+/// its callers pass it uncopied, or it names a match scrutinee's storage.
 pub fn analyze_ownership(
     func: &TirFunction,
     oracle: &OwnedCalls,
@@ -116,7 +115,7 @@ pub fn analyze_ownership(
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
-        value_reads: Vec::new(),
+        final_reads: Vec::new(),
         mutations: Vec::new(),
         assign_sites: Vec::new(),
         reach,
@@ -170,9 +169,12 @@ pub fn analyze_ownership(
     for site in &moved_places {
         site.node.mark(|marks| marks.moves = true);
     }
-    for &(read, local) in &a.value_reads {
-        if read.marks().final_read
-            && !shared_params.contains(&local)
+    // A match binding is storage its scrutinee still owns, and whether the
+    // scrutinee is dead there is the place moves' question, not this one.
+    let match_bound: IndexSet<u32> = a.match_sources.iter().map(|(b, _)| *b).collect();
+    for &(read, local) in &a.final_reads {
+        if !shared_params.contains(&local)
+            && !match_bound.contains(&local)
             && !a.place_escaped(local, None)
             && !read.marks().written
         {
@@ -1280,10 +1282,10 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a reference's referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
-    /// Each of those reads, with the local it reads. A final read elsewhere — a
-    /// reference's referent, a projection base — takes no value, so it moves
-    /// nothing.
-    value_reads: Vec<(&'a TirExpr, u32)>,
+    /// Those reads no path reads the local again after, with the local. A final
+    /// read elsewhere — a reference's referent, a projection base — takes no
+    /// value, so it moves nothing.
+    final_reads: Vec<(&'a TirExpr, u32)>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation<'a>>,
     /// Assignments to a place of an in-place type, decided once every reference
@@ -1366,7 +1368,9 @@ impl<'a> Analyzer<'a> {
         if record {
             let at = self.consumed.entry(index).or_default();
             at.extend(live.iter().copied());
-            self.value_reads.push((read, index));
+            if !live.contains(&index) {
+                self.final_reads.push((read, index));
+            }
         }
         self.read_base(index, live, record);
     }
@@ -3301,11 +3305,11 @@ impl MoveEligible {
         matches!(&value.kind, TirExprKind::Local { index, .. } if self.locals.contains(index))
     }
 
-    /// The value locals `value` reads once, where that read is a move: no other
-    /// read in `value` reaches their storage, and nothing after it does. A
-    /// reference moved hands over the reference, not what it names.
-    pub fn sole_moved_reads(&self, value: &TirExpr, type_table: &TypeTable) -> IndexSet<u32> {
-        // Per local read, whether its only read so far is a move.
+    /// The value locals every read in `value` moves. Two moves of one local lie
+    /// on disjoint paths, as each is a read no path reads again after, so
+    /// whichever runs hands over storage nothing reaches afterward. A reference
+    /// moved hands over the reference, not what it names.
+    pub fn moved_reads(&self, value: &TirExpr, type_table: &TypeTable) -> IndexSet<u32> {
         let mut reads: IndexMap<u32, bool> = IndexMap::default();
         let mut sites = ReadSites {
             moves: self,
@@ -3316,14 +3320,14 @@ impl MoveEligible {
                     });
                 reads
                     .entry(local)
-                    .and_modify(|sole| *sole = false)
+                    .and_modify(|all| *all &= moved)
                     .or_insert(moved);
             },
         };
         sites.visit_expr(value);
         reads
             .into_iter()
-            .filter_map(|(local, sole)| sole.then_some(local))
+            .filter_map(|(local, all)| all.then_some(local))
             .collect()
     }
 

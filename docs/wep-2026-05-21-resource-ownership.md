@@ -295,10 +295,11 @@ alias), replacing the old "copy-everything-then-elide" scheme. As implemented it
 is caller-side and single-phase (`lower::translate` emits `$value_copy$T` only
 where it cannot prove move / share / fresh; no elision pass):
 
-- Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
-  `moved_local_spans`. The elaborator reads names only. It sees a `&x`, but a
-  method call references its receiver with no `&` written, so its final uses
-  count only for a local the TIR walk finds no kept reference pinning. This also covers a **place-level move**: at a struct /
+- Move — `last_use::analyze_ownership`, whose backward walk over TIR decides a
+  read is final and marks it on its node. It runs on the body lowering sees, so
+  a read synthesis wrote is judged like one the source spelled. A final read
+  moves unless a kept reference pins its local, its callers pass it uncopied,
+  or it binds a match scrutinee's storage. This also covers a **place-level move**: at a struct /
   tuple literal, a whole-value or clean-field materialization aliases out of a
   _dead_ aggregate (the root is dead after the literal, sibling reads neither
   mutate nor move it, and the materialized fields are disjoint owners) instead of
@@ -591,6 +592,10 @@ Verified against the tree.
   expressions it writes, so it predicts none of the temps pattern lowering
   mints after it. A miss left the fold no helper to call, which
   `wrap_value_copy` asserts on.
+- [x] One walk decides a read final: the TIR walk lowering runs. The
+  elaborator's source-level last-use pass reached lowering keyed by span, which
+  every synthesized node shares, so it moved a synthesized read final or not.
+  A read synthesis wrote is now judged like any other, and the pass is gone.
 - [x] A `break LABEL` resumes where its labeled block ends, at both levels that
   compute last-use liveness. Each kept a stack of exit sets that only loops
   pushed, so every such break fell back to _every_ local live. A template
