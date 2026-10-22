@@ -683,9 +683,9 @@ below close that, in this order.
   the declared bounds, and `` format`${x}` `` reports the missing bound
   `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
-- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
-  direct lowering did four things a `format` site did not. Each is closed
-  where it arose:
+- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, a
+  `format` site cost more than the direct lowering in the places below. Each
+  is closed where it arose:
   - The direct lowering sizes the buffer from the segment lengths. `format`
     sums `lit().len()` and `tail().len()` over the holes, which folds to a
     constant, and starts from `String::with_capacity` of it.
@@ -713,7 +713,9 @@ below close that, in this order.
   Done: `tagged_template_format_direct_cost.wado` holds a `format` site to a
   constant-sized buffer, no `Formatter`, no `fmt_base` or `pad` call, and the
   radix prefix a constant. `tagged_template_format_loop_site.wado` holds one in
-  a loop to no template struct and no call to the radix helpers.
+  a loop to no template struct and no call to the radix helpers. A
+  single-hole site still pays its call into `format`, which the measurement
+  below shows as up to 1.11.
 
 - [ ] One path. An untagged template reifies as the `format` call, and the
   direct lowering (`synthesis::template::build_template_block`) is deleted.

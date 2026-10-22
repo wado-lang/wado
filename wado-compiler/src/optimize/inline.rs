@@ -1144,17 +1144,24 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     scan
 }
 
-/// Every expression under a `loop`.
+/// Every expression under a `loop`. A loop inside another is covered by the
+/// outer one's walk, so it is not walked again.
 fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
     let mut out = IndexSet::default();
+    let mut covered: IndexSet<StmtId> = IndexSet::default();
     body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(st) = node
+            && !covered.contains(&st)
             && let StmtKind::Loop { body: b } = &body.stmts[st].kind
         {
-            body.for_each_live_node_under(NodeRef::Block(*b), |n| {
-                if let NodeRef::Expr(e) = n {
+            body.for_each_live_node_under(NodeRef::Block(*b), |n| match n {
+                NodeRef::Expr(e) => {
                     out.insert(e);
                 }
+                NodeRef::Stmt(inner) => {
+                    covered.insert(inner);
+                }
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             });
         }
     });
@@ -1514,7 +1521,7 @@ enum Reach {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Site {
     Plain,
-    /// Inside a loop of the caller.
+    /// Inside a loop of the caller, or anywhere in a function only loops reach.
     Loop,
     /// After a `cold_path()` marker, or anywhere in a function only such sites
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
