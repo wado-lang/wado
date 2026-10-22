@@ -167,27 +167,6 @@ pub fn extract_options_descriptor(
         return Err(diagnostics);
     }
 
-    // A host supplies a probe's parameters by name, so it can supply only these.
-    if let Some(probe) = tir_module
-        .find_function("probe")
-        .filter(|probe| probe.borrow().is_export)
-    {
-        for param in &probe.borrow().params {
-            if !["path", "content", "type", "options"].contains(&param.name.as_str()) {
-                diagnostics.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::KilnProbeUnknownParameter,
-                    message: format!(
-                        "kiln: `probe` takes `{}`, but a host supplies only `path`, \
-                         `content`, `type` and `options`",
-                        param.name
-                    ),
-                    span: Some(span_of(&param.span, module)),
-                });
-            }
-        }
-    }
-
     // The entry module names `Options`, by declaring it or by re-exporting the
     // declaration, which the generator's other entry points then share.
     let Some(symbol) = sem
@@ -195,9 +174,6 @@ pub fn extract_options_descriptor(
         .lookup_in_module(module, "Options")
         .filter(|symbol| matches!(symbol.kind, SymbolKind::Struct(_)))
     else {
-        if !diagnostics.is_empty() {
-            return Err(diagnostics);
-        }
         return Ok(OptionsDescriptor { fields: vec![] });
     };
     let declaring = symbol.module_source();

@@ -225,8 +225,9 @@ pub enum Code {
     KilnStaleCache,
     /// A Kiln generator package imports an interface the sandbox forbids.
     KilnGeneratorForbiddenImport,
-    /// A generator's `probe` names a parameter no host supplies.
-    KilnProbeUnknownParameter,
+    /// A generator's `probe` takes a parameter no host supplies, or answers
+    /// something other than an extent.
+    KilnProbeSignature,
     /// A program for a world other than the test world reaches `core:eval`,
     /// which only `wado test` supplies.
     EvalOutsideTestWorld,
@@ -359,7 +360,7 @@ impl std::fmt::Display for Code {
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
-            Code::KilnProbeUnknownParameter => "KILN_PROBE_UNKNOWN_PARAMETER",
+            Code::KilnProbeSignature => "KILN_PROBE_SIGNATURE",
             Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
@@ -464,7 +465,7 @@ pub enum SourceError {
 impl std::fmt::Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceError::NotFound { path } => write!(f, "module not found: {path}"),
+            SourceError::NotFound { path } => write!(f, "file not found: {path}"),
             SourceError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
             }
@@ -807,6 +808,8 @@ pub enum GeneratorRunnerError {
     Generator(GeneratorError),
     /// The host failed (instantiation, import linking, fuel, timeout, …).
     Host(String),
+    /// An input file the generator is handed could not be read.
+    LoadInput { path: String, source: SourceError },
 }
 
 impl std::fmt::Display for GeneratorRunnerError {
@@ -817,6 +820,9 @@ impl std::fmt::Display for GeneratorRunnerError {
             }
             GeneratorRunnerError::Generator(e) => write!(f, "generator error: {e}"),
             GeneratorRunnerError::Host(msg) => write!(f, "generator host error: {msg}"),
+            GeneratorRunnerError::LoadInput { path, source } => {
+                write!(f, "failed to load input {path:?}: {source}")
+            }
         }
     }
 }

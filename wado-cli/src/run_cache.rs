@@ -115,7 +115,7 @@ impl RunCache {
     }
 
     /// Record that what was read depends on `path`, which the run's watch
-    /// already holds, as it does every stdlib file.
+    /// already holds whole, as it does every stdlib file.
     pub fn depend_on_watched(&self, path: &Path) {
         if self.reads.is_none() {
             return;
@@ -123,7 +123,7 @@ impl RunCache {
         let hash = self
             .inputs
             .hash_of(path)
-            .unwrap_or_else(|| panic!("the run watches {}", path.display()));
+            .unwrap_or_else(|| panic!("the run read {} whole", path.display()));
         self.record(path, None, Some(hash));
     }
 
@@ -299,7 +299,8 @@ impl SourceWatch {
     #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
     fn observe_dev_stdlib(&self) {}
 
-    /// The hash of what `path` held when the run first read it.
+    /// The hash of what `path` held when the run first read it whole; `None`
+    /// where it read only a prefix, or nothing.
     #[must_use]
     pub fn hash_of(&self, path: &Path) -> Option<[u8; 32]> {
         lock(&self.seen)

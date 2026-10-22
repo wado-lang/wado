@@ -8,7 +8,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -173,7 +173,7 @@ fn fill(from: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
         match from.read(&mut buf[read..]) {
             Ok(0) => break,
             Ok(n) => read += n,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
@@ -195,10 +195,15 @@ pub fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>>
     Ok(bytes)
 }
 
+/// A path through a file, such as `a.txt/b`, is as absent as a missing one.
 fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
-    SourceError::IoError {
-        path: path.display().to_string(),
-        message: e.to_string(),
+    let path = path.display().to_string();
+    match e.kind() {
+        ErrorKind::NotFound | ErrorKind::NotADirectory => SourceError::NotFound { path },
+        _ => SourceError::IoError {
+            path,
+            message: e.to_string(),
+        },
     }
 }
 

@@ -1,0 +1,17 @@
+// A missing input is reported as one the generator could not load, whether or
+// not the generator probes it first.
+
+use { hello } from "./sub/kiln/header_and_payload.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/header_probe_generator.wado",
+            inputs: [{ path: "./sub/kiln/absent.schema" }],
+        },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "kiln: failed to load input \"sub/kiln/absent.schema\": file not found"}

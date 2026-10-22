@@ -648,7 +648,9 @@ bytes of an input determine the output. The host calls it once per input file.
 The parameters are matched by name, so a probe may leave out any it does not
 read. The host supplies four: `path` and `content`, `type` (the file's `type`,
 as `input-file` carries it), and `options` when the generator declares an
-`Options` struct. A probe naming any other parameter does not compile.
+`Options` struct. Each has the type `generate` is handed it as, and the probe
+returns `Result<u64, E>` with `generate`'s `E`. A probe taking any other
+parameter or type does not compile.
 
 This probe says the first line decides everything:
 

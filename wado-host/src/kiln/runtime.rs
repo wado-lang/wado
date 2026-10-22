@@ -231,6 +231,38 @@ impl<D> StreamProducer<D> for RangeStream {
     }
 }
 
+/// The arguments `func`, the generator's `export`, takes, each from `supply` by
+/// its parameter's name and type. Matched by name, since an export may leave
+/// out the parameters it does not read. `supply` answers `None` for a name the
+/// host does not supply: compiling a generator refuses one, but a prebuilt
+/// generator was compiled elsewhere.
+fn args_by_name(
+    store: &mut Store<KilnHostState>,
+    func: &Func,
+    export: &str,
+    mut supply: impl FnMut(
+        &mut Store<KilnHostState>,
+        &str,
+        &Type,
+    ) -> Result<Option<Val>, GeneratorRunnerError>,
+) -> Result<Vec<Val>, GeneratorRunnerError> {
+    let params: Vec<(String, Type)> = func
+        .ty(&*store)
+        .params()
+        .map(|(name, ty)| (name.to_string(), ty))
+        .collect();
+    params
+        .iter()
+        .map(|(name, ty)| {
+            supply(store, name, ty)?.ok_or_else(|| {
+                GeneratorRunnerError::Host(format!(
+                    "`{export}` takes an unknown parameter `{name}`"
+                ))
+            })
+        })
+        .collect()
+}
+
 /// The `type` the use site gave a file, as the `option<string>` a generator
 /// reads it as.
 fn type_val(use_type: Option<&String>) -> Val {
@@ -352,8 +384,9 @@ fn record_string(fields: &[(String, Val)], name: &str) -> Result<String, Generat
 /// source of truth for widths, enum-vs-string, and field order. Field names
 /// arrive as raw Wado identifiers and are mapped to the component's CM
 /// kebab-case names here; enum cases arrive already in their CM names.
-fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, String> {
+fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, GeneratorRunnerError> {
     canonical_to_val(&CanonicalValue::Struct(options.values.clone()), ty)
+        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))
 }
 
 fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
@@ -517,17 +550,11 @@ pub async fn run_generator(
                 GeneratorRunnerError::Host("generator exports no `generate`".to_string())
             })?;
 
-        // Matched by name: `options` exists only for a non-empty `Options`, and a
-        // component built before `module` existed lacks that parameter.
-        let params: Vec<(String, Type)> = generate
-            .ty(&store)
-            .params()
-            .map(|(name, ty)| (name.to_string(), ty))
-            .collect();
-        let mut args: Vec<Val> = Vec::with_capacity(params.len());
-        for (name, ty) in &params {
-            args.push(match name.as_str() {
-                "primary" => input_file_val(&mut store, &request.primary, ty)?,
+        // `options` exists only for a non-empty `Options`, and a component built
+        // before `module` existed lacks that parameter.
+        let args = args_by_name(&mut store, &generate, "generate", |store, name, ty| {
+            Ok(Some(match name {
+                "primary" => input_file_val(store, &request.primary, ty)?,
                 "inputs" => {
                     let Type::List(list) = ty else {
                         unreachable!("`inputs` is a list in every generator world");
@@ -537,20 +564,15 @@ pub async fn run_generator(
                         request
                             .inputs
                             .iter()
-                            .map(|f| input_file_val(&mut store, f, &element))
+                            .map(|f| input_file_val(store, f, &element))
                             .collect::<Result<_, _>>()?,
                     )
                 }
                 "module" => Val::String(request.module.clone()),
-                "options" => options_to_val(&request.options, ty)
-                    .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
-                other => {
-                    return Err(GeneratorRunnerError::Host(format!(
-                        "`generate` takes an unknown parameter `{other}`"
-                    )));
-                }
-            });
-        }
+                "options" => options_to_val(&request.options, ty)?,
+                _ => return Ok(None),
+            }))
+        })?;
 
         // `call_async` drives the async task-return export to completion; its
         // error is a host/runtime failure, distinct from the generator's own
@@ -609,22 +631,13 @@ async fn run_probe(
                 unreachable!("the component type carries a `probe` export");
             };
 
-            // Matched by name, as `generate`'s are, since a probe may leave out
-            // the parameters it does not read. Compiling a generator refuses any
-            // other name, but a prebuilt one was compiled elsewhere.
             let len = source.byte_len();
             let mut source = Some(source);
-            let params: Vec<(String, Type)> = probe
-                .ty(&store)
-                .params()
-                .map(|(name, ty)| (name.to_string(), ty))
-                .collect();
-            let mut args: Vec<Val> = Vec::with_capacity(params.len());
-            for (name, ty) in &params {
-                args.push(match name.as_str() {
+            let args = args_by_name(&mut store, &probe, "probe", |store, name, ty| {
+                Ok(Some(match name {
                     "path" => Val::String(file.path.clone()),
                     "content" => host_stream(
-                        &mut store,
+                        store,
                         &file.path,
                         RangeStream {
                             source: source.take().expect("`probe` takes one `content`"),
@@ -632,15 +645,10 @@ async fn run_probe(
                         },
                     )?,
                     "type" => type_val(file.use_type.as_ref()),
-                    "options" => options_to_val(&request.options, ty)
-                        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
-                    other => {
-                        return Err(GeneratorRunnerError::Host(format!(
-                            "`probe` takes an unknown parameter `{other}`"
-                        )));
-                    }
-                });
-            }
+                    "options" => options_to_val(&request.options, ty)?,
+                    _ => return Ok(None),
+                }))
+            })?;
 
             let mut results = [Val::Bool(false)];
             probe
@@ -706,11 +714,12 @@ pub async fn probe_for<H: CompilerHost + ?Sized>(
     }
     let mut files = Vec::with_capacity(request.files.len());
     for file in &request.files {
-        files.push(
-            host.open_source(&file.path)
-                .await
-                .map_err(|e| GeneratorRunnerError::Host(format!("input `{}`: {e}", file.path)))?,
-        );
+        files.push(host.open_source(&file.path).await.map_err(|source| {
+            GeneratorRunnerError::LoadInput {
+                path: file.path.clone(),
+                source,
+            }
+        })?);
     }
     let (outcome, diagnostics) =
         run_probe(engine, component, request, files, KilnRunPolicy::default()).await;

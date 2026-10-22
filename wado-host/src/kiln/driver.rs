@@ -173,8 +173,8 @@ impl std::error::Error for ExecuteError {}
 ///
 /// # Errors
 ///
-/// - [`ExecuteError::LoadInput`] if `host.load_source` fails for the
-///   primary or any input.
+/// - [`ExecuteError::LoadInput`] if the primary or any input cannot be read,
+///   by the probe or for `generate`.
 /// - [`ExecuteError::Runner`] for any error the runner surfaces,
 ///   including `Unsupported` (which consume-only mode treats specially).
 /// - [`ExecuteError::InvalidOutputPath`] if the generator returns a
@@ -203,7 +203,12 @@ pub async fn execute<H: CompilerHost>(
     let mut extents = host
         .probe_generator(component_wasm, &probe)
         .await
-        .map_err(ExecuteError::Runner)?;
+        .map_err(|e| match e {
+            GeneratorRunnerError::LoadInput { path, source } => {
+                ExecuteError::LoadInput { path, source }
+            }
+            e => ExecuteError::Runner(e),
+        })?;
     if extents.is_empty() {
         extents = vec![None; files.len()];
     }
