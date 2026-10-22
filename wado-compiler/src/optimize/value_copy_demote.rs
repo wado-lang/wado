@@ -1267,11 +1267,12 @@ impl ElementImmutable<'_, '_, '_> {
     /// A self-derived value handed to an opaque (non-spine-builtin) call may
     /// only flow through a `&` reference.
     fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
-        if let ExprKind::Unary {
-            op: NirUnaryOp::Ref,
-            ..
-        } = &body.exprs[arg].kind
-        {
+        // Nothing writes through a `&`, whether the argument spells it or a
+        // local holds it: `sort_by` hands its comparator `&` elements.
+        if matches!(
+            self.analyzer.type_table.get(body.exprs[arg].type_id),
+            ResolvedType::Ref(_)
+        ) {
             self.visit_expr(body, arg);
             return;
         }
