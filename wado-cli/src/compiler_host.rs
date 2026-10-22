@@ -199,6 +199,20 @@ impl FilesystemCompilerHost {
         self.run.components().get_or_compile(component_wasm)
     }
 
+    /// Record that reading `path` failed with `error`: a missing file changes
+    /// the outcome once it appears, and any other failure is no file's to
+    /// vouch for.
+    fn observe_failure(&self, path: &str, error: &SourceError) {
+        match error {
+            SourceError::NotFound { .. } => {
+                self.run.observe_absent(&self.inner.base_path().join(path));
+            }
+            SourceError::IoError { .. } | SourceError::NetworkError { .. } => {
+                self.run.observe_untracked();
+            }
+        }
+    }
+
     fn should_log(&self, severity: Severity) -> bool {
         match self.log_level {
             LogLevel::Off => false,
@@ -270,8 +284,13 @@ impl CompilerHost for FilesystemCompilerHost {
 
     /// Nothing read through the reader is recorded: the part of the file a
     /// compile depends on is read again through [`Self::load_source_prefix`].
+    /// A file that fails to open is recorded, as one that fails to load is.
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-        self.inner.open_source(path).await
+        let opened = self.inner.open_source(path).await;
+        if let Err(e) = &opened {
+            self.observe_failure(path, e);
+        }
+        opened
     }
 
     async fn load_source_prefix(
@@ -281,14 +300,12 @@ impl CompilerHost for FilesystemCompilerHost {
     ) -> Result<Vec<u8>, SourceError> {
         // Every module and asset a compile reads passes here, which is how the
         // run learns what tree it is describing.
-        let file = self.inner.base_path().join(path);
         let loaded = self.inner.load_source_prefix(path, extent).await;
         match &loaded {
-            Ok(bytes) => self.run.observe(&file, extent, bytes),
-            Err(SourceError::NotFound { .. }) => self.run.observe_absent(&file),
-            Err(SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
-                self.run.observe_untracked();
-            }
+            Ok(bytes) => self
+                .run
+                .observe(&self.inner.base_path().join(path), extent, bytes),
+            Err(e) => self.observe_failure(path, e),
         }
         loaded
     }

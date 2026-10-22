@@ -225,6 +225,8 @@ pub enum Code {
     KilnStaleCache,
     /// A Kiln generator package imports an interface the sandbox forbids.
     KilnGeneratorForbiddenImport,
+    /// A generator's `probe` names a parameter no host supplies.
+    KilnProbeUnknownParameter,
     /// A program for a world other than the test world reaches `core:eval`,
     /// which only `wado test` supplies.
     EvalOutsideTestWorld,
@@ -357,6 +359,7 @@ impl std::fmt::Display for Code {
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
+            Code::KilnProbeUnknownParameter => "KILN_PROBE_UNKNOWN_PARAMETER",
             Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
@@ -575,9 +578,12 @@ pub trait CompilerHost: Send + Sync {
     }
 
     /// Ask a generator how many leading bytes of each input determine its
-    /// output, one answer per file in declaration order. `None` in a slot —
-    /// and the default empty answer — means the whole file, which is what a
-    /// generator exporting no `probe` gets. Protocol: WEP 2026-04-12.
+    /// output, one answer per file in declaration order, each shorter than the
+    /// file. `None` in a slot means the whole file, as an extent reaching its
+    /// end does, and so does the empty answer of a generator exporting no
+    /// `probe`, which the default gives. A host opens the files with
+    /// [`Self::open_source`] only once it knows the generator probes them.
+    /// Protocol: WEP 2026-04-12.
     fn probe_generator(
         &self,
         _component_wasm: &[u8],
@@ -699,7 +705,8 @@ pub struct GeneratorRequest {
 }
 
 /// What a Kiln generator's `probe` is asked about: every input file, primary
-/// first, each served a range at a time as the probe pulls it.
+/// first. The host serves each a range at a time, from
+/// [`CompilerHost::open_source`], as the probe pulls it.
 pub struct ProbeRequest {
     pub files: Vec<ProbeInput>,
     /// The invocation's options, as [`GeneratorRequest::options`].
@@ -709,7 +716,6 @@ pub struct ProbeRequest {
 /// One file a probe reads.
 pub struct ProbeInput {
     pub path: String,
-    pub content: Arc<dyn SourceReader>,
     /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
     /// file depends on what kind of file it is.
     pub use_type: Option<String>,
@@ -717,12 +723,13 @@ pub struct ProbeInput {
 
 /// A file read a range at a time. See [`CompilerHost::open_source`].
 pub trait SourceReader: Send + Sync {
-    /// The file's length in bytes.
+    /// The file's length in bytes when it was opened.
     fn byte_len(&self) -> u64;
 
-    /// At most `len` bytes from `start`: fewer where the file ends first, and
-    /// none from its end on.
-    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError>;
+    /// Fill `buf` from `start`, answering how many bytes were read: fewer than
+    /// `buf` holds only where the file ends first, which is its end now rather
+    /// than [`Self::byte_len`]'s.
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError>;
 }
 
 /// A file already held whole.
@@ -731,10 +738,11 @@ impl SourceReader for Vec<u8> {
         self.len() as u64
     }
 
-    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
         let start = usize::try_from(start).unwrap_or(usize::MAX).min(self.len());
-        let end = start.saturating_add(len).min(self.len());
-        Ok(self[start..end].to_vec())
+        let n = buf.len().min(self.len() - start);
+        buf[..n].copy_from_slice(&self[start..start + n]);
+        Ok(n)
     }
 }
 

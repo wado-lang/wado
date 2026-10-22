@@ -1,0 +1,16 @@
+// A probe's parameters are matched by name, so one the host does not supply is
+// refused when the generator compiles, not when it first runs.
+
+use { head } from "./sub/kiln/header_and_payload.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/misnamed_probe_generator.wado",
+        },
+    };
+
+test {
+    assert head() == 7;
+}
+
+__DATA__
+{"compile_error": "misnamed_probe_generator.wado:5:17: error: kiln: `probe` takes `bytes`, but a host supplies only `path`, `content`, `type` and `options`"}

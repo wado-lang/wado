@@ -18,8 +18,9 @@ use std::sync::{Arc, Mutex};
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
+use wado_lsp::host::read_prefix;
 
-use crate::fingerprint::{Input, read_prefix};
+use crate::fingerprint::Input;
 use wado_host::kiln::component_cache::ComponentCache;
 use wado_host::kiln::driver::ResolvedGenerator;
 use wado_host::sync::lock;
@@ -310,7 +311,7 @@ impl SourceWatch {
     /// reported.
     #[must_use]
     pub fn is_watching(&self, path: &Path) -> bool {
-        self.hash_of(path).is_some()
+        lock(&self.seen).keys().any(|(seen, _)| seen == path)
     }
 
     /// Declare `dir` a Kiln output directory, whose files this run writes.
@@ -511,6 +512,7 @@ mod tests {
         write(&file, "headpayload");
         let watch = SourceWatch::default();
         watch.observe(&file, Some(4), b"head");
+        assert!(watch.is_watching(&file));
         write(&file, "headPAYLOAD and more");
         assert!(watch.changed().is_empty());
         let _ = std::fs::remove_dir_all(&dir);

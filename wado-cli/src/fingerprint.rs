@@ -2,11 +2,12 @@
 //! files it read. Shared by the `core:eval` outcome cache and the `wado test`
 //! result cache.
 
-use std::io::{ErrorKind, Read};
-use std::path::{Path, PathBuf};
+use std::io::ErrorKind;
+use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
+use wado_lsp::host::read_prefix;
 
 use crate::kiln_provider::hex32;
 
@@ -125,15 +126,4 @@ impl Input {
             Err(_) => None,
         }
     }
-}
-
-/// The first `prefix` bytes of `path`, or all of it at `None`. A file shorter
-/// than `prefix` answers what it holds.
-pub(crate) fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>> {
-    let Some(n) = prefix else {
-        return std::fs::read(path);
-    };
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)?.take(n).read_to_end(&mut bytes)?;
-    Ok(bytes)
 }

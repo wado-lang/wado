@@ -155,17 +155,44 @@ impl SourceReader for FileReader {
         self.len
     }
 
-    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
         let mut file = self
             .file
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut bytes = Vec::new();
         file.seek(SeekFrom::Start(start))
-            .and_then(|_| (&mut *file).take(len as u64).read_to_end(&mut bytes))
-            .map_err(|e| io_error(&self.path, &e))?;
-        Ok(bytes)
+            .and_then(|_| fill(&mut *file, buf))
+            .map_err(|e| io_error(&self.path, &e))
     }
+}
+
+/// Read into `buf` until it is full or `from` ends, answering how much was read.
+fn fill(from: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut read = 0;
+    while read < buf.len() {
+        match from.read(&mut buf[read..]) {
+            Ok(0) => break,
+            Ok(n) => read += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(read)
+}
+
+/// The first `prefix` bytes of the file at `path`, or all of it at `None`. A
+/// file shorter than `prefix` answers what it holds.
+///
+/// # Errors
+///
+/// What opening or reading the file fails with.
+pub fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>> {
+    let Some(n) = prefix else {
+        return std::fs::read(path);
+    };
+    let mut bytes = Vec::new();
+    File::open(path)?.take(n).read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
@@ -177,8 +204,7 @@ fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
 
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        let full_path = self.base_path.join(path);
-        std::fs::read(&full_path).map_err(|e| io_error(&full_path, &e))
+        self.load_source_prefix(path, None).await
     }
 
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
@@ -190,11 +216,8 @@ impl CompilerHost for FilesystemCompilerHost {
         path: &str,
         extent: Option<u64>,
     ) -> Result<Vec<u8>, SourceError> {
-        let Some(n) = extent else {
-            return self.load_source(path).await;
-        };
-        FileReader::open(self.base_path.join(path))?
-            .read_at(0, usize::try_from(n).unwrap_or(usize::MAX))
+        let full_path = self.base_path.join(path);
+        read_prefix(&full_path, extent).map_err(|e| io_error(&full_path, &e))
     }
 
     async fn source_exists(&self, path: &str) -> bool {

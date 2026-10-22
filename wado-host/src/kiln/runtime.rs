@@ -190,8 +190,9 @@ fn host_stream(
         })
 }
 
-/// A file as a `stream<u8>` that reads each range as the guest asks for it, so
-/// the host reads no further than the probe pulls.
+/// A file as a `stream<u8>` that reads each range as the guest asks for it,
+/// into the guest's buffer, so the host reads no further than the probe pulls.
+/// A read short of what was asked is the end of the file.
 struct RangeStream {
     source: Arc<dyn SourceReader>,
     at: u64,
@@ -215,15 +216,14 @@ impl<D> StreamProducer<D> for RangeStream {
         if capacity == 0 {
             return Poll::Ready(Ok(StreamResult::Completed));
         }
-        let bytes = match this.source.read_at(this.at, capacity) {
-            Ok(bytes) => bytes,
+        let mut direct = dst.as_direct(store, capacity);
+        let read = match this.source.read_at(this.at, direct.remaining()) {
+            Ok(read) => read,
             Err(e) => return Poll::Ready(Err(wasmtime::format_err!("{e}"))),
         };
-        let mut direct = dst.as_direct(store, bytes.len());
-        direct.remaining()[..bytes.len()].copy_from_slice(&bytes);
-        direct.mark_written(bytes.len());
-        this.at += bytes.len() as u64;
-        Poll::Ready(Ok(if this.at >= this.source.byte_len() {
+        direct.mark_written(read);
+        this.at += read as u64;
+        Poll::Ready(Ok(if read < capacity {
             StreamResult::Dropped
         } else {
             StreamResult::Completed
@@ -580,31 +580,28 @@ pub async fn run_generator(
     (outcome, emitted)
 }
 
-/// Call the generator's optional `probe` once per input file, in declaration
-/// order, and return the extent each reported. An empty vector means the
-/// generator exports no probe, which is the whole file for every input.
+/// Call the generator's `probe` once per input file of `request`, reading each
+/// from its reader in `files`, and return the extent each reported, `None`
+/// where it reaches the end of the file.
 ///
 /// A fresh instance per call, so a probe carries nothing between inputs and
 /// the host stays free to choose how it instantiates.
-pub async fn run_probe(
+async fn run_probe(
     engine: &Engine,
     component: &Component,
     request: &ProbeRequest,
+    files: Vec<Arc<dyn SourceReader>>,
     policy: KilnRunPolicy,
 ) -> (
     Result<Vec<Option<u64>>, GeneratorRunnerError>,
     Vec<GeneratorDiagnostic>,
 ) {
-    if !exports(component, engine, "probe") {
-        return (Ok(Vec::new()), Vec::new());
-    }
-
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
     let diagnostics_inner = diagnostics.clone();
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(request.files.len());
-        for file in &request.files {
+        for (file, source) in request.files.iter().zip(files) {
             let (mut store, instance) =
                 instantiate(engine, component, policy, diagnostics_inner.clone()).await?;
 
@@ -612,9 +609,11 @@ pub async fn run_probe(
                 unreachable!("the component type carries a `probe` export");
             };
 
-            // Matched by name, as `generate`'s are: a probe declares only the
-            // parameters it reads, and `options` exists only for a non-empty
-            // `Options`.
+            // Matched by name, as `generate`'s are, since a probe may leave out
+            // the parameters it does not read. Compiling a generator refuses any
+            // other name, but a prebuilt one was compiled elsewhere.
+            let len = source.byte_len();
+            let mut source = Some(source);
             let params: Vec<(String, Type)> = probe
                 .ty(&store)
                 .params()
@@ -628,7 +627,7 @@ pub async fn run_probe(
                         &mut store,
                         &file.path,
                         RangeStream {
-                            source: Arc::clone(&file.content),
+                            source: source.take().expect("`probe` takes one `content`"),
                             at: 0,
                         },
                     )?,
@@ -652,7 +651,7 @@ pub async fn run_probe(
             let [result] = results;
             match result {
                 Val::Result(Ok(payload)) => match payload.as_deref() {
-                    Some(Val::U64(n)) => extents.push(Some(*n)),
+                    Some(Val::U64(n)) => extents.push(Some(*n).filter(|n| *n < len)),
                     other => {
                         return Err(GeneratorRunnerError::Host(format!(
                             "probe returned a non-u64 extent: {other:?}"
@@ -694,15 +693,27 @@ pub async fn generate_for<H: CompilerHost + ?Sized>(
 }
 
 /// [`run_probe`] under the default policy, for a host's
-/// [`CompilerHost::probe_generator`].
+/// [`CompilerHost::probe_generator`]. A generator exporting no probe answers
+/// empty, and `host` opens no file for it.
 pub async fn probe_for<H: CompilerHost + ?Sized>(
     host: &H,
     engine: &Engine,
     component: &Component,
     request: &ProbeRequest,
 ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+    if !exports(component, engine, "probe") {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::with_capacity(request.files.len());
+    for file in &request.files {
+        files.push(
+            host.open_source(&file.path)
+                .await
+                .map_err(|e| GeneratorRunnerError::Host(format!("input `{}`: {e}", file.path)))?,
+        );
+    }
     let (outcome, diagnostics) =
-        run_probe(engine, component, request, KilnRunPolicy::default()).await;
+        run_probe(engine, component, request, files, KilnRunPolicy::default()).await;
     relay_diagnostics(host, diagnostics);
     outcome
 }

@@ -190,25 +190,28 @@ pub async fn execute<H: CompilerHost>(
 
     // The probe reads each file a range at a time, so a checkpoint's probe
     // pulls its header and none of the payloads behind it.
-    let mut probe = ProbeRequest {
-        files: Vec::with_capacity(files.len()),
+    let probe = ProbeRequest {
+        files: files
+            .iter()
+            .map(|(path, use_type)| ProbeInput {
+                path: path.as_str().to_string(),
+                use_type: use_type.cloned(),
+            })
+            .collect(),
         options: invocation.options.clone(),
     };
-    for (path, use_type) in &files {
-        probe.files.push(ProbeInput {
-            path: path.as_str().to_string(),
-            content: host
-                .open_source(path.as_str())
-                .await
-                .map_err(|source| load_error(path, source))?,
-            use_type: use_type.cloned(),
-        });
-    }
-    let probed = host
+    let mut extents = host
         .probe_generator(component_wasm, &probe)
         .await
         .map_err(ExecuteError::Runner)?;
-    let extents = settle_extents(&probe, probed);
+    if extents.is_empty() {
+        extents = vec![None; files.len()];
+    }
+    assert_eq!(
+        extents.len(),
+        files.len(),
+        "kiln: probe must answer once per input file"
+    );
 
     // Each file is read to its extent and no further, which also enforces the
     // probe's claim: a generator that reads past its own extent sees EOF rather
@@ -368,30 +371,6 @@ fn to_meta_file_hash(f: &FileHash, extent: Option<u64>, use_type: Option<&String
         extent,
         use_type: use_type.cloned(),
     }
-}
-
-/// The extent each file is read to and recorded with, one per file of `probe`.
-/// With no probe `extents` is empty and every file is read whole.
-///
-/// An extent reaching the end of the file records as `None`, the whole file. A
-/// probe stopped by EOF was stopped by the file's length rather than by its
-/// contents, so recording that length would let a longer file sharing the
-/// prefix hash equal and hit the cache.
-fn settle_extents(probe: &ProbeRequest, extents: Vec<Option<u64>>) -> Vec<Option<u64>> {
-    if extents.is_empty() {
-        return vec![None; probe.files.len()];
-    }
-    assert_eq!(
-        extents.len(),
-        probe.files.len(),
-        "kiln: probe must answer once per input file"
-    );
-    probe
-        .files
-        .iter()
-        .zip(extents)
-        .map(|(file, extent)| extent.filter(|n| *n < file.content.byte_len()))
-        .collect()
 }
 
 /// Point every module that declared `invocation` at the generated entry it
@@ -1804,11 +1783,20 @@ mod tests {
                 self.bytes.byte_len()
             }
 
-            fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
-                let read = self.bytes.read_at(start, len)?;
+            fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+                let read = self.bytes.read_at(start, buf)?;
                 let mut furthest = self.furthest.lock().unwrap();
-                *furthest = (*furthest).max(start + read.len() as u64);
+                *furthest = (*furthest).max(start + read as u64);
                 Ok(read)
+            }
+        }
+
+        impl Tracked {
+            fn read_prefix(&self, n: u64) -> Vec<u8> {
+                let mut buf = vec![0; usize::try_from(n).unwrap()];
+                let read = self.read_at(0, &mut buf).unwrap();
+                assert_eq!(read, buf.len(), "every prefix here lies within its file");
+                buf
             }
         }
 
@@ -1825,17 +1813,13 @@ mod tests {
                 unreachable!("{path} is read a range at a time, never whole")
             }
 
-            async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-                Ok(Arc::clone(&self.files[path]) as Arc<dyn SourceReader>)
-            }
-
             async fn load_source_prefix(
                 &self,
                 path: &str,
                 extent: Option<u64>,
             ) -> Result<Vec<u8>, SourceError> {
                 let n = extent.expect("every file here has a header shorter than itself");
-                self.files[path].read_at(0, usize::try_from(n).unwrap())
+                Ok(self.files[path].read_prefix(n))
             }
 
             fn emit_diagnostic(&self, _d: Diagnostic) {}
@@ -1859,7 +1843,7 @@ mod tests {
                     .files
                     .iter()
                     .map(|file| {
-                        let prefix = file.content.read_at(0, 8).unwrap();
+                        let prefix = self.files[&file.path].read_prefix(8);
                         Some(8 + u64::from_le_bytes(prefix.try_into().unwrap()))
                     })
                     .collect())
