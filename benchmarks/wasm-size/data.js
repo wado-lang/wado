@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792680169421,
+  "lastUpdate": 1792685024123,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69509,6 +69509,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 294919,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd01a15ca5d6d59a14a25bea9417dadcb8e039ab",
+          "message": "Merge pull request #2420 from wado-lang/gale-html-speed\n\nperf(prelude): sort_by moves elements instead of copying them",
+          "timestamp": "2026-10-23T00:45:34+09:00",
+          "tree_id": "260e3b7b634a17efb519a12e849a38b3921962f0",
+          "url": "https://github.com/wado-lang/wado/commit/bd01a15ca5d6d59a14a25bea9417dadcb8e039ab"
+        },
+        "date": 1792685023082,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
             "unit": "bytes"
           }
         ]
