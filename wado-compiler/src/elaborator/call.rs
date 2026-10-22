@@ -4978,12 +4978,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
             let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
-            let args = match given_args {
-                Some(args) => args.to_vec(),
-                None => {
-                    let spelled = self.bind_slots(&param_types, &method_slots, &method_type_args);
-                    self.resolve_args_against_settled_params(&call.args, &spelled, ctx)
-                }
+            let args = if let Some(args) = given_args {
+                args.to_vec()
+            } else {
+                let spelled = self.bind_slots(&param_types, &method_slots, &method_type_args);
+                self.resolve_args_against_settled_params(&call.args, &spelled, ctx)
             };
             // The method's parameters exclude the receiver, so each pairs with
             // the argument after it.
@@ -5170,8 +5169,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args.iter()
             .zip(param_types)
             .map(|(arg, &param)| {
-                let expected = Some(param)
-                    .filter(|&p| !self.tysys.type_table.borrow().contains_type_param(p));
+                let expected =
+                    Some(param).filter(|&p| !self.tysys.type_table.borrow().contains_type_param(p));
                 self.resolve_expr(arg, ctx, expected)
             })
             .collect()
