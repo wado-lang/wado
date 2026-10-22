@@ -538,6 +538,13 @@ impl Semantics {
         self.fact_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
     }
 
+    /// The type the struct pattern field or case name pattern `id` takes
+    /// apart, as the body walk recorded it.
+    pub(crate) fn destructured_type(&self, id: AstId) -> Option<TypeId> {
+        self.fact_at(ModuleSemantics::DESTRUCTURED_TYPES, id)
+            .copied()
+    }
+
     /// [`Self::expression_type`] from every walk that reached the expression:
     /// a tuple `for-of`'s body is walked once per element.
     pub fn expression_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {

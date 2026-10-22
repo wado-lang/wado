@@ -925,16 +925,96 @@ impl MoveWalker<'_, '_> {
     }
 
     fn implements_drop(&self, expr: &Expr) -> bool {
-        let types = &self.sem().types;
         self.sem()
             .expression_type(expr.id())
-            .and_then(|ty| types.nominal_def(ty))
-            .is_some_and(|def| {
-                self.checker
-                    .drops
-                    .implementors
-                    .contains(&types.defs().ast_id(def))
-            })
+            .is_some_and(|ty| self.type_implements_drop(ty))
+    }
+
+    fn type_implements_drop(&self, ty: TypeId) -> bool {
+        let types = &self.sem().types;
+        types.nominal_def(ty).is_some_and(|def| {
+            self.checker
+                .drops
+                .implementors
+                .contains(&types.defs().ast_id(def))
+        })
+    }
+
+    /// Refuse a by-value `pattern` that moves an affine part out of a value
+    /// whose type implements `Drop`, at any depth, as
+    /// [`Self::refuse_move_out_of_drop`] refuses the field move. `scrutinee`
+    /// is what the pattern matches, where an expression names it: the `self`
+    /// of a `Drop::drop` body may still give up its own fields.
+    fn refuse_destructured_drop(&mut self, pattern: &Pattern, scrutinee: Option<&Expr>) {
+        let own_self =
+            self.drop_body && matches!(scrutinee, Some(Expr::Ident(id)) if id.name == "self");
+        self.refuse_destructured_drop_at(pattern, own_self);
+    }
+
+    fn refuse_destructured_drop_at(&mut self, pattern: &Pattern, own_self: bool) {
+        match pattern {
+            Pattern::Struct { fields, span, .. } => {
+                if let Some(first) = fields.first()
+                    && !own_self
+                    && fields.iter().any(|field| self.binds_affine(&field.pattern))
+                {
+                    self.refuse_destructured_part(first.id, *span);
+                }
+                for field in fields {
+                    self.refuse_destructured_drop_at(&field.pattern, false);
+                }
+            }
+            Pattern::Variant {
+                name_id,
+                bindings,
+                span,
+                ..
+            } => {
+                if !own_self && bindings.iter().any(|binding| self.binds_affine(binding)) {
+                    self.refuse_destructured_part(*name_id, *span);
+                }
+                for binding in bindings {
+                    self.refuse_destructured_drop_at(binding, false);
+                }
+            }
+            Pattern::Tuple(elements, _) => {
+                for element in elements {
+                    self.refuse_destructured_drop_at(element, false);
+                }
+            }
+            Pattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.refuse_destructured_drop_at(alternative, own_self);
+                }
+            }
+            Pattern::Typed { pattern, .. } => self.refuse_destructured_drop_at(pattern, own_self),
+            Pattern::Ident { .. }
+            | Pattern::MutIdent { .. }
+            | Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => {}
+        }
+    }
+
+    /// Refuse the part a pattern node at `span` moves out of the type it takes
+    /// apart, which the walk recorded at `site`, where that type implements
+    /// `Drop`.
+    fn refuse_destructured_part(&mut self, site: AstId, span: Span) {
+        let Some(ty) = self.sem().destructured_type(site) else {
+            return;
+        };
+        if self.type_implements_drop(ty) {
+            let type_name = self.sem().types.type_name(ty);
+            self.report(MoveError::DropPartialMove { type_name }, span);
+        }
+    }
+
+    /// Whether `pattern` binds an affine value by value.
+    fn binds_affine(&self, pattern: &Pattern) -> bool {
+        let mut affine = false;
+        for_each_pattern_binding(pattern, &mut |id| affine |= self.is_affine_local(id));
+        affine
     }
 
     /// Forgets the moves an assignment to `place` refills: the place and every
@@ -1487,6 +1567,7 @@ impl MoveWalker<'_, '_> {
 
     /// `pattern` binds afresh to what `value` refers into.
     fn bind_to(&mut self, pattern: &Pattern, value: &Expr) {
+        self.refuse_destructured_drop(pattern, Some(value));
         self.bind_pattern(pattern);
         let owners = self.owners_of(value);
         self.hold_bindings(pattern, &owners);
@@ -1746,6 +1827,7 @@ impl MoveWalker<'_, '_> {
                 LoopHead::None => {}
                 LoopHead::Condition(condition) => walker.visit_condition(condition),
                 LoopHead::Binding(pattern, owners) => {
+                    walker.refuse_destructured_drop(pattern, None);
                     walker.bind_pattern(pattern);
                     walker.hold_bindings(pattern, owners);
                 }
@@ -1841,6 +1923,7 @@ impl MoveWalker<'_, '_> {
         for arm in arms {
             self.flow.clone_from(&base);
             let diverged = self.in_scope(|walker| {
+                walker.refuse_destructured_drop(&arm.pattern, Some(scrutinee));
                 walker.bind_pattern(&arm.pattern);
                 walker.hold_bindings(&arm.pattern, &owners);
                 if let Some(guard) = &arm.guard {

@@ -2167,6 +2167,7 @@ impl<'a> PatternLowerer<'a> {
                                 guard: arm.guard.clone(),
                                 body: arm.body.clone(),
                                 span: arm.span,
+                                consumes: arm.consumes,
                             });
                         }
                     }

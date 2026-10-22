@@ -1971,6 +1971,7 @@ fn push_result_task_return_epilogue(
             span,
         ),
         span,
+        consumes: true,
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -2191,6 +2192,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 span,
             ),
             span,
+            consumes: true,
         });
     }
     if !arms.is_empty() {

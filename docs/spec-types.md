@@ -1361,9 +1361,31 @@ these:
   into a field or an element drops what the slot held.
 - What holds it drops: a container drops each value it still holds, a struct
   its fields in declaration order.
+- A by-value pattern consumes a value holding it, and none of the pattern's
+  bindings takes it. It drops as the arm is entered, after the guard and before
+  the body, or as the `let` binds. A `_` arm drops the whole scrutinee there. A
+  refutable pattern that fails consumes nothing, so the `else` of an `if let`
+  or a `let ... else` still holds the scrutinee.
 
 A move suppresses the drop, since the moved-from place no longer holds the
 value.
+
+<!-- {"fixture":"affine_pattern_drops_unbound_parts_on_arm_entry.wado"} -->
+
+```wado
+test "a struct pattern drops the fields it leaves out" {
+    let d = DROPS;
+    let p = P { a: Tok { id: 1 }, b: Tok { id: 2 } };
+    match p {
+        P { a, .. } => {
+            assert DROPS - d == 1;
+            assert eat(a) == 1;
+            assert DROPS - d == 2;
+        },
+    }
+    assert DROPS - d == 2;
+}
+```
 
 What a drop does is the type's `Drop`, a prelude trait:
 
@@ -1380,8 +1402,10 @@ pub affine trait Drop with () {
 - A resource's `fn drop(self)` is its `Drop` impl, which ends the handle in the
   host.
 - Only an affine type implements `Drop`, since a copyable type would run it for
-  every copy. A type that implements it may not be partially moved, nor be the
-  [`..base`](./spec-literals.md#base-spread) of a struct literal.
+  every copy. A type that implements it may not be partially moved, by a field
+  read or by a pattern binding an affine part of it, nor be the
+  [`..base`](./spec-literals.md#base-spread) of a struct literal. The `self` of
+  its own `drop` is the exception.
 - `builtin::drop(value)` drops any value where it is called. `x.drop()` calls
   the type's impl, and a generic body drops an `affine T` the way `T` drops.
 

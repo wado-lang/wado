@@ -239,6 +239,12 @@ macro_rules! with_body_facts {
             /// The type a type pattern (`p: T`) ascribes, keyed by the
             /// pattern's [`AstId`] — the `LetStmt`'s for a `let … else`.
             ann_pattern_ascription => pattern_ascriptions: $crate::tir::TypeId,
+            /// The type a struct pattern's field or a case pattern takes
+            /// apart, keyed by the field's [`AstId`] or the case name's: what
+            /// the move check asks of a pattern moving a part out of a type
+            /// that implements `Drop`.
+            #[allow(dead_code, reason = "only the move check reads it, through `Semantics`")]
+            ann_destructured_type => destructured_types: $crate::tir::TypeId,
             /// The element a range's context expected, which typed its
             /// endpoints, keyed by the [`crate::ast::RangeExpr`]'s [`AstId`]: a
             /// numeric type, or the variable standing for one until it is

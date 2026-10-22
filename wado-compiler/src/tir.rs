@@ -1397,6 +1397,10 @@ pub struct TirMatchArm {
     pub guard: Option<TirExpr>,
     pub body: TirExpr,
     pub span: Span,
+    /// Whether entering the arm consumes the scrutinee. Only the path a
+    /// refutable `let` takes when its pattern fails to match does not: it
+    /// leaves the scrutinee to its owner (WEP: Affine Types).
+    pub consumes: bool,
 }
 
 #[derive(Debug, Clone)]

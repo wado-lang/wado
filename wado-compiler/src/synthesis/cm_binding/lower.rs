@@ -350,6 +350,7 @@ fn synthesize_lower_variant_to_memory(
                     span,
                 ),
                 span,
+                consumes: true,
             });
         } else {
             arms.push(TirMatchArm {
@@ -367,6 +368,7 @@ fn synthesize_lower_variant_to_memory(
                     span,
                 ),
                 span,
+                consumes: true,
             });
         }
     }
@@ -541,6 +543,7 @@ pub(super) fn synthesize_lower_option_to_memory(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -557,6 +560,7 @@ pub(super) fn synthesize_lower_option_to_memory(
             span,
         ),
         span,
+        consumes: true,
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -1096,6 +1100,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -1112,6 +1117,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             span,
         ),
         span,
+        consumes: true,
     };
     loop_body.push(TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
@@ -1351,6 +1357,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 span,
                             ),
                             span,
+                            consumes: true,
                         });
                     } else {
                         arms.push(TirMatchArm {
@@ -1368,6 +1375,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 span,
                             ),
                             span,
+                            consumes: true,
                         });
                     }
                 }
@@ -1687,6 +1695,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -1703,6 +1712,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
             span,
         ),
         span,
+        consumes: true,
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -1840,6 +1850,7 @@ fn flatten_result_case_arm(
                 span,
             ),
             span,
+            consumes: true,
         };
     }
 
@@ -1905,6 +1916,7 @@ fn flatten_result_case_arm(
             span,
         ),
         span,
+        consumes: true,
     }
 }
 

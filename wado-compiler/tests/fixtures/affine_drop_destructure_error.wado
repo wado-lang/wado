@@ -1,0 +1,71 @@
+// A pattern gives up a part of a type that implements `Drop` no more than a
+// field move does, at any depth: its `drop` relies on the parts it was built
+// with. Taking a copyable part, or a reference through one, takes nothing.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine struct Pair {
+    a: Tok,
+    b: Tok,
+}
+
+impl Drop for Pair {
+    fn drop(self) {}
+}
+
+affine variant Slot {
+    Held(Tok),
+    Empty,
+}
+
+impl Drop for Slot {
+    fn drop(self) {}
+}
+
+affine struct Outer {
+    pair: Pair,
+}
+
+fn by_match(p: Pair) {
+    match p {
+        Pair { a, .. } => {},
+    }
+}
+
+fn by_let(p: Pair) {
+    let Pair { b, .. } = p;
+}
+
+fn by_if_let(s: Slot) {
+    if let Held(t) = s {
+    }
+}
+
+fn nested(o: Outer) {
+    let Outer { pair: Pair { a, .. } } = o;
+}
+
+fn copies(t: Tok, r: &Pair) -> i32 {
+    let Tok { id } = t;
+    let Pair { a, .. } = r;
+    return id + a.id;
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":37:14: analysis error: `Pair` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with",
+    "compile_errors_contains": [
+        ":42:14: analysis error: `Pair` implements `Drop`",
+        ":46:12: analysis error: `Slot` implements `Drop`",
+        ":51:28: analysis error: `Pair` implements `Drop`"
+    ]
+}

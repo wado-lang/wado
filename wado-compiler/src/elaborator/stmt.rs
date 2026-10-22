@@ -1904,6 +1904,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     self.record_reference_to_def(*name_id, case_ast_id);
                 }
+                self.sem
+                    .types
+                    .destructured_types
+                    .insert(*name_id, base_type);
 
                 // The cases belong to the structure the scrutinee wraps, so the
                 // declaration asked for the payload type is that structure's.
@@ -2007,6 +2011,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
+                    self.sem
+                        .types
+                        .destructured_types
+                        .insert(field.id, scrutinee_type);
                     let field_type = match head {
                         Some(_) => {
                             self.lookup_field_type(scrutinee_type, &field.field_name, field.span)
