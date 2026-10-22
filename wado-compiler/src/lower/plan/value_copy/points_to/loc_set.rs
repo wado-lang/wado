@@ -51,15 +51,8 @@ impl LocSet {
 
     /// Ascending.
     pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        let (small, words) = match &self.repr {
-            Repr::Small(locs) => (locs.as_slice(), [].as_slice()),
-            Repr::Words { words, .. } => ([].as_slice(), words.as_slice()),
-        };
-        small.iter().copied().chain(
-            words
-                .iter()
-                .flat_map(|&(i, w)| Bits(w).map(move |b| i * 64 + b)),
-        )
+        self.words()
+            .flat_map(|(i, w)| Bits(w).map(move |b| i * 64 + b))
     }
 
     pub fn insert(&mut self, loc: u32) -> bool {
@@ -270,7 +263,7 @@ mod tests {
     #[test]
     fn difference_adds_what_the_other_lacks_across_every_form() {
         // Small less small, small less words, words less small, words less words.
-        for (step_a, step_b, end) in [(3, 2, 60), (3, 2, 400), (5, 7, 1000), (2, 3, 100_000)] {
+        for (step_a, step_b, end) in [(3, 2, 60), (50, 3, 1000), (3, 50, 1000), (2, 3, 100_000)] {
             let a = set((0..end).step_by(step_a));
             let b = set((0..end).step_by(step_b));
             let mut out = set([1, end + 1]);
