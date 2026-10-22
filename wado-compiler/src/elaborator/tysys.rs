@@ -910,6 +910,19 @@ impl HeldTypes for AffineParams<'_> {
                 .trait_env
                 .assoc_type_decl(owning_trait, assoc_name)
                 .is_some_and(|decl| decl.is_affine),
+            ResolvedType::AssocParam {
+                owning_trait,
+                assoc_name,
+                index,
+                ..
+            } => {
+                self.types
+                    .trait_env
+                    .assoc_type_decl(owning_trait, assoc_name)
+                    .expect("a family parameter is minted from its declaration")
+                    .type_params[*index as usize]
+                    .is_affine
+            }
             _ => false,
         };
         if is_affine_param {

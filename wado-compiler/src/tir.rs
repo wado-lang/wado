@@ -469,6 +469,47 @@ impl TemplateShape {
     pub fn field_name(k: usize) -> String {
         format!("h{k}")
     }
+
+    #[must_use]
+    pub fn hole_types(&self) -> Vec<TypeId> {
+        self.holes.iter().map(|hole| hole.ty).collect()
+    }
+}
+
+/// Hold `field`'s value, a hole of type `hole_ty`, as the shape's field does
+/// ([`TypeTable::hole_field_type`]), and answer the local the `&` takes, which
+/// the caller records as address-taken. Only a closed type decides it, so an
+/// open shape's literal is held once substituted; holding twice is a no-op.
+pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
+    let field_ty = tt.hole_field_type(hole_ty);
+    if tt.type_key(field_ty) == tt.type_key(hole_ty)
+        || tt.type_key(field.value.type_id) == tt.type_key(field_ty)
+    {
+        return None;
+    }
+    assert_eq!(
+        tt.type_key(field.value.type_id),
+        tt.type_key(hole_ty),
+        "a hole's value has the hole's type"
+    );
+    let taken = match &field.value.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    };
+    let span = field.value.span;
+    let value = std::mem::replace(
+        &mut field.value,
+        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+    );
+    field.value = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(value),
+        },
+        field_ty,
+        span,
+    );
+    taken
 }
 
 /// A written shape a substituted one is made from, and the substitution that

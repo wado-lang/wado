@@ -1,0 +1,25 @@
+// A hole whose type is a pack's element would need one shape per element,
+// which no instantiation makes yet, so the hole is rejected (WEP 2026-01-10).
+trait Shown {
+    fn shown(&self) -> String;
+}
+
+impl<..T: Display> Shown for [..T] {
+    fn shown(&self) -> String {
+        let mut out = "";
+        for let v of *self {
+            out.push_str(&format`(${v})`);
+        }
+        return out;
+    }
+}
+
+export fn run() {
+    let _ = [1, "a"].shown();
+}
+
+__DATA__
+{
+    "compile_error": ":11:37: analysis error: a tagged template hole of type `..T` mentions a type pack; a template shape over a pack's element is not implemented yet",
+    "compile_error_codes": ["UNSUPPORTED_FEATURE"]
+}

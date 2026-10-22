@@ -21,6 +21,7 @@
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
  *   ./analyze_native_profile.ts PROFILE.json [--top N] [--binary wado]
  *                             [--main-base 0x100000000] [--symbolicator auto|atos|addr2line]
+ *                             [--under REGEX] [--thread REGEX]
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -230,6 +231,7 @@ function main(): void {
       arch: { type: "string", default: machine() },
       symbolicator: { type: "string", default: "auto" },
       under: { type: "string" },
+      thread: { type: "string" },
     },
   });
 
@@ -237,11 +239,22 @@ function main(): void {
     console.error(
       "usage: analyze_native_profile.ts PROFILE.json [--top N] " +
         "[--binary wado] [--main-base 0x100000000] " +
-        "[--symbolicator auto|atos|addr2line] [--under REGEX]",
+        "[--symbolicator auto|atos|addr2line] [--under REGEX] [--thread REGEX]",
     );
     process.exit(2);
   }
-  const under = values.under == null ? null : new RegExp(values.under as string);
+  const regexArg = (name: string): RegExp | null => {
+    const pattern = values[name] as string | undefined;
+    if (pattern == null) return null;
+    try {
+      return new RegExp(pattern);
+    } catch (e) {
+      console.error(`argument --${name}: invalid pattern: ${(e as Error).message}`);
+      process.exit(2);
+    }
+  };
+  const under = regexArg("under");
+  const threadFilter = regexArg("thread");
 
   const profilePath = positionals[0];
   const top = parseInt(values.top as string, 10);
@@ -259,6 +272,9 @@ function main(): void {
 
   const symbolicator = detectSymbolicator(symChoice);
   const profile = JSON.parse(readFileSync(profilePath, "utf8"));
+  if (threadFilter != null) {
+    profile.threads = profile.threads.filter((t: any) => threadFilter.test(t.name));
+  }
   const libs = profile.libs;
   const keyname = symbolicate(profile, binary, mainBase, arch, symbolicator);
 

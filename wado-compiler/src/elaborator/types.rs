@@ -699,6 +699,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl binding an affine type to an associated type not declared
+    /// `affine type`, which a generic body may copy (WEP: Affine Types).
+    AffineAssocBinding {
+        type_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
     /// An explicit `impl Eq for T;` / `impl Ord for T;` marker was written,
     /// but `T` is not structurally eligible — some field/case does not
     /// itself implement the trait. Unlike [`Self::TraitBoundNotSatisfied`]
@@ -1520,8 +1528,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A tagged template hole whose type mentions a type parameter.
-    TemplateHoleGeneric {
+    /// A tagged template hole whose type mentions a type pack.
+    TemplateHolePackElement {
         type_name: String,
         span: Span,
     },
@@ -1925,11 +1933,11 @@ impl TypeError {
                 "a template tag must name a function or a static method".to_string(),
                 *span,
             ),
-            TypeError::TemplateHoleGeneric { type_name, span } => (
+            TypeError::TemplateHolePackElement { type_name, span } => (
                 Code::UnsupportedFeature,
                 format!(
-                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template shape generic over the enclosing item is not implemented yet"
+                    "a tagged template hole of type `{type_name}` mentions a type pack; \
+                     a template shape over a pack's element is not implemented yet"
                 ),
                 *span,
             ),
@@ -1983,6 +1991,17 @@ impl TypeError {
                 Code::AffineArgument,
                 format!(
                     "affine type '{type_name}' given for '{param_name}', which may be copied; `affine {param_name}` would admit it"
+                ),
+                *span,
+            ),
+            TypeError::AffineAssocBinding {
+                type_name,
+                assoc_name,
+                span,
+            } => (
+                Code::AffineArgument,
+                format!(
+                    "affine type '{type_name}' bound to '{assoc_name}', which may be copied: the trait does not declare it `affine type`"
                 ),
                 *span,
             ),

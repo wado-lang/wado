@@ -101,7 +101,7 @@ use crate::tir::{
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateShape,
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
-    TirTemplatePart,
+    TirTemplatePart, hold_hole,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -4850,18 +4850,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Annotate diagnosed the template or the tag.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         };
-        let (struct_name, hole_types) = {
+        let (struct_name, hole_types, open) = {
             let tt = self.tysys.type_table.borrow();
-            let ResolvedType::Struct { def, .. } = tt.get(template_ty) else {
-                panic!("annotate records a struct type for a tagged template");
+            let ResolvedType::Struct {
+                def: def @ StructDef::Anon(id),
+                ..
+            } = tt.get(template_ty)
+            else {
+                panic!("annotate records an anonymous struct type for a tagged template");
             };
             let shape = tt
                 .template_shape_of_type(template_ty)
                 .expect("annotate records a template type for a tagged template");
-            let holes: Vec<TypeId> = shape.holes.iter().map(|h| h.ty).collect();
+            let holes = shape.hole_types();
             // The name the shape was registered under, not the one a message
             // shows: both render the shape, and only the mangle is a key.
-            (tt.struct_head_name(*def), holes)
+            (tt.struct_head_name(*def), holes, tt.anon_shape_is_open(*id))
         };
 
         let unique_id = ctx.fresh_serial();
@@ -4903,25 +4907,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expr.span(),
                 );
             }
-            let field_ty = self.tysys.type_table.borrow_mut().hole_field_type(hole_ty);
-            if field_ty != hole_ty {
-                if let TirExprKind::Local { index, .. } = &value.kind {
-                    ctx.address_taken_locals.insert(*index);
-                }
-                value = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(value),
-                    },
-                    field_ty,
-                    expr.span(),
-                );
-            }
-            fields.push(TirStructField {
+            let mut field = TirStructField {
                 name: TemplateShape::field_name(k),
                 value,
                 field_index: k as u32,
-            });
+            };
+            if !open
+                && let Some(taken) =
+                    hold_hole(&mut field, hole_ty, &mut self.tysys.type_table.borrow_mut())
+            {
+                ctx.address_taken_locals.insert(taken);
+            }
+            fields.push(field);
         }
 
         let literal = TirExpr::new(
