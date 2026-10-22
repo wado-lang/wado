@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792649268972,
+  "lastUpdate": 1792653436565,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69357,6 +69357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/10e9289b37513ec052bdf3c37c8263df42b8322f"
         },
         "date": 1792649268319,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f37502e2106be111b5bae8c18cd7e1d6381b201",
+          "message": "Merge pull request #2416 from wado-lang/claude/exciting-heisenberg-se5b9i\n\nchore(deps): wasmtime 50.0.0 and latest Cargo dependencies",
+          "timestamp": "2026-10-22T16:00:13+09:00",
+          "tree_id": "5bf23527dadceacd6f949c0934e453e57be15257",
+          "url": "https://github.com/wado-lang/wado/commit/6f37502e2106be111b5bae8c18cd7e1d6381b201"
+        },
+        "date": 1792653436164,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
