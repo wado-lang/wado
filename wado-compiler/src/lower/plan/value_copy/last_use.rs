@@ -2982,6 +2982,12 @@ impl<'a> Analyzer<'a> {
                 self.walk_expr(index, live, record);
                 self.walk_place_base(inner, live, record);
             }
+            // A test reads its operand and hands on nothing of it.
+            TirExprKind::VariantTag { expr: inner, .. }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::TupleLen { expr: inner } => {
+                self.walk_place_base(inner, live, record);
+            }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut children);
