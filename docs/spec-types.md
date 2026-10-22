@@ -1365,7 +1365,8 @@ these:
   bindings takes it. It drops as the arm is entered, after the guard and before
   the body, or as the `let` binds. A `_` arm drops the whole scrutinee there. A
   refutable pattern that fails consumes nothing, so the `else` of an `if let`
-  or a `let ... else` still holds the scrutinee.
+  or a `let ... else` still holds the scrutinee. A `matches` consumes nothing,
+  whether it matches or not: its guard sees the bindings by reference.
 
 A move suppresses the drop, since the moved-from place no longer holds the
 value.
@@ -1405,7 +1406,7 @@ pub affine trait Drop with () {
   every copy. A type that implements it may not be partially moved, by a field
   read or by a pattern binding an affine part of it, nor be the
   [`..base`](./spec-literals.md#base-spread) of a struct literal. The `self` of
-  its own `drop` is the exception.
+  its own `drop` is the exception. A newtype over such a type implements it too.
 - `builtin::drop(value)` drops any value where it is called. `x.drop()` calls
   the type's impl, and a generic body drops an `affine T` the way `T` drops.
 
