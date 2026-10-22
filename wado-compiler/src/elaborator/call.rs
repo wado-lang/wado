@@ -486,10 +486,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             self.record_reference_opt(ident.id, var_ref.defining_ast_id());
+            self.record_expression_type(ident.id, var_ref.value_type());
             return Some((var_ref.value_type(), Some(var_ref)));
         }
         let ty = self.global_var_type(ident.id, &ident.name)?;
         self.record_item_reference_by_name(ident.id, &ident.name);
+        self.record_expression_type(ident.id, ty);
         Some((ty, None))
     }
 
