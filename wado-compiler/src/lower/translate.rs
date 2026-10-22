@@ -18,7 +18,6 @@ use std::sync::Arc;
 use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::last_use::{AssignSiteKey, assign_site_key};
 use crate::lower::plan::value_copy::place;
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
@@ -350,14 +349,13 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
 }
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment in `in_place` replaces whole.
-fn guarded_locals(func: &TirFunction, in_place: &IndexSet<AssignSiteKey>) -> IndexSet<u32> {
-    struct Scan<'a> {
-        in_place: &'a IndexSet<AssignSiteKey>,
+/// assignment writing in place replaces whole.
+fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
+    struct Scan {
         deferred: IndexSet<u32>,
         replaced: IndexSet<u32>,
     }
-    impl TirRefVisitor for Scan<'_> {
+    impl TirRefVisitor for Scan {
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Let {
                 local_index,
@@ -375,7 +373,7 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<AssignSiteKey>) -> Ind
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
-                && self.in_place.contains(&assign_site_key(expr))
+                && expr.marks().in_place
             {
                 self.replaced.insert(index);
             }
@@ -386,7 +384,6 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<AssignSiteKey>) -> Ind
         return IndexSet::default();
     };
     let mut scan = Scan {
-        in_place,
         deferred: IndexSet::default(),
         replaced: IndexSet::default(),
     };
@@ -431,10 +428,8 @@ struct FunctionTranslator<'a, 'p> {
     /// [`value_copy::last_use::Ownership::written_args`], `None` where the
     /// ownership walk did not run, which leaves every argument copied.
     written_args: Option<IndexSet<Span>>,
-    /// Assignments that write into the storage their place holds
-    /// (WEP 2026-10-13).
-    in_place_assigns: IndexSet<AssignSiteKey>,
-    /// Locals declared without a value that such an assignment replaces whole.
+    /// Locals declared without a value that an assignment writing in place
+    /// ([`tir::ExprMarks::in_place`]) replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
     /// whether to write in place or to store.
     guarded_locals: IndexSet<u32>,
@@ -533,16 +528,14 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .body
                 .as_ref()
                 .is_some_and(|b| !value_copy::last_use::has_unsupported_form(b));
-        let in_place_assigns = if analyzed {
-            ownership.in_place_assigns
-        } else {
-            value_copy::last_use::unanalyzed_in_place_assigns(
+        if !analyzed {
+            value_copy::last_use::mark_unanalyzed_in_place_assigns(
                 func,
                 &base.type_table.borrow(),
                 base.value_copy,
-            )
-        };
-        let guarded_locals = guarded_locals(func, &in_place_assigns);
+            );
+        }
+        let guarded_locals = guarded_locals(func);
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
@@ -572,7 +565,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets,
             moved_roots,
             written_args,
-            in_place_assigns,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -599,7 +591,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             written_args: None,
-            in_place_assigns: IndexSet::default(),
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -1120,12 +1111,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 (**ref_expr).clone()
             }
-            _ if self.in_place_assigns.contains(&assign_site_key(expr))
-                && value_copy::last_use::can_write_in_place(
-                    expr,
-                    &self.base.type_table.borrow(),
-                ) =>
-            {
+            _ if expr.marks().in_place => {
                 // A handle of a reference type, so every later pass reads the
                 // writes below as going through it.
                 let ref_type = self
@@ -1184,18 +1170,10 @@ impl FunctionTranslator<'_, '_> {
     /// too. One out of bounds takes the call itself, which traps with its
     /// message. The list, index and value are evaluated first, as for the call.
     fn try_expand_in_place_element_assign(&self, call: &TirExpr) -> Option<Vec<StmtId>> {
-        let TirExprKind::Call { func, args, .. } = &call.kind else {
+        let TirExprKind::Call { args, .. } = &call.kind else {
             return None;
         };
-        // A span is no identity: a call the translator synthesizes for a
-        // closure carries the span of the source it stands for.
-        if !self
-            .base
-            .value_copy
-            .list_element_assigns
-            .contains(&func.module_source, &func.name)
-            || !self.in_place_assigns.contains(&assign_site_key(call))
-        {
+        if !call.marks().in_place {
             return None;
         }
         let [list, index, value] = args.iter().map(|a| &a.expr).collect::<Vec<_>>()[..] else {

@@ -1968,15 +1968,15 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                             ctx.wasi_package,
                         )
                     };
-                    let field_expr = TirExpr {
-                        kind: TirExprKind::FieldAccess {
+                    let field_expr = TirExpr::new(
+                        TirExprKind::FieldAccess {
                             expr: Box::new(local_ref(val_local, "$struct_val", value_type_id)),
                             field_index: field_idx as u32,
                             field_name: wado_name.clone(),
                         },
-                        type_id: field_type_id,
-                        span: synth_span(),
-                    };
+                        field_type_id,
+                        synth_span(),
+                    );
                     let field_addr = if offset == 0 {
                         addr.clone()
                     } else {

@@ -3,7 +3,7 @@
 //! reference a local index, every call a resolved target, and all syntactic
 //! sugar is already desugared.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -804,6 +804,20 @@ pub struct TirExpr {
     pub kind: TirExprKind,
     pub type_id: TypeId,
     pub span: Span,
+    /// What a pass decided about this node, written where it decided it while
+    /// it held the body by reference. The node is its own identity: a span is
+    /// none, since every synthesized node shares one, and a copy carries the
+    /// decision along.
+    marks: Cell<ExprMarks>,
+}
+
+/// What lowering's ownership walk decided about one expression.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExprMarks {
+    /// An assignment, or a `List::index_assign` call, that writes into the
+    /// storage its place holds rather than repointing the place: a holder of
+    /// that storage may read it afterwards (WEP 2026-10-13).
+    pub in_place: bool,
 }
 
 impl TirExpr {
@@ -812,7 +826,19 @@ impl TirExpr {
             kind,
             type_id,
             span,
+            marks: Cell::default(),
         }
+    }
+
+    #[must_use]
+    pub fn marks(&self) -> ExprMarks {
+        self.marks.get()
+    }
+
+    pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
+        let mut marks = self.marks.get();
+        set(&mut marks);
+        self.marks.set(marks);
     }
 
     /// The place `self` moves out of, or `self` where it moves nothing.

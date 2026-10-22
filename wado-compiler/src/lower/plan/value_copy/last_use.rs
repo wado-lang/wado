@@ -45,10 +45,6 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
-    /// Assignments to a place of an in-place type that write into the storage
-    /// the place holds, by [`assign_site_key`]: a holder of that storage may be
-    /// read afterwards (WEP 2026-10-13).
-    pub in_place_assigns: IndexSet<AssignSiteKey>,
     /// By-value call arguments, by span, whose storage may be written before
     /// the callee is done with them: a confined parameter still copies these.
     pub written_args: IndexSet<Span>,
@@ -146,7 +142,7 @@ pub fn analyze_ownership(
         }
     }
 
-    let in_place_assigns = a.in_place_assigns(
+    a.mark_in_place_assigns(
         func,
         &paths,
         &reference_copies,
@@ -193,7 +189,6 @@ pub fn analyze_ownership(
             read_spans,
         },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
-        in_place_assigns,
         written_args: a.written_args,
     }
 }
@@ -254,8 +249,9 @@ struct PlaceMove {
 /// An assignment to a place of an in-place type, and the locals live after it:
 /// the storage it would repoint stays reachable through a holder still readable
 /// there (WEP 2026-10-13).
-struct AssignSite {
-    key: AssignSiteKey,
+struct AssignSite<'a> {
+    /// The `Assign`, or the `List::index_assign` call.
+    node: &'a TirExpr,
     /// The local the place is rooted at, `None` where no local roots it (a
     /// field of a call's result, `xs[i].f`), so no reference to it can be ruled
     /// out.
@@ -630,25 +626,25 @@ impl<'a> Analyzer<'a> {
         self.record_write(place, lands, false, live);
     }
 
-    /// Note `assign`, writing `target`, for `in_place_assigns` where
+    /// Note `assign`, writing `target`, for [`ExprMarks::in_place`] where
     /// [`can_write_in_place`]; its writes are those recorded since `start`.
     fn note_assign_site(
         &mut self,
-        assign: &TirExpr,
+        assign: &'a TirExpr,
         target: &TirExpr,
         start: usize,
         live: &IndexSet<u32>,
     ) {
         if can_write_in_place(assign, self.type_table) {
-            self.note_site(assign_site_key(assign), target, false, start, live);
+            self.note_site(assign, target, false, start, live);
         }
     }
 
-    /// Note `call`, a `List::index_assign` on `receiver`, for `in_place_assigns`
-    /// when the elements are of an in-place type.
+    /// Note `call`, a `List::index_assign` on `receiver`, for
+    /// [`ExprMarks::in_place`] when the elements are of an in-place type.
     fn note_element_site(
         &mut self,
-        call: &TirExpr,
+        call: &'a TirExpr,
         func: &tir::FunctionRef,
         receiver: &TirExpr,
         start: usize,
@@ -662,7 +658,7 @@ impl<'a> Analyzer<'a> {
                 .as_list(receiver.type_id)
                 .is_some_and(|element| self.type_table.is_in_place_aggregate(element))
         {
-            self.note_site(assign_site_key(call), receiver, true, start, live);
+            self.note_site(call, receiver, true, start, live);
             // A list reached through a reference (`*capture` in a closure) is
             // the referent's, which no field of this body owns.
             if matches!(
@@ -681,7 +677,7 @@ impl<'a> Analyzer<'a> {
 
     fn note_site(
         &mut self,
-        key: AssignSiteKey,
+        node: &'a TirExpr,
         target: &TirExpr,
         element: bool,
         start: usize,
@@ -689,7 +685,7 @@ impl<'a> Analyzer<'a> {
     ) {
         let site = match self.resolver.names(target) {
             Names::Place(path) => AssignSite {
-                key,
+                node,
                 root: Some(path.root),
                 top: match path.selectors.first() {
                     Some(Selector::Field { index, .. }) => Some(*index),
@@ -713,7 +709,7 @@ impl<'a> Analyzer<'a> {
                     _ => None,
                 };
                 AssignSite {
-                    key,
+                    node,
                     root: place::place_root(target),
                     top: None,
                     last,
@@ -922,9 +918,7 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 /// stores `null`, which repoints: the object it held is the destination's now.
 /// An affine struct or list is an object, whose stores resource drop synthesis
 /// has already written into it where its place was not null, so one left is
-/// to a null place, and repoints too (WEP: Affine Types). Synthesized
-/// assignments into one local share an [`AssignSiteKey`], so lowering asks this
-/// again of each one it expands.
+/// to a null place, and repoints too (WEP: Affine Types).
 #[must_use]
 pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
     let TirExprKind::Assign { target, value } = &assign.kind else {
@@ -935,27 +929,6 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
     !matches!(value.kind, TirExprKind::Null)
         && !affine_object
         && type_table.is_in_place_aggregate(ty)
-}
-
-/// What tells one assignment site from another: its span, and the local its
-/// place is rooted at. Every synthesized site shares one span, so the span
-/// alone takes a store filling a local declared empty for one into a tuple a
-/// reference holds, and writes in place into nothing.
-pub type AssignSiteKey = (Span, Option<u32>);
-
-/// The key of `site`, an `Assign` or a `List::index_assign` call.
-#[must_use]
-pub fn assign_site_key(site: &TirExpr) -> AssignSiteKey {
-    let place = if let TirExprKind::Assign { target, .. } = &site.kind {
-        &**target
-    } else {
-        let (receiver, _) = site
-            .kind
-            .call_receiver()
-            .expect("an assign site is an `Assign` or an `index_assign` call");
-        place::unwrap_ref(receiver)
-    };
-    (site.span, place::place_root(place))
 }
 
 /// Where a forward walk over a body first takes a reference to each local, and
@@ -1087,23 +1060,21 @@ impl TirRefVisitor for ReferenceWalk<'_> {
     }
 }
 
-/// The assignments that write in place in a body the ownership walk does not
-/// read, answered without liveness: every one but to a place rooted at a local
-/// of this frame that no reference reaches yet, and to that a field some
+/// Mark the assignments that write in place in a body the ownership walk does
+/// not read, answered without liveness: every one but to a place rooted at a
+/// local of this frame that no reference reaches yet, and to that a field some
 /// reference anywhere may observe.
-#[must_use]
-pub fn unanalyzed_in_place_assigns(
+pub fn mark_unanalyzed_in_place_assigns(
     func: &TirFunction,
     type_table: &TypeTable,
     plan: &ValueCopyPlan,
-) -> IndexSet<AssignSiteKey> {
+) {
     struct Scan<'a> {
         func: &'a TirFunction,
         type_table: &'a TypeTable,
         observed: &'a ObservedFields,
         list_element_assigns: &'a FuncKeySet,
         references: ReferencePoints,
-        out: IndexSet<AssignSiteKey>,
     }
     impl Scan<'_> {
         /// Whether assigning `place` at `site` writes in place, as the walk
@@ -1157,14 +1128,14 @@ pub fn unanalyzed_in_place_assigns(
                     if in_place_elements
                         && self.writes_in_place(list, self.owning_field(list), expr.span)
                     {
-                        self.out.insert(assign_site_key(expr));
+                        expr.mark(|marks| marks.in_place = true);
                     }
                 }
                 TirExprKind::Assign { target, .. }
                     if can_write_in_place(expr, self.type_table)
                         && self.writes_in_place(target, self.owning_field(target), expr.span) =>
                 {
-                    self.out.insert(assign_site_key(expr));
+                    expr.mark(|marks| marks.in_place = true);
                 }
                 _ => {}
             }
@@ -1172,7 +1143,7 @@ pub fn unanalyzed_in_place_assigns(
         }
     }
     let Some(body) = &func.body else {
-        return IndexSet::default();
+        return;
     };
     let mut scan = Scan {
         func,
@@ -1180,10 +1151,8 @@ pub fn unanalyzed_in_place_assigns(
         observed: &plan.observed_fields,
         list_element_assigns: &plan.list_element_assigns,
         references: ReferencePoints::of(body, plan),
-        out: IndexSet::default(),
     };
     scan.visit_block(body);
-    scan.out
 }
 
 /// Forms that re-enter this frame and read a local twice, so the whole function
@@ -1326,7 +1295,7 @@ struct Analyzer<'a> {
     mutations: Vec<Mutation<'a>>,
     /// Assignments to a place of an in-place type, decided once every reference
     /// this body takes is known.
-    assign_sites: Vec<AssignSite>,
+    assign_sites: Vec<AssignSite<'a>>,
     /// Whether a call's result can hold the storage an argument refers to.
     reach: &'a StorageReach<'a>,
     returns_owned: &'a FuncKeySet,
@@ -1397,7 +1366,7 @@ enum FieldEscape {
     Fields(IndexSet<u32>),
 }
 
-impl Analyzer<'_> {
+impl<'a> Analyzer<'a> {
     /// A read in a value position: the whole local is taken, so the value can
     /// leave this binding, and where that happens decides who still sees it.
     fn read(&mut self, index: u32, span: Span, live: &mut IndexSet<u32>, record: bool) {
@@ -1420,7 +1389,7 @@ impl Analyzer<'_> {
 
     /// A place an expression is read *out of*. Move-side this is the read the
     /// default walk already made; share-side it consumes nothing.
-    fn walk_place_base(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_place_base(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.read_base(*index, live, record),
             TirExprKind::FieldAccess { expr: inner, .. }
@@ -1470,7 +1439,7 @@ impl Analyzer<'_> {
 
     /// A `&place` / `&mut place`. The referent stays live, but a reference takes no
     /// value, so it never ends the local's final use. Returns the referent.
-    fn ref_read(&mut self, place: &TirExpr, live: &mut IndexSet<u32>, record: bool) -> Option<u32> {
+    fn ref_read(&mut self, place: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) -> Option<u32> {
         match &place.kind {
             TirExprKind::Local { index, .. } => {
                 live.insert(*index);
@@ -1769,32 +1738,31 @@ impl Analyzer<'_> {
         (holds, readable_storage(paths, &anywhere))
     }
 
-    /// The assignments that write in place, each turning the writes it recorded
-    /// from a repoint into a write inside the storage. Every place asks the
-    /// references this body takes to it before the assignment: one a holder
+    /// Mark the assignments that write in place, each turning the writes it
+    /// recorded from a repoint into a write inside the storage. Every place asks
+    /// the references this body takes to it before the assignment: one a holder
     /// outlives, or one whose holder is readable after the assignment. A place
     /// past a reference is the caller's as well, so it also asks the references
     /// other bodies may hold across the call that reaches this one.
-    fn in_place_assigns(
+    fn mark_in_place_assigns(
         &mut self,
         func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         reference_copies: &[(u32, u32)],
         observed: &ObservedFields,
         references: &ReferencePoints,
-    ) -> IndexSet<AssignSiteKey> {
+    ) {
         let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
-        let mut out = IndexSet::default();
         for site in &self.assign_sites {
             let Some(root) = site.root else {
-                out.insert(site.key);
+                site.node.mark(|marks| marks.in_place = true);
                 for m in site.mutations.clone() {
                     self.mutations[m].rebinds_place = false;
                 }
                 continue;
             };
             let external = site.through_ref || is_reference_local(func, root, self.type_table);
-            if !external && !references.referenced_at(root, site.key.0) {
+            if !external && !references.referenced_at(root, site.node.span) {
                 continue;
             }
             let readable = readable_storage(paths, &site.live);
@@ -1825,13 +1793,12 @@ impl Analyzer<'_> {
                     observed.contains(owner, field)
                 }));
             if in_place {
-                out.insert(site.key);
+                site.node.mark(|marks| marks.in_place = true);
                 for m in site.mutations.clone() {
                     self.mutations[m].rebinds_place = false;
                 }
             }
         }
-        out
     }
 
     /// The fields of `root` a reference that outlives the frame reaches, `None`
@@ -1921,7 +1888,7 @@ impl Analyzer<'_> {
     /// transient as it is through a named callee that keeps nothing.
     fn walk_indirect_arg(
         &mut self,
-        arg: &TirExpr,
+        arg: &'a TirExpr,
         kept: &Kept,
         live: &mut IndexSet<u32>,
         record: bool,
@@ -1942,7 +1909,7 @@ impl Analyzer<'_> {
     fn walk_ref(
         &mut self,
         op: TirUnaryOp,
-        place: &TirExpr,
+        place: &'a TirExpr,
         kept: &Kept,
         live: &mut IndexSet<u32>,
         record: bool,
@@ -1958,7 +1925,7 @@ impl Analyzer<'_> {
     fn hold_ref(
         &mut self,
         op: TirUnaryOp,
-        place: &TirExpr,
+        place: &'a TirExpr,
         kept: &Kept,
         live: &mut IndexSet<u32>,
         record: bool,
@@ -1982,7 +1949,7 @@ impl Analyzer<'_> {
     /// whose writes the call records.
     fn walk_call_arg(
         &mut self,
-        arg: &TirExpr,
+        arg: &'a TirExpr,
         callee: Option<(&FunctionRef, u32)>,
         kept: &Kept,
         ref_receiver: bool,
@@ -2047,7 +2014,7 @@ impl Analyzer<'_> {
     /// `place_base` walks a receiver read through rather than taken.
     fn walk_kept(
         &mut self,
-        value: &TirExpr,
+        value: &'a TirExpr,
         kept: &Kept,
         place_base: bool,
         live: &mut IndexSet<u32>,
@@ -2073,7 +2040,7 @@ impl Analyzer<'_> {
     /// Walk `expr` where what it yields outlives it, so a reference there pins
     /// its referent as `&place` would, and any other value hands on what it
     /// holds, through whichever arm yields it.
-    fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_persisting(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         self.walk_kept(expr, &Kept::Frame, false, live, record);
     }
 
@@ -2084,7 +2051,7 @@ impl Analyzer<'_> {
     fn walk_stored_value(
         &mut self,
         local: u32,
-        value: &TirExpr,
+        value: &'a TirExpr,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -2517,13 +2484,13 @@ impl Analyzer<'_> {
             .unwrap_or_else(|| self.all_locals.clone())
     }
 
-    fn walk_block(&mut self, block: &TirBlock, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_block(&mut self, block: &'a TirBlock, live: &mut IndexSet<u32>, record: bool) {
         for stmt in block.stmts.iter().rev() {
             self.walk_stmt(stmt, live, record);
         }
     }
 
-    fn walk_stmt(&mut self, stmt: &TirStmt, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_stmt(&mut self, stmt: &'a TirStmt, live: &mut IndexSet<u32>, record: bool) {
         match &stmt.kind {
             TirStmtKind::Let {
                 local_index,
@@ -2606,7 +2573,7 @@ impl Analyzer<'_> {
     fn walk_labeled_block(
         &mut self,
         label: &str,
-        block: &TirBlock,
+        block: &'a TirBlock,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -2621,7 +2588,7 @@ impl Analyzer<'_> {
 
     /// A loop's live-in is the least fixpoint of its body over the back-edge.
     /// Only the pass after it settles records anything.
-    fn walk_loop(&mut self, body: &TirBlock, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_loop(&mut self, body: &'a TirBlock, live: &mut IndexSet<u32>, record: bool) {
         let exit_live = live.clone();
         let mut head = exit_live.clone();
         loop {
@@ -2655,8 +2622,8 @@ impl Analyzer<'_> {
 
     fn walk_match(
         &mut self,
-        scrut: &TirExpr,
-        arms: &[TirMatchArm],
+        scrut: &'a TirExpr,
+        arms: &'a [TirMatchArm],
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -2710,7 +2677,7 @@ impl Analyzer<'_> {
     /// the referent stays move-eligible wherever none of that is readable.
     fn walk_scrutinee(
         &mut self,
-        scrut: &TirExpr,
+        scrut: &'a TirExpr,
         binds: &[u32],
         live: &mut IndexSet<u32>,
         record: bool,
@@ -2770,7 +2737,7 @@ impl Analyzer<'_> {
             .collect()
     }
 
-    fn walk_expr(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+    fn walk_expr(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.read(*index, expr.span, live, record),
             TirExprKind::Assign { target, value } => {
