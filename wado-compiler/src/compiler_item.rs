@@ -182,6 +182,9 @@ pub enum CompilerItem {
     AsyncCall,
     /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
     ResultBuffer,
+    /// `CopyBuffer` — the linear memory a started stream copy moves through,
+    /// with the copy it belongs to.
+    CopyBuffer,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -792,6 +795,7 @@ impl CompilerItem {
         Self::Slice,
         Self::AsyncCall,
         Self::ResultBuffer,
+        Self::CopyBuffer,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -1044,6 +1048,7 @@ impl CompilerItem {
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::ResultBuffer => "result_buffer",
+            Self::CopyBuffer => "copy_buffer",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1351,6 +1356,7 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
+            | Self::CopyBuffer
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
@@ -1612,7 +1618,8 @@ impl CompilerItem {
             | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall
-            | Self::ResultBuffer => CompilerItemKind::Struct,
+            | Self::ResultBuffer
+            | Self::CopyBuffer => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream

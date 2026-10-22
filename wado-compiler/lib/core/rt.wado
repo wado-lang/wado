@@ -24,7 +24,7 @@ use {
     Stream,
     StreamWritable,
     ReadyEvent,
-    ResultBuffer,
+    CopyBuffer,
     StartedRead,
     StartedWrite,
     WaitEvent,
@@ -355,9 +355,9 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StartedRead<u8> {
     let room = cm_buffer_bytes(cm_copy_count(max), 1);
     let ptr = builtin::realloc(0, 0, 1, room);
+    let packed = builtin::stream_read(handle, ptr, room);
     return StartedRead {
-        buffer: ResultBuffer { ptr, size: room, align: 1 },
-        packed: builtin::stream_read(handle, ptr, room),
+        buffer: CopyBuffer { handle, packed, ptr, size: room, align: 1 },
         items: [],
     };
 }
@@ -374,9 +374,9 @@ internal fn cm_stream_lift_u8(handle: i32, ptr: i32, count: i32) -> List<u8> {
 internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StartedWrite<u8> {
     let len = data.len();
     let ptr = cm_lower_list_u8(data.internal_raw_data_ref(), 0, len) as i32;
+    let packed = builtin::stream_write(handle, ptr, cm_copy_count(len));
     return StartedWrite {
-        buffer: ResultBuffer { ptr, size: len, align: 1 },
-        packed: builtin::stream_write(handle, ptr, cm_copy_count(len)),
+        buffer: CopyBuffer { handle, packed, ptr, size: len, align: 1 },
         data,
     };
 }
@@ -455,10 +455,9 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 }
 
 /// The event of `code` whose handle and payload the host wrote at `out_ptr`,
-/// which this frees.
-///
-/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
-/// cannot arrive either.
+/// which this frees. A set holds subtasks and stream ends only, so no future
+/// event arrives, and `waitable-set.wait` is lowered with `cancellable = 0`, so
+/// no `TASK_CANCELLED` does.
 fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);

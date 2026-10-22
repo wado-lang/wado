@@ -2109,6 +2109,11 @@ impl TypeTable {
         self.make_struct(StructDef::Decl(def))
     }
 
+    pub fn make_copy_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::CopyBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         self.single_arg_of(type_id, CompilerItem::AsyncCall)

@@ -320,18 +320,11 @@ impl CanonicalIntrinsic {
     }
 
     /// Whether the canonical returns a value the declaring signature discards:
-    /// a cancel answers with the `u32` its copy ended on, and
-    /// `fn cancel_read(&self)` states no result. The caller drops it.
+    /// a future's cancel answers with the `u32` its copy ended on, and
+    /// `Future::cancel_read(&self)` states no result. The caller drops it.
     #[must_use]
     pub fn returns_discarded_result(&self) -> bool {
-        matches!(
-            self,
-            Self::StreamCancelRead(_)
-                | Self::StreamCancelWrite(_)
-                | Self::FutureCancelRead(_)
-                | Self::FutureCancelWrite(_)
-                | Self::SubtaskCancel
-        )
+        matches!(self, Self::FutureCancelRead(_) | Self::FutureCancelWrite(_))
     }
 
     /// Whether the intrinsic creates both ends of a stream or future, packed in

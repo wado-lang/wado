@@ -231,14 +231,10 @@ fn synthesize_bindings<K>(
         .collect()
 }
 
-/// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
-///
-/// For each unique stream element type T found in stream-read calls, generates a
-/// TIR function `$cm_stream_read_<T>` that:
-/// 1. Allocates a `max * elem_size` buffer and issues the element-parameterized
-///    `stream-read` canonical, awaiting BLOCKED
-/// 2. Loops through the buffer, lifting each record from linear memory
-/// 3. Returns them as a `StreamChunk<T>` with the copy's result
+/// Generate the `Stream<T>::begin_read` bindings where T is a non-u8 WASI record
+/// type: `$cm_stream_read_<T>`, which starts the copy into a `max * elem_size`
+/// buffer and returns the `StartedRead<T>`, and `$cm_stream_lift_<T>`, which
+/// lifts the records a settled copy delivered.
 fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunction>>> {
     synthesize_bindings(
         sites,
@@ -580,14 +576,15 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         vec![
             (
                 "buffer",
-                result_buffer_literal(
+                copy_buffer_literal(
+                    local_ref(handle_idx, "handle", TypeTable::I32),
+                    packed,
                     local_ref(ptr_local, "$list_base", TypeTable::I32),
                     byte_count,
                     elem_align,
                     type_table,
                 ),
             ),
-            ("packed", packed),
             ("data", local_ref(data_idx, "data", list_type_id)),
         ],
         type_table,
@@ -595,10 +592,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
 
     binding_function(
         func_name,
-        vec![
-            binding_param("handle", handle_idx, TypeTable::I32),
-            binding_param("data", data_idx, list_type_id),
-        ],
+        &[handle_idx, data_idx],
         started_type_id,
         stmts,
         next_local,
@@ -1142,7 +1136,7 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 }
 
 /// What the receiver of a stream `#[cm]` method streams. Never read off what
-/// the call returns: monomorphize replaces a `StreamChunk<T>` with a struct.
+/// the call returns: monomorphize replaces a `StartedRead<T>` with a struct.
 fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (receiver, _) = expr.kind.call_receiver()?;
     // `type MyStream = Stream<u8>` names the same stream; the payload paths peel
@@ -1254,10 +1248,11 @@ fn synthesize_stream_read_funcs(
         ),
     ));
     let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
+    let handle = || local_ref(handle_idx, "handle", TypeTable::I32);
     let packed = cm_canonical_call(
         stream_read_name,
         vec![
-            local_ref(handle_idx, "handle", TypeTable::I32),
+            handle(),
             ptr(),
             copy_count(local_ref(max_idx, "max", TypeTable::I32)),
         ],
@@ -1269,9 +1264,15 @@ fn synthesize_stream_read_funcs(
         vec![
             (
                 "buffer",
-                result_buffer_literal(ptr(), byte_count(), elem_align, type_table),
+                copy_buffer_literal(
+                    handle(),
+                    packed,
+                    ptr(),
+                    byte_count(),
+                    elem_align,
+                    type_table,
+                ),
             ),
-            ("packed", packed),
             (
                 "items",
                 list_with_capacity(elem_type_id, i32_const(0), type_table),
@@ -1282,10 +1283,7 @@ fn synthesize_stream_read_funcs(
     stmts.push(return_stmt(Some(started)));
     let begin = binding_function(
         names.begin,
-        vec![
-            binding_param("handle", handle_idx, TypeTable::I32),
-            binding_param("max", max_idx, TypeTable::I32),
-        ],
+        &[handle_idx, max_idx],
         started_type_id,
         stmts,
         next_local,
@@ -1463,11 +1461,7 @@ fn synthesize_stream_lift_func(
 
     binding_function(
         name,
-        vec![
-            binding_param("handle", handle_idx, TypeTable::I32),
-            binding_param("ptr", ptr_idx, TypeTable::I32),
-            binding_param("count", count_idx, TypeTable::I32),
-        ],
+        &[handle_idx, ptr_idx, count_idx],
         array_type_id,
         stmts,
         next_local,
@@ -1514,25 +1508,37 @@ fn list_with_capacity(
     )
 }
 
-/// `ResultBuffer { ptr, size, align }`: the linear memory a started copy holds
-/// until it settles, freed as the buffer drops.
-fn result_buffer_literal(
+/// `CopyBuffer { handle, packed, ptr, size, align }`: the linear memory the copy
+/// on `handle` moves through, which the canonical answered `packed` for. Field
+/// order follows the declaration, so the copy starts after `ptr` is allocated.
+fn copy_buffer_literal(
+    handle: TirExpr,
+    packed: TirExpr,
     ptr: TirExpr,
     size: TirExpr,
     align: i32,
     type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
-    let buffer_type = type_table.borrow_mut().make_result_buffer();
+    let buffer_type = type_table.borrow_mut().make_copy_buffer();
+    let struct_name = type_table
+        .borrow()
+        .compiler_struct_name(CompilerItem::CopyBuffer)
+        .to_string();
     struct_literal(
         buffer_type,
-        "ResultBuffer",
-        vec![("ptr", ptr), ("size", size), ("align", i32_const(align))],
+        struct_name,
+        vec![
+            ("handle", handle),
+            ("packed", packed),
+            ("ptr", ptr),
+            ("size", size),
+            ("align", i32_const(align)),
+        ],
     )
 }
 
-/// `StartedRead { buffer, packed, items }` / `StartedWrite { buffer, packed, data }`
-/// — a copy the canonical answered `packed` for, not yet settled. Field order
-/// follows the declaration.
+/// `StartedRead { buffer, items }` / `StartedWrite { buffer, data }`: a copy
+/// started and not yet settled. Field order follows the declaration.
 fn started_copy_literal(
     type_id: TypeId,
     item: CompilerItem,
@@ -1543,26 +1549,31 @@ fn started_copy_literal(
     struct_literal(type_id, struct_name, fields)
 }
 
-fn binding_param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
-    TirParam {
-        name: name.to_string(),
-        local_index,
-        type_id,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }
-}
-
-/// A synthesized binding function of the entry module.
+/// A synthesized binding function of the entry module. Its parameters are the
+/// locals `params` names, so each takes its name, type and mutability from the
+/// slot it binds.
 fn binding_function(
     name: String,
-    params: Vec<TirParam>,
+    params: &[u32],
     return_type: TypeId,
     stmts: Vec<TirStmt>,
     local_count: u32,
     locals: Vec<TirLocal>,
 ) -> TirFunction {
+    let params = params
+        .iter()
+        .map(|&local_index| {
+            let local = &locals[local_index as usize];
+            TirParam {
+                name: local.name.clone(),
+                local_index,
+                type_id: local.type_id,
+                is_mut: local.is_mut,
+                is_mut_ref: false,
+                span: synth_span(),
+            }
+        })
+        .collect();
     TirFunction {
         module_source: ModuleSource::default(),
         name,
