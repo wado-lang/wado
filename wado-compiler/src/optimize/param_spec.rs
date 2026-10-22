@@ -561,9 +561,9 @@ fn summarize_params(
 
 /// The constant fields of a struct-literal operand, or of a reference to one,
 /// or `None` when the operand is neither. A cast names the storage its operand
-/// does, so either side of the reference may carry one. A reference to a literal is the only
-/// name its object has, so a reference local bound to one roots it as a struct
-/// local roots its own. `expected` guards against reading field indices off a
+/// does, so either side of the reference may carry one. A reference to a
+/// literal is the only name its object has, so a reference local bound to one
+/// roots it as a struct local roots its own. `expected` guards against reading field indices off a
 /// literal of a different struct than the local's declared type — a local slot
 /// reused for two shapes would otherwise mix their field numbering.
 fn struct_literal_consts(
@@ -683,8 +683,8 @@ fn collect_roots(
         roots.swap_remove(local);
     }
     let (mut alias_of, alias_reads) = settle_aliases(&alias_defs, &defined, &invalid);
-    // A binding settled as no alias still binds the local to an object other
-    // than its literal.
+    // A binding settled as no alias still binds the local to another object, so
+    // a literal it is bound to elsewhere is not its only one.
     for def in &alias_defs {
         if !alias_of.contains_key(&def.local) {
             roots.swap_remove(&def.local);

@@ -2761,39 +2761,6 @@ fn inline_calls_in_block(
     }
 }
 
-/// Records `inlined_key` as spliced at `at`, then scans the spliced body for
-/// calls to splice, as far as the re-scan cap pays for.
-fn rescan_splice(
-    body: &mut Body,
-    at: ExprId,
-    inlined_key: FuncId,
-    candidates: Candidates<'_>,
-    descriptors: &[FunctionRef],
-    frame: &mut CallerFrame<'_>,
-    type_table: &TypeTable,
-    inlined_funcs: &mut Vec<FuncId>,
-    labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
-    site: Site,
-) {
-    if !inlined_funcs.contains(&inlined_key) {
-        inlined_funcs.push(inlined_key);
-    }
-    let left = Cell::new(candidates.rescan_cap);
-    inline_calls_in_expr(
-        body,
-        at,
-        candidates.rescanning(&left),
-        descriptors,
-        frame,
-        type_table,
-        inlined_funcs,
-        labels,
-        reval,
-        site,
-    );
-}
-
 /// The expression and block children of `e`, excluding patterns, in the order
 /// the tree `inline_calls_in_expr` recursed (expression children first, then
 /// block children — `If`/`Switch` put condition/scrutinee before their blocks,
@@ -3796,11 +3763,14 @@ fn inline_calls_in_expr(
             },
         );
         body.exprs[e] = moved;
-        rescan_splice(
+        if !inlined_funcs.contains(&inlined_key) {
+            inlined_funcs.push(inlined_key);
+        }
+        let left = Cell::new(candidates.rescan_cap);
+        inline_calls_in_expr(
             body,
             e,
-            inlined_key,
-            candidates,
+            candidates.rescanning(&left),
             descriptors,
             frame,
             type_table,
