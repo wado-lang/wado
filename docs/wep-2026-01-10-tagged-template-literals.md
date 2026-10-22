@@ -82,8 +82,8 @@ name it — and is reached only through the bound the tag declares.
 The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
 is the template's text with each hole spelled as its type and specifier, cut to
 50 characters with `...`: `` sql`id = ${id:04}` `` is named
-`` `id = ${i32:04}` ``. The name describes the shape; it is not its identity,
-which the cut leaves out.
+`` `id = ${i32:04}` ``. The name describes the shape but does not identify it:
+past the cut, two shapes can read alike.
 
 A hole's field carries its value without copying it and without boxing it. A
 type whose reference is a bare GC handle — `struct`, `List`, `String`, `i128`
