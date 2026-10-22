@@ -1066,10 +1066,9 @@ parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
 Each template shape has an anonymous type of its own, holding one field per
-hole. The shape is the template's segments, specifiers, hole types and hole
-source texts. So
-`` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
-even where `a` and `b` share a type. The type is unnameable and reached only
+hole. The shape is the template's segments, specifiers and hole types, so
+`` tag`${a}` `` and `` tag`${b}` `` are one type where `a` and `b` share one,
+and one instantiation of the tag. The type is unnameable and reached only
 through the bound; a diagnostic and `Reflect::type_name()` show it as its text
 with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
 at 50 characters with `...`.
@@ -1103,7 +1102,7 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit()` / `raw()` (the preceding segment, escapes processed or preserved),
-`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`get(&t)` (the value, `V`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states).
 `ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last

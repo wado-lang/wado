@@ -73,18 +73,17 @@ type it takes, since the template's own type is one no source spells.
 
 Each template literal that carries a tag denotes a value of a compiler-synthesized
 struct type, unique to that template's static shape, holding one field per
-hole. The shape is the tuple of (raw segments, specifiers, hole source texts,
-hole types): two templates with the same shape denote the same type and share
-every instantiation of the tag. The source texts are part of the shape because
-`TemplateHole::source()` is a constant, so `` tag`${a}` `` and `` tag`${b}` `` are two
-types even where `a` and `b` share one. The type is anonymous — nothing in the
-source can name it — and is reached only through the bound the tag declares.
+hole. The shape is the tuple of (raw segments, specifiers, hole types): two
+templates with the same shape denote the same type and share every
+instantiation of the tag, so `` tag`${a}` `` and `` tag`${b}` `` are one type
+where `a` and `b` share one. The type is anonymous — nothing in the source can
+name it — and is reached only through the bound the tag declares.
 
 The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
 is the template's text with each hole spelled as its type and specifier, cut to
 50 characters with `...`: `` sql`id = ${id:04}` `` is named
-`` `id = ${i32:04}` ``. The name describes the shape; it is not its identity,
-which also holds the source texts.
+`` `id = ${i32:04}` ``. The name describes the shape but does not identify it:
+past the cut, two shapes can read alike.
 
 A hole's field carries its value without copying it and without boxing it. A
 type whose reference is a bare GC handle — `struct`, `List`, `String`, `i128`
@@ -146,9 +145,6 @@ impl<T, V> TemplateHole<T, V> {
     /// `StructField::get` does; only a mutation copies.
     pub fn get(&self, t: &T) -> V;
 
-    /// The hole's expression as written: `"user.name"`.
-    pub fn source(&self) -> String;
-
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
@@ -207,8 +203,8 @@ Referencing a local of a handle type marks nothing on that local: only a
 box-target type's local is retagged by a reference, and those holes are held by
 value.
 
-The synthesized `impl ReflectTemplate` carries the segments, specifiers and
-sources as literals in its `members()` and `tail()` bodies, and `TemplateHole::get`
+The synthesized `impl ReflectTemplate` carries the segments and specifiers as
+literals in its `members()` and `tail()` bodies, and `TemplateHole::get`
 projects the field at the hole's index, dereferencing a handle field.
 
 ### Writing a tag
@@ -246,22 +242,6 @@ fn html<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> Html {
     }
     out.push_str(ReflectTemplate::<T>::tail());
     return Html { out };
-}
-```
-
-`source()` gives a structured sink its field names for free:
-
-```wado
-fn info<T: ReflectTemplate<Holes = [..V]>, ..V: Serialize>(t: T) with Log {
-    let mut msg = "";
-    let mut fields = FieldMap::new();
-    for let h of ReflectTemplate::<T>::members() {
-        msg.push_str(h.lit());
-        h.fmt(&t, &mut Formatter::new(&mut msg));
-        fields.insert(h.source(), h.get(&t));   // "user.id" => 42
-    }
-    msg.push_str(ReflectTemplate::<T>::tail());
-    emit(msg, fields);
 }
 ```
 
@@ -325,7 +305,7 @@ What the tag body compiles to, once monomorphized, inlined and folded:
 
 - `for let h of members()` is unrolled — one straight-line block per hole.
 - `members()` is a closed constant expression: globalization hoists it, and
-  every `lit()` / `raw()` / `source()` / `has_spec()` is a field projected out
+  every `lit()` / `raw()` / `has_spec()` is a field projected out
   of that global, which `niri` folds to the literal. `push_str(h.lit())` is
   the same instruction sequence as `push_str("SELECT …")`.
 - `get()` is a projection of the template struct's field at a constant index,
@@ -344,8 +324,7 @@ the optimizer's gap to close, not a reason to move the segments into a runtime
 value.
 
 Each distinct template shape instantiates the tag once, as inlining a builder at
-each site would. Two sites with the same shape share one instantiation; two
-that differ only in how a hole is spelled do not.
+each site would. Two sites with the same shape share one instantiation.
 
 ### Compile-time evaluation
 
@@ -375,6 +354,9 @@ path already guarantees.
   it, and it would make a tag a type rather than a function.
 - No literal index into `Members` or `Holes`: a pack is walked, never indexed
   (WEP 2026-03-14).
+- No hole source text. A tag reading it would make the spelling of a hole part
+  of the shape, so `` tag`${a}` `` and `` tag`${b}` `` would instantiate the tag
+  twice over one layout.
 
 ## Alternatives considered
 
@@ -427,7 +409,7 @@ introduces a mechanism; each item names the existing one it extends.
 
 - `AnonShape::Template(TemplateShape)` beside `Fields` and `Synthetic`.
   `TemplateShape { segments: Vec<String>, holes: Vec<TemplateHole> }`, the
-  segments raw, each hole `{ ty, spec: Option<String>, source }`. The shape is
+  segments raw, each hole `{ ty, spec: Option<String> }`. The shape is
   the interning key, so two sites of one shape reach one `AnonStructId` through
   `intern_shape`, as struct literals do.
 - The struct's fields are derived from the shape: `h{k}` typed
@@ -452,7 +434,7 @@ introduces a mechanism; each item names the existing one it extends.
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail()`, `raw_tail()`, each method
   carrying its own `compiler_item`.
-- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, source, has_spec }` with the constant accessors reading fields, and two bridged ones:
+- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, has_spec }` with the constant accessors reading fields, and two bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`. Both builtins are bodyless
   markers beside `struct_field_get`. `core:prelude` re-exports it with the
@@ -857,9 +839,6 @@ warm-up phase takes that cost. Three runs:
   same static method fails the same way when spelled as a call, and both are
   pinned as `#[TODO]` — `reflect_pack_static_namespace_import_todo.wado` and
   `reflect_pack_blanket_static_todo.wado`.
-- Two shapes that differ only in their holes' source texts
-  (`` tag`${a}` `` and `` tag`${b}` ``, `a` and `b` of one type) are two types
-  with one name. A diagnostic relating them names the same type on both sides.
 - The type has no `Inspect`, though every other type does. An `assert` that
   captures a template's value fails to compile
   (``assert id`n=${n}` == id`n=${n}`;``), and the error names the type by its

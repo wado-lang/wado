@@ -3477,9 +3477,8 @@ The flags value with only this bit set.
 ### `pub struct TemplateHole<T, V>`
 
 A hole handle minted by `ReflectTemplate::members()`: the literal text
-before the hole, the hole's source text and specifier presence are
-constants, and `get` / `fmt` reach the hole's value in a template.
-See WEP 2026-01-10.
+before the hole and the hole's specifier presence are constants, and
+`get` / `fmt` reach the hole's value in a template. See WEP 2026-01-10.
 
 _Fields are private._
 
@@ -3495,10 +3494,6 @@ one, escapes processed.
 #### `pub fn raw(&self) -> String`
 
 `lit()` with escapes preserved: `\n` is a backslash and an `n`.
-
-#### `pub fn source(&self) -> String`
-
-The hole's expression as written: `"user.name"`.
 
 #### `pub fn has_spec(&self) -> bool`
 
