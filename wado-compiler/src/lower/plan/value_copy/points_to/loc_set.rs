@@ -93,6 +93,39 @@ impl LocSet {
         }
     }
 
+    /// The non-empty words, by ascending index.
+    fn words(&self) -> impl Iterator<Item = (u32, u64)> + '_ {
+        let (small, words) = match &self.repr {
+            Repr::Small(locs) => (locs.as_slice(), [].as_slice()),
+            Repr::Words { words, .. } => ([].as_slice(), words.as_slice()),
+        };
+        let mut small = small.iter().copied().peekable();
+        std::iter::from_fn(move || {
+            let first = small.next()?;
+            let (i, mut w) = (first / 64, 1 << (first % 64));
+            while let Some(loc) = small.next_if(|&loc| loc / 64 == i) {
+                w |= 1 << (loc % 64);
+            }
+            Some((i, w))
+        })
+        .chain(words.iter().copied())
+    }
+
+    /// Add to `out` each location here that `other` lacks.
+    pub fn difference_into(&self, other: &LocSet, out: &mut LocSet) {
+        let mut theirs = other.words().peekable();
+        for (i, w) in self.words() {
+            while theirs.next_if(|&(j, _)| j < i).is_some() {}
+            let missing = match theirs.peek() {
+                Some(&(j, v)) if j == i => w & !v,
+                _ => w,
+            };
+            if missing != 0 {
+                out.insert_word(i, missing);
+            }
+        }
+    }
+
     /// Set the bits `bits` of word `at`, answering those that were clear.
     fn insert_word(&mut self, at: u32, bits: u64) -> u64 {
         assert_ne!(bits, 0, "a set holds no empty word");
@@ -231,6 +264,27 @@ mod tests {
             let new: Vec<u32> = (0..end).filter(|n| is_b(n) && !is_a(n)).collect();
             assert_eq!(added.iter().collect::<Vec<_>>(), new);
             assert_eq!(added.len(), new.len());
+        }
+    }
+
+    #[test]
+    fn difference_adds_what_the_other_lacks_across_every_form() {
+        // Small less small, small less words, words less small, words less words.
+        for (step_a, step_b, end) in [(3, 2, 60), (3, 2, 400), (5, 7, 1000), (2, 3, 100_000)] {
+            let a = set((0..end).step_by(step_a));
+            let b = set((0..end).step_by(step_b));
+            let mut out = set([1, end + 1]);
+            a.difference_into(&b, &mut out);
+            let is_b = |n: &u32| n.is_multiple_of(step_b as u32);
+            let mut expected: Vec<u32> = (0..end)
+                .step_by(step_a)
+                .filter(|n| !is_b(n))
+                .chain([1, end + 1])
+                .collect();
+            expected.sort_unstable();
+            expected.dedup();
+            assert_eq!(out.iter().collect::<Vec<_>>(), expected);
+            assert_eq!(out.len(), expected.len());
         }
     }
 
