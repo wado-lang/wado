@@ -3142,6 +3142,7 @@ fn "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0"(self, f) {
     let val_i64_7: i64;
     let q: i32;
+    let arr: ref Array<u8>;
     val_i64_7 = builtin::i64_extend_i32_u(self);
     q = $inline_count_digits_u64_base_1: block -> i32 {
         if val_i64_7 == 0_i64 {
@@ -3154,7 +3155,22 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower
         $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_145;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_arg_3.repr, $mv_arg_3.used, q);
     };
-    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee $mv_arg_3(f.buf).repr, self, val_i64_7, q, 4, 15, 0);
+    arr = local.tee $mv_arg_3(f.buf).repr;
+    q = self + q;
+    if val_i64_7 == 0_i64 {
+        builtin::array_set_u8(arr, self, 48);
+    } else {
+        b348: block {
+            l349: loop {
+                break_if b348 val_i64_7 == 0_i64;
+                q = q - 1;
+                self = builtin::i32_wrap_i64(val_i64_7 & 15_i64);
+                builtin::array_set_u8(arr, q, select i32(self < 10, 48 + self, (97 + self) - 10) & 255);
+                val_i64_7 = val_i64_7 >>u 4_i64;
+                continue l349;
+            };
+        };
+    }
 }
 
 export fn "opt_sroa_box_parameter.wado/$cm_export__run" as "run"

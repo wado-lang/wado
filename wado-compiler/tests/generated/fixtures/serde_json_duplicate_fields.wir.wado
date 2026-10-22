@@ -430,9 +430,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" =
 
 type "functype//core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(151)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(152)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>", ref "core:prelude/format.wado//Formatter");  // TypeId(152)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>", ref "core:prelude/format.wado//Formatter");  // TypeId(153)
+type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(153)
 
 type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(154)
 
@@ -6141,6 +6141,32 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, self, digit_count);
 }
 
+fn "core:prelude/traits.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
+    let s_9: ref "core:prelude/string.wado//String";
+    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>,serde_json_duplicate_fields.wado/Point>";
+    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>,core:serde/DeserializeError>";
+    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/ReflectVariant::members"();
+    if self.discriminant == 0 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
+        s_9 = $mv$$tuple_0$0.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
+        let $mv_arg_1: ref "serde_json_duplicate_fields.wado//Point";
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<serde_json_duplicate_fields.wado/Point>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>$serde_json_duplicate_fields.wado/Point$sroa[v.value]"(self, 0)).x, $mv_arg_1.y, f);
+    }
+    if self.discriminant == 1 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
+        s_9 = $mv$$tuple_0$1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
+        let $mv_arg_2: ref "core:serde//DeserializeError";
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:serde/DeserializeError>"(local.tee $mv_arg_2("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>$core:serde/DeserializeError$sroa[v.value]"(self, 1)).kind, $mv_arg_2.message, $mv_arg_2.offset, f);
+    }
+}
+
 fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     let bits: u64;
     let is_neg_16: bool;
@@ -6229,32 +6255,6 @@ fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     }
     if f.width > 0 {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, self_22);
-    }
-}
-
-fn "core:prelude/traits.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
-    let $load_1: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
-    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>,serde_json_duplicate_fields.wado/Point>";
-    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>,core:serde/DeserializeError>";
-    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/ReflectVariant::members"();
-    if self.discriminant == 0 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
-        s_9 = $mv$$tuple_0$0.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
-        let $mv_arg_1: ref "serde_json_duplicate_fields.wado//Point";
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<serde_json_duplicate_fields.wado/Point>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>$serde_json_duplicate_fields.wado/Point$sroa[v.value]"(self, 0)).x, $mv_arg_1.y, f);
-    }
-    if self.discriminant == 1 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee $load_1(f.buf), s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), $load_1);
-        s_9 = $mv$$tuple_0$1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_1, s_9);
-        let $mv_arg_2: ref "core:serde//DeserializeError";
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:serde/DeserializeError>"(local.tee $mv_arg_2("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>$core:serde/DeserializeError$sroa[v.value]"(self, 1)).kind, $mv_arg_2.message, $mv_arg_2.offset, f);
     }
 }
 

@@ -214,17 +214,17 @@ type "functype//core:collections/treemap.wado/core:collections/treemap.wado/Tree
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<u32,i32>", u32, i32) -> i32;  // TypeId(72)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i8,i32>", i8, i32) -> i32;  // TypeId(73)
+type "functype//core:prelude/primitive.wado/i8::fmt_into$sroa[self.value]" = fn(i8, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/i8::fmt_into$sroa[self.value]" = fn(i8, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i8,i32>", i8, i32) -> i32;  // TypeId(74)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
 
 type "functype//core:prelude/primitive.wado/u32::fmt_into$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<u64,i32>", u64, i32) -> i32;  // TypeId(77)
+type "functype//core:prelude/primitive.wado/u64::fmt_into$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(77)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_into$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<u64,i32>", u64, i32) -> i32;  // TypeId(78)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(79)
 
@@ -2172,6 +2172,19 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>
     };
 }
 
+fn "core:prelude/primitive.wado/i8::fmt_into$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]"(self, key, e) {
     let $load_3: ref Array<i32>;
     let $load_7: ref Array<i32>;
@@ -2202,15 +2215,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>:
     n_3 = self.root;
     depth = 0;
     block {
-        l256: loop {
+        l257: loop {
             if local.tee found($inline_core_collections_treemap_wado_TreeMap_i8_i32___search_node_sroa_key_value__0: block -> i32 {
                 base_43 = n_3 * 31;
                 lo = 0;
                 hi = builtin::array_get_value<i32>(self.lens, n_3);
                 $licm_nkeys_14 = self.nkeys;
-                b258: block {
-                    l259: loop {
-                        break_if b258 lo >= hi;
+                b259: block {
+                    l260: loop {
+                        break_if b259 lo >= hi;
                         mid = (lo + hi) >> 1;
                         if local.tee $local_7($inline_core_collections_treemap_wado_TreeMap_i8_i32___search_node_sroa_key_value__0__$inline_i8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             other_51 = builtin::array_get_value<i8>($licm_nkeys_14, base_43 + mid);
@@ -2228,7 +2241,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>:
                         } else {
                             break $inline_core_collections_treemap_wado_TreeMap_i8_i32___search_node_sroa_key_value__0: mid;
                         }
-                        continue l259;
+                        continue l260;
                     };
                 };
                 break $inline_core_collections_treemap_wado_TreeMap_i8_i32___search_node_sroa_key_value__0: -1 - lo;
@@ -2283,22 +2296,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>:
             }
             n_3 = builtin::array_get_value<i32>(self.kids, (n_3 * 32) + found);
             depth = depth + 1;
-            continue l256;
+            continue l257;
         };
     };
-}
-
-fn "core:prelude/primitive.wado/i8::fmt_into$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(self, f) {
@@ -2324,6 +2324,18 @@ fn "core:prelude/primitive.wado/u32::fmt_into$sroa[self.value]"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
+fn "core:prelude/primitive.wado/u64::fmt_into$sroa[self.value]"(self, f) {
+    let digit_count: i32;
+    let offset: i32;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64"(self);
+    offset = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, digit_count);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, self, digit_count);
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>::place$sroa[key.value]"(self, key, e) {
@@ -2356,15 +2368,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>
     n_3 = self.root;
     depth = 0;
     block {
-        l276: loop {
+        l277: loop {
             if local.tee found($inline_core_collections_treemap_wado_TreeMap_u64_i32___search_node_sroa_key_value__0: block -> i32 {
                 base_43 = n_3 * 31;
                 lo = 0;
                 hi = builtin::array_get_value<i32>(self.lens, n_3);
                 $licm_nkeys_14 = self.nkeys;
-                b278: block {
-                    l279: loop {
-                        break_if b278 lo >= hi;
+                b279: block {
+                    l280: loop {
+                        break_if b279 lo >= hi;
                         mid = (lo + hi) >> 1;
                         if local.tee $local_7($inline_core_collections_treemap_wado_TreeMap_u64_i32___search_node_sroa_key_value__0__$inline_u64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             other_51 = builtin::array_get_value<u64>($licm_nkeys_14, base_43 + mid);
@@ -2382,7 +2394,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>
                         } else {
                             break $inline_core_collections_treemap_wado_TreeMap_u64_i32___search_node_sroa_key_value__0: mid;
                         }
-                        continue l279;
+                        continue l280;
                     };
                 };
                 break $inline_core_collections_treemap_wado_TreeMap_u64_i32___search_node_sroa_key_value__0: -1 - lo;
@@ -2437,21 +2449,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u64,i32>
             }
             n_3 = builtin::array_get_value<i32>(self.kids, (n_3 * 32) + found);
             depth = depth + 1;
-            continue l276;
+            continue l277;
         };
     };
-}
-
-fn "core:prelude/primitive.wado/u64::fmt_into$sroa[self.value]"(self, f) {
-    let digit_count: i32;
-    let offset: i32;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(self);
-    offset = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, digit_count);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, self, digit_count);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {

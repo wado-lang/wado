@@ -156,21 +156,21 @@ type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Meters::
 
 type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Meters::add$sroa[self.value,other.value]" = fn(f64, f64) -> f64;  // TypeId(67)
 
-type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::raw$sroa[self.value]" = fn(i32) -> i32;  // TypeId(68)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(68)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
+type "functype//core:prelude/traits.wado/opt_sroa_newtype_param.wado/Meters^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
-type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::add_raw$sroa[self.value]" = fn(i32, i32) -> i32;  // TypeId(70)
+type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::raw$sroa[self.value]" = fn(i32) -> i32;  // TypeId(70)
 
-type "functype//core:prelude/traits.wado/opt_sroa_newtype_param.wado/Meters^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
+type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
+type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::inc$sroa[self.value]" = fn(i32) -> i32;  // TypeId(72)
 
-type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::inc$sroa[self.value]" = fn(i32) -> i32;  // TypeId(73)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
+type "functype//core:prelude/traits.wado/opt_sroa_newtype_param.wado/Seconds^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/traits.wado/opt_sroa_newtype_param.wado/Seconds^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+type "functype//opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::add_raw$sroa[self.value]" = fn(i32, i32) -> i32;  // TypeId(75)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(76)
 
@@ -2193,10 +2193,6 @@ fn "opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Meters::add$sroa[sel
     return self + other;
 }
 
-fn "opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::raw$sroa[self.value]"(self) {
-    return self;
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -2210,10 +2206,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
-fn "opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::add_raw$sroa[self.value]"(self, n) {
-    return self + n;
-}
-
 fn "core:prelude/traits.wado/opt_sroa_newtype_param.wado/Meters^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//String";
@@ -2222,6 +2214,10 @@ fn "core:prelude/traits.wado/opt_sroa_newtype_param.wado/Meters^core:prelude/tra
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee other(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), $load_0);
     other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Meters"), used: 6 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_0, other);
+}
+
+fn "opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::raw$sroa[self.value]"(self) {
+    return self;
 }
 
 fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f) {
@@ -2450,6 +2446,10 @@ fn "core:prelude/traits.wado/opt_sroa_newtype_param.wado/Seconds^core:prelude/tr
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee other(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), $load_0);
     other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Seconds"), used: 7 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($load_0, other);
+}
+
+fn "opt_sroa_newtype_param.wado/opt_sroa_newtype_param.wado/Count::add_raw$sroa[self.value]"(self, n) {
+    return self + n;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {

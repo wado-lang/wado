@@ -204,9 +204,9 @@ type "functype//reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(69)
 
-type "functype//reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^reflect_variant_inspect_proof.wado/LibInspect::lib_inspect$sroa[self.value]" = fn(ref "reflect_variant_inspect_proof.wado//Shape") -> ref "core:prelude/string.wado//String";  // TypeId(70)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(70)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
+type "functype//reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^reflect_variant_inspect_proof.wado/LibInspect::lib_inspect$sroa[self.value]" = fn(ref "reflect_variant_inspect_proof.wado//Shape") -> ref "core:prelude/string.wado//String";  // TypeId(71)
 
 type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
 
@@ -2495,6 +2495,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
 fn "reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^reflect_variant_inspect_proof.wado/LibInspect::lib_inspect$sroa[self.value]"(self) {
     let $load_3: ref Array<u8>;
     let out_2: ref "core:prelude/string.wado//String";
@@ -2622,19 +2635,6 @@ fn "reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^
         out_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Point"), used: 12 };
     }
     return out_2;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {

@@ -228,15 +228,15 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", i32, i32, char);  // TypeId(92)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
+type "functype//core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Box<char>", ref "core:prelude/string.wado//String");  // TypeId(93)
 
-type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(char, ref "core:prelude/string.wado//String");  // TypeId(94)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(94)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(95)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(char, ref "core:prelude/string.wado//String");  // TypeId(96)
 
-type "functype//core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Box<char>", ref "core:prelude/string.wado//String");  // TypeId(97)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
 
 type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
 
@@ -3490,6 +3490,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     };
 }
 
+fn "core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[f.buf]"(self, f) {
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 }, f);
+    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self.value, f);
+}
+
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
     let text: ref "core:prelude/string.wado//String";
     text = (if self -> ref "core:prelude/string.wado//String" {
@@ -3498,6 +3503,19 @@ fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
@@ -3637,19 +3655,6 @@ fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$s
     builtin::array_set_u8(f.repr, start_40, 39);
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
 fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
@@ -3660,11 +3665,6 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
-}
-
-fn "core:prelude/format.wado/&char^core:prelude/traits.wado/Inspect::inspect$sroa[f.buf]"(self, f) {
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 }, f);
-    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self.value, f);
 }
 
 fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f) {

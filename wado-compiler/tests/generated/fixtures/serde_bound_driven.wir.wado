@@ -10251,6 +10251,8 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec1"(self, f, b
     let bits_per_digit_6: i32;
     let self_12: i32;
     let q: i32;
+    let mask64: i64;
+    let $licm_arith_13: u64;
     bits_per_digit_6 = (if base == 2 -> i32 {
         1;
     } else {
@@ -10264,7 +10266,28 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec1"(self, f, b
         break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_6)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_6) + 1) + ((self_12 ^ bits_per_digit_6) >> 31), q);
     };
     $mv$alt_prefix$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv$alt_prefix$repr, $mv$alt_prefix$used, q);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, $mv$alt_prefix$used, self, q, bits_per_digit_6, base, upper);
+    $mv$alt_prefix$repr = f.buf.repr;
+    mask64 = builtin::i64_extend_i32_s(base);
+    q = $mv$alt_prefix$used + q;
+    if self == 0_i64 {
+        builtin::array_set_u8($mv$alt_prefix$repr, $mv$alt_prefix$used, 48);
+    } else {
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit_6);
+        b1155: block {
+            l1156: loop {
+                break_if b1155 self == 0_i64;
+                q = q - 1;
+                bits_per_digit_6 = builtin::i32_wrap_i64(self & mask64);
+                builtin::array_set_u8($mv$alt_prefix$repr, q, (if bits_per_digit_6 < 10 -> i32 {
+                    48 + bits_per_digit_6;
+                } else {
+                    select i32(upper, (65 + bits_per_digit_6) - 10, (97 + bits_per_digit_6) - 10);
+                }) & 255);
+                self = self >>u $licm_arith_13;
+                continue l1156;
+            };
+        };
+    }
 }
 
 export fn "serde_bound_driven.wado/$cm_export__$test_0_named_struct_serializes_without_an_explicit_impl_marker" as "$test_0_named_struct_serializes_without_an_explicit_impl_marker"

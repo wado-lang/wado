@@ -669,29 +669,124 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
 }
 
 fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_0::$call$dae[self]"(x) {
+    let $load_2: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
-    let new_used: i32;
+    let new_used_14: i32;
     let start_15: i32;
     let x_28: i64;
+    let q: u64;
+    let tens: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    if @unlikely(local.tee new_used(0 + 5) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee new_used_14(0 + 5) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_14);
     }
     start_15 = $local_2.used;
-    $local_2.used = new_used;
-    builtin::array_copy<u8>($local_2.repr, start_15, global:effect_param_eager_closure_methods.wado::$const_obj_45, 0, 5);
+    $local_2.used = new_used_14;
+    builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_15, global:effect_param_eager_closure_methods.wado::$const_obj_45, 0, 5);
     start_15 = x < 0;
-    x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(x); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
-    start_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, start_15, x);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_15, x_28, x);
-    x = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
-    start_15 = builtin::i32_wrap_i64(x_28 >> 32_i64);
-    new_used = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"(new_used = x; x = 0; new_used);
-    x = start_15;
-    start_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_15 = x; x = 0; start_15, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_15 = new_used; new_used = 0; start_15);
+    x_28 = builtin::i64_extend_i32_s(x);
+    x_28 = select i64(x_28 < 0_i64, 0_i64 - x_28, x_28);
+    x = $inline_count_digits_u64_1: block -> i32 {
+        if x_28 <u 100000_i64 {
+            if x_28 <u 100_i64 {
+                if x_28 <u 10_i64 {
+                    break $inline_count_digits_u64_1: 1;
+                }
+                break $inline_count_digits_u64_1: 2;
+            }
+            if x_28 <u 1000_i64 {
+                break $inline_count_digits_u64_1: 3;
+            }
+            if x_28 <u 10000_i64 {
+                break $inline_count_digits_u64_1: 4;
+            }
+            break $inline_count_digits_u64_1: 5;
+        }
+        if x_28 <u 10000000000_i64 {
+            if x_28 <u 10000000_i64 {
+                if x_28 <u 1000000_i64 {
+                    break $inline_count_digits_u64_1: 6;
+                }
+                break $inline_count_digits_u64_1: 7;
+            }
+            if x_28 <u 100000000_i64 {
+                break $inline_count_digits_u64_1: 8;
+            }
+            if x_28 <u 1000000000_i64 {
+                break $inline_count_digits_u64_1: 9;
+            }
+            break $inline_count_digits_u64_1: 10;
+        }
+        if x_28 <u 1000000000000000_i64 {
+            if x_28 <u 1000000000000_i64 {
+                if x_28 <u 100000000000_i64 {
+                    break $inline_count_digits_u64_1: 11;
+                }
+                break $inline_count_digits_u64_1: 12;
+            }
+            if x_28 <u 10000000000000_i64 {
+                break $inline_count_digits_u64_1: 13;
+            }
+            if x_28 <u 100000000000000_i64 {
+                break $inline_count_digits_u64_1: 14;
+            }
+            break $inline_count_digits_u64_1: 15;
+        }
+        if x_28 <u 100000000000000000_i64 {
+            if x_28 <u 10000000000000000_i64 {
+                break $inline_count_digits_u64_1: 16;
+            }
+            break $inline_count_digits_u64_1: 17;
+        }
+        if x_28 <u 1000000000000000000_i64 {
+            break $inline_count_digits_u64_1: 18;
+        }
+        if x_28 <u -8446744073709551616_i64 {
+            break $inline_count_digits_u64_1: 19;
+        }
+        break $inline_count_digits_u64_1: 20;
+    };
+    if start_15 {
+        if @unlikely(local.tee start_15($local_2.used + 1) > builtin::array_len($load_2)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_15);
+        }
+        new_used_14 = $local_2.used;
+        $local_2.used = start_15;
+        builtin::array_set_u8($local_2.repr, new_used_14, 45);
+    } else {
+    }
+    if @unlikely(local.tee new_used_14($local_2.used + x) > builtin::array_len($local_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_14);
+    }
+    start_15 = $local_2.used;
+    $local_2.used = new_used_14;
+    $load_2 = $local_2.repr;
+    x = start_15 + x;
+    b108: block {
+        l109: loop {
+            break_if b108 (x - start_15) < 2;
+            q = x_28 /u 100_i64;
+            tens = local.tee new_used_14(builtin::i32_wrap_i64(x_28 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_2, x - 1, ((48 + new_used_14) - (tens * 10)) & 255);
+            builtin::array_set_u8($load_2, x - 2, (48 + tens) & 255);
+            x = x - 2;
+            x_28 = q;
+            continue l109;
+        };
+    };
+    if x > start_15 {
+        builtin::array_set_u8($load_2, start_15, (48 + builtin::i32_wrap_i64(x_28 %u 10_i64)) & 255);
+    }
+    start_15 = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
+    x = builtin::i32_wrap_i64(x_28 >> 32_i64);
+    new_used_14 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"(new_used_14 = start_15; start_15 = 0; new_used_14);
+    start_15 = x;
+    x = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(x = start_15; start_15 = 0; x, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(x = new_used_14; new_used_14 = 0; x);
 }
 
 fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_1::$call$dae[self]"(a, b) {

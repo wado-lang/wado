@@ -166,9 +166,9 @@ type "functype//core:collections/treemap.wado/core:collections/treemap.wado/Tree
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::grow_nodes" = fn(ref "core:collections/treemap.wado//TreeMap<i32,()>");  // TypeId(57)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i32,()>", i32, i32) -> i32;  // TypeId(58)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i32,()>", i32, i32) -> i32;  // TypeId(59)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(60)
 
@@ -1469,19 +1469,6 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
     }
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]"(self, key, e) {
     let $load_3: ref Array<i32>;
     let $load_7: ref Array<i32>;
@@ -1512,15 +1499,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
     n_3 = self.root;
     depth = 0;
     block {
-        l161: loop {
+        l160: loop {
             if local.tee found($inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: block -> i32 {
                 base_43 = n_3 * 31;
                 lo = 0;
                 hi = builtin::array_get_value<i32>(self.lens, n_3);
                 $licm_nkeys_14 = self.nkeys;
-                b163: block {
-                    l164: loop {
-                        break_if b163 lo >= hi;
+                b162: block {
+                    l163: loop {
+                        break_if b162 lo >= hi;
                         mid = (lo + hi) >> 1;
                         if local.tee $local_7($inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             other_51 = builtin::array_get_value<i32>($licm_nkeys_14, base_43 + mid);
@@ -1538,7 +1525,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
                         } else {
                             break $inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: mid;
                         }
-                        continue l164;
+                        continue l163;
                     };
                 };
                 break $inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: -1 - lo;
@@ -1593,9 +1580,22 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
             }
             n_3 = builtin::array_get_value<i32>(self.kids, (n_3 * 32) + found);
             depth = depth + 1;
-            continue l161;
+            continue l160;
         };
     };
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
