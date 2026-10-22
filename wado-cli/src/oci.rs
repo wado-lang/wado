@@ -8,10 +8,15 @@
 //! config — so resolution needs only the manifest digest (integrity) and, when
 //! building, the component bytes.
 //!
-//! Authentication mirrors `wado publish`: the `WKG_OCI_USERNAME` /
-//! `WKG_OCI_PASSWORD` environment variables, else an anonymous pull.
+//! A pull authenticates with what `docker login` stored for the registry's
+//! host, else pulls anonymously.
+
+use std::fs::File;
+use std::io::{BufReader, ErrorKind, Read};
+use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
+use docker_credential::{CredentialRetrievalError, DockerCredential};
 use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
@@ -75,7 +80,9 @@ pub fn world_reference(
 
 /// List the image tags for a package's repository.
 pub async fn list_tags(reference: &Reference) -> anyhow::Result<Vec<String>> {
-    let resp = client().list_tags(reference, &auth(), None, None).await?;
+    let resp = client()
+        .list_tags(reference, &auth(reference)?, None, None)
+        .await?;
     Ok(resp.tags)
 }
 
@@ -83,14 +90,14 @@ pub async fn list_tags(reference: &Reference) -> anyhow::Result<Vec<String>> {
 /// used as the lock file's `integrity`. Fetches only the manifest, not the
 /// component blob.
 pub async fn manifest_digest(reference: &Reference) -> anyhow::Result<String> {
-    let (_manifest, digest) = client().pull_manifest(reference, &auth()).await?;
+    let (_manifest, digest) = client().pull_manifest(reference, &auth(reference)?).await?;
     Ok(digest)
 }
 
 /// Pull the component's Wasm bytes (the single `application/wasm` layer).
 pub async fn pull_component(reference: &Reference) -> anyhow::Result<Bytes> {
     let data = client()
-        .pull(reference, &auth(), vec![WASM_LAYER_MEDIA_TYPE])
+        .pull(reference, &auth(reference)?, vec![WASM_LAYER_MEDIA_TYPE])
         .await?;
     let layer = data
         .layers
@@ -108,14 +115,52 @@ fn client() -> Client {
     Client::new(config)
 }
 
-fn auth() -> RegistryAuth {
-    match (
-        std::env::var("WKG_OCI_USERNAME"),
-        std::env::var("WKG_OCI_PASSWORD"),
-    ) {
-        (Ok(user), Ok(password)) => RegistryAuth::Basic(user, password),
-        _ => RegistryAuth::Anonymous,
+/// What a credential helper prints for a host it holds nothing for. The Docker
+/// CLI matches the same text (`credentials.IsErrCredentialsNotFoundMessage`).
+const HELPER_HOLDS_NONE: &str = "credentials not found in native keychain";
+
+/// The credential `docker login` stored for `reference`'s host, else none.
+///
+/// It is looked up by that host and sent to no other: the host comes from a
+/// manifest, and opening someone else's package in an editor resolves it.
+fn auth(reference: &Reference) -> anyhow::Result<RegistryAuth> {
+    let Some(config) = docker_config() else {
+        return Ok(RegistryAuth::Anonymous);
+    };
+    let file = match File::open(&config) {
+        Ok(file) => file,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(RegistryAuth::Anonymous),
+        Err(e) => anyhow::bail!("reading {}: {e}", config.display()),
+    };
+    let host = reference.registry();
+    registry_auth(BufReader::new(file), host)
+        .map_err(|e| anyhow::anyhow!("the credential for {host} in {}: {e}", config.display()))
+}
+
+fn registry_auth(config: impl Read, host: &str) -> anyhow::Result<RegistryAuth> {
+    match docker_credential::get_credential_from_reader(config, host) {
+        Ok(DockerCredential::UsernamePassword(user, password)) => {
+            Ok(RegistryAuth::Basic(user, password))
+        }
+        Ok(DockerCredential::IdentityToken(_)) => {
+            anyhow::bail!("an identity token is not supported; log in with a username")
+        }
+        Err(CredentialRetrievalError::NoCredentialConfigured) => Ok(RegistryAuth::Anonymous),
+        Err(CredentialRetrievalError::HelperFailure { stdout, .. })
+            if stdout.trim() == HELPER_HOLDS_NONE =>
+        {
+            Ok(RegistryAuth::Anonymous)
+        }
+        Err(e) => Err(e.into()),
     }
+}
+
+/// Where `docker login` writes, as the Docker CLI finds it.
+fn docker_config() -> Option<PathBuf> {
+    let dir = std::env::var_os("DOCKER_CONFIG")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".docker")))?;
+    Some(dir.join("config.json"))
 }
 
 /// The CAs `wado run` trusts beyond the default webpki roots, so a registry
@@ -133,6 +178,17 @@ fn extra_root_certificates() -> Vec<Certificate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `docker login ghcr.io -u user -p pw`, as `config.json` records it.
+    const GHCR_LOGIN: &str = r#"{"auths": {"ghcr.io": {"auth": "dXNlcjpwdw=="}}}"#;
+
+    #[test]
+    fn a_credential_goes_only_to_its_own_host() {
+        let ghcr = registry_auth(GHCR_LOGIN.as_bytes(), "ghcr.io").unwrap();
+        assert!(matches!(ghcr, RegistryAuth::Basic(user, pw) if user == "user" && pw == "pw"));
+        let other = registry_auth(GHCR_LOGIN.as_bytes(), "registry.example").unwrap();
+        assert!(matches!(other, RegistryAuth::Anonymous));
+    }
 
     #[test]
     fn reference_maps_coordinate_to_repository() {
