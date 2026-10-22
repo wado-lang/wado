@@ -1128,8 +1128,8 @@ fn synthesize_future_read_func(
     }
 }
 
-/// The `(element, List<element>)` types of a WASI-record `stream-read`, or
-/// `None` for `u8` and value-payload streams (handled by their own paths).
+/// The element type of a WASI-record `stream-read` or `stream-lift`, or `None`
+/// for `u8` and value-payload streams (handled by their own paths).
 fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let elem_type_id = stream_read_element(tt, expr)?;
     (!has_value_payload(tt, elem_type_id)).then_some(elem_type_id)

@@ -7,3 +7,57 @@ test "a read offering more room than one copy moves does not trap" {
     assert chunk.items.is_empty();
     assert chunk.result == CopyResult::Dropped;
 }
+
+test "a read copy dropped in flight cancels, and the writer sees the end go" {
+    let [rx, tx] = Stream::<u8>::new();
+    let reading = rx.start_read(4);
+    assert reading.waitable_id() matches { Some(_) };
+    builtin::drop(reading);
+    let [tx, written] = tx.start_write([1]).finish();
+    tx.drop();
+    assert written.result == CopyResult::Dropped;
+}
+
+test "a write copy dropped in flight cancels, and the reader sees the end go" {
+    let [rx, tx] = Stream::<u8>::new();
+    let writing = tx.start_write([1, 2]);
+    assert writing.waitable_id() matches { Some(_) };
+    builtin::drop(writing);
+    let [rx, chunk] = rx.start_read(4).finish();
+    rx.drop();
+    assert chunk.result == CopyResult::Dropped;
+}
+
+test "a copy a set reported finishes on what the set took" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let writing = writer.start_write([7, 8]);
+    let ready = set.wait();
+    assert ready.event matches { Copied(Completed) };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [7, 8];
+}
+
+test "a copy a set reported drops without a cancel" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let writing = writer.start_write([9]);
+    builtin::drop(set.wait().member);
+    let [tx, written] = writing.finish();
+    tx.drop();
+    assert written.rest.is_empty();
+}
+
+test "a copy a handler settled reports what the handler said" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let chunk = StartedRead::<u8>::settled(StreamChunk { items: [], result: CopyResult::Cancelled }).settle(&rx);
+    rx.drop();
+    assert chunk.result == CopyResult::Cancelled;
+    assert StartedWrite::<u8>::settled(StreamWrite { rest: [3], result: CopyResult::Dropped }).settle().rest == [3];
+}
