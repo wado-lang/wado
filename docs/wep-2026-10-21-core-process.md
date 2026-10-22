@@ -82,13 +82,21 @@ backends agree. On Linux it is roughly what Seatbelt provides on macOS:
 | Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`  |
 | Network                         | `network-outbound` / `network-inbound` | seccomp on `socket` |
 | Signals and abstract sockets    | isolated by default                    | Landlock scopes     |
+| UNIX sockets by path            | `network-outbound`                     | seccomp on `socket` |
+| Leaving the process group       | not restricted                         | seccomp             |
 | Typing into the terminal        | `file-ioctl`                           | seccomp on `ioctl`  |
 | Inherited, cannot be lifted     | yes                                    | yes                 |
 
 On Linux, seccomp covers what Landlock does not:
 
 - The network. Landlock restricts TCP only, so a UDP socket passes it. With the
-  network not granted, seccomp refuses `socket` for every family but `AF_UNIX`.
+  network not granted, seccomp refuses `socket` for every family.
+- UNIX sockets named by a path. Landlock does not mediate `connect` to one, so a
+  child could reach D-Bus or another privileged service. seccomp refuses
+  `socket` for `AF_UNIX` and leaves `socketpair`, which reaches nothing outside
+  the child.
+- `setsid` and `setpgid`. The host ends a child by signalling its process group,
+  so a descendant that left the group would outlive it.
 - `TIOCSTI` and `TIOCLINUX`, which push input into a terminal. Under
   `inherit_stdin`, a child holds the user's terminal, and input it pushes there
   runs in the user's shell, outside any sandbox. Landlock's device `ioctl` rule
@@ -108,7 +116,8 @@ Writing the sandbox in-house carries two obligations:
 - Escape tests run in CI on Linux and on macOS. Each of these must fail: reading
   a file outside the grants, writing under a read-only subtree, executing a
   binary outside the grants, executing one through a grandchild, a TCP
-  connection or a UDP datagram when the network is not granted, pushing input
+  connection or a UDP datagram when the network is not granted, connecting to a
+  UNIX socket by path, a descendant surviving its group's kill (on Linux), pushing input
   into an inherited terminal, and escaping through a symbolic link or `..`.
 - The SBPL generator is fuzzed. A path holding `"` or `\` that escapes wrongly
   rewrites the policy itself.
@@ -163,8 +172,8 @@ child may read more than the guest. It is defined, not open-ended:
 | Purpose                         | Linux                                                    | macOS                                 |
 | ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
 | Loader and shared libraries     | `/lib*`, `/usr/lib*`, `/etc/ld.so.cache`                 | `/usr/lib`, `/System`, the dyld cache |
-| The program                     | the resolved binary and its install prefix               | the same (`/opt/homebrew/…`, say)     |
-| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`, its socket | `/private/etc/…`, mDNSResponder       |
+| Installed programs              | `/usr`, `/usr/local`, `/nix/store`                       | `/usr`, `/opt/homebrew`, `/opt/local` |
+| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`             | `/private/etc/…`, mDNSResponder       |
 | TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
 | Locale and time zones           | `/usr/share/zoneinfo`, locale data                       | the same                              |
 | Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
@@ -172,13 +181,17 @@ child may read more than the guest. It is defined, not open-ended:
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
-- The list is fixed per OS in the host's source. The install prefix is derived
-  from the resolved binary, since a Homebrew or Nix program reads its own
-  prefix.
+- The list is fixed per OS in the host's source. Nothing in it is derived from
+  the program's path, which the guest chooses: deriving a prefix from
+  `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
+  outside the grants runs only from a path the user adds to the baseline, such
+  as `~/.cargo/bin`.
 - The real `HOME` is never in the baseline. A child sees it only through an
   explicit grant, so `~/.ssh` stays out of reach by default.
-- Of the UNIX sockets, only the name resolver's is open. A socket such as D-Bus
-  is a path to a privileged service.
+- No UNIX socket named by a path is open, except mDNSResponder's on macOS, where
+  name resolution goes through it. A socket such as D-Bus is a path to a
+  privileged service. On Linux, glibc resolves through `resolv.conf` without
+  one.
 - With the network not granted, the name resolution and TLS rows drop out.
 
 ### Grants
@@ -191,8 +204,9 @@ child may read more than the guest. It is defined, not open-ended:
 - The child gets the guest's network grant, all or none. A child finer-grained
   than its guest would invert the rule.
 - Each directory the guest is granted must map to the same path on the host;
-  otherwise the host refuses to start the program. A guest path that names
-  another host path cannot appear in a child's arguments. `wado run`'s default
+  otherwise `get-availability` answers `denied`, and the trap a spawn raises
+  names the mapping. A guest path that names another host path cannot appear in
+  a child's arguments. The program still starts, since it may never spawn. `wado run`'s default
   grant, the current directory as `.`, counts as the same path: the child's
   working directory is that directory, so a relative path means the same thing
   on both sides.
@@ -257,11 +271,15 @@ interface spawn {
 ```
 
 - Dropping a `child` kills its process group. The host kills every child when
-  the guest exits.
+  the guest exits. The host signals a group only before it reaps the group's
+  leader: the unreaped leader holds its pid, so the group's id cannot pass to an
+  unrelated process.
 - `exit-status` takes Unix's shape, a `u8`, since Windows runs only under WSL2.
   `timed-out` is distinct from `signaled(9)`.
 - `cwd` is its own parameter because a record cannot hold a `borrow`. With
-  `none`, the child starts in the directory the host started in.
+  `none`, the child starts in the first preopened directory, the one `core:fs`
+  resolves paths against. The directory the host started in may lie outside the
+  grants.
 - A `program` holding a `/` is a path. Any other is looked up on the host's
   `PATH`, skipping empty and relative entries, the rule external subcommands
   already follow. There is no `find-executable`: the sandbox decides what runs,
@@ -280,7 +298,7 @@ interface spawn {
 ```wado
 use { Command, cmd } from "core:process";
 
-let rev = cmd`git rev-parse ${branch}`.read()?;            // stdout as text; a non-zero exit is an error
+let rev = cmd`git rev-parse ${branch}`.read()?;            // stdout as a ByteList; a non-zero exit is an error
 let out = Command::new("cargo").args(["build"]).output()?;  // stdout and stderr, read together
 let status = cmd`make -j${n}`.inherit_stdio().status()?;   // the child writes to the terminal itself
 
@@ -308,11 +326,17 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 - Captured output is capped at 64 MiB by default, and
   `Command::capture_limit(bytes)` changes the cap for both streams. Past it,
   stderr keeps its tail. Stdout past it is an `OutputTooLarge` error, since
-  output with its middle cut out (JSON, say) is wrong rather than short.
+  output with its middle cut out (JSON, say) is wrong rather than short. The
+  host kills the process group the moment stdout passes the cap, and the error
+  returns once the child has exited: a child left writing into a pipe nobody
+  reads would block forever.
+- Captured output is a `ByteList`, never a `String`. A program's output is bytes,
+  and decoding it is the caller's call, so no kind reports bad UTF-8.
 - `ProcessError { program, kind }` names the program as `FsError` names its
-  path. The kinds are `NotFound`, `NotPermitted`, `Io(ErrorCode)`, `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only
-  `read` returns `Failed`: `output` and `status` hand the exit status back as a
-  value, while `read` returns only text and has nowhere else to report it.
+  path. The kinds are `NotFound`, `NotPermitted`, `Io(ErrorCode)`,
+  `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only `read` returns
+  `Failed`: `output` and `status` hand the exit status back as a value, while
+  `read` returns only stdout and has nowhere else to report it.
 
 ### The `cmd` template
 
@@ -329,7 +353,9 @@ one goes after `--` where the program accepts it.
 3. A `List<String>` hole expands to one argument per element:
    `` cmd`rm -- ${files}` ``.
 4. Parts with no whitespace between them join into one argument:
-   `` cmd`cp ${src} ${dir}/out.txt` ``.
+   `` cmd`cp ${src} ${dir}/out.txt` ``. A `List<String>` hole joined to
+   anything is a contract violation (`` cmd`--file=${files}` ``): neither one
+   argument nor one per element is the obvious reading.
 
 Literal text must not hold a character a shell would treat specially, since
 here it would mean nothing and the program would read it wrong. Writing
@@ -366,7 +392,7 @@ cannot be taken back.
 3. `wado:process@0.1.0` in the `wado` host: `get-availability`, spawning,
    streams, the timeout and
    its grace option, killing the process group on drop and on guest exit,
-   `--deny-process`, and the refusal of a mapping that is not the same path.
+   `--deny-process`, and `denied` for a mapping that is not the same path.
 4. `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`, `status`
    and `read`, with its stdlib reference and a cheatsheet entry.
 5. Filtering the network per host through a proxy, for the guest and the child
@@ -384,9 +410,11 @@ cannot be taken back.
   rlimits and cgroups are all open.
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
   outside its grants exists, and its metadata, which Seatbelt hides.
-- A guest directory granted under a different host path refuses to start a
-  program that spawns, even where a mount namespace could present the guest's
-  view to the child.
+- A guest directory granted under a different host path turns spawning off, even
+  where a mount namespace could present the guest's view to the child.
+- Seatbelt cannot stop a descendant from calling `setsid`. On macOS such a
+  descendant survives its group's kill and keeps the child's grants after the
+  guest exits.
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
 
