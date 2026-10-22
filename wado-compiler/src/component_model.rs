@@ -3184,11 +3184,17 @@ impl CmInterfaceRegistry {
         };
         let stem = path.strip_suffix(".wado").unwrap_or(path);
         let wanted = (namespace, format!("{stem}.wado"));
+        // A types-only interface (`wasi:cli/types`) has no functions, so only
+        // the types it declares name it.
         let bundled: IndexSet<&str> = self
             .interfaces
             .keys()
             .map(String::as_str)
-            .chain(self.resources.keys().map(|(fq, _)| fq.as_str()))
+            .chain(
+                CmTypeKind::ALL
+                    .into_iter()
+                    .flat_map(|kind| self.kind_keys(kind).map(|(fq, _)| fq.as_str())),
+            )
             .filter(|fq| cm_interface_module(fq).as_ref() == Some(&wanted))
             .collect();
         bundled.into_iter().collect()
