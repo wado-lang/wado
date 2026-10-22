@@ -7,6 +7,7 @@ pub mod engine;
 pub mod fixture;
 pub mod kiln;
 pub mod random;
+pub mod sandbox;
 pub mod stub_host;
 pub mod sync;
 pub mod timezone;
