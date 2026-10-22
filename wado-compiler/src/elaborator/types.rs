@@ -1234,6 +1234,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A handler `impl` defines a method its effect does not declare. No
+    /// dispatch reaches it, so it is most likely a misspelled operation.
+    HandlerMethodNotAnOperation {
+        effect_name: String,
+        method_name: String,
+        span: Span,
+    },
+
     /// An impl writes a `contract` clause on a method its trait's clauses
     /// bind: a caller through a bound vouches for the trait's alone.
     ImplContractUnderTraitContract {
@@ -2680,6 +2688,17 @@ impl TypeError {
             } => (
                 Code::TraitDeclInvalid,
                 format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
+                *span,
+            ),
+            TypeError::HandlerMethodNotAnOperation {
+                effect_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "`{method_name}` is not an operation of `{effect_name}`, so a handler for it cannot answer it"
+                ),
                 *span,
             ),
             TypeError::ImplContractUnderTraitContract { span } => (

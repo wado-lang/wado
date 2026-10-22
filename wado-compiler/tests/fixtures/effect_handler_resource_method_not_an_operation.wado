@@ -1,0 +1,17 @@
+// A resource handler is held to the resource's own operations. `start_read`
+// is a method of an `impl` on `Stream<T>`, not an operation the resource
+// declares, so no dispatch reaches it.
+
+struct Mock {}
+
+impl Stream<u8> for Mock {
+    fn start_read(&mut self, this: &Stream<u8>, max: i32) -> ReadCopy<u8> {
+        resume this.start_read(max)
+    }
+    ..forward
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":8:8: error: `start_read` is not an operation of `Stream`, so a handler for it cannot answer it"}

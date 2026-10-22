@@ -998,6 +998,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(decl_key) = header.trait_def() else {
                 continue;
             };
+            let defs = resolutions.defs();
+            if defs.kind(decl_key).is_effect() {
+                let operations = defs.members(decl_key);
+                for method in &header.methods {
+                    if operations.iter().all(|&op| defs.name(op) != method.name) {
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::HandlerMethodNotAnOperation {
+                                effect_name: defs.name(decl_key).to_string(),
+                                method_name: method.name.clone(),
+                                span: method.name_span,
+                            },
+                        );
+                    }
+                }
+                continue;
+            }
             let Some(decl) = trait_env.decl_header_of(&decl_key) else {
                 continue;
             };
