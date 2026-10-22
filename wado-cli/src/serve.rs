@@ -26,7 +26,7 @@ use lexopt::Arg::Value;
 use tokio::net::TcpListener;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
-use wasmtime::component::{Accessor, AccessorTask, Component};
+use wasmtime::component::{Accessor, Component};
 use wasmtime::{AsContextMut, Engine, GuestProfiler, UpdateDeadline};
 use wasmtime_wasi_http::Error as HttpError;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
@@ -375,7 +375,7 @@ struct HandlerTask {
     idle_timeout: Duration,
 }
 
-impl AccessorTask<WasiState> for HandlerTask {
+impl HandlerTask {
     async fn run(self, accessor: &Accessor<WasiState>) -> wasmtime::Result<()> {
         let HandlerTask {
             service,
@@ -889,11 +889,15 @@ async fn worker_loop(
                                 // The `JoinHandle` is kept in `inflight` so a
                                 // recycle can wait for the request to finish;
                                 // the task itself is driven by `run_concurrent`.
-                                inflight.push(accessor.spawn(HandlerTask {
+                                let task = HandlerTask {
                                     service: Arc::clone(&service),
                                     job,
                                     idle_timeout: request_timeout,
-                                })?);
+                                };
+                                inflight.push(
+                                    accessor
+                                        .spawn(async move |accessor| task.run(accessor).await)?,
+                                );
                                 handled += 1;
                                 if recycle_requests != 0 && handled >= recycle_requests {
                                     stopping = Some(WorkerStop::Recycle);
