@@ -46,9 +46,9 @@ pub struct Ownership {
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
     /// Assignments to a place of an in-place type that write into the storage
-    /// the place holds, by the assignment's span: a holder of that storage may
-    /// be read afterwards (WEP 2026-10-13).
-    pub in_place_assigns: IndexSet<Span>,
+    /// the place holds, by [`assign_site_key`]: a holder of that storage may be
+    /// read afterwards (WEP 2026-10-13).
+    pub in_place_assigns: IndexSet<AssignSiteKey>,
     /// By-value call arguments, by span, whose storage may be written before
     /// the callee is done with them: a confined parameter still copies these.
     pub written_args: IndexSet<Span>,
@@ -255,7 +255,7 @@ struct PlaceMove {
 /// the storage it would repoint stays reachable through a holder still readable
 /// there (WEP 2026-10-13).
 struct AssignSite {
-    span: Span,
+    key: AssignSiteKey,
     /// The local the place is rooted at, `None` where no local roots it (a
     /// field of a call's result, `xs[i].f`), so no reference to it can be ruled
     /// out.
@@ -640,7 +640,7 @@ impl<'a> Analyzer<'a> {
         live: &IndexSet<u32>,
     ) {
         if can_write_in_place(assign, self.type_table) {
-            self.note_site(assign.span, target, false, start, live);
+            self.note_site(assign_site_key(assign), target, false, start, live);
         }
     }
 
@@ -662,7 +662,7 @@ impl<'a> Analyzer<'a> {
                 .as_list(receiver.type_id)
                 .is_some_and(|element| self.type_table.is_in_place_aggregate(element))
         {
-            self.note_site(call.span, receiver, true, start, live);
+            self.note_site(assign_site_key(call), receiver, true, start, live);
             // A list reached through a reference (`*capture` in a closure) is
             // the referent's, which no field of this body owns.
             if matches!(
@@ -681,7 +681,7 @@ impl<'a> Analyzer<'a> {
 
     fn note_site(
         &mut self,
-        span: Span,
+        key: AssignSiteKey,
         target: &TirExpr,
         element: bool,
         start: usize,
@@ -689,7 +689,7 @@ impl<'a> Analyzer<'a> {
     ) {
         let site = match self.resolver.names(target) {
             Names::Place(path) => AssignSite {
-                span,
+                key,
                 root: Some(path.root),
                 top: match path.selectors.first() {
                     Some(Selector::Field { index, .. }) => Some(*index),
@@ -713,7 +713,7 @@ impl<'a> Analyzer<'a> {
                     _ => None,
                 };
                 AssignSite {
-                    span,
+                    key,
                     root: place::place_root(target),
                     top: None,
                     last,
@@ -922,9 +922,9 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 /// stores `null`, which repoints: the object it held is the destination's now.
 /// An affine struct or list is an object, whose stores resource drop synthesis
 /// has already written into it where its place was not null, so one left is
-/// to a null place, and repoints too (WEP: Affine Types). The sites are keyed
-/// by span, which synthesized assignments share, so lowering asks this again
-/// of each one it expands.
+/// to a null place, and repoints too (WEP: Affine Types). Synthesized
+/// assignments into one local share an [`AssignSiteKey`], so lowering asks this
+/// again of each one it expands.
 #[must_use]
 pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
     let TirExprKind::Assign { target, value } = &assign.kind else {
@@ -935,6 +935,26 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
     !matches!(value.kind, TirExprKind::Null)
         && !affine_object
         && type_table.is_in_place_aggregate(ty)
+}
+
+/// What tells one assignment site from another: its span, and the local its
+/// place is rooted at. Every synthesized site shares one span, and a store
+/// filling a local declared empty is no store into a tuple a reference holds.
+pub type AssignSiteKey = (Span, Option<u32>);
+
+/// The key of `site`, an `Assign` or a `List::index_assign` call.
+#[must_use]
+pub fn assign_site_key(site: &TirExpr) -> AssignSiteKey {
+    let place = if let TirExprKind::Assign { target, .. } = &site.kind {
+        &**target
+    } else {
+        let (receiver, _) = site
+            .kind
+            .call_receiver()
+            .expect("an assign site is an `Assign` or an `index_assign` call");
+        place::unwrap_ref(receiver)
+    };
+    (site.span, place::place_root(place))
 }
 
 /// Where a forward walk over a body first takes a reference to each local, and
@@ -1075,14 +1095,14 @@ pub fn unanalyzed_in_place_assigns(
     func: &TirFunction,
     type_table: &TypeTable,
     plan: &ValueCopyPlan,
-) -> IndexSet<Span> {
+) -> IndexSet<AssignSiteKey> {
     struct Scan<'a> {
         func: &'a TirFunction,
         type_table: &'a TypeTable,
         observed: &'a ObservedFields,
         list_element_assigns: &'a FuncKeySet,
         references: ReferencePoints,
-        out: IndexSet<Span>,
+        out: IndexSet<AssignSiteKey>,
     }
     impl Scan<'_> {
         /// Whether assigning `place` at `site` writes in place, as the walk
@@ -1136,14 +1156,14 @@ pub fn unanalyzed_in_place_assigns(
                     if in_place_elements
                         && self.writes_in_place(list, self.owning_field(list), expr.span)
                     {
-                        self.out.insert(expr.span);
+                        self.out.insert(assign_site_key(expr));
                     }
                 }
                 TirExprKind::Assign { target, .. }
                     if can_write_in_place(expr, self.type_table)
                         && self.writes_in_place(target, self.owning_field(target), expr.span) =>
                 {
-                    self.out.insert(expr.span);
+                    self.out.insert(assign_site_key(expr));
                 }
                 _ => {}
             }
@@ -1761,19 +1781,19 @@ impl Analyzer<'_> {
         reference_copies: &[(u32, u32)],
         observed: &ObservedFields,
         references: &ReferencePoints,
-    ) -> IndexSet<Span> {
+    ) -> IndexSet<AssignSiteKey> {
         let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
         let mut out = IndexSet::default();
         for site in &self.assign_sites {
             let Some(root) = site.root else {
-                out.insert(site.span);
+                out.insert(site.key);
                 for m in site.mutations.clone() {
                     self.mutations[m].rebinds_place = false;
                 }
                 continue;
             };
             let external = site.through_ref || is_reference_local(func, root, self.type_table);
-            if !external && !references.referenced_at(root, site.span) {
+            if !external && !references.referenced_at(root, site.key.0) {
                 continue;
             }
             let readable = readable_storage(paths, &site.live);
@@ -1804,7 +1824,7 @@ impl Analyzer<'_> {
                     observed.contains(owner, field)
                 }));
             if in_place {
-                out.insert(site.span);
+                out.insert(site.key);
                 for m in site.mutations.clone() {
                     self.mutations[m].rebinds_place = false;
                 }

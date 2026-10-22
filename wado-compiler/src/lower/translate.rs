@@ -18,6 +18,7 @@ use std::sync::Arc;
 use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::last_use::{AssignSiteKey, assign_site_key};
 use crate::lower::plan::value_copy::place;
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
@@ -350,9 +351,9 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
 /// assignment in `in_place` replaces whole.
-fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32> {
+fn guarded_locals(func: &TirFunction, in_place: &IndexSet<AssignSiteKey>) -> IndexSet<u32> {
     struct Scan<'a> {
-        in_place: &'a IndexSet<Span>,
+        in_place: &'a IndexSet<AssignSiteKey>,
         deferred: IndexSet<u32>,
         replaced: IndexSet<u32>,
     }
@@ -374,7 +375,7 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
-                && self.in_place.contains(&expr.span)
+                && self.in_place.contains(&assign_site_key(expr))
             {
                 self.replaced.insert(index);
             }
@@ -432,7 +433,7 @@ struct FunctionTranslator<'a, 'p> {
     written_args: Option<IndexSet<Span>>,
     /// Assignments that write into the storage their place holds, by span
     /// (WEP 2026-10-13).
-    in_place_assigns: IndexSet<Span>,
+    in_place_assigns: IndexSet<AssignSiteKey>,
     /// Locals declared without a value that such an assignment replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
     /// whether to write in place or to store.
@@ -1119,7 +1120,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 (**ref_expr).clone()
             }
-            _ if self.in_place_assigns.contains(&expr.span)
+            _ if self.in_place_assigns.contains(&assign_site_key(expr))
                 && value_copy::last_use::can_write_in_place(
                     expr,
                     &self.base.type_table.borrow(),
@@ -1188,12 +1189,12 @@ impl FunctionTranslator<'_, '_> {
         };
         // A span is no identity: a call the translator synthesizes for a
         // closure carries the span of the source it stands for.
-        if !self.in_place_assigns.contains(&call.span)
-            || !self
-                .base
-                .value_copy
-                .list_element_assigns
-                .contains(&func.module_source, &func.name)
+        if !self
+            .base
+            .value_copy
+            .list_element_assigns
+            .contains(&func.module_source, &func.name)
+            || !self.in_place_assigns.contains(&assign_site_key(call))
         {
             return None;
         }
