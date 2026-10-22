@@ -73,8 +73,9 @@ Three reasons:
 - The candidates (nono, birdcage, wardstone and others) are young or dormant.
   Depending on one hands the speed of security fixes to someone else.
 
-The policy is the subset both OS mechanisms express exactly, so the two
-backends agree. On Linux it is roughly what Seatbelt provides on macOS:
+The policy is the subset both OS mechanisms express, so the two backends agree
+everywhere but the one row the table marks. On Linux it is roughly what Seatbelt
+provides on macOS:
 
 | To restrict                     | macOS (Seatbelt)                       | Linux               |
 | ------------------------------- | -------------------------------------- | ------------------- |
@@ -171,7 +172,7 @@ child may read more than the guest. It is defined, not open-ended:
 
 | Purpose                         | Linux                                                    | macOS                                 |
 | ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries     | `/lib*`, `/usr/lib*`, `/etc/ld.so.cache`                 | `/usr/lib`, `/System`, the dyld cache |
+| Loader and shared libraries     | `/lib*`, `/etc/ld.so.cache`                              | `/usr/lib`, `/System`, the dyld cache |
 | Installed programs              | `/usr`, `/usr/local`, `/nix/store`                       | `/usr`, `/opt/homebrew`, `/opt/local` |
 | Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`             | `/private/etc/…`, mDNSResponder       |
 | TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
