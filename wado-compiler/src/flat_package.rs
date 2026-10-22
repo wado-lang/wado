@@ -23,7 +23,6 @@ use crate::tir::{
     TirVariantDecl,
 };
 use crate::tir_visitor::TirMutVisitor;
-use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -111,11 +110,6 @@ pub struct FlatPackage {
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
     pub trait_env: std::sync::Arc<TraitEnv>,
-
-    /// Local last-use spans (WEP 2026-05-21). A span is present when the
-    /// identifier use there is a move-eligible local's final use; the
-    /// value-copy planner elides the copy there.
-    pub moved_local_spans: IndexSet<Span>,
 
     /// What `prelower_reach` dropped. Minting a stub for one of these means the
     /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.

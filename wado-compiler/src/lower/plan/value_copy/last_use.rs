@@ -19,7 +19,6 @@ use crate::tir::{
     TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
-use crate::token::Span;
 use crate::type_table::TypeTable;
 use std::rc::Rc;
 
@@ -27,14 +26,14 @@ use std::rc::Rc;
 #[derive(Default)]
 pub struct MoveEligible {
     /// Whole locals whose every read is final. A single read that moves is
-    /// marked on its node instead ([`ExprMarks::moves`]).
+    /// marked on its node instead ([`tir::ExprMarks::moves`]).
     pub locals: IndexSet<u32>,
 }
 
 /// What one backward walk over a body decides: which locals a move can retire,
 /// and which read-only bindings may alias the storage they were read out of.
 /// What it decides of a single expression it marks on the node
-/// ([`ExprMarks`]):
+/// ([`tir::ExprMarks`]):
 ///
 /// - `moves` on a field or whole-value materialization that aliases a dead
 ///   aggregate out at a literal, and on a whole-local value read the
@@ -52,10 +51,10 @@ pub struct Ownership {
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
-/// liveness this walk computes. `final_reads` are the elaborator's final-use
-/// spans, which read names only: a reference a call takes to its receiver without
-/// a `&` is out of their sight, so this walk's pins veto them, and so is a
-/// parameter the callers pass uncopied.
+/// liveness this walk computes. A read reify marked final
+/// ([`tir::ExprMarks::final_read`]) was judged by names only: a reference a call
+/// takes to its receiver without a `&` is out of its sight, so this walk's pins
+/// veto it, and so is a parameter the callers pass uncopied.
 pub fn analyze_ownership(
     func: &TirFunction,
     oracle: &OwnedCalls,
@@ -63,7 +62,6 @@ pub fn analyze_ownership(
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
     points_to: &PointsTo,
-    final_reads: &IndexSet<Span>,
     reach: &StorageReach<'_>,
 ) -> Ownership {
     let Some(body) = &func.body else {
@@ -173,7 +171,7 @@ pub fn analyze_ownership(
         site.node.mark(|marks| marks.moves = true);
     }
     for &(read, local) in &a.value_reads {
-        if final_reads.contains(&read.span)
+        if read.marks().final_read
             && !shared_params.contains(&local)
             && !a.place_escaped(local, None)
             && !read.marks().written

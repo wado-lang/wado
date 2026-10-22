@@ -125,7 +125,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         builtin_registry,
         wasm_assets,
         trait_env,
-        moved_local_spans,
         #[cfg(debug_assertions)]
         pruned,
     } = flat;
@@ -161,7 +160,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             #[cfg(debug_assertions)]
             pruned,
         }),
-        moved_local_spans,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, FuncRef> =
@@ -276,10 +274,6 @@ struct Translator<'a> {
     /// callees are interned on first sight as `extern_stub`s appended after the
     /// in-package functions. Replaces the former post-pass `assign_func_ids`.
     interner: RefCell<Interner>,
-    /// Last-use spans (WEP 2026-05-21). A `Local` read whose span is listed is
-    /// a move-eligible local's final use, so its defensive value copy is
-    /// elided.
-    moved_local_spans: IndexSet<Span>,
 }
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
@@ -509,7 +503,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &resolver,
                     base.value_copy,
                     &base.points_to,
-                    &base.moved_local_spans,
                     &value_copy::reach::StorageReach::new(
                         &type_table,
                         &base.struct_fields_map,

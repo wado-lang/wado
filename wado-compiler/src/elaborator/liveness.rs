@@ -14,7 +14,6 @@ use crate::ast::{
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::token::Span;
 
 /// Result of the source-level liveness analysis. Two root sets run over one call
 /// graph: `E` reachable from production roots, `T` from `test` blocks. A
@@ -36,17 +35,12 @@ pub(crate) struct Liveness {
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
     /// path, of a move-eligible local binding, filled only where TIR is built
-    /// ([`compute_last_uses`]). The canonical `AstId`-keyed output — reusable
-    /// by the future affine-resource client.
+    /// ([`compute_last_uses`]). Reify marks each such read
+    /// ([`crate::tir::ExprMarks::final_read`]) for the value-copy planner.
     /// Sound by construction: a use is recorded only when the analysis proves
     /// the local dead afterward *and* the binding owns what it names, so an
     /// unrecorded use always falls back to a copy.
     pub(crate) last_uses: IndexSet<AstId>,
-    /// The same last-use facts projected to source spans, the form the
-    /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
-    /// but no `AstId`. One set over the program: a span names its own parse.
-    /// Threaded through `Package` → `FlatPackage` to the planner.
-    pub(crate) moved_spans: IndexSet<Span>,
 }
 
 /// Which modules a liveness run sees, and so which roots it can trust.
@@ -380,8 +374,7 @@ pub(crate) struct References<'a> {
 }
 
 /// Compute local last-use liveness over every function / method body in the
-/// program (WEP 2026-05-21). Fills `last_uses` (the `AstId`-keyed set) and
-/// `moved_spans` (the span projection). Analyzed over all modules —
+/// program (WEP 2026-05-21), into `last_uses`. Analyzed over all modules —
 /// stdlib bodies benefit from copy elision too. Reads only the single-definition
 /// edges: a trait default body's locals are per-impl, so not decidable here.
 pub(crate) fn compute_last_uses(
@@ -389,28 +382,24 @@ pub(crate) fn compute_last_uses(
     references: &IndexMap<AstId, AstId>,
     liveness: &mut Liveness,
 ) {
-    let Liveness {
-        last_uses,
-        moved_spans: spans,
-        ..
-    } = liveness;
+    let last_uses = &mut liveness.last_uses;
     for module in modules.values() {
         for item in &module.items {
             match item {
-                Item::Function(func) => analyze_body(func, references, last_uses, spans),
+                Item::Function(func) => analyze_body(func, references, last_uses),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        analyze_body(method, references, last_uses, spans);
+                        analyze_body(method, references, last_uses);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        analyze_body(method, references, last_uses, spans);
+                        analyze_body(method, references, last_uses);
                     }
                 }
                 Item::Interface(interface_decl) => {
                     for method in &interface_decl.methods {
-                        analyze_body(method, references, last_uses, spans);
+                        analyze_body(method, references, last_uses);
                     }
                 }
                 _ => {}
@@ -420,13 +409,12 @@ pub(crate) fn compute_last_uses(
 }
 
 /// Run the eligibility pre-pass and the backward last-use pass over one
-/// function body, merging discovered last uses into `last_uses` (by use-site
-/// `AstId`) and `spans` (by source span, within the enclosing module).
+/// function body, merging discovered last uses into `last_uses` by use-site
+/// `AstId`.
 fn analyze_body(
     func: &Function,
     references: &IndexMap<AstId, AstId>,
     last_uses: &mut IndexSet<AstId>,
-    spans: &mut IndexSet<Span>,
 ) {
     let Some(body) = &func.body else {
         return;
@@ -468,7 +456,6 @@ fn analyze_body(
         references,
         eligible,
         last_uses,
-        spans,
         exits: Vec::new(),
     };
     let mut live = IndexSet::default();
@@ -571,8 +558,6 @@ struct LastUseAnalyzer<'a> {
     references: &'a IndexMap<AstId, AstId>,
     eligible: IndexSet<AstId>,
     last_uses: &'a mut IndexSet<AstId>,
-    /// Span projection for the enclosing module (see [`Liveness::moved_spans`]).
-    spans: &'a mut IndexSet<Span>,
     /// Live-after set per enclosing `break` target: a loop (unlabeled) or a
     /// labeled block.
     exits: Vec<Exit>,
@@ -597,7 +582,6 @@ impl LastUseAnalyzer<'_> {
         if let Some(def) = self.use_def(ident.id) {
             if record && !live.contains(&def) {
                 self.last_uses.insert(ident.id);
-                self.spans.insert(ident.span);
             }
             live.insert(def);
         }
@@ -1175,7 +1159,6 @@ impl Graph {
             dead_items,
             test_only_items,
             last_uses: IndexSet::default(),
-            moved_spans: IndexSet::default(),
         }
     }
 

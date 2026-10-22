@@ -1756,6 +1756,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // parameter defaults, and struct field defaults so every
                         // reify-emitted call site keeps its callee live.
                         gate,
+                        &state.liveness.last_uses,
                     );
                     reify.coverage = state.coverage.as_ref();
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
