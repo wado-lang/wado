@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792685024123,
+  "lastUpdate": 1792708407615,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69533,6 +69533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bd01a15ca5d6d59a14a25bea9417dadcb8e039ab"
         },
         "date": 1792685023082,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c546920edc077ef4e1a4594b7e67a48cf6289c88",
+          "message": "Merge pull request #2422 from wado-lang/claude/gracious-faraday-rjp97k\n\nrefactor(template)!: a hole's spelling is no part of a template's shape",
+          "timestamp": "2026-10-23T07:13:34+09:00",
+          "tree_id": "b5d90256d384cff5ec216dfedbfa835ae5c87013",
+          "url": "https://github.com/wado-lang/wado/commit/c546920edc077ef4e1a4594b7e67a48cf6289c88"
+        },
+        "date": 1792708407225,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
