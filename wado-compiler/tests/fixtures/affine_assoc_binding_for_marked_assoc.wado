@@ -1,0 +1,51 @@
+// An associated type declared `affine type` admits an affine binding, and a
+// body generic over the trait moves its projection at most once.
+
+use { log_stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+trait Source {
+    affine type Item;
+
+    fn take(&mut self) -> Option<Self::Item>;
+}
+
+struct One {
+    done: bool,
+}
+
+impl Source for One {
+    type Item = Tok;
+
+    fn take(&mut self) -> Option<Tok> {
+        if self.done {
+            return null;
+        }
+        self.done = true;
+        return Option::Some(Tok { n: 7 });
+    }
+}
+
+fn first<S: Source>(s: &mut S) -> Option<S::Item> with _ {
+    let x = s.take();
+    return x;
+}
+
+export fn run() {
+    let mut one = One { done: false };
+    if let Some(t) = first(&mut one) {
+        log_stdout(`got ${t.n}`);
+    }
+}
+
+__DATA__
+{"stdout": "got 7\ndrop 7\n"}
