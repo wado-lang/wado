@@ -6705,14 +6705,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 guard: None,
                 body: arm_body,
                 span: m.span,
-                consumes: true,
+                consumes: false,
             },
             TirMatchArm {
                 pattern: TirPattern::Wildcard,
                 guard: None,
                 body: bool_lit(false, m.span),
                 span: m.span,
-                consumes: true,
+                consumes: false,
             },
         ];
 

@@ -137,11 +137,50 @@ test "an if let that does not match leaves the scrutinee" {
         } else {
             assert DROPS - d == 0;
             let again = s;
-            let two = again matches { Two(_) };
-            assert two;
+            let paired = again matches { Two(_) };
+            assert paired;
         }
     }
     assert DROPS - d == 2;
+}
+
+global ZERO: Tok = Tok { id: 0 };
+
+test "a constant pattern drops the whole scrutinee" {
+    let d = DROPS;
+    let t = Tok { id: 0 };
+    match t {
+        ZERO => {
+            assert DROPS - d == 1;
+        },
+        _ => {},
+    }
+    assert DROPS - d == 1;
+}
+
+fn pair() -> P {
+    return P { a: Tok { id: 1 }, b: Tok { id: 2 } };
+}
+
+test "a field of a temporary drops with the rest of it" {
+    let d = DROPS;
+    scope: {
+        match pair().a {
+            _ => {},
+        }
+    }
+    assert DROPS - d == 2;
+}
+
+test "matches consumes nothing, a guard's binding included" {
+    let d = DROPS;
+    let s = Slot::One(Tok { id: 3 });
+    let big = s matches { One(t) && t.id > 1 };
+    assert big;
+    assert DROPS - d == 0;
+    let again = s;
+    let one = again matches { One(_) };
+    assert one;
 }
 
 test "a destructuring let drops the fields it leaves out" {

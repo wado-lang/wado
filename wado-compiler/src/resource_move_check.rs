@@ -930,9 +930,12 @@ impl MoveWalker<'_, '_> {
             .is_some_and(|ty| self.type_implements_drop(ty))
     }
 
+    /// Whether `ty`, or the type a newtype over it represents, implements
+    /// `Drop`: a newtype inherits its base's.
     fn type_implements_drop(&self, ty: TypeId) -> bool {
         let types = &self.sem().types;
-        types.nominal_def(ty).is_some_and(|def| {
+        let head = types.representation_head(ty);
+        types.nominal_def(head).is_some_and(|def| {
             self.checker
                 .drops
                 .implementors
