@@ -76,14 +76,14 @@ Three reasons:
 The policy is the subset both OS mechanisms express exactly, so the two
 backends agree. On Linux it is roughly what Seatbelt provides on macOS:
 
-| To restrict                     | macOS (Seatbelt)                       | Linux                                              |
-| ------------------------------- | -------------------------------------- | -------------------------------------------------- |
-| Read and write, per subtree     | `file-read*` / `file-write*`           | Landlock                                           |
-| Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`                                 |
-| Network                         | `network-outbound` / `network-inbound` | seccomp on `socket`                                |
-| Signals and abstract sockets    | isolated by default                    | Landlock scopes                                    |
-| Typing into the terminal        | `file-ioctl`                           | seccomp on `ioctl`                                 |
-| Inherited, cannot be lifted     | yes                                    | yes                                                |
+| To restrict                     | macOS (Seatbelt)                       | Linux               |
+| ------------------------------- | -------------------------------------- | ------------------- |
+| Read and write, per subtree     | `file-read*` / `file-write*`           | Landlock            |
+| Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`  |
+| Network                         | `network-outbound` / `network-inbound` | seccomp on `socket` |
+| Signals and abstract sockets    | isolated by default                    | Landlock scopes     |
+| Typing into the terminal        | `file-ioctl`                           | seccomp on `ioctl`  |
+| Inherited, cannot be lifted     | yes                                    | yes                 |
 
 On Linux, seccomp covers what Landlock does not:
 
