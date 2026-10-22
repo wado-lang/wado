@@ -909,6 +909,42 @@ async fn compile_artifact(
     }
 }
 
+fn instantiate_wasmtime(
+    wasm: &[u8],
+    opt_level: wasmtime::OptLevel,
+    profile: &ProfileMode,
+    runtime_knobs: RuntimeKnobs,
+    profiler_slot: Option<&GuestProfilerSlot>,
+) -> Result<(
+    Arc<Engine>,
+    Arc<Component>,
+    Arc<Linker<WasiState>>,
+    Option<(GuestProfilerSlot, Duration)>,
+)> {
+    let engine = Arc::new(runtime::create_test_engine(
+        opt_level,
+        profile,
+        runtime_knobs,
+    )?);
+    let component = Arc::new(Component::new(&engine, wasm)?);
+    let linker = Arc::new(runtime::create_test_linker(&component)?);
+    let profiler = match (profile, profiler_slot) {
+        (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
+            let interval = Duration::from_millis(*interval_ms);
+            *lock(slot) = Some(GuestProfiler::new_component(
+                &engine,
+                "wado",
+                interval,
+                (*component).clone(),
+                std::iter::empty::<(String, wasmtime::Module)>(),
+            )?);
+            Some((Arc::clone(slot), interval))
+        }
+        _ => None,
+    };
+    Ok((engine, component, linker, profiler))
+}
+
 /// **Stage 2 worker** — hand the wasm bytes to wasmtime: create an
 /// `Engine`, AOT-compile the `Component`, build the WASI P3 `Linker`,
 /// and discover the test exports. This is the expensive Cranelift step
@@ -930,30 +966,13 @@ fn load_module(
     reporter: &Arc<dyn TestReporter>,
 ) -> LoadOutcome {
     let load_start = Instant::now();
-    let load_result = (|| -> Result<_> {
-        let engine = Arc::new(runtime::create_test_engine(
-            opt_level,
-            profile,
-            runtime_knobs,
-        )?);
-        let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
-        let linker = Arc::new(runtime::create_test_linker(&component)?);
-        let profiler = match (profile, profiler_slot) {
-            (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
-                let interval = Duration::from_millis(*interval_ms);
-                *lock(slot) = Some(GuestProfiler::new_component(
-                    &engine,
-                    "wado",
-                    interval,
-                    (*component).clone(),
-                    std::iter::empty::<(String, wasmtime::Module)>(),
-                )?);
-                Some((Arc::clone(slot), interval))
-            }
-            _ => None,
-        };
-        Ok((engine, component, linker, profiler))
-    })();
+    let load_result = instantiate_wasmtime(
+        &artifact.wasm,
+        opt_level,
+        profile,
+        runtime_knobs,
+        profiler_slot,
+    );
     let load_duration = load_start.elapsed();
     observer.add_work(load_duration);
 

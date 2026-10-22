@@ -284,13 +284,10 @@ pub fn run_pipeline(
                             .enumerate()
                             .map(|(emit_index, (phase, tmpl))| {
                                 let output_path = tmpl.output_path(&item.name);
-                                let content = rendered.get(phase).cloned().unwrap_or_else(|| {
-                                    Err("internal error: phase not rendered".to_string())
-                                });
                                 EmitOutput {
                                     emit_index,
                                     output_path,
-                                    content,
+                                    content: rendered[phase].clone(),
                                 }
                             })
                             .collect();
