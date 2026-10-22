@@ -185,22 +185,25 @@ fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut Lo
     }
     if fresh > 0 {
         // Fill from the back: each word lands at or past where it stood, so
-        // none is overwritten before it moves.
+        // none is overwritten before it moves, and once the last new word is
+        // placed the rest already stand where they belong.
         let mut a = ours.len();
         ours.resize(a + fresh, (0, 0));
         let mut out = ours.len();
         for &(i, w) in theirs.iter().rev() {
+            if out == a {
+                break;
+            }
             while a > 0 && ours[a - 1].0 > i {
                 a -= 1;
                 out -= 1;
                 ours[out] = ours[a];
             }
+            out -= 1;
             if a > 0 && ours[a - 1].0 == i {
                 a -= 1;
-                out -= 1;
                 ours[out] = ours[a];
             } else {
-                out -= 1;
                 ours[out] = (i, w);
             }
         }

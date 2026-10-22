@@ -699,14 +699,16 @@ impl Graph {
             }
         }
         self.copy_to[r] = copy_to.into_iter().collect();
-        let carried = self
+        let mut carried = self
             .merged
             .swap_remove(&root)
             .expect("a settled node merged others");
+        // Measured before any is carried: what `root` gains meanwhile reaches
+        // its delta, which carries it along every edge.
         let missing: Vec<LocSet> = carried
-            .iter()
+            .iter_mut()
             .map(|c| {
-                let mut missing = c.pending.clone();
+                let mut missing = std::mem::take(&mut c.pending);
                 self.pts[r].difference_into(&c.pts, &mut missing);
                 missing
             })
