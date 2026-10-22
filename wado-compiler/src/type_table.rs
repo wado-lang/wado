@@ -183,6 +183,14 @@ impl Default for TypeTable {
     }
 }
 
+/// What [`TypeTable::declared_members`] finds for a declaration.
+struct DeclaredMembers {
+    types: Vec<TypeId>,
+    /// Whether `types` are the template's, written in terms of its parameters,
+    /// rather than the instance's own.
+    of_template: bool,
+}
+
 impl TypeTable {
     pub const I8: TypeId = TypeId(0);
     pub const I16: TypeId = TypeId(1);
@@ -2491,22 +2499,13 @@ impl TypeTable {
                 if self.is_affine_decl(*def) {
                     return true;
                 }
-                if self.is_tuple_def(*def) {
-                    (None, &[], type_args.clone())
-                } else if let Some(fields) = self
-                    .struct_field_index
-                    .get(&(*def, self.type_keys(type_args)))
-                    .or_else(|| self.struct_field_index.get(&(*def, Vec::new())))
-                {
-                    // An instance's own fields are concrete, so the arguments
-                    // its template would read are only the recursion guard's.
-                    (Some(*def), type_args.as_slice(), fields.clone())
-                } else if let Some(cases) = self.variant_case_index.get(def) {
-                    let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
-                    (Some(*def), type_args.as_slice(), payloads)
-                } else {
+                let Some(members) = self.declared_members(*def, type_args) else {
                     return false;
-                }
+                };
+                // An instance's own fields are concrete, so the arguments its
+                // template would read are only the recursion guard's.
+                let guarded = (!self.is_tuple_def(*def)).then_some(*def);
+                (guarded, type_args.as_slice(), members.types)
             }
             ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
                 Some(cases) => (
@@ -2539,6 +2538,40 @@ impl TypeTable {
             .any(|member| self.holds_affine_in(member, &inner, open));
         open.pop();
         held
+    }
+
+    /// The member types of declaration `def` instantiated with `type_args`: a
+    /// tuple's elements, a struct's fields, a variant's payloads. `None` where
+    /// nothing registered them.
+    fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
+        if self.is_tuple_def(def) {
+            return Some(DeclaredMembers {
+                types: type_args.to_vec(),
+                of_template: false,
+            });
+        }
+        if let Some(fields) = self
+            .struct_field_index
+            .get(&(def, self.type_keys(type_args)))
+        {
+            return Some(DeclaredMembers {
+                types: fields.clone(),
+                of_template: false,
+            });
+        }
+        let types = match self.struct_field_index.get(&(def, Vec::new())) {
+            Some(fields) => fields.clone(),
+            None => self
+                .variant_case_index
+                .get(&def)?
+                .iter()
+                .map(|(_, _, payload)| *payload)
+                .collect(),
+        };
+        Some(DeclaredMembers {
+            types,
+            of_template: true,
+        })
     }
 
     /// Whether a value of `ty` reaches a `&mut`, through which a holder of a
@@ -2604,20 +2637,15 @@ impl TypeTable {
                 else {
                     return true;
                 };
-                if self.is_tuple_def(*def) {
-                    (Vec::new(), bound)
-                } else if let Some(fields) =
-                    self.struct_field_index.get(&(*def, self.type_keys(&bound)))
-                {
-                    (Vec::new(), fields.clone())
-                } else if let Some(fields) = self.struct_field_index.get(&(*def, Vec::new())) {
-                    (bound, fields.clone())
-                } else if let Some(cases) = self.variant_case_index.get(def) {
-                    let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
-                    (bound, payloads)
-                } else {
+                let Some(members) = self.declared_members(*def, &bound) else {
                     return true;
-                }
+                };
+                let template_args = if members.of_template {
+                    bound
+                } else {
+                    Vec::new()
+                };
+                (template_args, members.types)
             }
             ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
                 Some(cases) => (

@@ -1,7 +1,8 @@
-// `value_copy_demote` rule: a local holding a read-only `&` of the copy reads
-// it as `&sorted` written at the call does. `distinct_count` binds `&sorted`
-// before handing it on, so the deep copy still demotes to a shallow one, and
-// the caller's list stays unchanged.
+// `value_copy_demote` rule: a local holding a read-only `&` of the copy is
+// that `&` written at the call. `distinct_count` binds `&sorted` before
+// handing it on, so the deep copy still demotes to a shallow one, and the
+// caller's list stays unchanged. A second call keeps `distinct_count` out of
+// line, so the copy is not folded away with the literal.
 
 use { println, Stdout } from "core:cli";
 

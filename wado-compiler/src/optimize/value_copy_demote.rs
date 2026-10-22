@@ -1276,7 +1276,7 @@ impl ElementImmutable<'_, '_, '_> {
     }
 
     /// A self-derived value handed to an opaque (non-spine-builtin) call may
-    /// only flow through a `&` reference.
+    /// only flow through a read-only `&`.
     fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
         if is_read_only_ref(self.analyzer.type_table, body.exprs[arg].type_id) {
             self.visit_expr(body, arg);
