@@ -80,12 +80,22 @@ backends agree. On Linux it is roughly what Seatbelt provides on macOS:
 | ------------------------------- | -------------------------------------- | -------------------------------------------------- |
 | Read and write, per subtree     | `file-read*` / `file-write*`           | Landlock                                           |
 | Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`                                 |
-| Network                         | `network-outbound` / `network-inbound` | Landlock TCP rules, seccomp for the other families |
+| Network                         | `network-outbound` / `network-inbound` | seccomp on `socket`                                |
 | Signals and abstract sockets    | isolated by default                    | Landlock scopes                                    |
+| Typing into the terminal        | `file-ioctl`                           | seccomp on `ioctl`                                 |
 | Inherited, cannot be lifted     | yes                                    | yes                                                |
 
-On Linux, seccomp covers what Landlock does not: socket families other than TCP,
-and `ptrace`. On macOS, the policy becomes generated SBPL.
+On Linux, seccomp covers what Landlock does not:
+
+- The network. Landlock restricts TCP only, so a UDP socket passes it. With the
+  network not granted, seccomp refuses `socket` for every family but `AF_UNIX`.
+- `TIOCSTI` and `TIOCLINUX`, which push input into a terminal. Under
+  `inherit_stdin`, a child holds the user's terminal, and input it pushes there
+  runs in the user's shell, outside any sandbox. Landlock's device `ioctl` rule
+  does not reach a descriptor the child inherited.
+- `ptrace`.
+
+On macOS, the policy becomes generated SBPL.
 
 A confined child starts through a helper, `wado __sandbox-exec`. The host
 re-executes itself single-threaded, the helper applies the confinement, and then
@@ -97,9 +107,9 @@ Writing the sandbox in-house carries two obligations:
 
 - Escape tests run in CI on Linux and on macOS. Each of these must fail: reading
   a file outside the grants, writing under a read-only subtree, executing a
-  binary outside the grants, executing one through a grandchild, a network
-  connection when the network is not granted, and escaping through a symbolic
-  link or `..`.
+  binary outside the grants, executing one through a grandchild, a TCP
+  connection or a UDP datagram when the network is not granted, pushing input
+  into an inherited terminal, and escaping through a symbolic link or `..`.
 - The SBPL generator is fuzzed. A path holding `"` or `\` that escapes wrongly
   rewrites the policy itself.
 
@@ -160,8 +170,8 @@ child may read more than the guest. It is defined, not open-ended:
 | Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
 | Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
 
-- The baseline is read and execute only. The private `HOME` and `TMPDIR` are the
-  only writable entries.
+- The baseline is read and execute only. The writable entries are the private
+  `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
 - The list is fixed per OS in the host's source. The install prefix is derived
   from the resolved binary, since a Homebrew or Nix program reads its own
   prefix.
@@ -306,8 +316,10 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 
 ### The `cmd` template
 
-`` cmd`…` `` builds an argument vector without a shell, so a hole cannot inject
-an argument:
+`` cmd`…` `` builds an argument vector without a shell, so a hole can neither
+split into several arguments nor run as shell syntax. It can still be read as an
+option: a value starting with `-` is one to the program, so a hole that may hold
+one goes after `--` where the program accepts it.
 
 1. Literal text splits on whitespace, newlines included:
    `` cmd`git status --short` `` is `["git", "status", "--short"]`.
