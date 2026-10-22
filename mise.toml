@@ -662,13 +662,13 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:process; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
 # `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
-for package in kiln eval coverage; do
+for package in kiln eval coverage process; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \

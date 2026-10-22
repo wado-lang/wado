@@ -1,0 +1,24 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/process/process.wit"])]
+#![stdlib("core:process/process.wado")]
+
+use { Availability, Command, ErrorCode, Spawned } from "core:process/types.wado";
+use { Descriptor } from "wasi:filesystem/types.wado";
+
+
+
+
+
+/// Spawning a host program, confined to the caller's own grants. See
+/// WEP 2026-10-21 (`core:process`).
+/// 
+/// Every function but `get-availability` requires it to answer `available`, and
+/// traps otherwise. The answer is fixed for the instance's lifetime.
+#[cm("core:process/process@0.1.0")]
+pub interface Process {
+    #[cm("core:process/process@0.1.0#get-availability")]
+    fn get_availability() -> Availability;
+    /// Start `cmd` in `cwd`, or in the first preopened directory.
+    #[cm("core:process/process@0.1.0#spawn")]
+    #[cm_params("cmd", "cwd")]
+    fn spawn(cmd: Command, cwd: Option<&Descriptor>) -> Result<Spawned, ErrorCode>;
+}

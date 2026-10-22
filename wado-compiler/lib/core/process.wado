@@ -1,0 +1,14 @@
+#![stdlib("core:process")]
+//! Run a host program under a sandbox that confines it to what the guest
+//! already reaches. See WEP 2026-10-21 (`core:process`).
+
+use { Process } from "core:process/process.wado";
+
+pub use { Process } from "core:process/process.wado";
+pub use { Availability, ExitStatus } from "core:process/types.wado";
+
+/// Whether this host offers spawning. The answer is fixed for the life of the
+/// program, and every other function here requires it to be `Available`.
+pub fn availability() -> Availability with Process {
+    return Process::get_availability();
+}
