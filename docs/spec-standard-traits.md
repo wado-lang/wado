@@ -11,23 +11,15 @@ The prelude defines iterator traits for generic iteration over collections.
 
 ### Iterator - Core Iteration Trait
 
-<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Types that can yield a sequence of values, each impl performing what its
-/// `next` does
 pub affine trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
     /// Returns None when iteration is complete.
     fn next(&mut self) -> Option<Self::Item>;
-}
-
-test {
-    let mut c = Countdown { n: 1 };
-    assert c.next() == Option::Some(1) && c.next() == null;
-}
 ```
 
 An iterator may perform effects as it advances: a `next` reading the next line
@@ -57,37 +49,27 @@ test {
 
 ### IntoIterator - Conversion Trait
 
-<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Types that can be converted into an iterator
 pub affine trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
-    /// Creates an iterator from a value
+    /// Creates an iterator from a value.
     fn into_iter(&self) -> Self::Iter;
-}
-
-test {
-    let mut it = Count { n: 2 }.into_iter();
-    assert it.next() == Option::Some(2);
 }
 ```
 
 ### FromIterator - Collection Construction
 
-<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Types that can be constructed from an iterator of `Elem`
+/// Trait for creating a collection from any iterator of `Elem`.
 pub trait FromIterator with () {
     type Elem;
     fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
-}
-
-test {
-    assert Total::from_iter(&mut Countdown { n: 3 }).sum == 6;
 }
 ```
 
@@ -272,46 +254,85 @@ Two prelude traits carry the shared methods of the
 implementor has a contiguous backing. `Array`, `List` and `Slice` implement
 both.
 
-<!-- {"fixture":"spec_traits_sequence_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/slice.wado"} -->
 
 ```wado
 pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
+
+    /// The element at `index`. `get` answers for an index that may be out of
+    /// range.
     fn at(&self, index: i32) -> Self::Elem
         contract 0 <= index < self.len();
 
-    // default bodies, written against `len` and `at`
-    fn is_empty(&self) -> bool { return self.len() == 0; }
-    fn get(&self, index: i32) -> Option<Self::Elem> {
-        return if index < 0 || index >= self.len() { null } else { Option::Some(unchecked self.at(index)) };
+    #[unavailable("write `unchecked xs.at(i)`")]
+    fn get_unchecked(&self);
+
+    fn is_empty(&self) -> bool {
+        return self.len() == 0;
     }
-    fn first(&self) -> Option<Self::Elem> { return self.get(0); }
-    fn last(&self) -> Option<Self::Elem> { return self.get(self.len() - 1); }
-    fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
+
+    fn get(&self, index: i32) -> Option<Self::Elem> {
+        if index < 0 || index >= self.len() {
+            return null;
+        }
+        return Option::Some(unchecked self.at(index));
+    }
+
+    fn first(&self) -> Option<Self::Elem> {
+        return self.get(0);
+    }
+
+    fn last(&self) -> Option<Self::Elem> {
+        return self.get(self.len() - 1);
+    }
+
+    fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _ {
         for let mut i = 0; i < self.len(); i += 1 {
-            if pred(unchecked self.at(i)) { return Option::Some(i); }
+            if pred(unchecked self.at(i)) {
+                return Option::Some(i);
+            }
         }
         return null;
     }
 }
+```
 
+<!-- {"source": "wado-compiler/lib/core/prelude/slice.wado"} -->
+
+```wado
 pub trait AsSlice: Sequence with () {
     fn as_slice(&self) -> Slice<Self::Elem>;
 
-    // default bodies, through `as_slice`
-    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> { return self.as_slice().slice(start, end); }
-    fn iter_value(&self) -> SliceValueIter<Self::Elem> { return self.as_slice().iter_value(); }
-    fn iter_ref(&self) -> SliceRefIter<Self::Elem> { return self.as_slice().iter_ref(); }
-    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> { return self.as_slice().windows(size); }
-    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> { return self.as_slice().chunks(size); }
-}
+    /// Sub-view over `[start, end)`, clamped to this sequence.
+    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> {
+        return self.as_slice().slice(start, end);
+    }
 
-test {
-    let d = Digits { items: [0, 1, 2] };
-    assert d.last() == Option::Some(2) && d.position(|x| x == 1) == Option::Some(1);
-    assert d.slice(1, 3).len() == 2;
+    fn iter_value(&self) -> SliceValueIter<Self::Elem> {
+        return self.as_slice().iter_value();
+    }
+
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem> {
+        return self.as_slice().iter_ref();
+    }
+
+    /// Overlapping windows of `size` consecutive elements.
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>
+        contract size > 0
+    {
+        return unchecked self.as_slice().windows(size);
+    }
+
+    /// Non-overlapping chunks of up to `size` elements; the last may be
+    /// shorter.
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>
+        contract size > 0
+    {
+        return unchecked self.as_slice().chunks(size);
+    }
 }
 ```
 
@@ -346,17 +367,12 @@ The prelude defines traits for comparison operators:
 
 ### Eq - Equality
 
-<!-- {"fixture":"spec_traits_comparison_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Types that can be compared for equality
 pub affine trait Eq<Rhs = Self> with () {
-    /// Returns true if self equals other
+    /// Returns true if self equals other.
     fn eq(&self, other: &Rhs) -> bool;
-}
-
-test {
-    assert Coin { cents: 5 }.eq(&Coin { cents: 5 });
 }
 ```
 
@@ -387,34 +403,30 @@ references point to one place, call `ref_eq` (see
 
 ### Ordering Enum
 
-<!-- {"fixture":"spec_traits_ordering_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Result of a three-way comparison
 pub enum Ordering {
-    Less,    // first value is less than second
-    Equal,   // values are equal
-    Greater, // first value is greater than second
-}
-
-test {
-    assert Ordering::Less != Ordering::Greater;
+    /// The first value is less than the second.
+    #[compiler_item("ordering_less")]
+    Less,
+    /// The two values are equal.
+    #[compiler_item("ordering_equal")]
+    Equal,
+    /// The first value is greater than the second.
+    #[compiler_item("ordering_greater")]
+    Greater,
 }
 ```
 
 ### Ord - Ordering
 
-<!-- {"fixture":"spec_traits_comparison_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// A total order over the type
 pub affine trait Ord: Eq with () {
-    /// Compares self with other and returns an Ordering
+    /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
-}
-
-test {
-    assert Coin { cents: 1 }.cmp(&Coin { cents: 2 }) == Ordering::Less;
 }
 ```
 
@@ -514,15 +526,12 @@ assert xs < [1, 3] && xs < [1, 2, 0];
 
 The prelude defines a `Default` trait providing a uniform "zero value" / "empty value" interface:
 
-<!-- {"fixture":"spec_traits_default_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
 pub affine trait Default with () {
+    /// Returns the default value for this type.
     fn default() -> Self;
-}
-
-test {
-    assert Origin::default().x == 0;
 }
 ```
 
@@ -607,25 +616,30 @@ test "written" {
 Two prelude traits convert a value of one type into another. `From` cannot
 fail. `TryFrom` returns a `Result`, and its failure is an `Error`:
 
-<!-- {"fixture":"spec_traits_conversion_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
 pub affine trait From<T> with () {
+    /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
+/// Fallible conversion trait. `Err: Error`, so a caller reaching the failure
+/// through the bound can always report its reason.
 pub affine trait TryFrom<T> with () {
     type Err: Error;
+
+    /// Attempts to convert a value of type `T` into `Self`.
     fn try_from(value: T) -> Result<Self, Self::Err>;
 }
+```
 
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+
+```wado
+/// What every standard library error type is: a failure carrying a reason a
+/// person can read. It adds nothing to `Display`, so a bound on it says only that.
 pub affine trait Error: Display with () {
-}
-
-test {
-    assert Even::from(21 as i16).n == 42;
-    assert Even::try_from(4).unwrap().n == 4;
-    assert `${Even::try_from(3).unwrap_err()}` == "3 is odd";
 }
 ```
 
@@ -833,22 +847,25 @@ assert i32::from_str_lenient(" 1 ").is_err();           // never trims whitespac
 
 A `StrSlice` is an `AsStrSlice`, so a field is parsed out of a larger buffer with no substring allocation (see [String Views](./spec-types.md#string-views)).
 
-<!-- {"fixture":"spec_traits_parse_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
 pub trait FromStr with () {
     type Err: Error;
+
+    /// Parse the whole of any `AsStrSlice` text as `Self`.
     fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
+```
 
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+
+```wado
 pub trait LenientFromStr with () {
     type Err: Error;
-    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
-}
 
-test {
-    assert Flag::from_str("on").unwrap().on && Flag::from_str("ON").is_err();
-    assert Flag::from_str_lenient("ON").unwrap().on;
+    /// Parse the entire string as `Self`, accepting forgiving spellings.
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 ```
 
@@ -893,18 +910,15 @@ Rationale: [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 `AsStrSlice` is the conversion that lets one signature take an owned `String`, a
 reference to one, or a [`StrSlice`](./spec-types.md#string-views) view of one:
 
-<!-- {"fixture":"spec_traits_as_str_slice_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/string.wado"} -->
 
 ```wado
 pub trait AsStrSlice: Eq<String> + Display with () {
     fn as_str_slice(&self) -> StrSlice;
-    // default bodies over the view: len, slice, chars, starts_with, find, …
-}
-
-test {
-    assert Word { text: "hi" }.as_str_slice() == "hi";
-}
 ```
+
+The rest of the trait is default bodies over the view: `len`, `slice`, `chars`,
+`starts_with`, `find`, and so on.
 
 `String` and `StrSlice` implement it, and `impl<T: AsStrSlice> AsStrSlice for &T`
 passes a reference through. A parameter that only reads its text names
@@ -925,16 +939,14 @@ The prelude's binary operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`,
 `BitAnd`, `BitOr`, `BitXor`, `Shl`, `Shr`) carry a right-hand type parameter
 defaulting to `Self`:
 
-<!-- {"fixture":"spec_traits_add_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-trait Add<Rhs = Self> with () {
+pub trait Add<Rhs = Self> with () {
     type Output;
-    fn add(&self, rhs: &Rhs) -> Self::Output;
-}
 
-test {
-    assert Cm { v: 1 }.add(&Cm { v: 2 }).v == 3;
+    /// Adds two values and returns the result.
+    fn add(&self, rhs: &Rhs) -> Self::Output;
 }
 ```
 
@@ -999,69 +1011,53 @@ The prelude defines traits for index-based access:
 
 ### IndexValue - Value Read
 
-<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Returns element by value (copy)
 pub trait IndexValue<IndexType> with () {
     type Output;
-    fn index_value(&self, index: IndexType) -> Self::Output;
-}
 
-test {
-    assert Cells { v: [Cell { n: 7 }] }.index_value(0).n == 7;
+    /// Returns a copy of the element at the given index.
+    fn index_value(&self, index: IndexType) -> Self::Output;
 }
 ```
 
 ### IndexAssign - Value Write
 
-<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Assigns value to element at index
 pub affine trait IndexAssign<IndexType> with () {
     affine type Output;
-    fn index_assign(&mut self, index: IndexType, value: Self::Output);
-}
 
-test {
-    let mut c = Cells { v: [Cell { n: 7 }] };
-    c.index_assign(0, Cell { n: 8 });
-    assert c.v[0].n == 8;
+    /// Assigns a value to the element at the given index.
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 ```
 
 ### IndexRef - Reference Read
 
-<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Returns element by shared reference
 pub affine trait IndexRef<IndexType> with () {
     affine type Output: Ref;
-    fn index_ref(&self, index: IndexType) -> &Self::Output;
-}
 
-test {
-    assert Cells { v: [Cell { n: 7 }] }.index_ref(0).n == 7;
+    /// Returns a reference to the element at the given index.
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 ```
 
 ### IndexRefMut - Mutable Reference
 
-<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-/// Returns element by mutable reference
 pub affine trait IndexRefMut<IndexType> with () {
     affine type Output: RefMut;
-    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
-}
 
-test {
-    let mut c = Cells { v: [Cell { n: 7 }] };
-    c.index_ref_mut(0).n = 9;
-    assert c.v[0].n == 9;
+    /// Returns a mutable reference to the element at the given index.
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 ```
 
