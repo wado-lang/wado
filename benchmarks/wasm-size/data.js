@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792653436565,
+  "lastUpdate": 1792656253236,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69401,6 +69401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6f37502e2106be111b5bae8c18cd7e1d6381b201"
         },
         "date": 1792653436164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f6ca7529bc5821700c12dce7766e82715c08490",
+          "message": "Merge pull request #2417 from wado-lang/lower-speed\n\nperf(lower): lower gale_gen 45% faster by settling merged points-to nodes incrementally",
+          "timestamp": "2026-10-22T16:43:32+09:00",
+          "tree_id": "1082f2d77afb2cbff3ec2a984687c3f35d2e58ac",
+          "url": "https://github.com/wado-lang/wado/commit/4f6ca7529bc5821700c12dce7766e82715c08490"
+        },
+        "date": 1792656252543,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
