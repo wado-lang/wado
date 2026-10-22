@@ -53,17 +53,14 @@ use y from "./dup.wasm" with { type: "wasm", package: "b:y" };
 
 The packages a component offers are those of the interfaces it exports and of
 the non-WASI interfaces it imports. A WASI import is the host's, and resolves to
-the standard library. An imported interface is one the consumer provides, as a
-`with` handler.
+the standard library. A non-WASI import is an interface the consumer provides,
+through a `with` handler.
 
 The key may be left out where the component offers exactly one package, which
 is the common case. Where it offers more, leaving it out is an error at the
 `use` that names the packages offered. A version may be left out the same way:
 `package: "a:x"` names `a:x@1.0.0` where the component offers no other version
 of `a:x`.
-
-The same holds for every way a package is imported: by file path, and by a
-registry coordinate resolving to a prebuilt component.
 
 ### An interface's types are its members
 
@@ -97,8 +94,8 @@ collides.
 The bindings synthesized for a component keep each interface in a scope of its
 own. A reference between them is a reference site the resolver answers, as
 WIT's own `use` is, so no synthesized type carries only a spelling. A module
-declares each WIT name once, and §9's `(name, module)` step answers with one
-declaration again.
+declares each WIT name once, and Declaration Identity's §9 `(name, module)`
+step answers with one declaration again.
 
 An operation is bound to its interface's declaration, not to the spelling
 `Interface::operation`. This closes the

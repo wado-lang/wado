@@ -444,18 +444,28 @@ any name.
 A component is consumed through the type it carries. No Wado declaration file
 or side-car `.wit` is involved.
 
-- An exported interface becomes a Wado `interface`. Its named types become Wado
-  items of the corresponding kind: a record a `struct`, a variant a `variant`,
+- A `use` of a component imports one of its packages as a module. The `package`
+  key of the `with` clause names it (`package: "b:y"`). The packages a
+  component offers are those of the interfaces it exports and of the non-WASI
+  interfaces it imports. The key may be left out where the component offers
+  one package. Where it offers more, leaving the key out is an error that names
+  them. A version may be left out the same way.
+- An interface of the package becomes a Wado `interface`. Its named types are
+  members of that interface, named `Iface::Type` or imported with
+  `use { Iface::{Type} }`. A record becomes a `struct`, a variant a `variant`,
   an enum an `enum`, flags a `flags`, and a type alias a newtype.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
-  Each of its functions is also a free function of the module, imported by bare
+  Its functions and types are also members of the module, imported by bare
   name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. A name two exported default interfaces share is left out,
-  and a world-level function keeps its name over an interface function of the
-  same name. Any other interface, an imported one included, is reached only
-  through its name.
+  or a component. A world-level function keeps its name over an interface
+  function of the same name. Any other interface, an imported one included, is
+  reached only through its name.
+
+> Not yet implemented: the `package` key, and an interface's types as its
+> members ([WEP](./wep-2026-10-22-component-packages.md)).
+
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`
