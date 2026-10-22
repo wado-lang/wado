@@ -1232,32 +1232,10 @@ impl CompilerNamed {
 
 #[cfg(test)]
 mod last_use_tests {
+    use futures::executor::block_on;
+
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::semantics::semantics;
-
-    fn block_on<F: std::future::Future>(future: F) -> F::Output {
-        use std::future::Future;
-        use std::pin::Pin;
-        use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-        fn raw() -> RawWaker {
-            fn no_op(_: *const ()) {}
-            fn clone(_: *const ()) -> RawWaker {
-                raw()
-            }
-            RawWaker::new(
-                std::ptr::null(),
-                &RawWakerVTable::new(clone, no_op, no_op, no_op),
-            )
-        }
-        let waker = unsafe { Waker::from_raw(raw()) };
-        let mut cx = Context::from_waker(&waker);
-        let mut fut = Box::pin(future);
-        loop {
-            if let Poll::Ready(v) = Pin::new(&mut fut).as_mut().poll(&mut cx) {
-                return v;
-            }
-        }
-    }
 
     /// Return a sorted list of the identifier texts that the analysis marked as
     /// final uses, one entry per marked use.

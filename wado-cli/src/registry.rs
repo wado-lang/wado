@@ -13,6 +13,7 @@ use crate::compile::empty_manifest;
 use crate::git::{fetch_manifest, resolve_ref};
 use crate::manifest::resolve_manifest;
 use crate::{git, oci};
+use wado_host::sync::joined;
 
 /// Parse an image tag into a semver [`Version`], stripping an optional leading
 /// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule
@@ -65,19 +66,13 @@ impl FilesystemProvider {
     }
 }
 
-// Run a blocking git operation on the blocking pool, flattening the join error.
+// Run a blocking git operation on the blocking pool.
 async fn on_blocking<T, F>(f: F) -> Result<T, ProviderError>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, ProviderError> + Send + 'static,
 {
-    match tokio::task::spawn_blocking(f).await {
-        Ok(result) => result,
-        Err(e) => Err(ProviderError::IoError {
-            path: "git".to_string(),
-            message: e.to_string(),
-        }),
-    }
+    joined(tokio::task::spawn_blocking(f).await)
 }
 
 impl DependencyProvider for FilesystemProvider {

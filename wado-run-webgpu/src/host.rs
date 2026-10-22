@@ -169,7 +169,9 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
                 Box::pin(async move {
                     let instance =
                         accessor.with(|mut access| Arc::clone(&access.get().gpu.instance));
-                    spawn_blocking(move || instance.poll_all_devices(true)).await??;
+                    spawn_blocking(move || instance.poll_all_devices(true))
+                        .await
+                        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))?;
                     Ok(())
                 })
             },
