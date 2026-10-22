@@ -9,7 +9,7 @@ export fn run() with Stdout {
     tx.drop();
 
     // Read from the readable end - should report the writable end dropped
-    let chunk = rx.read(64);
+    let [rx, chunk] = rx.start_read(64).finish();
     assert chunk.items.len() == 0;
     assert chunk.result == CopyResult::Dropped;
 

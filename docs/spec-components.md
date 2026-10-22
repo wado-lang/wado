@@ -293,20 +293,35 @@ keep running afterwards, for example to write a response's trailers.
 
 ### Streams and Futures
 
-`Stream<T>` and `Future<T>` are unbuffered channels. A `write` blocks until the
-other end reads, and a `read` blocks until the other end writes, so the two ends
-must be driven by different tasks. A component cannot start a task of its own,
-so one end goes to another task: an async import's subtask, or the caller of an
-`export async fn`. A task that drives both ends blocks forever.
+`Stream<T>` and `Future<T>` are unbuffered channels. A write settles once the
+other end reads, and a read once the other end writes. A task that waits on one
+end before it starts the copy on the other blocks forever, so it either starts
+both copies before waiting, or hands one end to another task: an async import's
+subtask, or the caller of an `export async fn`.
 
 A future's ends are each used once, so both consume their end:
 `Future::read(self)` and `FutureWritable::write(self, value)`. A second read or
 write is a use after move. A `FutureWritable` dropped before its write traps
 with a message naming it, since the reader would otherwise wait forever.
 
+A stream copy is started and finished in two steps, so a task can wait on
+several at once. `Stream::start_read(self, max)` returns a `ReadCopy<T>` and
+`StreamWritable::start_write(self, data)` a `WriteCopy<T>`. Each moves the end
+into the copy, since the Component Model traps on a second copy on an end that
+is copying. `finish` waits where the copy has not settled, and hands back the
+end with what the copy moved. Both copies are `Waitable`, and a set reports a
+settled one as `ReadyEvent::Copied`. Dropping a copy that has not settled
+cancels it. `read_to_end`, `read_to_end_bytes`, `write_all` and `write_raw_all`
+borrow the end and copy until the stream ends.
+
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
-take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `WriteCopy::finish` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+
+A handler for `Stream<T>` or `StreamWritable<T>` answers the operations a copy
+starts with, `begin_read` and `begin_write`. It returns a copy that has already
+settled, built by `StartedRead::settled` or `StartedWrite::settled`, so every
+copy a program makes goes through it, a started one included.
 
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands

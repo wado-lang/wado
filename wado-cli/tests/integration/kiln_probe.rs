@@ -16,10 +16,11 @@ use predicates::prelude::*;
 /// below it never reaches the generated source.
 const HEADER_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
-export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
     let mut n: u64 = 0;
     loop {
-        let chunk = content.read(1);
+        let [end, chunk] = content.start_read(1).finish();
+        content = end;
         if chunk.items.len() > 0 {
             n += 1;
             if chunk.items[0] == b'\n' {

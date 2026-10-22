@@ -1254,6 +1254,10 @@ fn synthesize_stream_read_funcs(
                 result_buffer_literal(ptr(), byte_count(), elem_align, type_table),
             ),
             ("packed", packed),
+            (
+                "items",
+                list_with_capacity(elem_type_id, i32_const(0), type_table),
+            ),
         ],
         type_table,
     );
@@ -1292,12 +1296,9 @@ fn synthesize_stream_lift_func(
 ) -> TirFunction {
     let type_table = ctx.type_table;
     let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
-    // `List` is a declaration, so the receiver its methods are named after
-    // carries it rather than the spelling `List` happens to have.
     let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
     let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
     let list_template = |item| type_table.borrow().compiler_items().require_template(item);
-    // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
     let list_method = |method: &str| {
         LocalMethodName::new(list_fq.clone(), None, method.to_string())
             .with_struct_type_args(std::slice::from_ref(&elem_fq))
@@ -1335,29 +1336,10 @@ fn synthesize_stream_lift_func(
         array_type_id,
         false,
     );
-    let with_capacity = list_method("with_capacity");
-    let empty_arr = TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::list(),
-                name: with_capacity.to_mangled_name(),
-                template: Some(list_template(CompilerItem::ListWithCapacity)),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: format!("{list_fq}::with_capacity"),
-                    impl_type_args: vec![elem_type_id],
-                    method_type_args: vec![],
-                    is_blanket: false,
-                }),
-                method_info: Some(with_capacity),
-            }),
-            type_args: vec![],
-            args: CallArgs::free(vec![CallArg::new(
-                local_ref(count_idx, "count", TypeTable::I32),
-                false,
-            )]),
-        },
-        array_type_id,
-        synth_span(),
+    let empty_arr = list_with_capacity(
+        elem_type_id,
+        local_ref(count_idx, "count", TypeTable::I32),
+        type_table,
     );
     stmts.push(let_mut_stmt("arr", arr_idx, array_type_id, empty_arr));
 
@@ -1475,6 +1457,45 @@ fn synthesize_stream_lift_func(
     )
 }
 
+/// `List::<Elem>::with_capacity(capacity)`. `List` is a declaration, so the
+/// receiver its methods are named after carries it rather than the spelling
+/// `List` happens to have.
+fn list_with_capacity(
+    elem_type_id: TypeId,
+    capacity: TirExpr,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    let array_type_id = type_table.borrow_mut().make_list(elem_type_id);
+    let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
+    let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
+    let with_capacity = LocalMethodName::new(list_fq.clone(), None, "with_capacity".to_string())
+        .with_struct_type_args(std::slice::from_ref(&elem_fq));
+    let template = type_table
+        .borrow()
+        .compiler_items()
+        .require_template(CompilerItem::ListWithCapacity);
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::list(),
+                name: with_capacity.to_mangled_name(),
+                template: Some(template),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: format!("{list_fq}::with_capacity"),
+                    impl_type_args: vec![elem_type_id],
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: Some(with_capacity),
+            }),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(capacity, false)]),
+        },
+        array_type_id,
+        synth_span(),
+    )
+}
+
 /// `ResultBuffer { ptr, size, align }`: the linear memory a started copy holds
 /// until it settles, freed as the buffer drops.
 fn result_buffer_literal(
@@ -1491,7 +1512,7 @@ fn result_buffer_literal(
     )
 }
 
-/// `StartedRead { buffer, packed }` / `StartedWrite { buffer, packed, data }`
+/// `StartedRead { buffer, packed, items }` / `StartedWrite { buffer, packed, data }`
 /// — a copy the canonical answered `packed` for, not yet settled. Field order
 /// follows the declaration.
 fn started_copy_literal(

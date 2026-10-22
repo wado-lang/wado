@@ -300,17 +300,19 @@ pub resource Stream<T> {
     #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
 
+    /// One Component Model copy of up to `max` elements, started and not
+    /// waited for. It is the operation a handler answers, with
+    /// `StartedRead::settled`. A program calls `start_read`, which holds the
+    /// end for the copy: a second copy on an end that is copying traps.
+    #[cm("stream-read")]
+    fn begin_read(&self, max: i32) -> StartedRead<T>;
+
     /// Drop the readable end of the stream.
     #[cm("stream-drop-readable")]
     fn drop(self);
 }
 
 impl<T> Stream<T> {
-    /// One Component Model copy of up to `max` elements, started and not
-    /// waited for.
-    #[cm("stream-read")]
-    internal fn begin_read(&self, max: i32) -> StartedRead<T>;
-
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed result it settled on.
     #[cm("stream-cancel-read")]
@@ -360,23 +362,35 @@ impl Stream<u8> {
 /// until the peer moves, so this bounds the buffer, not the throughput.
 internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 
-/// A `stream.read` the host may still be copying into `buffer`. `packed` is
-/// what the canonical answered, BLOCKED where the copy has not settled.
+/// A read copy as `Stream::begin_read` started it: one the host may still be
+/// copying into `buffer`, or one a handler settled with its `items`. `packed`
+/// is what the canonical answered, BLOCKED where the copy has not settled.
 #[compiler_item("started_read")]
-internal affine struct StartedRead<T> {
+pub affine struct StartedRead<T> {
     internal buffer: ResultBuffer,
     internal packed: i32,
+    internal items: List<T>,
 }
 
 impl<T> StartedRead<T> {
+    /// A copy that already moved `chunk`, for a handler to answer
+    /// `Stream::begin_read` with.
+    pub fn settled(chunk: StreamChunk<T>) -> StartedRead<T> {
+        return StartedRead {
+            buffer: ResultBuffer::empty(),
+            packed: copy_status(chunk.result),
+            items: chunk.items,
+        };
+    }
+
     /// What the copy on `end` moved, once it has settled. The buffer frees as
     /// this returns.
     internal fn settle(self, end: &Stream<T>) -> StreamChunk<T> {
         let packed = settled_copy(builtin::resource_handle(end), self.packed);
-        return StreamChunk {
-            items: end.lift_copied(self.buffer.ptr, cm_packed_upper(packed)),
-            result: copy_result(packed),
-        };
+        let count = cm_packed_upper(packed);
+        // A settled copy's count is zero, as it moved nothing through `buffer`.
+        let items = if count == 0 { self.items } else { end.lift_copied(self.buffer.ptr, count) };
+        return StreamChunk { items, result: copy_result(packed) };
     }
 }
 
@@ -429,6 +443,15 @@ impl<T> Waitable for ReadCopy<T> {
 /// Writable end of an async sequence (WASI Component Model stream).
 #[compiler_item("stream_writable")]
 pub resource StreamWritable<T> {
+    /// One Component Model copy of `data`, started and not waited for. An
+    /// empty `data` is the CM's readiness signal: it settles once a reader
+    /// rendezvouses, having written nothing. It is the operation a handler
+    /// answers, with `StartedWrite::settled`. A program calls `start_write`,
+    /// which holds the end for the copy: a second copy on an end that is
+    /// copying traps.
+    #[cm("stream-write")]
+    fn begin_write(&self, data: List<T>) -> StartedWrite<T>;
+
     /// `write_all` for a byte view, lowered once with no value-semantics copy.
     /// Any element type but a byte is a compile error.
     #[cm("stream-write-raw-all")]
@@ -446,12 +469,6 @@ internal fn write_copy_is_final(result: CopyResult, delivered: i32) -> bool {
 }
 
 impl<T> StreamWritable<T> {
-    /// One Component Model copy of `data`, started and not waited for. An
-    /// empty `data` is the CM's readiness signal: it settles once a reader
-    /// rendezvouses, having written nothing.
-    #[cm("stream-write")]
-    internal fn begin_write(&self, data: List<T>) -> StartedWrite<T>;
-
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed result it settled on.
     #[cm("stream-cancel-write")]
@@ -483,17 +500,28 @@ impl<T> StreamWritable<T> {
     }
 }
 
-/// A `stream.write` the host may still be copying out of `buffer`, which holds
-/// `data` lowered. `packed` is what the canonical answered, BLOCKED where the
+/// A write copy as `StreamWritable::begin_write` started it: one the host may
+/// still be copying out of `buffer`, which holds `data` lowered, or one a
+/// handler settled. `packed` is what the canonical answered, BLOCKED where the
 /// copy has not settled.
 #[compiler_item("started_write")]
-internal affine struct StartedWrite<T> {
+pub affine struct StartedWrite<T> {
     internal buffer: ResultBuffer,
     internal packed: i32,
     internal data: List<T>,
 }
 
 impl<T> StartedWrite<T> {
+    /// A copy that already ended as `written` says, for a handler to answer
+    /// `StreamWritable::begin_write` with.
+    pub fn settled(written: StreamWrite<T>) -> StartedWrite<T> {
+        return StartedWrite {
+            buffer: ResultBuffer::empty(),
+            packed: copy_status(written.result),
+            data: written.rest,
+        };
+    }
+
     /// What the copy on `end` left of `data`, once it has settled. The buffer
     /// frees as this returns.
     internal fn settle(self, end: &StreamWritable<T>) -> StreamWrite<T> {
@@ -558,6 +586,15 @@ internal fn copy_result(packed: i32) -> CopyResult {
         1 => CopyResult::Dropped,
         2 => CopyResult::Cancelled,
         _ => unreachable(),
+    };
+}
+
+/// The packed word of a copy that moved nothing and ended as `result`.
+fn copy_status(result: CopyResult) -> i32 {
+    return match result {
+        Completed => 0,
+        Dropped => 1,
+        Cancelled => 2,
     };
 }
 
@@ -983,6 +1020,13 @@ internal affine struct ResultBuffer {
     internal ptr: i32,
     internal size: i32,
     internal align: i32,
+}
+
+impl ResultBuffer {
+    /// A buffer holding no memory, which frees nothing.
+    internal fn empty() -> ResultBuffer {
+        return ResultBuffer { ptr: 0, size: 0, align: 1 };
+    }
 }
 
 impl Drop for ResultBuffer {

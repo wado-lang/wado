@@ -67,6 +67,22 @@ the one Wado's streams already require.
 - Every element type takes them. The compiler synthesizes the start and the
   finish per element type, as it synthesizes the copy today.
 
+### Handlers
+
+A handler for `Stream<T>` or `StreamWritable<T>` is how a test feeds a program
+input or captures its output, so the started copy has to go through it. The
+copy starts with a resource operation, `Stream::begin_read(&self, max)` or
+`StreamWritable::begin_write(&self, data)`, which returns a `StartedRead<T>` or
+`StartedWrite<T>`. `start_read` and `start_write` call it and take the end, and
+so do the loops. A handler answers with a copy that has already settled,
+`StartedRead::settled(chunk)` or `StartedWrite::settled(written)`: its data is
+in memory, so it has no host copy to wait on. Such a copy joins a set as ready,
+and dropping it cancels nothing.
+
+The operations are public, since a handler in another package implements them.
+A program that calls `begin_read` itself holds no copy in its end, so a second
+copy on that end traps where the ownership would have refused it.
+
 ### One way to copy
 
 `Stream::read` and `StreamWritable::write` are removed. Each was a started copy
@@ -104,9 +120,10 @@ program holding an end holds no copy in flight, so it never cancels one itself.
 ## Roadmap
 
 1. The started copy for every element type: `start_read`, `start_write`,
-   `Copied`, the delivered copy table and cancel on drop, with e2e fixtures for
-   a read that blocks, two reads settled out of order, a dropped copy in
-   flight, and a record element type.
+   `Copied`, the delivered copy table, cancel on drop and the handler
+   operations, with e2e fixtures for a read that blocks, two reads settled out
+   of order, a dropped copy in flight, a record element type, and a handler
+   answering a started copy.
 2. `read` and `write` removed, the loops rebuilt on the started copy, and every
    caller in the repository moved to a loop or to the started copy.
 3. `waitable_set_rejects_stream.wado` kept, since a bare end stays not
