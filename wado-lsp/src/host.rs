@@ -195,15 +195,22 @@ pub fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>>
     Ok(bytes)
 }
 
-/// A path through a file, such as `a.txt/b`, is as absent as a missing one.
+/// Whether `e` says the file is not there. A path through a file, such as
+/// `wado.toml` under a path dependency naming a file, is as absent as a
+/// missing one.
+#[must_use]
+pub fn is_absent(e: &std::io::Error) -> bool {
+    matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
+}
+
 fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
     let path = path.display().to_string();
-    match e.kind() {
-        ErrorKind::NotFound | ErrorKind::NotADirectory => SourceError::NotFound { path },
-        _ => SourceError::IoError {
-            path,
-            message: e.to_string(),
-        },
+    if is_absent(e) {
+        return SourceError::NotFound { path };
+    }
+    SourceError::IoError {
+        path,
+        message: e.to_string(),
     }
 }
 

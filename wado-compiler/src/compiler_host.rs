@@ -465,7 +465,7 @@ pub enum SourceError {
 impl std::fmt::Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceError::NotFound { path } => write!(f, "file not found: {path}"),
+            SourceError::NotFound { path } => write!(f, "file not found: '{path}'"),
             SourceError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
             }

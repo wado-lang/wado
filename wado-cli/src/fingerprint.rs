@@ -2,12 +2,11 @@
 //! files it read. Shared by the `core:eval` outcome cache and the `wado test`
 //! result cache.
 
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
-use wado_lsp::host::read_prefix;
+use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::kiln_provider::hex32;
 
@@ -110,9 +109,7 @@ impl Input {
     }
 
     /// What `path` holds now, its first `prefix` bytes where that is given;
-    /// `None` where it cannot be read, which matches no recorded input. A path
-    /// through a file, such as `wado.toml` under a path dependency naming a
-    /// file, is as absent as a missing one.
+    /// `None` where it cannot be read, which matches no recorded input.
     pub(crate) fn on_disk(path: PathBuf, prefix: Option<u64>) -> Option<Self> {
         match read_prefix(&path, prefix) {
             Ok(bytes) => Some(Self::hashed(
@@ -120,9 +117,7 @@ impl Input {
                 prefix,
                 Some(Sha256::digest(bytes).into()),
             )),
-            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
-                Some(Self::hashed(path, prefix, None))
-            }
+            Err(e) if is_absent(&e) => Some(Self::hashed(path, prefix, None)),
             Err(_) => None,
         }
     }
