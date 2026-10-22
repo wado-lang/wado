@@ -683,20 +683,30 @@ below close that, in this order.
   the declared bounds, and `` format`${x}` `` reports the missing bound
   `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
-- [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
-  direct lowering does four things a `format` site does not:
-  - It sizes the buffer from the segment lengths (`String::with_capacity`).
-    `format` starts from `""` and grows.
-  - It appends a `String` hole with no specifier directly. `format` goes
-    through `Display::fmt` and `Formatter::pad`.
-  - It inlines a radix renderer (`${i:#x}`) at the site. `format` calls
-    `u64::fmt_base`, building the radix prefix as a `String` on each call.
-  - `optimize::tmpl_hoist` reuses its buffer across loop iterations, and
-    recognizes only the direct lowering's `$tmpl` block.
+- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
+  direct lowering did four things a `format` site did not. Each is closed
+  where it arose:
+  - The direct lowering sizes the buffer from the segment lengths. `format`
+    sums `lit().len()` and `tail().len()` over the holes, which folds to a
+    constant, and starts from `String::with_capacity` of it.
+  - A `String` hole with no specifier is a plain append. `format` reaches it
+    through `Display::fmt` and `Formatter::pad`, which fold to the same append
+    once `param_spec` specializes `pad` on the `Formatter`'s constant fields.
+    `$hole_fmt` hands the formatter on as `&mut Formatter { … }`, so
+    `param_spec` roots a reference local bound to a struct literal as it roots
+    a struct local.
+  - The radix renderer (`${i:#x}`) is spliced into the site. Its call sits in
+    a `break` value in `$hole_fmt`, and `inline` rescans every splice it makes,
+    not only one at a statement, so the chain reaches `u64::fmt_base` while it
+    still fits.
+  - `optimize::tmpl_hoist` lifts the direct lowering's buffer out of a loop.
+    A `format` call at a loop site stays a call, so there is nothing to lift,
+    and the benchmark below runs the same with the pass skipped
+    (`WADO_SKIP_PASS=nir/tmpl_hoist`).
 
-  Done when a `wir_expect` fixture holds a `format` site to what the direct
-  lowering emits for the same template, and the measurement below shows no
-  gap.
+  Done: `tagged_template_format_direct_cost.wado` holds a `format` site to a
+  constant-sized buffer, no `Formatter`, no `fmt_base` or `pad` call, and the
+  radix prefix a constant, and the measurement below shows no gap.
 
 - [ ] One path. An untagged template reifies as the `format` call, and the
   direct lowering (`synthesis::template::build_template_block`) is deleted.
@@ -742,7 +752,7 @@ Three runs:
 | Phase           | Time per iteration, untagged = 1 |
 | --------------- | -------------------------------- |
 | untagged        | 1                                |
-| `` format`…` `` | 1.2 to 1.3                       |
+| `` format`…` `` | 0.88 to 0.90                     |
 
 ## Known gaps
 

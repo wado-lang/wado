@@ -559,17 +559,26 @@ fn summarize_params(
 // Caller-side roots
 // ---------------------------------------------------------------------------
 
-/// The constant fields of a struct-literal operand, or `None` when the operand
-/// is not one. `expected` guards against reading field indices off a literal of
-/// a different struct than the local's declared type — a local slot reused for
-/// two shapes would otherwise mix their field numbering.
+/// The constant fields of a struct-literal operand, or of a reference to one,
+/// or `None` when the operand is neither. A reference to a literal is the only
+/// name its object has, so a reference local bound to one roots it as a struct
+/// local roots its own. `expected` guards against reading field indices off a
+/// literal of a different struct than the local's declared type — a local slot
+/// reused for two shapes would otherwise mix their field numbering.
 fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
     value: Operand,
     expected: Option<TypeId>,
 ) -> Option<FieldConsts> {
-    let expr = value.as_expr()?;
+    let mut expr = value.as_expr()?;
+    if let ExprKind::Unary {
+        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+        expr: inner,
+    } = &body.exprs[expr].kind
+    {
+        expr = inner.as_expr()?;
+    }
     let ExprKind::StructLiteral {
         struct_type,
         fields,

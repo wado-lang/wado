@@ -465,11 +465,19 @@ impl<T, V> TemplateHole<T, V> {
     }
 }
 
+global HOLE_CAPACITY_GUESS: i32 = 16;
+
 /// The tag an untagged template is sugar for: every hole rendered through its
 /// specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
 /// See WEP 2026-01-10.
 pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    let mut out = "";
+    // The segments are constants, so this folds to one: the buffer is sized
+    // once, and only a hole rendering past its guess grows it.
+    let mut capacity = ReflectTemplate::<T>::tail().len();
+    for let h of ReflectTemplate::<T>::members() {
+        capacity += h.lit().len() + HOLE_CAPACITY_GUESS;
+    }
+    let mut out = String::with_capacity(capacity);
     for let h of ReflectTemplate::<T>::members() {
         out.push_str(&h.lit());
         h.fmt(&t, &mut Formatter::new(&mut out));

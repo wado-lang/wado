@@ -3896,6 +3896,19 @@ fn inline_calls_in_expr(
             },
         );
         body.exprs[e] = moved;
+        let left = Cell::new(candidates.rescan_cap);
+        inline_calls_in_expr(
+            body,
+            e,
+            candidates.rescanning(&left),
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
     }
 }
 

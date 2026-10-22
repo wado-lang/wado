@@ -104,7 +104,8 @@ Allocation and aggregates:
   sites reach, unless the body is no bigger than the call. A callee that
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop.
+  back: at its only call site, or at its only site in a loop. A spliced body is
+  scanned again for calls to splice, wherever the call it replaced sat.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
 - `sroa` — split into scalar locals a struct, tuple, or array local used only
@@ -145,7 +146,8 @@ Scalars and dataflow:
 
 - `copy_prop` — propagate a trivial copy and drop the binding.
 - `param_spec` — specialize a callee on the constant arguments its callers
-  pass.
+  pass, and on the constant fields of a struct they pass by reference, a
+  reference to a struct literal included.
 - `dae` — drop a parameter the callee never reads.
 - `drve` — drop a return value every caller discards.
 - `store_load_forward` — forward a stored value to a later load.
