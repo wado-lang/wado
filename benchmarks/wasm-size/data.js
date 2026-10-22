@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792656253236,
+  "lastUpdate": 1792680169421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69465,6 +69465,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f01510096abfd9d7ce83591298864bf0a50cb60c",
+          "message": "Merge pull request #2419 from wado-lang/claude/gracious-faraday-rjp97k\n\nperf(template): bring format`…` to the direct lowering's cost",
+          "timestamp": "2026-10-22T23:26:00+09:00",
+          "tree_id": "713a618297fe6a468f147e8e672e6c06743e5b61",
+          "url": "https://github.com/wado-lang/wado/commit/f01510096abfd9d7ce83591298864bf0a50cb60c"
+        },
+        "date": 1792680168678,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294919,
             "unit": "bytes"
           }
         ]
