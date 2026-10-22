@@ -749,6 +749,14 @@ impl ElementClean<'_, '_> {
                     self.clean = false;
                 }
             }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            } if inner.as_expr().is_some_and(|ie| is_local(body, ie, idx)) => {
+                if !is_read_only_ref(self.analyzer.type_table, body.exprs[id].type_id) {
+                    self.clean = false;
+                }
+            }
             kind if kind.as_method_call().is_some() => {
                 let Some((receiver, callee, rest)) = kind.as_method_call() else {
                     return;
@@ -905,41 +913,17 @@ impl ElementClean<'_, '_> {
         }
     }
 
-    /// `idx` passed as a call argument: `&` is element-clean, `&mut idx` is not,
-    /// and by-value is clean only when the callee cannot mutate that parameter's
-    /// elements (`callee_param_immutable`) — last-use lowering turns a by-value
-    /// argument into a MOVE, so a mutating callee would reach the demoted spine's
-    /// shared elements rather than an independent copy.
+    /// `idx` passed as a call argument: a read-only `&` is element-clean,
+    /// `&mut idx` is not, and by-value is clean only when the callee cannot
+    /// mutate that parameter's elements (`callee_param_immutable`) — last-use
+    /// lowering turns a by-value argument into a MOVE, so a mutating callee
+    /// would reach the demoted spine's shared elements rather than an
+    /// independent copy.
     fn visit_call_arg(&mut self, body: &Body, arg: ExprId, callee_param_immutable: bool) {
-        let idx = self.idx;
         match &body.exprs[arg].kind {
             ExprKind::Local { index, .. } => {
-                if *index == idx && !callee_param_immutable {
+                if *index == self.idx && !callee_param_immutable {
                     self.clean = false;
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                let inner = *inner;
-                // A promoted `Operand::Value` inner is a constant; it mentions no
-                // local, so it cannot escape `idx`.
-                if inner
-                    .as_expr()
-                    .is_some_and(|ie| expr_mentions_local(body, ie, idx))
-                {
-                    self.clean = false;
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: inner,
-            } => {
-                if let Some(ie) = inner.as_expr()
-                    && !is_local(body, ie, idx)
-                {
-                    self.visit_expr(body, ie);
                 }
             }
             _ => self.visit_expr(body, arg),
@@ -1188,6 +1172,33 @@ impl ElementImmutable<'_, '_, '_> {
                 let is_builtin = callee.intrinsic().is_some();
                 let fname = callee.name.clone();
                 let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                // A builtin storing an element of `self` into another local's
+                // storage (`array_move(&mut buf, k, &self.repr, j, 1)`) makes
+                // that local an alias of `self`'s elements.
+                if is_builtin
+                    && args.iter().any(|&a| {
+                        is_self_derived_op(
+                            body,
+                            a,
+                            &self.tainted,
+                            tt,
+                            self.analyzer.element_accessors,
+                        )
+                    })
+                {
+                    for &a in &args {
+                        if let Some(ae) = a.as_expr()
+                            && let ExprKind::Unary {
+                                op: NirUnaryOp::MutRef,
+                                expr: inner,
+                            } = &body.exprs[ae].kind
+                            && let Some(ie) = inner.as_expr()
+                            && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+                        {
+                            self.tainted.insert(*index);
+                        }
+                    }
+                }
                 for a in args {
                     let Some(a) = a.as_expr() else { continue };
                     if is_builtin {
@@ -1267,12 +1278,7 @@ impl ElementImmutable<'_, '_, '_> {
     /// A self-derived value handed to an opaque (non-spine-builtin) call may
     /// only flow through a `&` reference.
     fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
-        // Nothing writes through a `&`, whether the argument spells it or a
-        // local holds it: `sort_by` hands its comparator `&` elements.
-        if matches!(
-            self.analyzer.type_table.get(body.exprs[arg].type_id),
-            ResolvedType::Ref(_)
-        ) {
+        if is_read_only_ref(self.analyzer.type_table, body.exprs[arg].type_id) {
             self.visit_expr(body, arg);
             return;
         }
@@ -1300,6 +1306,12 @@ fn element_accessors(project: &NirPackage) -> IndexSet<FuncId> {
             accessor.then(|| f.id.expect("func_id assigned at lower"))
         })
         .collect()
+}
+
+/// Whether a value of `ty` is a `&` nothing can write through: its referent
+/// reaches no `&mut`, whether the argument spells the `&` or a local holds it.
+fn is_read_only_ref(tt: &TypeTable, ty: TypeId) -> bool {
+    matches!(tt.get(ty), ResolvedType::Ref(inner) if !tt.reaches_mut_ref(*inner))
 }
 
 /// [`is_self_derived`] for an operand: a promoted constant is never self-derived.

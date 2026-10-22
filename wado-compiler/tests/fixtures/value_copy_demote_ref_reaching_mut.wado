@@ -1,0 +1,53 @@
+// `value_copy_demote` rule: a `&` handed to a call keeps elements immutable
+// only when nothing reachable from it is a `&mut`. `bump0` hands `poke` a `&H`
+// whose field is a `&mut` into its own first element, through which `poke`
+// writes. So `bump0` is not element-immutable, and the copy in `bumped` stays
+// deep: the caller's list must keep its value. `poke(&h)` and a local holding
+// `&h` are the same reference, and neither demotes.
+
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32, s: String }
+struct H { m: &mut P }
+
+fn poke(h: &H) {
+    h.m.x = 42;
+}
+
+trait Bump {
+    fn bump0(&mut self);
+    fn bump1(&mut self);
+}
+
+impl Bump for List<P> {
+    fn bump0(&mut self) {
+        let h = H { m: unchecked self.index_ref_mut(0) };
+        poke(&h);
+    }
+
+    fn bump1(&mut self) {
+        let h = H { m: unchecked self.index_ref_mut(1) };
+        let r = &h;
+        poke(r);
+    }
+}
+
+fn bumped(src: &List<P>) -> i32 {
+    let mut c = *src;
+    c.bump0();
+    c.bump1();
+    return c[0].x + c[1].x;
+}
+
+export fn run() with Stdout {
+    let ps: List<P> = [P { x: 1, s: "a" }, P { x: 2, s: "b" }];
+    let got = bumped(&ps);
+    println(`${ps[0].x} ${ps[1].x} ${got}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2 84\n",
+    "wir_scope": "/bumped",
+    "wir_expect:O2": ["array_clone_deep"]
+}

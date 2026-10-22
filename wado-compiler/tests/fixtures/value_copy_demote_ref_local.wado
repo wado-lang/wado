@@ -1,0 +1,39 @@
+// `value_copy_demote` rule: a local holding a read-only `&` of the copy reads
+// it as `&sorted` written at the call does. `distinct_count` binds `&sorted`
+// before handing it on, so the deep copy still demotes to a shallow one, and
+// the caller's list stays unchanged.
+
+use { println, Stdout } from "core:cli";
+
+fn count(tokens: &List<String>) -> i32 {
+    let mut n = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i == 0 || tokens[i] != tokens[i - 1] {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+fn distinct_count(tokens: &List<String>) -> i32 {
+    let mut sorted = *tokens;
+    sorted.sort();
+    let r = &sorted;
+    return count(r);
+}
+
+export fn run() with Stdout {
+    let words: List<String> = ["pear", "apple", "pear", "fig"];
+    let n = distinct_count(&words);
+    let more: List<String> = [builtin::black_box("b"), "a", "b"];
+    let m = distinct_count(&more);
+    println(`${n} ${words[0]} ${words[3]} ${m} ${more[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "3 pear fig 2 b\n",
+    "wir_scope": "/run\"",
+    "wir_expect:O2": ["builtin::array_copy<ref \"core:prelude/string.wado//String\">"],
+    "wir_not_expect:O2": ["array_clone_deep"]
+}
