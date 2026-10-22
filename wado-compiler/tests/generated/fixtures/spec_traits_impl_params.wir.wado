@@ -1943,18 +1943,16 @@ fn "spec_traits_impl_params.wado/core:prelude/list.wado/List<i32>::sort_by$$Clos
     let i: i32;
     let j: i32;
     let k: i32;
+    let a_10: i32;
+    let b_11: i32;
     let b_14: i32;
-    let value_32: i32;
-    let value_37: i32;
-    let $licm_repr_40: ref Array<i32>;
-    let $sroa_a_value_41: i32;
-    let $sroa_b_value_42: i32;
+    let $licm_repr_20: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_40 = self.repr;
+    $licm_repr_20 = self.repr;
     b213: block {
         l214: loop {
             start = 0;
@@ -1970,38 +1968,36 @@ fn "spec_traits_impl_params.wado/core:prelude/list.wado/List<i32>::sort_by$$Clos
                             break_if b217 k >= end;
                             if i < mid {
                                 if j < end {
-                                    $sroa_a_value_41 = builtin::array_get_value<i32>($licm_repr_40, i);
-                                    $sroa_b_value_42 = builtin::array_get_value<i32>($licm_repr_40, j);
-                                    if $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__4: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        if $sroa_a_value_41 < $sroa_b_value_42 {
-                                            break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__4: 0;
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_20, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_20, j);
+                                    if $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        if a_10 < b_11 {
+                                            break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
                                         }
-                                        if $sroa_a_value_41 > $sroa_b_value_42 {
-                                            break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__4: 2;
+                                        if a_10 > b_11 {
+                                            break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
                                         }
-                                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__4: 1;
+                                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                                     } == 2 {
-                                        builtin::array_set<i32>(buf, k, $sroa_b_value_42);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<i32>(buf, k, $sroa_a_value_41);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_32 = builtin::array_get_value<i32>($licm_repr_40, i);
-                                    builtin::array_set<i32>(buf, k, value_32);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_37 = builtin::array_get_value<i32>($licm_repr_40, j);
-                                builtin::array_set<i32>(buf, k, value_37);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l218;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_40, start, buf, start, end - start);
+                    builtin::array_copy<i32>($licm_repr_20, start, buf, start, end - start);
                     start = end;
                     continue l216;
                 };

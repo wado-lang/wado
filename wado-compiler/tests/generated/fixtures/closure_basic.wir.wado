@@ -4495,15 +4495,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     let a_11: ref "core:prelude/types.wado//Box<i32>";
     let b_12: ref "core:prelude/types.wado//Box<i32>";
     let b_15: i32;
-    let value_28: i32;
-    let value_33: i32;
-    let $licm_repr_36: ref Array<i32>;
+    let $licm_repr_16: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_36 = self.repr;
+    $licm_repr_16 = self.repr;
     b275: block {
         l276: loop {
             start = 0;
@@ -4519,33 +4517,31 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                             break_if b279 k >= end;
                             if i < mid {
                                 if j < end {
-                                    a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, i) };
-                                    b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, j) };
+                                    a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, i) };
+                                    b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, j) };
                                     if block -> "core:prelude/traits.wado//enum:Ordering" {
                                         let $indirect_call_1: ref "canonical//CanonicalClosure_2";
                                         call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"(cmp)).env, a_11, b_12);
                                     } == 2 {
-                                        builtin::array_set<i32>(buf, k, b_12.value);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_16, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<i32>(buf, k, a_11.value);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_16, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_28 = builtin::array_get_value<i32>($licm_repr_36, i);
-                                    builtin::array_set<i32>(buf, k, value_28);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_16, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_33 = builtin::array_get_value<i32>($licm_repr_36, j);
-                                builtin::array_set<i32>(buf, k, value_33);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_16, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l280;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_36, start, buf, start, end - start);
+                    builtin::array_copy<i32>($licm_repr_16, start, buf, start, end - start);
                     start = end;
                     continue l278;
                 };
@@ -4823,18 +4819,16 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_68$dae
     let i: i32;
     let j: i32;
     let k: i32;
+    let a_10: i32;
+    let b_11: i32;
     let b_14: i32;
-    let value_30: i32;
-    let value_35: i32;
-    let $licm_repr_38: ref Array<i32>;
-    let $sroa_a_value_39: i32;
-    let $sroa_b_value_40: i32;
+    let $licm_repr_18: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_38 = self.repr;
+    $licm_repr_18 = self.repr;
     b312: block {
         l313: loop {
             start = 0;
@@ -4850,38 +4844,36 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_68$dae
                             break_if b316 k >= end;
                             if i < mid {
                                 if j < end {
-                                    $sroa_a_value_39 = builtin::array_get_value<i32>($licm_repr_38, i);
-                                    $sroa_b_value_40 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                    if $inline_closure_basic_wado__Closure_68___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        if $sroa_a_value_39 < $sroa_b_value_40 {
-                                            break $inline_closure_basic_wado__Closure_68___call_3: 0;
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_18, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_18, j);
+                                    if $inline_closure_basic_wado__Closure_68___call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        if a_10 < b_11 {
+                                            break $inline_closure_basic_wado__Closure_68___call_1: 0;
                                         }
-                                        if $sroa_a_value_39 > $sroa_b_value_40 {
-                                            break $inline_closure_basic_wado__Closure_68___call_3: 2;
+                                        if a_10 > b_11 {
+                                            break $inline_closure_basic_wado__Closure_68___call_1: 2;
                                         }
-                                        break $inline_closure_basic_wado__Closure_68___call_3: 1;
+                                        break $inline_closure_basic_wado__Closure_68___call_1: 1;
                                     } == 2 {
-                                        builtin::array_set<i32>(buf, k, $sroa_b_value_40);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_18, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<i32>(buf, k, $sroa_a_value_39);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_18, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_30 = builtin::array_get_value<i32>($licm_repr_38, i);
-                                    builtin::array_set<i32>(buf, k, value_30);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_18, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_35 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                builtin::array_set<i32>(buf, k, value_35);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_18, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l317;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_38, start, buf, start, end - start);
+                    builtin::array_copy<i32>($licm_repr_18, start, buf, start, end - start);
                     start = end;
                     continue l315;
                 };
@@ -4903,18 +4895,16 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_69$dae
     let i: i32;
     let j: i32;
     let k: i32;
+    let a_10: i32;
+    let b_11: i32;
     let b_14: i32;
-    let value_30: i32;
-    let value_35: i32;
-    let $licm_repr_38: ref Array<i32>;
-    let $sroa_a_value_39: i32;
-    let $sroa_b_value_40: i32;
+    let $licm_repr_18: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_38 = self.repr;
+    $licm_repr_18 = self.repr;
     b324: block {
         l325: loop {
             start = 0;
@@ -4930,38 +4920,36 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_69$dae
                             break_if b328 k >= end;
                             if i < mid {
                                 if j < end {
-                                    $sroa_a_value_39 = builtin::array_get_value<i32>($licm_repr_38, i);
-                                    $sroa_b_value_40 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                    if $inline_closure_basic_wado__Closure_69___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        if $sroa_a_value_39 > $sroa_b_value_40 {
-                                            break $inline_closure_basic_wado__Closure_69___call_3: 0;
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_18, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_18, j);
+                                    if $inline_closure_basic_wado__Closure_69___call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        if a_10 > b_11 {
+                                            break $inline_closure_basic_wado__Closure_69___call_1: 0;
                                         }
-                                        if $sroa_a_value_39 < $sroa_b_value_40 {
-                                            break $inline_closure_basic_wado__Closure_69___call_3: 2;
+                                        if a_10 < b_11 {
+                                            break $inline_closure_basic_wado__Closure_69___call_1: 2;
                                         }
-                                        break $inline_closure_basic_wado__Closure_69___call_3: 1;
+                                        break $inline_closure_basic_wado__Closure_69___call_1: 1;
                                     } == 2 {
-                                        builtin::array_set<i32>(buf, k, $sroa_b_value_40);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_18, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<i32>(buf, k, $sroa_a_value_39);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_18, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_30 = builtin::array_get_value<i32>($licm_repr_38, i);
-                                    builtin::array_set<i32>(buf, k, value_30);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_18, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_35 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                builtin::array_set<i32>(buf, k, value_35);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_18, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l329;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_38, start, buf, start, end - start);
+                    builtin::array_copy<i32>($licm_repr_18, start, buf, start, end - start);
                     start = end;
                     continue l327;
                 };

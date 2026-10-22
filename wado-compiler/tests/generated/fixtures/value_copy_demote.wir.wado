@@ -470,8 +470,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0$dae[cmp]"(self) {
-    let $load_3: i32;
-    let $load_5: i32;
     let n: i32;
     let buf: ref "Array<core:prelude/string.wado/String>";
     let width: i32;
@@ -481,28 +479,24 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let i_7: i32;
     let j: i32;
     let k: i32;
+    let a_10: ref "core:prelude/string.wado//String";
+    let b_11: ref "core:prelude/string.wado//String";
     let b_14: i32;
-    let v_15: ref "core:prelude/string.wado//String";
-    let v_18: ref "core:prelude/string.wado//String";
-    let value_28: ref "core:prelude/string.wado//String";
-    let value_32: ref "core:prelude/string.wado//String";
-    let value_36: ref "core:prelude/string.wado//String";
-    let v_37: ref "core:prelude/string.wado//String";
-    let value_42: ref "core:prelude/string.wado//String";
-    let v_43: ref "core:prelude/string.wado//String";
-    let $licm_repr_46: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_20: ref "Array<core:prelude/string.wado/String>";
+    let a_21: ref Array<u8>;
+    let a_end: i32;
+    let b_24: ref Array<u8>;
+    let b_end: i32;
     let min_len: i32;
-    let i_56: i32;
+    let i_30: i32;
     let x: u8;
     let y: u8;
-    let $av_65: i32;
-    let $av_66: i32;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<ref "core:prelude/string.wado//String">(n);
     width = 1;
-    $licm_repr_46 = self.repr;
+    $licm_repr_20 = self.repr;
     b51: block {
         l52: loop {
             start = 0;
@@ -518,69 +512,57 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                             break_if b55 k >= end;
                             if i_7 < mid {
                                 if j < end {
-                                    v_15 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, i_7);
-                                    let $array_clone_src_1: ref Array<u8>;
-                                    $array_clone_src_1 = v_15.repr;
-                                    $load_3 = v_15.used;
-                                    let $array_clone_dst_2: ref Array<u8>;
-                                    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $array_clone_src_1, 0, $load_3);
-                                    v_18 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, j);
-                                    let $array_clone_src_4: ref Array<u8>;
-                                    $array_clone_src_4 = v_18.repr;
-                                    $load_5 = v_18.used;
-                                    let $array_clone_dst_5: ref Array<u8>;
-                                    builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_5)), 0, $array_clone_src_4, 0, $load_5);
+                                    a_10 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_20, i_7);
+                                    b_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_20, j);
                                     if $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        min_len = select i32($load_3 < $load_5, $load_3, $load_5);
-                                        i_56 = 0;
+                                        a_21 = a_10.repr;
+                                        a_end = a_10.used;
+                                        b_24 = b_11.repr;
+                                        b_end = b_11.used;
+                                        min_len = select i32(a_end < b_end, a_end, b_end);
+                                        i_30 = 0;
                                         b60: block {
                                             l61: loop {
-                                                break_if b60 i_56 >= min_len;
-                                                x = builtin::array_get_value<u8>($array_clone_dst_2, i_56);
-                                                y = builtin::array_get_value<u8>($array_clone_dst_5, i_56);
+                                                break_if b60 i_30 >= min_len;
+                                                x = builtin::array_get_value<u8>(a_21, i_30);
+                                                y = builtin::array_get_value<u8>(b_24, i_30);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_56 = i_56 + 1;
+                                                i_30 = i_30 + 1;
                                                 continue l61;
                                             };
                                         };
-                                        if $load_3 < $load_5 {
+                                        if a_end < b_end {
                                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                         }
-                                        if $load_3 > $load_5 {
+                                        if a_end > b_end {
                                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                         }
                                         break $inline_core_prelude_array_wado_seq_cmp_u8__0: 1;
                                     } == 2 {
-                                        value_28 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_11: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_11(builtin::array_new<u8>($load_5)), 0, $array_clone_dst_5, 0, $load_5); $array_clone_dst_11, used: $load_5 };
-                                        builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_28);
+                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, j, 1);
                                         j = j + 1;
                                     } else {
-                                        value_32 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_3)), 0, $array_clone_dst_2, 0, $load_3); $array_clone_dst_8, used: $load_3 };
-                                        builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_32);
+                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, i_7, 1);
                                         i_7 = i_7 + 1;
                                     }
                                 } else {
-                                    $av_65 = local.tee v_37(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, i_7)).used;
-                                    value_36 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_13: ref Array<u8>; $array_clone_src_13 = v_37.repr; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($av_65)), 0, $array_clone_src_13, 0, $av_65); $array_clone_dst_14, used: $av_65 };
-                                    builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_36);
+                                    builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, i_7, 1);
                                     i_7 = i_7 + 1;
                                 }
                             } else {
-                                $av_66 = local.tee v_43(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, j)).used;
-                                value_42 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_16: ref Array<u8>; $array_clone_src_16 = v_43.repr; let $array_clone_dst_17: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_17(builtin::array_new<u8>($av_66)), 0, $array_clone_src_16, 0, $av_66); $array_clone_dst_17, used: $av_66 };
-                                builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_42);
+                                builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l56;
                         };
                     };
-                    builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_46, start, buf, start, end - start);
+                    builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_20, start, buf, start, end - start);
                     start = end;
                     continue l54;
                 };

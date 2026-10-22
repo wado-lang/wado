@@ -604,15 +604,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     let b_12: ref "core:prelude/types.wado//Box<i32>";
     let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_15: i32;
-    let value_28: i32;
-    let value_33: i32;
-    let $licm_repr_36: ref Array<i32>;
+    let $licm_repr_16: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_36 = self.repr;
+    $licm_repr_16 = self.repr;
     b75: block {
         l76: loop {
             start = 0;
@@ -628,35 +626,33 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                             break_if b79 k >= end;
                             if i < mid {
                                 if j < end {
-                                    a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, i) };
-                                    b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, j) };
+                                    a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, i) };
+                                    b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, j) };
                                     $match_13 = block -> "core:prelude/traits.wado//enum:Ordering" {
                                         let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                                         call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(cmp)).env, a_11, b_12);
                                     };
-                                    $licm_repr_36 = self.repr;
+                                    $licm_repr_16 = self.repr;
                                     if $match_13 == 2 {
-                                        builtin::array_set<i32>(buf, k, b_12.value);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_16, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_set<i32>(buf, k, a_11.value);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_16, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_28 = builtin::array_get_value<i32>($licm_repr_36, i);
-                                    builtin::array_set<i32>(buf, k, value_28);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_16, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                value_33 = builtin::array_get_value<i32>($licm_repr_36, j);
-                                builtin::array_set<i32>(buf, k, value_33);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_16, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l80;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_36, start, buf, start, end - start);
+                    builtin::array_copy<i32>($licm_repr_16, start, buf, start, end - start);
                     start = end;
                     continue l78;
                 };
