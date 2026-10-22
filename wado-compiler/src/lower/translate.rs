@@ -431,7 +431,7 @@ struct FunctionTranslator<'a, 'p> {
     /// [`value_copy::last_use::Ownership::written_args`], `None` where the
     /// ownership walk did not run, which leaves every argument copied.
     written_args: Option<IndexSet<Span>>,
-    /// Assignments that write into the storage their place holds, by span
+    /// Assignments that write into the storage their place holds
     /// (WEP 2026-10-13).
     in_place_assigns: IndexSet<AssignSiteKey>,
     /// Locals declared without a value that such an assignment replaces whole.

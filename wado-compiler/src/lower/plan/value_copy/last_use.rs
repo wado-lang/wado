@@ -938,8 +938,9 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
 }
 
 /// What tells one assignment site from another: its span, and the local its
-/// place is rooted at. Every synthesized site shares one span, and a store
-/// filling a local declared empty is no store into a tuple a reference holds.
+/// place is rooted at. Every synthesized site shares one span, so the span
+/// alone takes a store filling a local declared empty for one into a tuple a
+/// reference holds, and writes in place into nothing.
 pub type AssignSiteKey = (Span, Option<u32>);
 
 /// The key of `site`, an `Assign` or a `List::index_assign` call.

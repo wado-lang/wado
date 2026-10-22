@@ -2504,8 +2504,10 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             }
         })
         .collect();
-    let patterns: Vec<(&TirPattern, bool)> =
-        arms.iter().map(|arm| (&arm.pattern, arm.consumes)).collect();
+    let patterns: Vec<(&TirPattern, bool)> = arms
+        .iter()
+        .map(|arm| (&arm.pattern, arm.consumes))
+        .collect();
     let place = consumed_scrutinee(scrutinee, &patterns, cx);
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
         let consumed = place.clone().filter(|_| arm.consumes);
