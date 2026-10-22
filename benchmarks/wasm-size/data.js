@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792627057549,
+  "lastUpdate": 1792634127708,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69225,6 +69225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/af380e51b5269723b0a75a613975fdb1e7b5c1bc"
         },
         "date": 1792627057184,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "abe826435160eeeb6e4f4ef74633078de361bf5a",
+          "message": "Merge pull request #2412 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): reject an affine binding of an unmarked associated type",
+          "timestamp": "2026-10-22T10:36:39+09:00",
+          "tree_id": "00331c20cd792647084a202012f99d2ca603c7ad",
+          "url": "https://github.com/wado-lang/wado/commit/abe826435160eeeb6e4f4ef74633078de361bf5a"
+        },
+        "date": 1792634126688,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
