@@ -820,6 +820,21 @@ pub struct Formatter {
 }
 ```
 
+The sentinels are associated constants:
+
+<!-- {"source": "wado-compiler/lib/core/prelude/format.wado"} -->
+
+```wado
+/// No width given: every padding path is a no-op.
+pub const NO_WIDTH: i32 = -1;
+/// No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
+pub const PRECISION_DEFAULT: i32 = -2;
+/// Render uncapped: sequence Inspect skips truncation.
+pub const PRECISION_INFINITE: i32 = -1;
+/// Default sequence Inspect cap: chars for `String`, elements for `List`.
+pub const DEFAULT_SEQ_LIMIT: i32 = 256;
+```
+
 A spec that sets nothing gives what `Formatter::new` gives:
 
 <!-- {"source": "wado-compiler/lib/core/prelude/format.wado"} -->
