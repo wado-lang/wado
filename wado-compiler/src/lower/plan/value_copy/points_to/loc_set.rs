@@ -61,27 +61,17 @@ impl LocSet {
 
     /// Add each location of `other`, and each one new here to `added`.
     pub fn union_into(&mut self, other: &LocSet, added: &mut LocSet) {
-        match &other.repr {
-            Repr::Small(locs) => {
-                for &loc in locs {
-                    if self.insert(loc) {
-                        added.insert(loc);
-                    }
-                }
-            }
-            Repr::Words { words: theirs, .. } => {
-                if let Repr::Words { words: ours, len } = &mut self.repr
-                    && theirs.len() > SMALL_MAX
-                {
-                    *len += merge_words(ours, theirs, added);
-                    return;
-                }
-                for &(i, w) in theirs {
-                    let new = self.insert_word(i, w);
-                    if new != 0 {
-                        added.insert_word(i, new);
-                    }
-                }
+        if let (Repr::Words { words: ours, len }, Repr::Words { words: theirs, .. }) =
+            (&mut self.repr, &other.repr)
+            && theirs.len() > SMALL_MAX
+        {
+            *len += merge_words(ours, theirs, added);
+            return;
+        }
+        for (i, w) in other.words() {
+            let new = self.insert_word(i, w);
+            if new != 0 {
+                added.insert_word(i, new);
             }
         }
     }
@@ -166,33 +156,56 @@ impl LocSet {
 
 /// Merge `theirs` into `ours`, both ascending, recording each new bit in
 /// `added`; answers how many bits were new.
+///
+/// Merges in place: a set that has settled gains few words, so the words it
+/// already holds are updated where they stand and only the new ones move.
 fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut LocSet) -> usize {
-    let mut merged = Vec::with_capacity(ours.len().max(theirs.len()));
     let mut gained = 0;
-    let (mut a, mut b) = (0, 0);
-    while a < ours.len() || b < theirs.len() {
-        let take_ours = b == theirs.len() || (a < ours.len() && ours[a].0 < theirs[b].0);
-        if take_ours {
-            merged.push(ours[a]);
+    let mut fresh = 0;
+    let mut a = 0;
+    for &(i, w) in theirs {
+        while a < ours.len() && ours[a].0 < i {
             a += 1;
-            continue;
         }
-        let (i, w) = theirs[b];
-        b += 1;
-        let old = if a < ours.len() && ours[a].0 == i {
-            a += 1;
-            ours[a - 1].1
-        } else {
-            0
+        let new = match ours.get_mut(a) {
+            Some((j, old)) if *j == i => {
+                let new = w & !*old;
+                *old |= new;
+                new
+            }
+            _ => {
+                fresh += 1;
+                w
+            }
         };
-        let new = w & !old;
         if new != 0 {
             gained += new.count_ones() as usize;
             added.insert_word(i, new);
         }
-        merged.push((i, old | w));
     }
-    *ours = merged;
+    if fresh > 0 {
+        // Fill from the back: each word lands at or past where it stood, so
+        // none is overwritten before it moves.
+        let mut a = ours.len();
+        ours.resize(a + fresh, (0, 0));
+        let mut out = ours.len();
+        for &(i, w) in theirs.iter().rev() {
+            while a > 0 && ours[a - 1].0 > i {
+                a -= 1;
+                out -= 1;
+                ours[out] = ours[a];
+            }
+            if a > 0 && ours[a - 1].0 == i {
+                a -= 1;
+                out -= 1;
+                ours[out] = ours[a];
+            } else {
+                out -= 1;
+                ours[out] = (i, w);
+            }
+        }
+        assert_eq!(out, a, "the merge fills every slot it opened");
+    }
     gained
 }
 
@@ -243,8 +256,15 @@ mod tests {
     #[test]
     fn union_reports_only_new_locations_across_every_form() {
         // Small into small, words into words by insertion, and words into
-        // words by merge.
-        for (step_a, step_b, end) in [(37, 41, 1000), (3, 2, 100), (3, 2, 100_000)] {
+        // words by merge: into every word already held, and interleaving new
+        // words with held ones from either side.
+        for (step_a, step_b, end) in [
+            (37, 41, 1000),
+            (3, 2, 100),
+            (3, 2, 100_000),
+            (200, 130, 100_000),
+            (130, 200, 100_000),
+        ] {
             let mut a = set((0..end).step_by(step_a));
             let b = set((0..end).step_by(step_b));
             let mut added = LocSet::default();
