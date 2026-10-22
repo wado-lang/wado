@@ -16,7 +16,7 @@ The prelude defines iterator traits for generic iteration over collections.
 ```wado
 /// Types that can yield a sequence of values, each impl performing what its
 /// `next` does
-pub trait Iterator with _ {
+pub affine trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -61,7 +61,7 @@ test {
 
 ```wado
 /// Types that can be converted into an iterator
-pub trait IntoIterator with _ {
+pub affine trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -350,7 +350,7 @@ The prelude defines traits for comparison operators:
 
 ```wado
 /// Types that can be compared for equality
-pub trait Eq<Rhs = Self> with () {
+pub affine trait Eq<Rhs = Self> with () {
     /// Returns true if self equals other
     fn eq(&self, other: &Rhs) -> bool;
 }
@@ -408,7 +408,7 @@ test {
 
 ```wado
 /// A total order over the type
-pub trait Ord: Eq with () {
+pub affine trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -517,7 +517,7 @@ The prelude defines a `Default` trait providing a uniform "zero value" / "empty 
 <!-- {"fixture":"spec_traits_default_decl.wado"} -->
 
 ```wado
-pub trait Default with () {
+pub affine trait Default with () {
     fn default() -> Self;
 }
 
@@ -610,16 +610,16 @@ fail. `TryFrom` returns a `Result`, and its failure is an `Error`:
 <!-- {"fixture":"spec_traits_conversion_decls.wado"} -->
 
 ```wado
-pub trait From<T> with () {
+pub affine trait From<T> with () {
     fn from(value: T) -> Self;
 }
 
-pub trait TryFrom<T> with () {
+pub affine trait TryFrom<T> with () {
     type Err: Error;
     fn try_from(value: T) -> Result<Self, Self::Err>;
 }
 
-pub trait Error: Display with () {
+pub affine trait Error: Display with () {
 }
 
 test {
@@ -1019,8 +1019,8 @@ test {
 
 ```wado
 /// Assigns value to element at index
-pub trait IndexAssign<IndexType> with () {
-    type Output;
+pub affine trait IndexAssign<IndexType> with () {
+    affine type Output;
     fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 
@@ -1037,8 +1037,8 @@ test {
 
 ```wado
 /// Returns element by shared reference
-pub trait IndexRef<IndexType> with () {
-    type Output: Ref;
+pub affine trait IndexRef<IndexType> with () {
+    affine type Output: Ref;
     fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
@@ -1053,8 +1053,8 @@ test {
 
 ```wado
 /// Returns element by mutable reference
-pub trait IndexRefMut<IndexType> with () {
-    type Output: RefMut;
+pub affine trait IndexRefMut<IndexType> with () {
+    affine type Output: RefMut;
     fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 

@@ -7,11 +7,11 @@ standard library provides. One pair of traits serves every format:
 <!-- {"fixture":"spec_serialization_traits.wado"} -->
 
 ```wado
-pub trait Serialize with () {
+pub affine trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-pub trait Deserialize with () {
+pub affine trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
 }
 

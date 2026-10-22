@@ -140,12 +140,12 @@ impl checks `b` first, then `a`, each as `IndexValue` checks a read.
 The standard containers implement it. Each exchanges the values in place and
 copies nothing:
 
-| Container       | `IndexSwap` | How                                             |
-| --------------- | ----------- | ----------------------------------------------- |
-| `List<T>`       | every `T`   | two `array_take`s, as `List::swap` does         |
-| `Array<T>`      | every `T`   | two `array_take`s                               |
-| `HashMap<K, V>` | every `V`   | two lookups, then two `array_take`s on `values` |
-| `TreeMap<K, V>` | every `V`   | two lookups, then two `array_take`s on `values` |
+| Container       | `IndexSwap`           | How                                             |
+| --------------- | --------------------- | ----------------------------------------------- |
+| `List<T>`       | every `T`, affine too | two `array_take`s, as `List::swap` does         |
+| `Array<T>`      | every `T`, affine too | two `array_take`s                               |
+| `HashMap<K, V>` | every copyable `V`    | two lookups, then two `array_take`s on `values` |
+| `TreeMap<K, V>` | every copyable `V`    | two lookups, then two `array_take`s on `values` |
 
 A map exchanges the values of two existing keys. The keys and their order stay
 as they were. A missing key panics, as a read of `m[k]` does.

@@ -200,5 +200,10 @@ The last two are what this WEP is for. The migration will find them.
   fixture exercises it. A block quoted from a function no test calls passes.
 - A `source` quotation is held to its file alone. Nothing asks that the file is
   compiled or run.
+- A block that states a standard library declaration (a prelude trait, say)
+  mostly quotes a fixture's copy of it, abridged, and is held to the copy.
+  Nothing compares the copy with the library, so a change to the library's
+  declaration leaves the specification stating the old one. The `affine`
+  modifiers the prelude's traits gained went unnoticed this way.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.
