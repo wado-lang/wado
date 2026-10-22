@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
-use crate::fingerprint::Input;
+use crate::fingerprint::{Input, read_prefix};
 use wado_host::kiln::component_cache::ComponentCache;
 use wado_host::kiln::driver::ResolvedGenerator;
 use wado_host::sync::lock;
@@ -88,14 +88,21 @@ impl RunCache {
 
     /// Record that `path` held `bytes`.
     pub fn observe(&self, path: &Path, bytes: &[u8]) {
-        let hash = self.inputs.observe(path, bytes);
-        self.record(path, Some(hash));
+        let hash = self.inputs.observe(path, None, bytes);
+        self.record(path, None, Some(hash));
+    }
+
+    /// Record that `path` began with `bytes`, its first `prefix`, and that
+    /// nothing past them was read.
+    pub fn observe_prefix(&self, path: &Path, prefix: u64, bytes: &[u8]) {
+        let hash = self.inputs.observe(path, Some(prefix), bytes);
+        self.record(path, Some(prefix), Some(hash));
     }
 
     /// Record that `path` was looked up and was not there: the outcome changes
     /// once it appears.
     pub fn observe_absent(&self, path: &Path) {
-        self.record(path, None);
+        self.record(path, None, None);
     }
 
     /// Record that what was read depends on what `path` holds now, for a file
@@ -106,7 +113,7 @@ impl RunCache {
         if self.reads.is_none() {
             return;
         }
-        match Input::on_disk(normalize_path(&absolutize(path))) {
+        match Input::on_disk(normalize_path(&absolutize(path)), None) {
             Some(input) => self.record_input(input),
             None => self.observe_untracked(),
         }
@@ -122,7 +129,7 @@ impl RunCache {
             .inputs
             .hash_of(path)
             .unwrap_or_else(|| panic!("the run watches {}", path.display()));
-        self.record(path, Some(hash));
+        self.record(path, None, Some(hash));
     }
 
     /// Record a read no file describes, such as an environment variable, so
@@ -133,15 +140,21 @@ impl RunCache {
         }
     }
 
-    fn record(&self, path: &Path, hash: Option<[u8; 32]>) {
+    fn record(&self, path: &Path, prefix: Option<u64>, hash: Option<[u8; 32]>) {
         if self.reads.is_some() {
-            self.record_input(Input::hashed(normalize_path(&absolutize(path)), hash));
+            self.record_input(Input::hashed(
+                normalize_path(&absolutize(path)),
+                prefix,
+                hash,
+            ));
         }
     }
 
     fn record_input(&self, input: Input) {
         if let Some(log) = &self.reads {
-            lock(&log.inputs).entry(input.path.clone()).or_insert(input);
+            lock(&log.inputs)
+                .entry((input.path.clone(), input.prefix))
+                .or_insert(input);
         }
     }
 
@@ -174,7 +187,7 @@ impl RunCache {
 /// The reads of one [`RunCache::scoped`] view.
 #[derive(Default)]
 struct ReadLog {
-    inputs: Mutex<IndexMap<PathBuf, Input>>,
+    inputs: Mutex<IndexMap<(PathBuf, Option<u64>), Input>>,
     untracked: AtomicBool,
 }
 
@@ -234,7 +247,9 @@ struct Stamp {
 /// deterministic output, are not changes.
 #[derive(Default)]
 pub struct SourceWatch {
-    seen: Mutex<IndexMap<PathBuf, Stamp>>,
+    /// By path and the prefix read of it, `None` being the whole file: a file
+    /// read both ways is two reads, neither of which says what the other saw.
+    seen: Mutex<IndexMap<(PathBuf, Option<u64>), Stamp>>,
     /// Kiln output directories, whose files this run produces rather than
     /// reads. Applied at [`Self::changed`], not at [`Self::observe`]: the file
     /// declaring a directory may compile after one that read its output.
@@ -242,19 +257,21 @@ pub struct SourceWatch {
 }
 
 impl SourceWatch {
-    /// Record `bytes` as what `path` held when the run first read it; a later
-    /// read is compared against that, never replaces it. Returns their hash.
-    pub fn observe(&self, path: &Path, bytes: &[u8]) -> [u8; 32] {
+    /// Record `bytes` as what `path` held when the run first read it, its
+    /// first `prefix` bytes where that is given; a later read is compared
+    /// against that, never replaces it. Returns their hash.
+    pub fn observe(&self, path: &Path, prefix: Option<u64>, bytes: &[u8]) -> [u8; 32] {
         // Hash outside the lock — every compile worker reads at once — then
         // insert-or-compare under one hold, so two workers reaching the same
         // path cannot each decide they are the first and drop the loser's hash.
         let hash: [u8; 32] = Sha256::digest(bytes).into();
+        let key = (path.to_path_buf(), prefix);
         let mut seen = lock(&self.seen);
-        match seen.get_mut(path) {
+        match seen.get_mut(&key) {
             Some(stamp) => stamp.diverged |= stamp.hash != hash,
             None => {
                 seen.insert(
-                    path.to_path_buf(),
+                    key,
                     Stamp {
                         len: bytes.len() as u64,
                         hash,
@@ -279,7 +296,7 @@ impl SourceWatch {
         wado_lsp::host::install_dev_stdlib();
         let root = Path::new(DEV_STDLIB_ROOT);
         for (file, source) in installed_dev_stdlib() {
-            self.observe(&root.join(file), source.as_bytes());
+            self.observe(&root.join(file), None, source.as_bytes());
         }
     }
 
@@ -290,7 +307,9 @@ impl SourceWatch {
     /// The hash of what `path` held when the run first read it.
     #[must_use]
     pub fn hash_of(&self, path: &Path) -> Option<[u8; 32]> {
-        lock(&self.seen).get(path).map(|stamp| stamp.hash)
+        lock(&self.seen)
+            .get(&(path.to_path_buf(), None))
+            .map(|stamp| stamp.hash)
     }
 
     /// Whether this run has read `path`, so a later edit to it would be
@@ -317,26 +336,28 @@ impl SourceWatch {
         let seen = lock(&self.seen).clone();
         let mut changed: Vec<PathBuf> = seen
             .into_iter()
-            .filter(|(path, _)| !generated.iter().any(|dir| path.starts_with(dir)))
-            .filter(|(path, stamp)| stamp.diverged || moved(path, stamp))
-            .map(|(path, _)| path)
+            .filter(|((path, _), _)| !generated.iter().any(|dir| path.starts_with(dir)))
+            .filter(|((path, prefix), stamp)| stamp.diverged || moved(path, *prefix, stamp))
+            .map(|((path, _), _)| path)
             .collect();
         changed.sort();
+        changed.dedup();
         changed
     }
 }
 
-/// Whether `path` differs from `stamp`. Length is the only cheap filter used:
-/// the bytes reach [`SourceWatch`] already read, so a write between that read
-/// and a stat would pair the old content with a new timestamp and hide the
-/// change for the rest of the run. Everything else re-reads.
-fn moved(path: &Path, stamp: &Stamp) -> bool {
+/// Whether `path`, or its first `prefix` bytes, differs from `stamp`. Length
+/// is the only cheap filter used: the bytes reach [`SourceWatch`] already
+/// read, so a write between that read and a stat would pair the old content
+/// with a new timestamp and hide the change for the rest of the run.
+/// Everything else re-reads.
+fn moved(path: &Path, prefix: Option<u64>, stamp: &Stamp) -> bool {
     match std::fs::metadata(path) {
-        Ok(meta) if meta.len() != stamp.len => return true,
+        Ok(meta) if prefix.is_none() && meta.len() != stamp.len => return true,
         Ok(_) => {}
         Err(_) => return true,
     }
-    match std::fs::read(path) {
+    match read_prefix(path, prefix) {
         Ok(bytes) => <[u8; 32]>::from(Sha256::digest(&bytes)) != stamp.hash,
         Err(_) => true,
     }
@@ -382,7 +403,7 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "fn a() {}");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"fn a() {}");
+        watch.observe(&file, None, b"fn a() {}");
         assert!(watch.changed().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -393,7 +414,7 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "fn a() {}");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"fn a() {}");
+        watch.observe(&file, None, b"fn a() {}");
         write(&file, "fn a() { let x = 1; }");
         assert_eq!(watch.changed(), vec![file]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -407,7 +428,7 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "fn a() {}");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"fn a() {}");
+        watch.observe(&file, None, b"fn a() {}");
         write(&file, "fn a() {}");
         assert!(watch.changed().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
@@ -419,7 +440,7 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "fn a() {}");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"fn a() {}");
+        watch.observe(&file, None, b"fn a() {}");
         std::fs::remove_file(&file).expect("remove");
         assert_eq!(watch.changed(), vec![file]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -433,7 +454,7 @@ mod tests {
         let file = out_dir.join("g.wado");
         write(&file, "// v1");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"// v1");
+        watch.observe(&file, None, b"// v1");
         // The declaring file compiles later than one that read the output.
         write(&file, "// v2");
         watch.mark_generated_dir(out_dir);
@@ -449,8 +470,8 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "v1");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"v1");
-        watch.observe(&file, b"v2");
+        watch.observe(&file, None, b"v1");
+        watch.observe(&file, None, b"v2");
         write(&file, "v1");
         assert_eq!(watch.changed(), vec![file]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -465,7 +486,7 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "NEW");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"OLD");
+        watch.observe(&file, None, b"OLD");
         assert_eq!(watch.changed(), vec![file]);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -481,10 +502,49 @@ mod tests {
         let watch = SourceWatch::default();
         std::thread::scope(|scope| {
             for version in ["v1", "v2"] {
-                scope.spawn(|| watch.observe(&file, version.as_bytes()));
+                scope.spawn(|| watch.observe(&file, None, version.as_bytes()));
             }
         });
         assert_eq!(watch.changed(), vec![file]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A Kiln input cut to its probe's extent depended on that prefix alone.
+    #[test]
+    fn an_edit_past_a_prefix_read_is_not_a_change() {
+        let dir = tmp_dir("prefix-tail");
+        let file = dir.join("a.bin");
+        write(&file, "headpayload");
+        let watch = SourceWatch::default();
+        watch.observe(&file, Some(4), b"head");
+        write(&file, "headPAYLOAD and more");
+        assert!(watch.changed().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_edit_within_a_prefix_read_is_reported() {
+        let dir = tmp_dir("prefix-head");
+        let file = dir.join("a.bin");
+        write(&file, "headpayload");
+        let watch = SourceWatch::default();
+        watch.observe(&file, Some(4), b"head");
+        write(&file, "HEADpayload");
+        assert_eq!(watch.changed(), vec![file]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// One file read whole and as a prefix is two reads, and the prefix is
+    /// no different version of the whole file.
+    #[test]
+    fn a_whole_read_and_a_prefix_read_of_one_file_do_not_diverge() {
+        let dir = tmp_dir("prefix-and-whole");
+        let file = dir.join("a.bin");
+        write(&file, "headpayload");
+        let watch = SourceWatch::default();
+        watch.observe(&file, None, b"headpayload");
+        watch.observe(&file, Some(4), b"head");
+        assert!(watch.changed().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -494,8 +554,8 @@ mod tests {
         let file = dir.join("a.wado");
         write(&file, "v1");
         let watch = SourceWatch::default();
-        watch.observe(&file, b"v1");
-        watch.observe(&file, b"v1");
+        watch.observe(&file, None, b"v1");
+        watch.observe(&file, None, b"v1");
         assert!(watch.changed().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

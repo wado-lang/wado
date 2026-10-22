@@ -13,7 +13,15 @@ use {
     package_of,
     read_all,
 } from "core:kiln";
-use { Spelling, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
+use {
+    Spelling,
+    check,
+    generate_model,
+    generate_tokenizer,
+    header_extent,
+    read_header,
+    spelling_of,
+} from "./compile.wado";
 
 pub use { Options } from "./compile.wado";
 
@@ -42,6 +50,17 @@ fn entry(path: String, content: String) -> Response {
             OutputFile { path, content, is_entry: true },
         ],
     };
+}
+
+/// How many leading bytes of a file the module depends on: a checkpoint's
+/// header, and the whole of a graph or a tokenizer, every byte of which is
+/// schema. An extent past the end of the file is the whole file.
+export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnError> {
+    if type matches { Some("safetensors") } {
+        return Result::Ok(header_extent(content));
+    }
+    content.drop();
+    return Result::Ok(u64::MAX);
 }
 
 // A stream is outside drop elaboration, so every one is consumed or dropped

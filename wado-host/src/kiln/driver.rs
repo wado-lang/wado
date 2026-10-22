@@ -31,7 +31,7 @@ use std::sync::Arc;
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
     CompilerHost, DependencyIndex, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError,
-    SourceError,
+    ProbeInput, ProbeRequest, SourceError,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
@@ -102,8 +102,8 @@ pub struct InvocationRun {
     /// project-root-relative, normalized (`output_dir` joined with the
     /// generator-relative path and forward-slash-only).
     pub outputs: Vec<OutputHash>,
-    /// What the probe reported, in `GeneratorRequest::files` order. Empty when
-    /// the generator exports none, which means every file whole.
+    /// The extent each file was read to, primary first; `None` is the whole
+    /// file, as every file is for a generator exporting no probe.
     pub extents: Vec<Option<u64>>,
 }
 
@@ -186,27 +186,51 @@ pub async fn execute<H: CompilerHost>(
     manifest_root: &Path,
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
-    let primary = load_input(host, &invocation.from, invocation.use_type.as_ref()).await?;
-    let mut inputs = Vec::with_capacity(invocation.inputs.len());
-    for input in &invocation.inputs {
-        inputs.push(load_input(host, &input.path, input.use_type.as_ref()).await?);
-    }
+    let files: Vec<_> = invocation.files().collect();
 
-    let mut request = GeneratorRequest {
-        primary,
-        inputs,
+    // The probe reads each file a range at a time, so a checkpoint's probe
+    // pulls its header and none of the payloads behind it.
+    let mut probe = ProbeRequest {
+        files: Vec::with_capacity(files.len()),
+        options: invocation.options.clone(),
+    };
+    for (path, use_type) in &files {
+        probe.files.push(ProbeInput {
+            path: path.as_str().to_string(),
+            content: host
+                .open_source(path.as_str())
+                .await
+                .map_err(|source| load_error(path, source))?,
+            use_type: use_type.cloned(),
+        });
+    }
+    let probed = host
+        .probe_generator(component_wasm, &probe)
+        .await
+        .map_err(ExecuteError::Runner)?;
+    let extents = settle_extents(&probe, probed);
+
+    // Each file is read to its extent and no further, which also enforces the
+    // probe's claim: a generator that reads past its own extent sees EOF rather
+    // than bytes the cache key does not cover.
+    let mut loaded = Vec::with_capacity(files.len());
+    for ((path, use_type), extent) in files.iter().zip(&extents) {
+        loaded.push(GeneratorInputFile {
+            path: path.as_str().to_string(),
+            content: host
+                .load_source_prefix(path.as_str(), *extent)
+                .await
+                .map_err(|source| load_error(path, source))?,
+            use_type: use_type.cloned(),
+        });
+    }
+    let mut loaded = loaded.into_iter();
+    let request = GeneratorRequest {
+        primary: loaded.next().expect("the primary is the first file"),
+        inputs: loaded.collect(),
         module: invocation.invoked_as.clone(),
         options: invocation.options.clone(),
     };
-
-    // The probe reports how much of each input determines the output, and the
-    // clamp below enforces that claim: a generator that reads past its own
-    // extent sees EOF rather than bytes the cache key does not cover.
-    let probed = host
-        .probe_generator(component_wasm, &request)
-        .await
-        .map_err(ExecuteError::Runner)?;
-    let extents = settle_extents(&mut request, probed);
 
     let primary_hash = file_hash(&invocation.from, &request.primary.content);
     let input_hashes: Vec<_> = invocation
@@ -223,10 +247,7 @@ pub async fn execute<H: CompilerHost>(
 
     let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
     let by = generator_identity(&invocation.module);
-    let source_paths: Vec<InvocationPath> = std::iter::once(&invocation.from)
-        .chain(invocation.inputs.iter().map(|input| &input.path))
-        .cloned()
-        .collect();
+    let source_paths: Vec<InvocationPath> = files.iter().map(|(path, _)| (*path).clone()).collect();
     let header = GeneratedHeader::emit_with_paths(&by, &source_paths);
 
     let mut outputs = Vec::with_capacity(response.files.len());
@@ -308,14 +329,13 @@ pub fn build_metadata(
     generator_source_hash: String,
 ) -> Metadata {
     let generator = generator_identity(&invocation.module);
-    let extent_at = |i: usize| run.extents.get(i).copied().flatten();
-    let primary = to_meta_file_hash(&run.primary, extent_at(0), invocation.use_type.as_ref());
+    let primary = to_meta_file_hash(&run.primary, run.extents[0], invocation.use_type.as_ref());
     let inputs: Vec<MetaFileHash> = run
         .inputs
         .iter()
         .zip(&invocation.inputs)
-        .enumerate()
-        .map(|(i, (f, input))| to_meta_file_hash(f, extent_at(i + 1), input.use_type.as_ref()))
+        .zip(&run.extents[1..])
+        .map(|((f, input), extent)| to_meta_file_hash(f, *extent, input.use_type.as_ref()))
         .collect();
 
     let outputs: Vec<MetaOutputEntry> = run
@@ -350,41 +370,28 @@ fn to_meta_file_hash(f: &FileHash, extent: Option<u64>, use_type: Option<&String
     }
 }
 
-/// Cut each input down to the extent its probe reported, and answer the extents
-/// as they will be recorded. With no probe `extents` is empty and every input
-/// stays whole.
+/// The extent each file is read to and recorded with, one per file of `probe`.
+/// With no probe `extents` is empty and every file is read whole.
 ///
 /// An extent reaching the end of the file records as `None`, the whole file. A
 /// probe stopped by EOF was stopped by the file's length rather than by its
 /// contents, so recording that length would let a longer file sharing the
 /// prefix hash equal and hit the cache.
-fn settle_extents(request: &mut GeneratorRequest, extents: Vec<Option<u64>>) -> Vec<Option<u64>> {
+fn settle_extents(probe: &ProbeRequest, extents: Vec<Option<u64>>) -> Vec<Option<u64>> {
     if extents.is_empty() {
-        return extents;
+        return vec![None; probe.files.len()];
     }
     assert_eq!(
         extents.len(),
-        1 + request.inputs.len(),
+        probe.files.len(),
         "kiln: probe must answer once per input file"
     );
-    request
-        .files_mut()
+    probe
+        .files
+        .iter()
         .zip(extents)
-        .map(|(file, extent)| {
-            let n = extent_len(extent?);
-            if n >= file.content.len() {
-                return None;
-            }
-            file.content.truncate(n);
-            Some(n as u64)
-        })
+        .map(|(file, extent)| extent.filter(|n| *n < file.content.byte_len()))
         .collect()
-}
-
-/// An extent as a length on this target. One past `usize` saturates, which
-/// reads as the whole file and is the right answer for a 32-bit host.
-fn extent_len(extent: u64) -> usize {
-    usize::try_from(extent).unwrap_or(usize::MAX)
 }
 
 /// Point every module that declared `invocation` at the generated entry it
@@ -575,13 +582,8 @@ async fn matches_file<H: CompilerHost>(
     expected_hex: &str,
     extent: Option<u64>,
 ) -> bool {
-    match host.load_source(path.as_str()).await {
-        Ok(mut bytes) => {
-            if let Some(n) = extent {
-                bytes.truncate(extent_len(n));
-            }
-            hash_matches_bytes(&bytes, expected_hex)
-        }
+    match host.load_source_prefix(path.as_str(), extent).await {
+        Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
         Err(_) => false,
     }
 }
@@ -679,23 +681,11 @@ fn walk_and_delete(
     Ok(())
 }
 
-async fn load_input<H: CompilerHost>(
-    host: &H,
-    path: &InvocationPath,
-    use_type: Option<&String>,
-) -> Result<GeneratorInputFile, ExecuteError> {
-    let bytes =
-        host.load_source(path.as_str())
-            .await
-            .map_err(|source| ExecuteError::LoadInput {
-                path: path.as_str().to_string(),
-                source,
-            })?;
-    Ok(GeneratorInputFile {
+fn load_error(path: &InvocationPath, source: SourceError) -> ExecuteError {
+    ExecuteError::LoadInput {
         path: path.as_str().to_string(),
-        content: bytes,
-        use_type: use_type.cloned(),
-    })
+        source,
+    }
 }
 
 /// Validate and convert a generator-supplied relative path into an
@@ -1551,7 +1541,7 @@ mod tests {
         use std::assert_matches;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
-            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, SourceReader,
         };
 
         struct MockHost {
@@ -1801,6 +1791,123 @@ mod tests {
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");
+        }
+
+        /// A file served a range at a time, remembering the furthest byte read.
+        struct Tracked {
+            bytes: Vec<u8>,
+            furthest: Arc<Mutex<u64>>,
+        }
+
+        impl SourceReader for Tracked {
+            fn byte_len(&self) -> u64 {
+                self.bytes.byte_len()
+            }
+
+            fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
+                let read = self.bytes.read_at(start, len)?;
+                let mut furthest = self.furthest.lock().unwrap();
+                *furthest = (*furthest).max(start + read.len() as u64);
+                Ok(read)
+            }
+        }
+
+        /// Serves each file only a range at a time, and probes as a
+        /// safetensors reader does: the first eight bytes give the length of
+        /// the header behind them.
+        struct RangedHost {
+            files: IndexMap<String, Arc<Tracked>>,
+            requests: Mutex<Vec<GeneratorRequest>>,
+        }
+
+        impl CompilerHost for RangedHost {
+            async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+                unreachable!("{path} is read a range at a time, never whole")
+            }
+
+            async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+                Ok(Arc::clone(&self.files[path]) as Arc<dyn SourceReader>)
+            }
+
+            async fn load_source_prefix(
+                &self,
+                path: &str,
+                extent: Option<u64>,
+            ) -> Result<Vec<u8>, SourceError> {
+                let n = extent.expect("every file here has a header shorter than itself");
+                self.files[path].read_at(0, usize::try_from(n).unwrap())
+            }
+
+            fn emit_diagnostic(&self, _d: Diagnostic) {}
+
+            fn stdlib_module_read(&self, _import_path: &str) {}
+
+            fn package_root(&self, _path: &str) -> Option<String> {
+                None
+            }
+
+            fn package_index(&self, root: &str) -> DependencyIndex {
+                unreachable!("no module lies in a package: {root}")
+            }
+
+            async fn probe_generator(
+                &self,
+                _wasm: &[u8],
+                request: &ProbeRequest,
+            ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+                Ok(request
+                    .files
+                    .iter()
+                    .map(|file| {
+                        let prefix = file.content.read_at(0, 8).unwrap();
+                        Some(8 + u64::from_le_bytes(prefix.try_into().unwrap()))
+                    })
+                    .collect())
+            }
+
+            async fn run_generator(
+                &self,
+                _wasm: &[u8],
+                request: GeneratorRequest,
+            ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+                self.requests.lock().unwrap().push(request);
+                Ok(GeneratorResponse { files: vec![] })
+            }
+        }
+
+        /// A header of `header` bytes behind its length, then `payload` bytes.
+        fn checkpoint(header: &[u8], payload: usize) -> Arc<Tracked> {
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend_from_slice(header);
+            bytes.resize(bytes.len() + payload, 0xAB);
+            Arc::new(Tracked {
+                bytes,
+                furthest: Arc::default(),
+            })
+        }
+
+        #[test]
+        fn a_probed_input_is_read_to_its_extent_and_no_further() {
+            let tmp = tempfile::tempdir().unwrap();
+            let host = RangedHost {
+                files: [
+                    ("schema.proto".to_string(), checkpoint(b"{}", 64)),
+                    ("dep.proto".to_string(), checkpoint(b"{\"w\":1}", 1 << 20)),
+                ]
+                .into_iter()
+                .collect(),
+                requests: Mutex::default(),
+            };
+            let run = runtime()
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
+                .unwrap();
+
+            assert_eq!(run.extents, [Some(10), Some(15)]);
+            for (path, extent) in [("schema.proto", 10), ("dep.proto", 15)] {
+                assert_eq!(*host.files[path].furthest.lock().unwrap(), extent, "{path}");
+            }
+            let reqs = host.requests.lock().unwrap();
+            assert_eq!(reqs[0].inputs[0].content[8..], *b"{\"w\":1}");
         }
     }
 

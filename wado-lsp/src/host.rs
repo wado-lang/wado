@@ -7,11 +7,14 @@
 //! this host's [`CompilerHost::dependency_index`] reports.
 
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::{
     CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
+    SourceReader,
 };
 
 pub mod discovery;
@@ -128,13 +131,70 @@ impl FilesystemCompilerHost {
     }
 }
 
+/// A file on disk, read a range at a time.
+struct FileReader {
+    file: Mutex<File>,
+    len: u64,
+    path: PathBuf,
+}
+
+impl FileReader {
+    fn open(path: PathBuf) -> Result<Self, SourceError> {
+        let file = File::open(&path).map_err(|e| io_error(&path, &e))?;
+        let len = file.metadata().map_err(|e| io_error(&path, &e))?.len();
+        Ok(Self {
+            file: Mutex::new(file),
+            len,
+            path,
+        })
+    }
+}
+
+impl SourceReader for FileReader {
+    fn byte_len(&self) -> u64 {
+        self.len
+    }
+
+    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
+        let mut file = self
+            .file
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut bytes = Vec::new();
+        file.seek(SeekFrom::Start(start))
+            .and_then(|_| (&mut *file).take(len as u64).read_to_end(&mut bytes))
+            .map_err(|e| io_error(&self.path, &e))?;
+        Ok(bytes)
+    }
+}
+
+fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
+    SourceError::IoError {
+        path: path.display().to_string(),
+        message: e.to_string(),
+    }
+}
+
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         let full_path = self.base_path.join(path);
-        std::fs::read(&full_path).map_err(|e| SourceError::IoError {
-            path: full_path.display().to_string(),
-            message: e.to_string(),
-        })
+        std::fs::read(&full_path).map_err(|e| io_error(&full_path, &e))
+    }
+
+    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+        Ok(Arc::new(FileReader::open(self.base_path.join(path))?))
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, SourceError> {
+        let Some(n) = extent else {
+            return self.load_source(path).await;
+        };
+        FileReader::open(self.base_path.join(path))?
+            .read_at(0, usize::try_from(n).unwrap_or(usize::MAX))
     }
 
     async fn source_exists(&self, path: &str) -> bool {

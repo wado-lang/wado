@@ -644,9 +644,10 @@ An `Error` event does not fail the build. A generator fails only by returning an
 ### The Probe
 
 A generator may export `probe` beside `generate`. It reports how many leading
-bytes of an input determine the output. The host calls it once per input file,
-with that file's path and content, and with the options when the generator
-declares an `Options` struct.
+bytes of an input determine the output. The host calls it once per input file.
+The parameters are matched by name, and a probe declares only those it reads:
+`path` and `content`, `type` (the file's `type`, as `input-file` carries it),
+and `options` when the generator declares an `Options` struct.
 
 This probe says the first line decides everything:
 
@@ -672,6 +673,9 @@ export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
 }
 ```
 
+- The host reads a file only as far as the probe pulls its stream, and then
+  reads it to its extent and no further. A probe of a checkpoint reads the
+  header, never the payloads behind it.
 - `generate` sees each input cut to its extent. Reading further gets the end
   of the stream.
 - The extent must be decided by the bytes inside it.

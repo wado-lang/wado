@@ -9,6 +9,7 @@
 //! See WEP: `CompilerHost` Abstraction for Compiler I/O
 
 use std::future::Future;
+use std::sync::Arc;
 
 use crate::ast::AstIdSpace;
 use crate::hashmap;
@@ -510,6 +511,40 @@ pub trait CompilerHost: Send + Sync {
         async move { self.load_source(path).await.is_ok() }
     }
 
+    /// `path` opened to be read a range at a time, for a reader that learns how
+    /// far to read only by reading, as a Kiln probe does. What is read through
+    /// it is no dependency of the compile: the part one depends on is read again
+    /// through [`Self::load_source_prefix`].
+    ///
+    /// The default loads the file whole; a filesystem host overrides it, so a
+    /// probe of a checkpoint reads the header rather than the payloads.
+    fn open_source(
+        &self,
+        path: &str,
+    ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
+        async move {
+            let bytes = self.load_source(path).await?;
+            Ok(Arc::new(bytes) as Arc<dyn SourceReader>)
+        }
+    }
+
+    /// The first `extent` bytes of `path`, or all of it at `None`: the part of
+    /// a Kiln input its output depends on. The default loads the file whole and
+    /// cuts it; a filesystem host overrides it to read the prefix alone.
+    fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move {
+            let mut bytes = self.load_source(path).await?;
+            if let Some(n) = extent {
+                bytes.truncate(usize::try_from(n).unwrap_or(usize::MAX));
+            }
+            Ok(bytes)
+        }
+    }
+
     /// Emit a diagnostic (error, warning, etc.)
     ///
     /// This method is called synchronously by the compiler whenever a diagnostic
@@ -546,7 +581,7 @@ pub trait CompilerHost: Send + Sync {
     fn probe_generator(
         &self,
         _component_wasm: &[u8],
-        _request: &GeneratorRequest,
+        _request: &ProbeRequest,
     ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
         async move { Ok(Vec::new()) }
     }
@@ -663,17 +698,43 @@ pub struct GeneratorRequest {
     pub options: CanonicalOptions,
 }
 
-impl GeneratorRequest {
-    /// Every input file, primary first. This is the order a probe answers in
-    /// and the order extents are recorded in, so it lives here rather than
-    /// being re-spelled at each site that walks them.
-    pub fn files(&self) -> impl Iterator<Item = &GeneratorInputFile> {
-        std::iter::once(&self.primary).chain(self.inputs.iter())
+/// What a Kiln generator's `probe` is asked about: every input file, primary
+/// first, each served a range at a time as the probe pulls it.
+pub struct ProbeRequest {
+    pub files: Vec<ProbeInput>,
+    /// The invocation's options, as [`GeneratorRequest::options`].
+    pub options: CanonicalOptions,
+}
+
+/// One file a probe reads.
+pub struct ProbeInput {
+    pub path: String,
+    pub content: Arc<dyn SourceReader>,
+    /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
+    /// file depends on what kind of file it is.
+    pub use_type: Option<String>,
+}
+
+/// A file read a range at a time. See [`CompilerHost::open_source`].
+pub trait SourceReader: Send + Sync {
+    /// The file's length in bytes.
+    fn byte_len(&self) -> u64;
+
+    /// At most `len` bytes from `start`: fewer where the file ends first, and
+    /// none from its end on.
+    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError>;
+}
+
+/// A file already held whole.
+impl SourceReader for Vec<u8> {
+    fn byte_len(&self) -> u64 {
+        self.len() as u64
     }
 
-    /// [`Self::files`], for a caller that rewrites what it walks.
-    pub fn files_mut(&mut self) -> impl Iterator<Item = &mut GeneratorInputFile> {
-        std::iter::once(&mut self.primary).chain(self.inputs.iter_mut())
+    fn read_at(&self, start: u64, len: usize) -> Result<Vec<u8>, SourceError> {
+        let start = usize::try_from(start).unwrap_or(usize::MAX).min(self.len());
+        let end = start.saturating_add(len).min(self.len());
+        Ok(self[start..end].to_vec())
     }
 }
 

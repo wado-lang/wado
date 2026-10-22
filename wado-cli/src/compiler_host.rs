@@ -10,7 +10,7 @@ use std::time::Instant;
 use indexmap::IndexMap;
 use wado_compiler::{
     Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, LogLevel, Severity, SourceError,
+    GeneratorRunnerError, LogLevel, ProbeRequest, Severity, SourceError, SourceReader,
 };
 
 use crate::args::DEFAULT_LOG_LEVEL;
@@ -279,6 +279,32 @@ impl CompilerHost for FilesystemCompilerHost {
         loaded
     }
 
+    /// Nothing read through the reader is recorded: the part of the file a
+    /// compile depends on is read again through [`Self::load_source_prefix`].
+    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+        self.inner.open_source(path).await
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, SourceError> {
+        let Some(n) = extent else {
+            return self.load_source(path).await;
+        };
+        let file = self.inner.base_path().join(path);
+        let loaded = self.inner.load_source_prefix(path, extent).await;
+        match &loaded {
+            Ok(bytes) => self.run.observe_prefix(&file, n, bytes),
+            Err(SourceError::NotFound { .. }) => self.run.observe_absent(&file),
+            Err(SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
+                self.run.observe_untracked();
+            }
+        }
+        loaded
+    }
+
     async fn source_exists(&self, path: &str) -> bool {
         let exists = self.inner.source_exists(path).await;
         // A present file is recorded once the compile reads it.
@@ -384,7 +410,7 @@ impl CompilerHost for FilesystemCompilerHost {
     async fn probe_generator(
         &self,
         component_wasm: &[u8],
-        request: &GeneratorRequest,
+        request: &ProbeRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
         let (engine, component) = self.aot(component_wasm)?;
         let _span = KilnSpan::new(self, "kiln/probe");

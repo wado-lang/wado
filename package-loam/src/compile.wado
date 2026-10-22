@@ -138,3 +138,27 @@ fn holds_header(prefix: &ByteList) -> bool {
 
 /// Enough for GPT-2's header in one read, which is 14 KiB.
 global HEADER_CHUNK: i32 = 65536;
+
+/// How many leading bytes of a checkpoint the build depends on: through the end
+/// of the header its first eight bytes declare. Those eight alone where they
+/// declare a header no module can address, which the check then refuses, and
+/// all of a file that ends inside them. Reads the eight bytes and no more, so a
+/// build reads none of the payloads.
+pub fn header_extent(content: Stream<u8>) -> u64 {
+    let mut length = ByteList::with_capacity(8);
+    loop {
+        let chunk = content.read(8 - length.len());
+        length.extend(&(chunk.items as ByteList));
+        if chunk.result != CopyResult::Completed || length.len() == 8 {
+            break;
+        }
+    }
+    content.drop();
+    if length.len() < 8 {
+        return u64::MAX;
+    }
+    return match declared_header_end(&length) {
+        Ok(end) => end as u64,
+        Err(_) => 8,
+    };
+}
