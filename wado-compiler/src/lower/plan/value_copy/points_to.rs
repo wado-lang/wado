@@ -660,7 +660,7 @@ impl Graph {
         }
     }
 
-    /// What `node`'s own edges have carried, given the set they carried it from.
+    /// What `node`'s own edges have carried of `pts`, its set.
     fn carried(&mut self, node: u32, pts: LocSet) -> Carried {
         Carried {
             pts,
