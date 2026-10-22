@@ -532,7 +532,7 @@ fn "parser_synth_id_collision_test.wado/section_header_of"(line) {
     let $load_0: i32;
     let last_idx: i32;
     let repr_29: ref Array<u8>;
-    let b_66: u8;
+    let b_64: u8;
     let part: ref Array<u8>;
     if local.tee $load_0(line.used) <= 2 {
         return ref.null none;
@@ -554,14 +554,14 @@ fn "parser_synth_id_collision_test.wado/section_header_of"(line) {
         "parser_synth_id_collision_test.wado/section_header_of$cold1$dae[line,$contract_arg_0]"(last_idx, $load_0);
         unreachable;
     }
-    if @unlikely(local.tee $load_0((if local.tee b_66($inline_boundary_at_10: block -> bool {
+    if @unlikely(local.tee $load_0((if local.tee b_64($inline_boundary_at_10: block -> bool {
         if 1 == $load_0 {
             break $inline_boundary_at_10: 1;
         }
         if 1 > $load_0 {
             break $inline_boundary_at_10: 0;
         }
-        break $inline_boundary_at_10: (local.tee b_66(builtin::array_get_value<u8>(repr_29, 1)) & 192) != 128;
+        break $inline_boundary_at_10: (local.tee b_64(builtin::array_get_value<u8>(repr_29, 1)) & 192) != 128;
     }) -> i32 {
         $inline_boundary_at_14: block -> bool {
             if (last_idx == 0) | (last_idx == $load_0) {
@@ -576,7 +576,7 @@ fn "parser_synth_id_collision_test.wado/section_header_of"(line) {
         0;
     })) == 0) {
         cold_path;
-        "parser_synth_id_collision_test.wado/section_header_of$cold0$dae[$contract_arg_0]"(line, last_idx, b_66);
+        "parser_synth_id_collision_test.wado/section_header_of$cold0$dae[$contract_arg_0]"(line, last_idx, b_64);
         unreachable;
     }
     builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee last_idx(last_idx - 1))), 0, repr_29, 1, last_idx);
@@ -587,29 +587,29 @@ fn "parser_synth_id_collision_test.wado/section_header_of"(line) {
 }
 
 fn "parser_synth_id_collision_test.wado/post_process"($mv$raw$repr, $mv$raw$used) {
-    let self_8: ref "core:prelude/string.wado//StrSlice";
+    let self_4: ref "core:prelude/string.wado//StrSlice";
     let part: ref Array<u8>;
-    self_8 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$raw$repr, start: 0, end: $mv$raw$used };
-    self_8 = block -> ref "core:prelude/string.wado//StrSlice" {
+    self_4 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$raw$repr, start: 0, end: $mv$raw$used };
+    self_4 = block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_end_3: i32;
-        multivalue_bind [$mv$raw$repr, $mv$raw$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_8.repr, 0, $mv$raw$used);
+        multivalue_bind [$mv$raw$repr, $mv$raw$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_4.repr, 0, $mv$raw$used);
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$raw$repr, $mv$raw$used, $mv_end_3);
     };
     if block -> bool {
         let $mv_arg_5: ref "core:prelude/string.wado//String";
         $mv_arg_5 = global:parser_synth_id_collision_test.wado::$const_obj_22;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(self_8.repr, self_8.start, self_8.end, $mv_arg_5.repr, $mv_arg_5.used);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(self_4.repr, self_4.start, self_4.end, $mv_arg_5.repr, $mv_arg_5.used);
     } {
         return block -> ref "core:prelude/string.wado//String" {
             $mv_arg_5 = global:parser_synth_id_collision_test.wado::$const_obj_22;
             let $mv_arg_8: ref "core:prelude/string.wado//String";
             $mv_arg_8 = global:parser_synth_id_collision_test.wado::$const_obj_23;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:prelude/string.wado/String,core:prelude/string.wado/String>$dae[count]"(self_8.repr, self_8.start, self_8.end, $mv_arg_5.repr, $mv_arg_5.used, $mv_arg_8.repr, $mv_arg_8.used);
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:prelude/string.wado/String,core:prelude/string.wado/String>$dae[count]"(self_4.repr, self_4.start, self_4.end, $mv_arg_5.repr, $mv_arg_5.used, $mv_arg_8.repr, $mv_arg_8.used);
         };
     }
     let $mv$$vr_2$0: i32;
     let $mv$$vr_2$1: i32;
-    multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1] = ($mv_arg_8 = global:parser_synth_id_collision_test.wado::$const_obj_21; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(local.tee $mv$raw$repr(self_8.repr), local.tee $mv_end_3(self_8.start), local.tee $mv$raw$used(self_8.end), $mv_arg_8.repr, $mv_arg_8.used));
+    multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1] = ($mv_arg_8 = global:parser_synth_id_collision_test.wado::$const_obj_21; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(local.tee $mv$raw$repr(self_4.repr), local.tee $mv_end_3(self_4.start), local.tee $mv$raw$used(self_4.end), $mv_arg_8.repr, $mv_arg_8.used));
     if $mv$$vr_2$0 == 1 {
         $mv_arg_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(($mv$raw$used - $mv_end_3) + 1), used: 0 };
         $inline_core_prelude_string_wado_String__internal_push_view_12: block {
@@ -620,7 +620,7 @@ fn "parser_synth_id_collision_test.wado/post_process"($mv$raw$repr, $mv$raw$used
             }
             $mv$$vr_2$1 = $mv_arg_8.used;
             $mv_arg_8.used = $mv$$vr_2$0;
-            builtin::array_copy<u8>($mv_arg_8.repr, $mv$$vr_2$1, self_8.repr, self_8.start, $mv$$vr_2$0);
+            builtin::array_copy<u8>($mv_arg_8.repr, $mv$$vr_2$1, self_4.repr, self_4.start, $mv$$vr_2$0);
         };
         if @unlikely(local.tee $mv$$vr_2$0($mv_arg_8.used + 1) > builtin::array_len($mv_arg_8.repr)) {
             cold_path;
@@ -701,7 +701,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
     let start_15: ref "core:prelude/string.wado//String";
     let $match_19: ref null "core:prelude/string.wado//String";
     let elements_30: ref "Array<parser_synth_id_collision_test.wado/DescriptorPair>";
-    let repr_36: ref Array<u8>;
+    let repr_37: ref Array<u8>;
     let value_41: ref "parser_synth_id_collision_test.wado//DescriptorPair";
     let used_42: i32;
     let self_49: i32;
@@ -725,10 +725,10 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
     let b_122: ref Array<u8>;
     let len_125: i32;
     let i_126: i32;
-    let self_132: ref "core:prelude/string.wado//StrSlice";
-    let self_133: ref "core:prelude/string.wado//StrSlice";
-    let repr_135: ref Array<u8>;
-    let len_137: i32;
+    let self_127: ref "core:prelude/string.wado//StrSlice";
+    let self_129: ref "core:prelude/string.wado//StrSlice";
+    let repr_134: ref Array<u8>;
+    let len_136: i32;
     let part: ref Array<u8>;
     let a_141: ref Array<u8>;
     let a_end_143: i32;
@@ -754,7 +754,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
     current_name = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     have_current = 0;
     current_value = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
-    $iter_0 = struct.new "core:prelude/string.wado//StrLinesIter" { repr: local.tee repr_36(text.repr), used: 25, pos: 0, finished: 0 };
+    $iter_0 = struct.new "core:prelude/string.wado//StrLinesIter" { repr: local.tee repr_37(text.repr), used: 25, pos: 0, finished: 0 };
     b80: block {
         l81: loop {
             if ref.is_null(local.tee $match_19("core:prelude/string.wado/core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0))) == 0 {
@@ -769,7 +769,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
                         builtin::array_set<ref "parser_synth_id_collision_test.wado//DescriptorPair">(pairs.repr, used_42, value_41);
                         pairs.used = used_42 + 1;
                     }
-                    current_name = struct.new "core:prelude/string.wado//String" { repr: repr_36 = name.repr; $load_5 = name.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, repr_36, 0, $load_5); $array_clone_dst_2, used: $load_5 };
+                    current_name = struct.new "core:prelude/string.wado//String" { repr: repr_37 = name.repr; $load_5 = name.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, repr_37, 0, $load_5); $array_clone_dst_2, used: $load_5 };
                     have_current = 1;
                     current_value = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
                 } else {
@@ -812,7 +812,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
         l90: loop {
             break_if b89 start_53 >= have_current;
             v_88 = struct.new "core:prelude/string.wado//String" { repr: $load_10 = local.tee v_88(local.tee value_41(builtin::array_get_value<ref "parser_synth_id_collision_test.wado//DescriptorPair">(elements_30, start_53)).name).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee new_used(v_88.used))), 0, $load_10, 0, new_used); $array_clone_dst_2, used: new_used };
-            v_89 = struct.new "core:prelude/string.wado//String" { repr: repr_36 = local.tee v_89(value_41.value).repr; self_49 = v_89.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>(self_49)), 0, repr_36, 0, self_49); $array_clone_dst_8, used: self_49 };
+            v_89 = struct.new "core:prelude/string.wado//String" { repr: repr_37 = local.tee v_89(value_41.value).repr; self_49 = v_89.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>(self_49)), 0, repr_37, 0, self_49); $array_clone_dst_8, used: self_49 };
             start_53 = start_53 + 1;
             v_89 = "parser_synth_id_collision_test.wado/post_process"(v_89.repr, v_89.used);
             if $inline_core_prelude_array_wado_seq_eq_u8__30: block -> bool {
@@ -886,17 +886,17 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__37: 1;
             } {
-                self_132 = struct.new "core:prelude/string.wado//StrSlice" { repr: v_89.repr, start: 0, end: v_89.used };
-                repr_135 = local.tee self_133(block -> ref "core:prelude/string.wado//StrSlice" {
+                self_129 = struct.new "core:prelude/string.wado//StrSlice" { repr: v_89.repr, start: 0, end: v_89.used };
+                repr_134 = local.tee self_127(block -> ref "core:prelude/string.wado//StrSlice" {
                     let $mv_repr_10: ref Array<u8>;
                     let $mv_start_11: i32;
                     let $mv_end_12: i32;
-                    multivalue_bind [$mv_repr_10, $mv_start_11, $mv_end_12] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_132.repr, 0, self_132.end);
+                    multivalue_bind [$mv_repr_10, $mv_start_11, $mv_end_12] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_129.repr, 0, self_129.end);
                     "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv_repr_10, $mv_start_11, $mv_end_12);
                 }).repr;
-                $load_43 = self_133.start;
-                builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee len_137(self_133.end - $load_43))), 0, repr_135, $load_43, len_137);
-                current_name = struct.new "core:prelude/string.wado//String" { repr: part, used: len_137 };
+                $load_43 = self_127.start;
+                builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee len_136(self_127.end - $load_43))), 0, repr_134, $load_43, len_136);
+                current_name = struct.new "core:prelude/string.wado//String" { repr: part, used: len_136 };
             } else if $inline_core_prelude_array_wado_seq_eq_u8__46: block -> bool {
                 a_141 = v_88.repr;
                 a_end_143 = v_88.used;
@@ -1114,7 +1114,7 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let ptr_15: i32;
+    let ptr_13: i32;
     let i: i32;
     let ptr_24: i32;
     let count_25: i32;
@@ -1124,22 +1124,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b152: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b152: block {
         l153: loop {
             break_if b152 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l153;
         };
-    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l155: loop {
-            ptr_24 = ptr_15 + i;
+            ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_9: $mv$data$start;
+                    break $inline_cm_await_blocked_7: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -1149,7 +1149,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_9: status;
+                break $inline_cm_await_blocked_7: status;
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
@@ -1161,7 +1161,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             });
             i = i + count_25;
             if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_24;
             }
             continue l155;
@@ -1551,14 +1551,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"($mv$
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$self$repr, $mv$self$start, $mv$self$end) {
     let p: i32;
     let value: u32;
-    let b0: u32;
-    let b1_16: u32;
-    let b1_17: u32;
-    let b2_18: u32;
-    let b1_19: u32;
-    let b2_20: u32;
-    let b3: u32;
     let $bitset_offset_2: u32;
+    let b0: u32;
+    let b1_20: u32;
+    let b1_21: u32;
+    let b2_22: u32;
+    let b1_23: u32;
+    let b2_24: u32;
+    let b3: u32;
     b198: block {
         l199: loop {
             break_if b198 $mv$self$end <= $mv$self$start;
@@ -1574,26 +1574,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$se
                     continue l201;
                 };
             };
-            break_if b198 $inline_char__is_whitespace_sroa_self_value__1: block -> bool {
-                if (local.tee $bitset_offset_2(local.tee value($inline_decode_char_at_0: block -> ref "tuple//[u32, i32]" {
+            break_if b198 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
+                if (local.tee $bitset_offset_2(local.tee value($inline_decode_char_at_1: block -> ref "tuple//[u32, i32]" {
                     if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, p)) <u 128 {
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: b0, 1: 1 };
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: b0, 1: 1 };
                     }
                     if b0 <u 224 {
-                        b1_16 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: ((b0 & 31) << 6) | (b1_16 & 63), 1: 2 };
+                        b1_20 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: ((b0 & 31) << 6) | (b1_20 & 63), 1: 2 };
                     }
                     if b0 <u 240 {
-                        b1_17 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                        b2_18 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: (((b0 & 15) << 12) | ((b1_17 & 63) << 6)) | (b2_18 & 63), 1: 3 };
+                        b1_21 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                        b2_22 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: (((b0 & 15) << 12) | ((b1_21 & 63) << 6)) | (b2_22 & 63), 1: 3 };
                     }
-                    b1_19 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                    b2_20 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
+                    b1_23 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                    b2_24 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
                     b3 = builtin::array_get_value<u8>($mv$self$repr, p + 3);
-                    break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: ((((b0 & 7) << 18) | ((b1_19 & 63) << 12)) | ((b2_20 & 63) << 6)) | (b3 & 63), 1: 4 };
+                    break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: ((((b0 & 7) << 18) | ((b1_23 & 63) << 12)) | ((b2_24 & 63) << 6)) | (b3 & 63), 1: 4 };
                 }.0) - 9) <u 24) & (((8388639_i64 >>u builtin::i64_extend_i32_u($bitset_offset_2)) & 1_i64) != 0_i64) {
-                    break $inline_char__is_whitespace_sroa_self_value__1: 1;
+                    break $inline_char__is_whitespace_sroa_self_value__0: 1;
                 }
                 if value == 133 -> bool {
                     1;
@@ -1634,7 +1634,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$se
                 } else {
                     value == 12288;
                 }
-                break $inline_char__is_whitespace_sroa_self_value__1;
+                break $inline_char__is_whitespace_sroa_self_value__0;
             } == 0;
             $mv$self$end = p;
             continue l199;

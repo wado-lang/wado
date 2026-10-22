@@ -1023,14 +1023,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "reflect_anon_struct.wado/reflect_anon_struct.wado/$anon_{x:i32,y:core:prelude/string.wado/String}^reflect_anon_struct.wado/Describe::describe$dae[self]"() {
     let $load_0: ref Array<u8>;
     let out_0: ref "core:prelude/string.wado//String";
-    let result_45: ref "core:prelude/string.wado//String";
+    let result_44: ref "core:prelude/string.wado//String";
     out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     out_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-    local.tee result_45(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2), used: 0 }).used = 1;
-    builtin::array_copy<u8>(local.tee $load_0(result_45.repr), 0, out_0.repr, 0, 1);
-    result_45.used = 2;
+    local.tee result_44(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2), used: 0 }).used = 1;
+    builtin::array_copy<u8>(local.tee $load_0(result_44.repr), 0, out_0.repr, 0, 1);
+    result_44.used = 2;
     builtin::array_copy<u8>($load_0, 1, global:reflect_anon_struct.wado::$const_obj_10, 0, 1);
-    return local.tee out_0(result_45);
+    return local.tee out_0(result_44);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
@@ -1412,7 +1412,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
     let bits_per_digit_5: i32;
-    let self_12: i32;
+    let self_11: i32;
     let q: i32;
     let start_114: i32;
     bits_per_digit_5 = (if base == 2 -> i32 {
@@ -1425,14 +1425,14 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
         if self == 0_i64 {
             break $inline_count_digits_u64_base_0: 1;
         }
-        break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_12 ^ bits_per_digit_5) >> 31), q);
+        break $inline_count_digits_u64_base_0: select i32((self_11 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_11(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_11 ^ bits_per_digit_5) >> 31), q);
     };
-    if @unlikely(local.tee self_12(f.used + q) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee self_11(f.used + q) > builtin::array_len(f.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self_11);
     }
     start_114 = f.used;
-    f.used = self_12;
+    f.used = self_11;
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, start_114, self, q, bits_per_digit_5, base, upper);
 }
 

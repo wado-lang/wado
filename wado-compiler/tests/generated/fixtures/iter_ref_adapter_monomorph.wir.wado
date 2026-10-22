@@ -232,7 +232,7 @@ global global:iter_ref_adapter_monomorph.wado::$const_obj_6: ref Array<i32> = ar
 global global:iter_ref_adapter_monomorph.wado::$const_obj_7: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40), used: 4 };
 
 fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"() {
-    let self_8: ref "core:prelude//List<i32>";
+    let self_10: ref "core:prelude//List<i32>";
     let end: i32;
     let elements_19: ref Array<i32>;
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
@@ -241,11 +241,11 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
     let $sroa_self_f_54: ref struct;
     let $sroa_self_repr_55: ref Array<i32>;
     let $sroa_self_index_56: i32;
-    end = local.tee self_8(global:iter_ref_adapter_monomorph.wado::$const_obj_5).used;
-    $sroa_self_repr_55 = self_8.repr;
+    end = local.tee self_10(global:iter_ref_adapter_monomorph.wado::$const_obj_5).used;
+    $sroa_self_repr_55 = self_10.repr;
     $sroa_self_index_56 = 0;
     $sroa_self_f_54 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iter_ref_adapter_monomorph.wado//$Closure_0" {  }, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_0" };
-    self_8 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_19(array.new_fixed<i32>()), used: 0 };
+    self_10 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_19(array.new_fixed<i32>()), used: 0 };
     b0: block {
         l1: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__7: block {
@@ -257,12 +257,12 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_self_f_54)).env, ref_val);
                     };
-                    if @unlikely(local.tee used_28(self_8.used) >= builtin::array_len(self_8.repr)) {
+                    if @unlikely(local.tee used_28(self_10.used) >= builtin::array_len(self_10.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_10);
                     }
-                    builtin::array_set<i32>(self_8.repr, used_28, $fused_slot_45);
-                    self_8.used = used_28 + 1;
+                    builtin::array_set<i32>(self_10.repr, used_28, $fused_slot_45);
+                    self_10.used = used_28 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__7;
                 };
                 break b0;
@@ -272,11 +272,11 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
     };
     $sroa_self_repr_55 = global:iter_ref_adapter_monomorph.wado::$const_obj_4;
     if @unlikely(local.tee used_28($inline_core_prelude_array_wado_seq_eq_i32__14: block -> bool {
-        if local.tee used_28(self_8.used) != 3 {
+        if local.tee used_28(self_10.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
         }
         $fused_slot_45 = 0;
-        elements_19 = self_8.repr;
+        elements_19 = self_10.repr;
         b6: block {
             l7: loop {
                 break_if b6 $fused_slot_45 >= used_28;
@@ -290,7 +290,7 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
         break $inline_core_prelude_array_wado_seq_eq_i32__14: 1;
     }) == 0) {
         cold_path;
-        "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator$cold0"(self_8);
+        "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator$cold0"(self_10);
         unreachable;
     }
 }
@@ -298,18 +298,18 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
 fn "iter_ref_adapter_monomorph.wado/$test_1_filter_over_a__list_reference_iterator__then_map_to_values"() {
     let xs: ref "core:prelude//List<i32>";
     let self_7: ref "core:prelude/traits.wado//IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32>";
-    let self_13: ref "core:prelude/slice.wado//SliceRefIter<i32>";
-    let pred: ref "iter_ref_adapter_monomorph.wado//$Closure_1";
-    let self_15: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>";
+    let self_8: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>";
     let f: ref "iter_ref_adapter_monomorph.wado//$Closure_2";
+    let self_10: ref "core:prelude/slice.wado//SliceRefIter<i32>";
+    let pred: ref "iter_ref_adapter_monomorph.wado//$Closure_1";
     let elements_21: ref Array<i32>;
     let used_25: i32;
     let $licm_repr_44: ref Array<i32>;
-    self_13 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: local.tee xs(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 }).repr, index: 0, end: 4 };
+    self_10 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: local.tee xs(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 }).repr, index: 0, end: 4 };
     pred = struct.new "iter_ref_adapter_monomorph.wado//$Closure_1" {  };
-    self_15 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>" { inner: self_13, pred: struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_1" } };
+    self_8 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>" { inner: self_10, pred: struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_1" } };
     f = struct.new "iter_ref_adapter_monomorph.wado//$Closure_2" {  };
-    self_7 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32>" { inner: self_15, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_2" } };
+    self_7 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32>" { inner: self_8, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_2" } };
     xs = struct.new "core:prelude//List<i32>" { repr: local.tee elements_21(array.new_fixed<i32>()), used: 0 };
     b9: block {
         l10: loop {
@@ -364,15 +364,15 @@ fn "iter_ref_adapter_monomorph.wado/$test_2_collect_a_filtered_reference_iterato
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_30: i32;
-    let self_39: ref "core:prelude//List<i32>";
-    let self_44: ref "core:prelude/slice.wado//SliceRefIter<i32>";
+    let self_39: ref "core:prelude/slice.wado//SliceRefIter<i32>";
     let pred: ref "iter_ref_adapter_monomorph.wado//$Closure_3";
+    let self_41: ref "core:prelude//List<i32>";
     let offset_60: i32;
     let f_76: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_155: ref Array<u8>;
-    self_44 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: local.tee self_39(global:iter_ref_adapter_monomorph.wado::$const_obj_7).repr, index: 0, end: self_39.used };
+    self_39 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: local.tee self_41(global:iter_ref_adapter_monomorph.wado::$const_obj_7).repr, index: 0, end: self_41.used };
     pred = struct.new "iter_ref_adapter_monomorph.wado//$Closure_3" {  };
-    if @unlikely(local.tee $load_2(local.tee refs("core:prelude/list.wado/core:prelude/list.wado/List<&i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>>"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>" { inner: self_44, pred: struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_3" } })).used) != 2) {
+    if @unlikely(local.tee $load_2(local.tee refs("core:prelude/list.wado/core:prelude/list.wado/List<&i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>>"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>" { inner: self_39, pred: struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/iter_ref_adapter_monomorph.wado/$closure_wrapper_3" } })).used) != 2) {
         cold_path;
         "iter_ref_adapter_monomorph.wado/$test_2_collect_a_filtered_reference_iterator_into_list__t_$cold2"($load_2);
         unreachable;

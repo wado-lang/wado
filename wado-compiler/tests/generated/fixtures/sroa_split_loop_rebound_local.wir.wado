@@ -374,11 +374,11 @@ fn "sroa_split_loop_rebound_local.wado/sroa_split_loop_rebound_local.wado/statem
     let $iter_0: ref "core:prelude/string.wado//StrSplitIter";
     let part_3: ref "core:prelude/string.wado//String";
     let $match_5: ref null "core:prelude/string.wado//String";
-    let self_28: ref "core:prelude/string.wado//StrSlice";
+    let self_24: ref "core:prelude/string.wado//StrSlice";
     let value_31: ref "core:prelude/string.wado//String";
     let used_32: i32;
     let len: i32;
-    let part_38: ref Array<u8>;
+    let part_37: ref Array<u8>;
     let $sroa_sep_repr_49: ref Array<u8>;
     out = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $sroa_sep_repr_49 = array.new_fixed<u8>(59);
@@ -386,14 +386,14 @@ fn "sroa_split_loop_rebound_local.wado/sroa_split_loop_rebound_local.wado/statem
     b19: block {
         l20: loop {
             if ref.is_null(local.tee $match_5("core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0))) == 0 {
-                self_28 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $sroa_sep_repr_49(local.tee part_3(ref.as_non_null($match_5)).repr), start: 0, end: part_3.used };
+                self_24 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $sroa_sep_repr_49(local.tee part_3(ref.as_non_null($match_5)).repr), start: 0, end: part_3.used };
                 let $mv$stmt$repr: ref Array<u8>;
                 let $mv$stmt$start: i32;
                 let $mv$stmt$end: i32;
-                multivalue_bind [$mv$stmt$repr, $mv$stmt$start, $mv$stmt$end] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_28.repr, 0, self_28.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
+                multivalue_bind [$mv$stmt$repr, $mv$stmt$start, $mv$stmt$end] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_24.repr, 0, self_24.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
                 if $mv$stmt$end != $mv$stmt$start {
-                    builtin::array_copy<u8>(local.tee part_38(builtin::array_new<u8>(local.tee len($mv$stmt$end - $mv$stmt$start))), 0, $mv$stmt$repr, $mv$stmt$start, len);
-                    value_31 = struct.new "core:prelude/string.wado//String" { repr: part_38, used: len };
+                    builtin::array_copy<u8>(local.tee part_37(builtin::array_new<u8>(local.tee len($mv$stmt$end - $mv$stmt$start))), 0, $mv$stmt$repr, $mv$stmt$start, len);
+                    value_31 = struct.new "core:prelude/string.wado//String" { repr: part_37, used: len };
                     if @unlikely(local.tee used_32(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out);
@@ -1170,14 +1170,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"($mv$
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$self$repr, $mv$self$start, $mv$self$end) {
     let p: i32;
     let value: u32;
-    let b0: u32;
-    let b1_16: u32;
-    let b1_17: u32;
-    let b2_18: u32;
-    let b1_19: u32;
-    let b2_20: u32;
-    let b3: u32;
     let $bitset_offset_2: u32;
+    let b0: u32;
+    let b1_20: u32;
+    let b1_21: u32;
+    let b2_22: u32;
+    let b1_23: u32;
+    let b2_24: u32;
+    let b3: u32;
     b122: block {
         l123: loop {
             break_if b122 $mv$self$end <= $mv$self$start;
@@ -1193,26 +1193,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$se
                     continue l125;
                 };
             };
-            break_if b122 $inline_char__is_whitespace_sroa_self_value__1: block -> bool {
-                if (local.tee $bitset_offset_2(local.tee value($inline_decode_char_at_0: block -> ref "tuple//[u32, i32]" {
+            break_if b122 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
+                if (local.tee $bitset_offset_2(local.tee value($inline_decode_char_at_1: block -> ref "tuple//[u32, i32]" {
                     if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, p)) <u 128 {
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: b0, 1: 1 };
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: b0, 1: 1 };
                     }
                     if b0 <u 224 {
-                        b1_16 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: ((b0 & 31) << 6) | (b1_16 & 63), 1: 2 };
+                        b1_20 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: ((b0 & 31) << 6) | (b1_20 & 63), 1: 2 };
                     }
                     if b0 <u 240 {
-                        b1_17 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                        b2_18 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
-                        break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: (((b0 & 15) << 12) | ((b1_17 & 63) << 6)) | (b2_18 & 63), 1: 3 };
+                        b1_21 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                        b2_22 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
+                        break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: (((b0 & 15) << 12) | ((b1_21 & 63) << 6)) | (b2_22 & 63), 1: 3 };
                     }
-                    b1_19 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
-                    b2_20 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
+                    b1_23 = builtin::array_get_value<u8>($mv$self$repr, p + 1);
+                    b2_24 = builtin::array_get_value<u8>($mv$self$repr, p + 2);
                     b3 = builtin::array_get_value<u8>($mv$self$repr, p + 3);
-                    break $inline_decode_char_at_0: struct.new "tuple//[u32, i32]" { 0: ((((b0 & 7) << 18) | ((b1_19 & 63) << 12)) | ((b2_20 & 63) << 6)) | (b3 & 63), 1: 4 };
+                    break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: ((((b0 & 7) << 18) | ((b1_23 & 63) << 12)) | ((b2_24 & 63) << 6)) | (b3 & 63), 1: 4 };
                 }.0) - 9) <u 24) & (((8388639_i64 >>u builtin::i64_extend_i32_u($bitset_offset_2)) & 1_i64) != 0_i64) {
-                    break $inline_char__is_whitespace_sroa_self_value__1: 1;
+                    break $inline_char__is_whitespace_sroa_self_value__0: 1;
                 }
                 if value == 133 -> bool {
                     1;
@@ -1253,7 +1253,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$se
                 } else {
                     value == 12288;
                 }
-                break $inline_char__is_whitespace_sroa_self_value__1;
+                break $inline_char__is_whitespace_sroa_self_value__0;
             } == 0;
             $mv$self$end = p;
             continue l123;
@@ -1611,7 +1611,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
     let bits_per_digit_5: i32;
-    let self_12: i32;
+    let self_11: i32;
     let q: i32;
     let start_98: i32;
     bits_per_digit_5 = (if base == 2 -> i32 {
@@ -1624,14 +1624,14 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
         if self == 0_i64 {
             break $inline_count_digits_u64_base_0: 1;
         }
-        break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_12 ^ bits_per_digit_5) >> 31), q);
+        break $inline_count_digits_u64_base_0: select i32((self_11 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_11(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_11 ^ bits_per_digit_5) >> 31), q);
     };
-    if @unlikely(local.tee self_12(f.used + q) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee self_11(f.used + q) > builtin::array_len(f.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self_11);
     }
     start_98 = f.used;
-    f.used = self_12;
+    f.used = self_11;
     "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, start_98, self, q, bits_per_digit_5, base, upper);
 }
 

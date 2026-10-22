@@ -197,11 +197,11 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/live_iterator"() {
     a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     $sroa_it_repr_32 = a.repr;
     builtin::array_set<i32>(array.new_fixed<i32>(1, 2), 0, 7);
-    return $inline_core_prelude_types_wado_Option__i32___unwrap_8: block -> ref "core:prelude/types.wado//Box<i32>" {
+    return $inline_core_prelude_types_wado_Option__i32___unwrap_7: block -> ref "core:prelude/types.wado//Box<i32>" {
         block {
             block {
             };
-            break $inline_core_prelude_types_wado_Option__i32___unwrap_8: struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($sroa_it_repr_32, 0) };
+            break $inline_core_prelude_types_wado_Option__i32___unwrap_7: struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($sroa_it_repr_32, 0) };
         };
         cold_path;
         "core:prelude/types.wado/core:prelude/types.wado/Option<&i32>::unwrap$cold0$dae[self]"();
@@ -219,12 +219,12 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/iterator_handed_away"() {
     held = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: a.repr, index: 0, end: 2 };
     builtin::array_set<i32>(array.new_fixed<i32>(1, 2), 0, 7);
     $match_mut_lift_5 = ref.as_non_null(held);
-    return $inline_core_prelude_types_wado_Option__i32___unwrap_8: block -> ref "core:prelude/types.wado//Box<i32>" {
-        $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_7: block {
-            break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_7 local.tee $load_1($match_mut_lift_5.index) >= $match_mut_lift_5.end;
+    return $inline_core_prelude_types_wado_Option__i32___unwrap_7: block -> ref "core:prelude/types.wado//Box<i32>" {
+        $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_8: block {
+            break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_8 local.tee $load_1($match_mut_lift_5.index) >= $match_mut_lift_5.end;
             ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($match_mut_lift_5.repr, $load_1) };
             $match_mut_lift_5.index = $load_1 + 1;
-            break $inline_core_prelude_types_wado_Option__i32___unwrap_8: ref_val;
+            break $inline_core_prelude_types_wado_Option__i32___unwrap_7: ref_val;
         };
         cold_path;
         "core:prelude/types.wado/core:prelude/types.wado/Option<&i32>::unwrap$cold0$dae[self]"();
@@ -604,7 +604,7 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let ptr_15: i32;
+    let ptr_13: i32;
     let i: i32;
     let ptr_24: i32;
     let count_25: i32;
@@ -614,22 +614,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b46: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b46: block {
         l47: loop {
             break_if b46 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l47;
         };
-    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l49: loop {
-            ptr_24 = ptr_15 + i;
+            ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_9: $mv$data$start;
+                    break $inline_cm_await_blocked_7: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -639,7 +639,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_9: status;
+                break $inline_cm_await_blocked_7: status;
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
@@ -651,7 +651,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             });
             i = i + count_25;
             if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_24;
             }
             continue l49;

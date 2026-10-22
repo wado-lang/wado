@@ -316,15 +316,15 @@ fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f,fill
     let origin: ref "retain_indirect_bounded_destination.wado//Bag";
     let kept: ref "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>";
     let $local_5: ref "core:prelude/string.wado//String";
+    let elements_12: ref "Array<core:prelude/string.wado/String>";
     let new_used: i32;
-    let start_24: i32;
+    let start_26: i32;
     let x: i64;
-    let elements_39: ref "Array<core:prelude/string.wado/String>";
     let elements_46: ref "Array<retain_indirect_bounded_destination.wado/Bag>";
-    origin = struct.new "retain_indirect_bounded_destination.wado//Bag" { tags: start_24 = builtin::array_len(local.tee elements_39(array.new_fixed<ref "core:prelude/string.wado//String">($local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; if @unlikely(local.tee new_used(0 + 1) > builtin::array_len($local_5.repr)) {
+    origin = struct.new "retain_indirect_bounded_destination.wado//Bag" { tags: start_26 = builtin::array_len(local.tee elements_12(array.new_fixed<ref "core:prelude/string.wado//String">($local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; if @unlikely(local.tee new_used(0 + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used);
-    }; start_24 = $local_5.used; $local_5.used = new_used; builtin::array_copy<u8>($local_5.repr, start_24, global:retain_indirect_bounded_destination.wado::$const_obj_19, 0, 1); new_used = local.tee start_24(black_box(1)) < 0; start_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_24); select i64(x < 0_i64, 0_i64 - x, x))); new_used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, new_used, start_24); "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, new_used, x, start_24); $local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_39, used: start_24 } };
+    }; start_26 = $local_5.used; $local_5.used = new_used; builtin::array_copy<u8>($local_5.repr, start_26, global:retain_indirect_bounded_destination.wado::$const_obj_19, 0, 1); new_used = local.tee start_26(black_box(1)) < 0; start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_26); select i64(x < 0_i64, 0_i64 - x, x))); new_used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, new_used, start_26); "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, new_used, x, start_26); $local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_12, used: start_26 } };
     kept = struct.new "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>" { repr: local.tee elements_46(array.new_fixed<ref "retain_indirect_bounded_destination.wado//Bag">()), used: 0 };
     if @unlikely(0 >= builtin::array_len(kept.repr)) {
         cold_path;
@@ -1500,7 +1500,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
     let bits_per_digit_5: i32;
-    let self_12: i32;
+    let self_11: i32;
     let q: i32;
     bits_per_digit_5 = (if base == 2 -> i32 {
         1;
@@ -1512,10 +1512,10 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
         if self == 0_i64 {
             break $inline_count_digits_u64_base_0: 1;
         }
-        break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_12 ^ bits_per_digit_5) >> 31), q);
+        break $inline_count_digits_u64_base_0: select i32((self_11 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_11(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_11 ^ bits_per_digit_5) >> 31), q);
     };
-    self_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, q);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, self_12, self, q, bits_per_digit_5, base, upper);
+    self_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, q);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, self_11, self, q, bits_per_digit_5, base, upper);
 }
 
 fn "closure/retain_indirect_bounded_destination.wado/$closure_wrapper_0"($env, $p0, $p1) {

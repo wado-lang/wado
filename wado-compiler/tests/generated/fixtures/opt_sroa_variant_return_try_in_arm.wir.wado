@@ -532,27 +532,27 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let p1_lo: i64;
     let p1_hi: i64;
     let p0_hi: i64;
-    let self_51: ref "core:prelude//List<u64>";
+    let self_50: ref "core:prelude//List<u64>";
     q = p / 27;
     if local.tee p(p % 27) < 0 {
         q = q - 1;
         p = p + 27;
     }
     q = (q - -13) * 3;
-    self_51 = global:core:prelude/fpfmt.wado::POW10_FINE;
+    self_50 = global:core:prelude/fpfmt.wado::POW10_FINE;
     if @unlikely(p >=u 27) {
         cold_path;
         "core:prelude/fpfmt.wado/pow10_fine$cold0$dae[$v1]"(p);
         unreachable;
     }
-    f = builtin::array_get_value<u64>(self_51.repr, p);
-    multivalue_bind [p2_lo, p2_hi] = i64.mul_wide_u(self_51 = global:core:prelude/fpfmt.wado::POW10_COARSE; if @unlikely(((0 <= q) & (q < 76)) == 0) {
+    f = builtin::array_get_value<u64>(self_50.repr, p);
+    multivalue_bind [p2_lo, p2_hi] = i64.mul_wide_u(self_50 = global:core:prelude/fpfmt.wado::POW10_COARSE; if @unlikely(((0 <= q) & (q < 76)) == 0) {
         cold_path;
         "core:prelude/fpfmt.wado/mul_pow10$cold2$dae[p,$v1]"(q);
         unreachable;
-    }; builtin::array_get_value<u64>(self_51.repr, q), f);
-    multivalue_bind [p1_lo, p1_hi] = i64.mul_wide_u(self_51 = global:core:prelude/fpfmt.wado::POW10_COARSE; p = q + 1; builtin::array_get_value<u64>(self_51.repr, p), f);
-    multivalue_bind [f, p0_hi] = i64.mul_wide_u(self_51 = global:core:prelude/fpfmt.wado::POW10_COARSE; q = q + 2; builtin::array_get_value<u64>(self_51.repr, q), f);
+    }; builtin::array_get_value<u64>(self_50.repr, q), f);
+    multivalue_bind [p1_lo, p1_hi] = i64.mul_wide_u(self_50 = global:core:prelude/fpfmt.wado::POW10_COARSE; p = q + 1; builtin::array_get_value<u64>(self_50.repr, p), f);
+    multivalue_bind [f, p0_hi] = i64.mul_wide_u(self_50 = global:core:prelude/fpfmt.wado::POW10_COARSE; q = q + 2; builtin::array_get_value<u64>(self_50.repr, q), f);
     p1_lo = builtin::i64_extend_i32_u(local.tee p0_hi(p1_lo + p0_hi) <u p1_lo);
     p1_lo = local.tee p1_hi(p2_lo + p1_hi) + p1_lo;
     p1_hi = p2_hi + (builtin::i64_extend_i32_u(p1_hi <u p2_lo) + builtin::i64_extend_i32_u(p1_lo <u p1_hi));
@@ -779,12 +779,12 @@ fn "core:prelude/fpfmt.wado/parse_text_bits$sroa[return]"($mv$s$repr, $mv$s$star
                     } else {
                         0;
                     }) == 0;
-                    digit_23 = $inline_push_exponent_digit_59: block -> i64 {
+                    digit_23 = $inline_push_exponent_digit_57: block -> i64 {
                         c2_9 = (builtin::array_get_value<u8>($mv$s$repr, $mv$s$start + i) - 48) & 255;
                         if digit_23 >= 1000000000000000_i64 {
-                            break $inline_push_exponent_digit_59: digit_23;
+                            break $inline_push_exponent_digit_57: digit_23;
                         }
-                        break $inline_push_exponent_digit_59: (digit_23 * 10_i64) + builtin::i64_extend_i32_s(c2_9);
+                        break $inline_push_exponent_digit_57: (digit_23 * 10_i64) + builtin::i64_extend_i32_s(c2_9);
                     };
                     i = i + 1;
                     continue l65;

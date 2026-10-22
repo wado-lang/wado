@@ -405,7 +405,7 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let ptr_15: i32;
+    let ptr_13: i32;
     let i: i32;
     let ptr_24: i32;
     let count_25: i32;
@@ -415,22 +415,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b45: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b45: block {
         l46: loop {
             break_if b45 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l46;
         };
-    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l48: loop {
-            ptr_24 = ptr_15 + i;
+            ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_9: block -> i32 {
+            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_9: $mv$data$start;
+                    break $inline_cm_await_blocked_7: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -440,7 +440,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_9: status;
+                break $inline_cm_await_blocked_7: status;
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
@@ -452,7 +452,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             });
             i = i + count_25;
             if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_24;
             }
             continue l48;
@@ -492,7 +492,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     let $leaf_15: i32;
     let $leaf_16: ref Array<u8>;
     let $leaf_17: i32;
-    let self_26: ref "core:prelude/string.wado//String";
+    let self_19: ref "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
@@ -508,10 +508,10 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b54: block {
         l55: loop {
             break_if b54 i_3 >= $licm_used_58;
-            self_26 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_59, i_3).0;
+            self_19 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_59, i_3).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                a = self_26.repr;
-                a_end = self_26.used;
+                a = self_19.repr;
+                a_end = self_19.used;
                 b = key.repr;
                 if a_end != key.used {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
@@ -562,7 +562,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$sroa[self.entries]"(self, $mv$key$repr, $mv$key$used) {
     let i_2: i32;
-    let self_23: ref "core:prelude/string.wado//String";
+    let self_16: ref "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
     let i_32: i32;
@@ -574,10 +574,10 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b63: block {
         l64: loop {
             break_if b63 i_2 >= $licm_used_43;
-            self_23 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_44, i_2).0;
+            self_16 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_44, i_2).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                a = self_23.repr;
-                if local.tee a_end(self_23.used) != $mv$key$used {
+                a = self_16.repr;
+                if local.tee a_end(self_16.used) != $mv$key$used {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_32 = 0;
@@ -604,7 +604,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has$sroa[self.entries]"(self, $mv$key$repr, $mv$key$used) {
     let i_2: i32;
-    let self_17: ref "core:prelude/string.wado//String";
+    let self_10: ref "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
     let i_26: i32;
@@ -616,10 +616,10 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b70: block {
         l71: loop {
             break_if b70 i_2 >= $licm_used_30;
-            self_17 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_31, i_2).0;
+            self_10 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_31, i_2).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-                a = self_17.repr;
-                if local.tee a_end(self_17.used) != $mv$key$used {
+                a = self_10.repr;
+                if local.tee a_end(self_10.used) != $mv$key$used {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_26 = 0;

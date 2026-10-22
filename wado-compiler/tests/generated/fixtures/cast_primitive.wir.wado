@@ -389,9 +389,9 @@ fn "cast_primitive.wado/$test_18_cast_to_a_newtype_of_a_wide_integer"() {
     let b_66: ref Array<u8>;
     let i_70: i32;
     let f_93: ref "core:prelude/format.wado//Formatter";
-    let lo_190: i64;
-    let hi_191: i64;
-    let hi_326: i64;
+    let lo_191: i64;
+    let hi_192: i64;
+    let hi_327: i64;
     let value_465: f64;
     let high_466: u64;
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -505,7 +505,7 @@ condition: `${170141183460469231731687303715884105727 as Money}` == \"1701411834
         unreachable;
     }
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"(multivalue_bind [lo_190, hi_191] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64); struct.new "core:prelude/int128.wado//u128" { low: lo_190, high: hi_191 }, $local_11, 1);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"(multivalue_bind [lo_191, hi_192] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64); struct.new "core:prelude/int128.wado//u128" { low: lo_191, high: hi_192 }, $local_11, 1);
     if @unlikely(local.tee i_70($inline_core_prelude_array_wado_seq_eq_u8__71: block -> bool {
         b_66 = $local_11.repr;
         i_70 = $local_11.used;
@@ -560,31 +560,31 @@ condition: `${-170141183460469231731687303715884105728 as Money}` == \"-17014118
         unreachable;
     }
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    hi_191 = 0_i64;
-    lo_190 = 0_i64;
+    hi_192 = 0_i64;
+    lo_191 = 0_i64;
     $inline_core_prelude_int128_wado_u128__from_f64_0: block {
         if (local.tee value_465(builtin::f64_abs(2.5)) <= 0) | (value_465 != value_465) {
-            hi_191 = 0_i64;
-            lo_190 = 0_i64;
+            hi_192 = 0_i64;
+            lo_191 = 0_i64;
             break $inline_core_prelude_int128_wado_u128__from_f64_0;
         }
         if (value_465 < 340282366920938500000000000000000000000) == 0 {
-            hi_191 = -1_i64;
-            lo_190 = -1_i64;
+            hi_192 = -1_i64;
+            lo_191 = -1_i64;
             break $inline_core_prelude_int128_wado_u128__from_f64_0;
         }
         high_466 = builtin::i64_trunc_sat_f64_u(value_465 / 18446744073709552000);
-        hi_191 = builtin::i64_trunc_sat_f64_u(value_465 - (builtin::f64_convert_i64_u(high_466) * 18446744073709552000));
-        lo_190 = high_466;
+        hi_192 = builtin::i64_trunc_sat_f64_u(value_465 - (builtin::f64_convert_i64_u(high_466) * 18446744073709552000));
+        lo_191 = high_466;
         break $inline_core_prelude_int128_wado_u128__from_f64_0;
     };
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"($inline_core_prelude_int128_wado_i128__abs_u128_118: block -> ref "core:prelude/int128.wado//u128" {
-        if lo_190 < 0_i64 {
-            multivalue_bind [high_466, hi_326] = i64.sub128(0_i64, 0_i64, hi_191, lo_190);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_118: struct.new "core:prelude/int128.wado//u128" { low: high_466, high: hi_326 };
+        if lo_191 < 0_i64 {
+            multivalue_bind [high_466, hi_327] = i64.sub128(0_i64, 0_i64, hi_192, lo_191);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_118: struct.new "core:prelude/int128.wado//u128" { low: high_466, high: hi_327 };
         }
-        break $inline_core_prelude_int128_wado_i128__abs_u128_118: struct.new "core:prelude/int128.wado//u128" { low: hi_191, high: lo_190 };
-    }, $local_13, lo_190 < 0_i64);
+        break $inline_core_prelude_int128_wado_i128__abs_u128_118: struct.new "core:prelude/int128.wado//u128" { low: hi_192, high: lo_191 };
+    }, $local_13, lo_191 < 0_i64);
     if @unlikely(local.tee i_70($inline_core_prelude_array_wado_seq_eq_u8__127: block -> bool {
         b_66 = $local_13.repr;
         i_70 = $local_13.used;
@@ -2501,7 +2501,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]"(self, f) {
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, upper, $mv$alt_prefix$repr, $mv$alt_prefix$used) {
     let bits_per_digit_6: i32;
-    let self_13: i32;
+    let self_12: i32;
     let q: i32;
     bits_per_digit_6 = (if base == 2 -> i32 {
         1;
@@ -2513,7 +2513,7 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, u
         if self == 0_i64 {
             break $inline_count_digits_u64_base_0: 1;
         }
-        break $inline_count_digits_u64_base_0: select i32((self_13 - (q * bits_per_digit_6)) != 0, (local.tee q(local.tee self_13(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_6) + 1) + ((self_13 ^ bits_per_digit_6) >> 31), q);
+        break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_6)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_6) + 1) + ((self_12 ^ bits_per_digit_6) >> 31), q);
     };
     $mv$alt_prefix$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv$alt_prefix$repr, $mv$alt_prefix$used, q);
     "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, $mv$alt_prefix$used, self, q, bits_per_digit_6, base, upper);
@@ -2675,7 +2675,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
     let bits_per_digit_5: i32;
-    let self_12: i32;
+    let self_11: i32;
     let q: i32;
     bits_per_digit_5 = (if base == 2 -> i32 {
         1;
@@ -2687,10 +2687,10 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
         if self == 0_i64 {
             break $inline_count_digits_u64_base_0: 1;
         }
-        break $inline_count_digits_u64_base_0: select i32((self_12 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_12(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_12 ^ bits_per_digit_5) >> 31), q);
+        break $inline_count_digits_u64_base_0: select i32((self_11 - (q * bits_per_digit_5)) != 0, (local.tee q(local.tee self_11(64 - builtin::i32_wrap_i64(builtin::i64_clz(self))) / bits_per_digit_5) + 1) + ((self_11 ^ bits_per_digit_5) >> 31), q);
     };
-    self_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, q);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, self_12, self, q, bits_per_digit_5, base, upper);
+    self_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, q);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.repr, self_11, self, q, bits_per_digit_5, base, upper);
 }
 
 export fn "cast_primitive.wado/$cm_export__$test_0_u64_narrows_to_every_smaller_integer" as "$test_0_u64_narrows_to_every_smaller_integer"
