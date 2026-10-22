@@ -86,17 +86,11 @@ impl RunCache {
         })
     }
 
-    /// Record that `path` held `bytes`.
-    pub fn observe(&self, path: &Path, bytes: &[u8]) {
-        let hash = self.inputs.observe(path, None, bytes);
-        self.record(path, None, Some(hash));
-    }
-
-    /// Record that `path` began with `bytes`, its first `prefix`, and that
-    /// nothing past them was read.
-    pub fn observe_prefix(&self, path: &Path, prefix: u64, bytes: &[u8]) {
-        let hash = self.inputs.observe(path, Some(prefix), bytes);
-        self.record(path, Some(prefix), Some(hash));
+    /// Record that `path` held `bytes`, or began with them where they are its
+    /// first `prefix` and nothing past them was read.
+    pub fn observe(&self, path: &Path, prefix: Option<u64>, bytes: &[u8]) {
+        let hash = self.inputs.observe(path, prefix, bytes);
+        self.record(path, prefix, Some(hash));
     }
 
     /// Record that `path` was looked up and was not there: the outcome changes

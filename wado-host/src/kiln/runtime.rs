@@ -33,7 +33,7 @@ use wado_compiler::name::to_cm_name;
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
     GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, GeneratorSourceSpan, ProbeInput, ProbeRequest, SourceReader,
+    GeneratorRunnerError, GeneratorSourceSpan, ProbeRequest, SourceReader,
 };
 
 use crate::engine::fuel_engine;
@@ -175,17 +175,18 @@ async fn instantiate(
     Ok((store, instance))
 }
 
-/// A file's content as a host-produced `stream<u8>`, which the generator reads
-/// at its own pace.
-fn content_stream(
+/// The file at `path` as a host-produced `stream<u8>`, which the generator
+/// reads at its own pace.
+fn host_stream(
     store: &mut Store<KilnHostState>,
-    f: &GeneratorInputFile,
+    path: &str,
+    producer: impl StreamProducer<KilnHostState, Item = u8>,
 ) -> Result<Val, GeneratorRunnerError> {
-    StreamReader::new(&mut *store, f.content.clone())
+    StreamReader::new(&mut *store, producer)
         .and_then(|s| s.try_into_stream_any(&mut *store))
         .map(Val::Stream)
         .map_err(|e| {
-            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", f.path))
+            GeneratorRunnerError::Host(format!("input `{path}`: host stream create: {e:#}"))
         })
 }
 
@@ -230,22 +231,6 @@ impl<D> StreamProducer<D> for RangeStream {
     }
 }
 
-fn probe_stream(
-    store: &mut Store<KilnHostState>,
-    file: &ProbeInput,
-) -> Result<Val, GeneratorRunnerError> {
-    let producer = RangeStream {
-        source: Arc::clone(&file.content),
-        at: 0,
-    };
-    StreamReader::new(&mut *store, producer)
-        .and_then(|s| s.try_into_stream_any(&mut *store))
-        .map(Val::Stream)
-        .map_err(|e| {
-            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", file.path))
-        })
-}
-
 /// The `type` the use site gave a file, as the `option<string>` a generator
 /// reads it as.
 fn type_val(use_type: Option<&String>) -> Val {
@@ -268,7 +253,7 @@ fn input_file_val(
             field.name.to_string(),
             match field.name {
                 "path" => Val::String(f.path.clone()),
-                "content" => content_stream(store, f)?,
+                "content" => host_stream(store, &f.path, f.content.clone())?,
                 "type" => type_val(f.use_type.as_ref()),
                 other => {
                     return Err(GeneratorRunnerError::Host(format!(
@@ -639,7 +624,14 @@ pub async fn run_probe(
             for (name, ty) in &params {
                 args.push(match name.as_str() {
                     "path" => Val::String(file.path.clone()),
-                    "content" => probe_stream(&mut store, file)?,
+                    "content" => host_stream(
+                        &mut store,
+                        &file.path,
+                        RangeStream {
+                            source: Arc::clone(&file.content),
+                            at: 0,
+                        },
+                    )?,
                     "type" => type_val(file.use_type.as_ref()),
                     "options" => options_to_val(&request.options, ty)
                         .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,

@@ -362,7 +362,7 @@ pub async fn try_compile_with_run_cache(
     };
     // The entry file never goes through `load_source`, so the watch would
     // otherwise miss the one file the caller named.
-    base_host.run_cache().observe(path, source.as_bytes());
+    base_host.run_cache().observe(path, None, source.as_bytes());
     if let Some(project) = &manifest_pair {
         for file in resolution_inputs(&project.root) {
             base_host.run_cache().depend_on_file(&file);

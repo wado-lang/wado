@@ -265,18 +265,7 @@ impl FilesystemCompilerHost {
 
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        // Every module and asset a compile reads passes here, which is how the
-        // run learns what tree it is describing.
-        let file = self.inner.base_path().join(path);
-        let loaded = self.inner.load_source(path).await;
-        match &loaded {
-            Ok(bytes) => self.run.observe(&file, bytes),
-            Err(SourceError::NotFound { .. }) => self.run.observe_absent(&file),
-            Err(SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
-                self.run.observe_untracked();
-            }
-        }
-        loaded
+        self.load_source_prefix(path, None).await
     }
 
     /// Nothing read through the reader is recorded: the part of the file a
@@ -290,13 +279,12 @@ impl CompilerHost for FilesystemCompilerHost {
         path: &str,
         extent: Option<u64>,
     ) -> Result<Vec<u8>, SourceError> {
-        let Some(n) = extent else {
-            return self.load_source(path).await;
-        };
+        // Every module and asset a compile reads passes here, which is how the
+        // run learns what tree it is describing.
         let file = self.inner.base_path().join(path);
         let loaded = self.inner.load_source_prefix(path, extent).await;
         match &loaded {
-            Ok(bytes) => self.run.observe_prefix(&file, n, bytes),
+            Ok(bytes) => self.run.observe(&file, extent, bytes),
             Err(SourceError::NotFound { .. }) => self.run.observe_absent(&file),
             Err(SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
                 self.run.observe_untracked();
