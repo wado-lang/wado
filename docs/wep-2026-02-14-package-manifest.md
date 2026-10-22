@@ -259,7 +259,7 @@ The earlier warg protocol is dropped. Its registry (`bytecodealliance/registry`)
 
 Consuming (pulling), unlike publishing, does not go through `wkg`: a published package is a standalone Wasm Component Model artifact (one `application/wasm` layer), and resolving a dependency is a hot path that must not require an external binary. So the CLI pulls with a native OCI client (the `oci-client` crate).
 
-A pull authenticates with the credential `docker login` stored for the registry's host, and pulls anonymously where none is stored. The `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD` variables publish reads are not read here. They name no host, and the host a pull reaches comes from a manifest: opening someone else's package in an editor resolves its dependencies, so an unbound credential would go to whatever registry that package names. An identity token, which needs an exchange `oci-client` does not make, is an error rather than an anonymous pull.
+A pull authenticates with the credential `docker login` stored for the registry's host, and pulls anonymously where none is stored. It does not read `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`, as publish does, because those name no host. The host a pull reaches comes from a manifest, and opening someone else's package in an editor resolves its dependencies. A credential bound to no host would go to whatever registry that package names. An identity token is an error rather than an anonymous pull, since using one takes a token exchange that `oci-client` does not make.
 
 `integrity` is the OCI manifest digest — one layer, one digest, which is also why the package's source rides in a custom section of that same `.wasm` rather than a second layer.
 

@@ -13,7 +13,7 @@
 
 use std::fs::File;
 use std::io::{BufReader, ErrorKind, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use bytes::Bytes;
 use docker_credential::{CredentialRetrievalError, DockerCredential};
@@ -21,6 +21,8 @@ use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
 use wado_host::tls_trust::extra_ca_certs;
+
+use crate::cache::home_dir;
 
 pub use oci_client::Reference as OciReference;
 
@@ -159,7 +161,7 @@ fn registry_auth(config: impl Read, host: &str) -> anyhow::Result<RegistryAuth> 
 fn docker_config() -> Option<PathBuf> {
     let dir = std::env::var_os("DOCKER_CONFIG")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".docker")))?;
+        .or_else(|| home_dir().map(|home| home.join(".docker")))?;
     Some(dir.join("config.json"))
 }
 
