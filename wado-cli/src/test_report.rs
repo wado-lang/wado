@@ -14,23 +14,23 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use wado_compiler::hashmap::IndexMap;
 
 use crate::rss::live_suffix;
+use crate::runtime::Ticker;
 use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
     TodoCompileError,
 };
 use crate::test_cache::Tally;
-use wado_host::sync::{join_in_drop, lock};
+use wado_host::sync::lock;
 
 /// How often the heartbeat reporter re-prints progress while
 /// otherwise quiet. A failure/resolved-TODO notice resets this window
-/// (see `HeartbeatState::notify`) so the next heartbeat doesn't immediately
+/// (see `HeartbeatReporter::announce`) so the next heartbeat doesn't immediately
 /// repeat what was just reported.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -294,13 +294,6 @@ struct HeartbeatState {
     todo_resolved: AtomicU32,
     skip_files: AtomicUsize,
     pending_tests: Mutex<IndexMap<String, usize>>,
-    /// Whether the run is done. Held across the ticker's check and its print,
-    /// and while it is set, so no heartbeat lands inside the final output.
-    stopped: Mutex<bool>,
-    /// Signalled on every immediate failure/resolved-TODO notice so the
-    /// heartbeat loop can restart its wait — avoids printing a near-
-    /// duplicate heartbeat right after an event that already reported.
-    wake: Condvar,
 }
 
 impl HeartbeatState {
@@ -356,7 +349,9 @@ fn print_heartbeat(state: &HeartbeatState) {
 /// otherwise, and a final three-axis summary.
 pub(crate) struct HeartbeatReporter {
     state: Arc<HeartbeatState>,
-    ticker: Mutex<Option<JoinHandle<()>>>,
+    /// Dropped when the run is done, so no heartbeat lands inside the final
+    /// output.
+    ticker: Mutex<Option<Ticker>>,
     failures: FailureRecap,
 }
 
@@ -372,30 +367,14 @@ impl HeartbeatReporter {
             todo_resolved: AtomicU32::new(0),
             skip_files: AtomicUsize::new(0),
             pending_tests: Mutex::new(IndexMap::default()),
-            stopped: Mutex::new(false),
-            wake: Condvar::new(),
         });
 
         print_heartbeat(&state);
 
-        let ticker_state = Arc::clone(&state);
-        let ticker = std::thread::Builder::new()
-            .name("test-heartbeat".to_string())
-            .spawn(move || {
-                let mut stopped = lock(&ticker_state.stopped);
-                while !*stopped {
-                    // A wake-up before the interval restarts the wait.
-                    let (guard, wait) = ticker_state
-                        .wake
-                        .wait_timeout(stopped, HEARTBEAT_INTERVAL)
-                        .unwrap_or_else(PoisonError::into_inner);
-                    stopped = guard;
-                    if wait.timed_out() && !*stopped {
-                        print_heartbeat(&ticker_state);
-                    }
-                }
-            })
-            .expect("spawning the heartbeat thread");
+        let ticker = Ticker::start(HEARTBEAT_INTERVAL, {
+            let state = Arc::clone(&state);
+            move || print_heartbeat(&state)
+        });
 
         Self {
             state,
@@ -404,19 +383,12 @@ impl HeartbeatReporter {
         }
     }
 
-    /// Print an immediate one-line notice and wake the heartbeat loop so
-    /// it doesn't immediately repeat the same information.
+    /// Print an immediate one-line notice and restart the heartbeat's
+    /// interval so it doesn't immediately repeat the same information.
     fn announce(&self, line: &str) {
         println!("{line}");
-        self.state.wake.notify_one();
-    }
-
-    /// End the ticker, so no heartbeat follows. Its panic continues here.
-    fn stop_ticker(&self) {
-        *lock(&self.state.stopped) = true;
-        self.state.wake.notify_one();
-        if let Some(ticker) = lock(&self.ticker).take() {
-            join_in_drop(ticker);
+        if let Some(ticker) = lock(&self.ticker).as_ref() {
+            ticker.restart();
         }
     }
 
@@ -430,13 +402,6 @@ impl HeartbeatReporter {
                 self.state.mark_file_done();
             }
         }
-    }
-}
-
-impl Drop for HeartbeatReporter {
-    /// A run that ends before `on_run_done` still ends its ticker.
-    fn drop(&mut self) {
-        self.stop_ticker();
     }
 }
 
@@ -550,7 +515,7 @@ impl TestReporter for HeartbeatReporter {
     }
 
     fn on_run_done(&self, grand: &PackageTotals, _multi_pkg: bool, wall: Duration) {
-        self.stop_ticker();
+        drop(lock(&self.ticker).take());
         println!();
         test::print_three_axis(grand, Some(&test::format_duration(wall)));
     }

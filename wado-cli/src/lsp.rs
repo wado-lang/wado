@@ -2,7 +2,6 @@
 
 use std::convert::Infallible;
 use std::fmt::Write as _;
-use std::future::pending;
 use std::pin::pin;
 use std::sync::Mutex;
 
@@ -15,7 +14,7 @@ use wado_manifest::RegistryComponentNeed;
 
 use crate::args::{self, CliExit};
 use crate::dep_component::pull_component;
-use wado_host::sync::{joined, lock};
+use wado_host::sync::{joined, lock, next_joined};
 
 #[derive(Debug)]
 pub struct LspOptions {}
@@ -78,12 +77,7 @@ async fn prefetch(mut needs: mpsc::UnboundedReceiver<RegistryComponentNeed>) -> 
     loop {
         let need = {
             let next = pin!(needs.recv());
-            let ended = pin!(async {
-                match pulls.join_next().await {
-                    Some(pull) => joined(pull),
-                    None => pending().await,
-                }
-            });
+            let ended = pin!(next_joined(&mut pulls));
             match select(next, ended).await {
                 Either::Left((need, _)) => need.expect("the prefetcher holds the sender for good"),
                 Either::Right(((), _)) => continue,
@@ -106,7 +100,8 @@ pub async fn run(_opts: LspOptions) -> Result<(), CliExit> {
     install_prefetcher(needs_tx);
     // The server blocks its thread on stdin, so it gets one of its own and
     // this task stays free to watch the pulls.
-    let server = tokio::task::spawn_blocking(|| Handle::current().block_on(wado_lsp::server::run_stdio()));
+    let server =
+        tokio::task::spawn_blocking(|| Handle::current().block_on(wado_lsp::server::run_stdio()));
     let code = match select(server, pin!(prefetch(needs))).await {
         Either::Left((code, _)) => joined(code),
         Either::Right((never, _)) => match never {},

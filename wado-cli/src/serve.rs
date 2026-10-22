@@ -38,7 +38,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
-use wado_host::sync::{joined, lock};
+use wado_host::sync::{joined, lock, next_joined};
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -1106,12 +1106,7 @@ async fn run_http_server(
         let event = {
             let accept = pin!(listener.accept());
             // A connection is joined as it ends, so its panic ends the server.
-            let ended = pin!(async {
-                match connections.join_next().await {
-                    Some(connection) => joined(connection),
-                    None => std::future::pending().await,
-                }
-            });
+            let ended = pin!(next_joined(&mut connections));
             match select(select(accept, ended), shutdown.as_mut()).await {
                 Either::Left((Either::Left((accepted, _)), _)) => ServerEvent::Accepted(accepted),
                 Either::Left((Either::Right(((), _)), _)) => continue,

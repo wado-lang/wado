@@ -4,7 +4,7 @@ use std::panic::resume_unwind;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
-use tokio::task::JoinError;
+use tokio::task::{JoinError, JoinSet};
 
 /// Lock `mutex`, recovering the guard if a previous holder panicked. Every
 /// production mutex in the CLI and this crate goes through here: propagating poison would
@@ -19,6 +19,15 @@ pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// whose result is joined here.
 pub fn joined<T>(task: Result<T, JoinError>) -> T {
     task.unwrap_or_else(|e| resume_unwind(e.into_panic()))
+}
+
+/// What the next of `tasks` to end returned, as [`joined`] reads it. An empty
+/// set never answers, so a `select` over this waits on its other side.
+pub async fn next_joined<T: 'static>(tasks: &mut JoinSet<T>) -> T {
+    match tasks.join_next().await {
+        Some(task) => joined(task),
+        None => std::future::pending().await,
+    }
 }
 
 /// Join `thread` from a `Drop`. Its panic continues here, unless the drop is
