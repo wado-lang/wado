@@ -38,7 +38,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
-use wado_host::sync::lock;
+use wado_host::sync::{joined, lock};
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -1147,8 +1147,8 @@ async fn run_http_server(
                     }
                 });
 
-                while let Some(res) = connections.try_join_next() {
-                    log_connection_join_error(res);
+                while let Some(connection) = connections.try_join_next() {
+                    joined(connection);
                 }
             }
         }
@@ -1158,8 +1158,8 @@ async fn run_http_server(
     // tasks alive to receive their responses.
     let drain_deadline = timeout + Duration::from_secs(5);
     let drain = async {
-        while let Some(res) = connections.join_next().await {
-            log_connection_join_error(res);
+        while let Some(connection) = connections.join_next().await {
+            joined(connection);
         }
     };
     if tokio::time::timeout(drain_deadline, drain).await.is_err() {
@@ -1175,7 +1175,9 @@ async fn run_http_server(
     // loop. Wait for them to wind down.
     drop(dispatch);
     for engine_task in engine_tasks {
-        let _ = tokio::time::timeout(drain_deadline, engine_task).await;
+        if let Ok(engine_task) = tokio::time::timeout(drain_deadline, engine_task).await {
+            joined(engine_task);
+        }
     }
     drop(epoch_ticker);
 
@@ -1200,16 +1202,6 @@ async fn run_http_server(
         anyhow::bail!("a worker failed to instantiate the component");
     }
     Ok(())
-}
-
-/// Log connection task panics; ignore cancellation (which is the normal
-/// outcome when shutdown aborts in-flight tasks at the drain deadline).
-fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
-    if let Err(e) = res
-        && !e.is_cancelled()
-    {
-        eprintln!("connection task panicked: {e}");
-    }
 }
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
