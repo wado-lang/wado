@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792708407615,
+  "lastUpdate": 1792713078875,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69577,6 +69577,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c546920edc077ef4e1a4594b7e67a48cf6289c88"
         },
         "date": 1792708407225,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2f009afbfc342858855bc24ce3deadf13f08b23",
+          "message": "Merge pull request #2423 from wado-lang/ccr-bbf404f4-8lxgul\n\nfix: a panic ends the run, and T::method checks its arguments",
+          "timestamp": "2026-10-23T08:36:55+09:00",
+          "tree_id": "d37be437b5f60bd548805d8068d20dc0a7e3f6a5",
+          "url": "https://github.com/wado-lang/wado/commit/a2f009afbfc342858855bc24ce3deadf13f08b23"
+        },
+        "date": 1792713078317,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
