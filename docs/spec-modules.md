@@ -458,9 +458,10 @@ or side-car `.wit` is involved.
   and a type alias a newtype. Each is named through its interface
   (`Geo::Point`), and also by its own name at module level, as if the module
   held `pub use { Geo::{Point} };`.
-- Short names, module-level type names and plain-named exports share the
-  module's one namespace. A name two of them share is an error to import that
-  names what it could mean, and only a path through a full name reaches either.
+- Short names, module-level type names, plain-named exports and the default
+  interface's functions (below) share the module's one namespace. A name two
+  of them share is an error to import that names what it could mean, and only a
+  path through a full name reaches either.
   A `wasi:*` module is Wado source, so its module-level names are the ones its
   own `pub use` list gives.
 - A non-WASI interface the component imports is an item of its module too,
@@ -472,9 +473,8 @@ or side-car `.wit` is involved.
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
   Each of its functions is also a free function of the module, imported by bare
   name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. A name two exported default interfaces share is left out,
-  and a world-level function keeps its name over an interface function of the
-  same name. Any other interface, an imported one included, is reached only
+  or a component. A world-level function keeps its name over an interface
+  function of the same name. Any other interface, an imported one included, is reached only
   through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
