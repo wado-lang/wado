@@ -130,8 +130,13 @@ A component built from `world root` in package `a:x` decodes, through
 `wit_component::decode`, to a world `root` in a package `root:component` the
 decoder names. The name `a:x/root` is gone. What it admits is a world no
 `.wasm` import can name, and a component whose plain-named exports cannot be
-told apart by the world that declared them. The name is lost before decoding:
-`wasm-tools component new` writes no world name into the component.
+told apart by the world that declared them.
+
+A component's type has no place for a world name. The only carrier is the
+`component-type` custom section, so whether the name survives is up to the
+producer. `wasm-tools component new` drops that section. Wado writes one, but
+the world in it has lost its package (#2426). The loader does not read the
+section either.
 
 ## References
 
