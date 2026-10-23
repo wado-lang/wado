@@ -574,16 +574,13 @@ impl TirMutVisitor for PackExpansionLocalSplitter<'_> {
         if matches!(expr.kind, TirExprKind::Closure { .. }) {
             return;
         }
-        if let TirExprKind::TupleLiteral { elements } = &mut expr.kind {
-            let lone = elements.len() == 1;
-            self.split(elements);
-            // A lone element collides with nothing, so `split` only retyped its
-            // bindings, and what nests inside it is still owed its own split.
-            if !lone {
-                return;
-            }
-        }
+        // Inner expansions first: an element's own copies of a nested one are
+        // told apart there, and the fresh slots that leaves are then unique to
+        // the element this level splits.
         self.walk_expr(expr);
+        if let TirExprKind::TupleLiteral { elements } = &mut expr.kind {
+            self.split(elements);
+        }
     }
 }
 
