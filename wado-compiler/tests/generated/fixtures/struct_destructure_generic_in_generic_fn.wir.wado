@@ -46,7 +46,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
@@ -65,11 +65,11 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:struct_destructure_generic_in_generic_fn.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(32);
+global global:struct_destructure_generic_in_generic_fn.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "struct_destructure_generic_in_generic_fn.wado/run"() with Stdout {
     let $load_2: i32;
@@ -98,7 +98,7 @@ fn "struct_destructure_generic_in_generic_fn.wado/run"() with Stdout {
     }
     new_used_217 = a_14.used;
     a_14.used = start_218;
-    builtin::array_copy<u8>(a_14.repr, new_used_217, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_6, 0, 1);
+    builtin::array_copy<u8>(a_14.repr, new_used_217, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_0, 0, 1);
     if @unlikely(local.tee new_used_217(local.tee $sroa_$f_buf_131(a_14).used + 1) > builtin::array_len($sroa_$f_buf_131.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_131, new_used_217);
@@ -112,7 +112,7 @@ fn "struct_destructure_generic_in_generic_fn.wado/run"() with Stdout {
     }
     new_used_217 = a_14.used;
     a_14.used = start_218;
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(a_14.repr), new_used_217, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_6, 0, 1);
+    builtin::array_copy<u8>(local.tee $array_clone_src_1(a_14.repr), new_used_217, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_0, 0, 1);
     if @unlikely(local.tee new_used_217(a_14.used + (1 + $load_2)) > builtin::array_len($array_clone_src_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(a_14, new_used_217);
@@ -121,7 +121,7 @@ fn "struct_destructure_generic_in_generic_fn.wado/run"() with Stdout {
     a_14.used = new_used_217;
     builtin::array_copy<u8>(local.tee $array_clone_src_1(a_14.repr), start_218, $array_clone_dst_2, 0, $load_2);
     $load_2 = start_218 + $load_2;
-    builtin::array_copy<u8>($array_clone_src_1, $load_2, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_6, 0, 1);
+    builtin::array_copy<u8>($array_clone_src_1, $load_2, global:struct_destructure_generic_in_generic_fn.wado::$const_obj_0, 0, 1);
     if @unlikely(local.tee $load_2(local.tee $sroa_$f_buf_131(a_14).used + 1) > builtin::array_len($sroa_$f_buf_131.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_131, $load_2);
@@ -135,7 +135,7 @@ fn "struct_destructure_generic_in_generic_fn.wado/run"() with Stdout {
     start_218 = $load_2;
     $load_2 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($load_2 = start_218; start_218 = 0; $load_2, a_14.repr, a_14.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2 = new_used_217; new_used_217 = 0; $load_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_2 = new_used_217; new_used_217 = 0; $load_2);
 }
 
 fn "struct_destructure_generic_in_generic_fn.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -228,8 +228,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

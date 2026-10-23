@@ -1,6 +1,8 @@
 use std::fs;
+use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 
@@ -91,6 +93,22 @@ fn install_alt_stack() {
     }
 }
 
+/// Names the fixture a worker panicked on, which the panic's own message does
+/// not, and stops the reader feeding the rest of the run.
+struct Compiling<'a> {
+    path: &'a str,
+    failed: &'a AtomicBool,
+}
+
+impl Drop for Compiling<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.failed.store(true, Ordering::Relaxed);
+            eprintln!("error: a panic ended the run while compiling {}", self.path);
+        }
+    }
+}
+
 struct ReadItem {
     name: String,
     source: String,
@@ -104,10 +122,6 @@ struct WriteBatch {
     name: String,
     outputs: Vec<EmitOutput>,
     compile_time: Duration,
-    /// The dump panicked (internal compiler crash) rather than returning a clean
-    /// compile error. A panic is always fatal; a compile error is skippable under
-    /// `--skip-empty` (format-only fixtures that intentionally don't compile).
-    panicked: bool,
 }
 
 struct EmitOutput {
@@ -203,32 +217,36 @@ pub fn run_pipeline(
 
     // Output templates shared with every worker, parsed once and reused for
     // both per-fixture path building and the end-of-run stale prune.
-    let emit_templates: std::sync::Arc<Vec<(Phase, Template)>> = std::sync::Arc::new(
+    let emit_templates: Arc<Vec<(Phase, Template)>> = Arc::new(
         emits
             .iter()
             .map(|e| (e.phase, Template::parse(&e.out_template)))
             .collect(),
     );
-    let distinct_phases = std::sync::Arc::new(distinct_phases);
-    let default_world: std::sync::Arc<Option<String>> =
-        std::sync::Arc::new(default_world.map(str::to_string));
+    let distinct_phases = Arc::new(distinct_phases);
+    let default_world = Arc::new(default_world.map(str::to_string));
 
     // Channels
     let (read_tx, read_rx) = mpsc::sync_channel::<ReadItem>(2 * num_workers);
     let (write_tx, write_rx) = mpsc::sync_channel::<WriteBatch>(num_workers);
 
+    let failed = Arc::new(AtomicBool::new(false));
+
     // Reader thread: sends pre-read items
-    let reader = std::thread::spawn(move || {
-        for item in read_items {
-            if read_tx.send(item).is_err() {
-                break;
+    let reader = std::thread::spawn({
+        let failed = Arc::clone(&failed);
+        move || {
+            for item in read_items {
+                if failed.load(Ordering::Relaxed) || read_tx.send(item).is_err() {
+                    break;
+                }
             }
+            // drop read_tx to signal EOF
         }
-        // drop read_tx to signal EOF
     });
 
     // Shared receiver for work-stealing among dump workers
-    let read_rx = std::sync::Arc::new(std::sync::Mutex::new(read_rx));
+    let read_rx = Arc::new(std::sync::Mutex::new(read_rx));
 
     // Dump worker threads
     let mut workers = Vec::with_capacity(num_workers);
@@ -238,6 +256,7 @@ pub fn run_pipeline(
         let emit_templates = emit_templates.clone();
         let distinct_phases = distinct_phases.clone();
         let default_world = default_world.clone();
+        let failed = Arc::clone(&failed);
 
         workers.push(
             std::thread::Builder::new()
@@ -269,31 +288,18 @@ pub fn run_pipeline(
                             *slot.lock().unwrap() = Some((input_path.clone(), t0));
                         }
 
-                        let render_result =
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                rt.block_on(render_phases(
-                                    &item.source,
-                                    &item.input_path,
-                                    &distinct_phases,
-                                    opt_level,
-                                    default_world.as_deref(),
-                                ))
-                            }));
-                        let panicked = render_result.is_err();
-                        let rendered: IndexMap<Phase, Result<String, String>> = render_result
-                            .unwrap_or_else(|panic_val| {
-                                let msg = match panic_val.downcast_ref::<String>() {
-                                    Some(s) => s.clone(),
-                                    None => match panic_val.downcast_ref::<&str>() {
-                                        Some(s) => (*s).to_string(),
-                                        None => "unknown panic".to_string(),
-                                    },
-                                };
-                                distinct_phases
-                                    .iter()
-                                    .map(|p| (*p, Err(format!("panic in {input_path}: {msg}"))))
-                                    .collect()
-                            });
+                        let compiling = Compiling {
+                            path: &input_path,
+                            failed: &failed,
+                        };
+                        let rendered = rt.block_on(render_phases(
+                            &item.source,
+                            &item.input_path,
+                            &distinct_phases,
+                            opt_level,
+                            default_world.as_deref(),
+                        ));
+                        drop(compiling);
                         let compile_time = t0.elapsed();
 
                         // Clear active file
@@ -306,13 +312,10 @@ pub fn run_pipeline(
                             .enumerate()
                             .map(|(emit_index, (phase, tmpl))| {
                                 let output_path = tmpl.output_path(&item.name);
-                                let content = rendered.get(phase).cloned().unwrap_or_else(|| {
-                                    Err("internal error: phase not rendered".to_string())
-                                });
                                 EmitOutput {
                                     emit_index,
                                     output_path,
-                                    content,
+                                    content: rendered[phase].clone(),
                                 }
                             })
                             .collect();
@@ -322,7 +325,6 @@ pub fn run_pipeline(
                                 name: item.name.clone(),
                                 outputs,
                                 compile_time,
-                                panicked,
                             })
                             .is_err()
                         {
@@ -333,8 +335,10 @@ pub fn run_pipeline(
                 .expect("failed to spawn dump worker"),
         );
     }
-    // Drop the original write_tx so writer sees EOF when all workers finish
+    // Drop the original write_tx so writer sees EOF when all workers finish,
+    // and the original read_rx so the reader stops if they all panicked.
     drop(write_tx);
+    drop(read_rx);
 
     // Collect results, writing each output in place. No file is removed here:
     // every golden file is overwritten where it already lives, so there is no
@@ -386,7 +390,7 @@ pub fn run_pipeline(
                     generated += 1;
                 }
                 Err(e) => {
-                    if skip_empty && !batch.panicked {
+                    if skip_empty {
                         eprintln!("  Skipped {display} ({e})");
                         skipped += 1;
                         continue;
@@ -401,9 +405,8 @@ pub fn run_pipeline(
         }
     }
 
-    reader.join().expect("reader thread panicked");
-    for w in workers {
-        w.join().expect("dump worker panicked");
+    for thread in std::iter::once(reader).chain(workers) {
+        thread.join().unwrap_or_else(|panic| resume_unwind(panic));
     }
 
     // Prune stale golden files: anything matching an emit's pattern whose

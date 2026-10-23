@@ -81,13 +81,6 @@ impl Stream<u8> for Console {
 }
 
 impl StreamWritable<u8> for Console {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
-        if self.capture(ResourceId::of(this), &data) {
-            resume StreamWrite { rest: [], result: CopyResult::Completed };
-        }
-        resume this.write(data);
-    }
-
     fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         if self.capture(ResourceId::of(this), &data.to_list()) {
             resume CopyResult::Completed;

@@ -6,7 +6,7 @@ test "take empties the place" {
     let taken = slot.take();
     assert slot matches { None };
     builtin::drop(taken);
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
 }
 
 test "replace returns what was there" {
@@ -15,9 +15,9 @@ test "replace returns what was there" {
     let mut slot: Option<Stream<u8>> = Some(rx);
     let old = slot.replace(rx2);
     builtin::drop(old);
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
     builtin::drop(slot);
-    assert tx2.write([1]).result == CopyResult::Dropped;
+    assert tx2.write_all([1]) == CopyResult::Dropped;
 }
 
 affine struct Holder {
@@ -29,7 +29,7 @@ test "take from a field" {
     let mut holder = Holder { slot: Some(rx) };
     let taken = holder.slot.take();
     builtin::drop(taken);
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
     assert holder.slot matches { None };
 }
 

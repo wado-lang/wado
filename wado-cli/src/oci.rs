@@ -8,14 +8,23 @@
 //! config — so resolution needs only the manifest digest (integrity) and, when
 //! building, the component bytes.
 //!
-//! Authentication mirrors `wado publish`: the `WKG_OCI_USERNAME` /
-//! `WKG_OCI_PASSWORD` environment variables, else an anonymous pull.
+//! A pull authenticates with what `docker login` stored for the registry's
+//! host, else pulls anonymously.
+
+use std::fs::File;
+use std::io::{BufReader, ErrorKind, Read};
+use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
 
 use bytes::Bytes;
+use docker_credential::{CredentialRetrievalError, DockerCredential};
 use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
+use wado_compiler::hashmap::IndexMap;
+use wado_host::sync::{joined, lock};
 use wado_host::tls_trust::extra_ca_certs;
+use wado_lsp::host::discovery::home_dir;
 
 pub use oci_client::Reference as OciReference;
 
@@ -75,7 +84,8 @@ pub fn world_reference(
 
 /// List the image tags for a package's repository.
 pub async fn list_tags(reference: &Reference) -> anyhow::Result<Vec<String>> {
-    let resp = client().list_tags(reference, &auth(), None, None).await?;
+    let auth = auth(reference).await?;
+    let resp = client().list_tags(reference, &auth, None, None).await?;
     Ok(resp.tags)
 }
 
@@ -83,14 +93,16 @@ pub async fn list_tags(reference: &Reference) -> anyhow::Result<Vec<String>> {
 /// used as the lock file's `integrity`. Fetches only the manifest, not the
 /// component blob.
 pub async fn manifest_digest(reference: &Reference) -> anyhow::Result<String> {
-    let (_manifest, digest) = client().pull_manifest(reference, &auth()).await?;
+    let auth = auth(reference).await?;
+    let (_manifest, digest) = client().pull_manifest(reference, &auth).await?;
     Ok(digest)
 }
 
 /// Pull the component's Wasm bytes (the single `application/wasm` layer).
 pub async fn pull_component(reference: &Reference) -> anyhow::Result<Bytes> {
+    let auth = auth(reference).await?;
     let data = client()
-        .pull(reference, &auth(), vec![WASM_LAYER_MEDIA_TYPE])
+        .pull(reference, &auth, vec![WASM_LAYER_MEDIA_TYPE])
         .await?;
     let layer = data
         .layers
@@ -108,14 +120,84 @@ fn client() -> Client {
     Client::new(config)
 }
 
-fn auth() -> RegistryAuth {
-    match (
-        std::env::var("WKG_OCI_USERNAME"),
-        std::env::var("WKG_OCI_PASSWORD"),
-    ) {
-        (Ok(user), Ok(password)) => RegistryAuth::Basic(user, password),
-        _ => RegistryAuth::Anonymous,
+/// What a credential helper prints for a host it holds nothing for. The Docker
+/// CLI matches the same text (`credentials.IsErrCredentialsNotFoundMessage`).
+const HELPER_HOLDS_NONE: &str = "credentials not found in native keychain";
+
+/// The key Docker Hub's credential is filed under, whichever of its names a
+/// reference spells: `docker login` keeps the legacy index URL.
+const DOCKER_HUB_KEY: &str = "https://index.docker.io/v1/";
+
+/// What [`auth`] answered for each host this run. One resolution makes
+/// several calls to a host, and a lookup can start a credential helper that
+/// prompts the user.
+static AUTH_BY_HOST: LazyLock<Mutex<IndexMap<String, RegistryAuth>>> =
+    LazyLock::new(Mutex::default);
+
+/// The credential `docker login` stored for `reference`'s host, else none.
+///
+/// It is looked up by that host and sent to no other: the host comes from a
+/// manifest, and opening someone else's package in an editor resolves it.
+async fn auth(reference: &Reference) -> anyhow::Result<RegistryAuth> {
+    let host = reference.registry().to_string();
+    if let Some(known) = lock(&AUTH_BY_HOST).get(&host) {
+        return Ok(known.clone());
     }
+    let found = joined(
+        tokio::task::spawn_blocking({
+            let host = host.clone();
+            move || look_up_auth(&host)
+        })
+        .await,
+    )?;
+    lock(&AUTH_BY_HOST).insert(host, found.clone());
+    Ok(found)
+}
+
+fn look_up_auth(host: &str) -> anyhow::Result<RegistryAuth> {
+    let Some(config) = docker_config() else {
+        return Ok(RegistryAuth::Anonymous);
+    };
+    let file = match File::open(&config) {
+        Ok(file) => file,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(RegistryAuth::Anonymous),
+        Err(e) => anyhow::bail!("reading {}: {e}", config.display()),
+    };
+    registry_auth(BufReader::new(file), host)
+        .map_err(|e| anyhow::anyhow!("the credential for {host} in {}: {e}", config.display()))
+}
+
+fn registry_auth(config: impl Read, host: &str) -> anyhow::Result<RegistryAuth> {
+    let key = match host {
+        "docker.io" | "index.docker.io" | "registry-1.docker.io" => DOCKER_HUB_KEY,
+        _ => host,
+    };
+    match docker_credential::get_credential_from_reader(config, key) {
+        Ok(DockerCredential::UsernamePassword(user, password)) => {
+            Ok(RegistryAuth::Basic(user, password))
+        }
+        Ok(DockerCredential::IdentityToken(_)) => {
+            anyhow::bail!("an identity token is not supported; log in with a username")
+        }
+        Err(CredentialRetrievalError::NoCredentialConfigured) => Ok(RegistryAuth::Anonymous),
+        Err(CredentialRetrievalError::HelperFailure { stdout, .. })
+            if stdout.trim() == HELPER_HOLDS_NONE =>
+        {
+            Ok(RegistryAuth::Anonymous)
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Where `docker login` writes, as the Docker CLI finds it. An empty
+/// `DOCKER_CONFIG` is unset: read as a path, it would name the working
+/// directory, which may be a package someone else wrote.
+fn docker_config() -> Option<PathBuf> {
+    let dir = std::env::var_os("DOCKER_CONFIG")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| home_dir().map(|home| home.join(".docker")))?;
+    Some(dir.join("config.json"))
 }
 
 /// The CAs `wado run` trusts beyond the default webpki roots, so a registry
@@ -133,6 +215,26 @@ fn extra_root_certificates() -> Vec<Certificate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `docker login ghcr.io -u user -p pw`, as `config.json` records it.
+    const GHCR_LOGIN: &str = r#"{"auths": {"ghcr.io": {"auth": "dXNlcjpwdw=="}}}"#;
+
+    #[test]
+    fn a_credential_goes_only_to_its_own_host() {
+        let ghcr = registry_auth(GHCR_LOGIN.as_bytes(), "ghcr.io").unwrap();
+        assert!(matches!(ghcr, RegistryAuth::Basic(user, pw) if user == "user" && pw == "pw"));
+        let other = registry_auth(GHCR_LOGIN.as_bytes(), "registry.example").unwrap();
+        assert!(matches!(other, RegistryAuth::Anonymous));
+    }
+
+    /// A helper names Docker Hub by its legacy index URL, as `docker login`
+    /// files it. The helper here is not installed, so asking it is an error,
+    /// where a lookup under the wrong key would answer anonymous.
+    #[test]
+    fn docker_hub_is_looked_up_by_its_index_url() {
+        let config = r#"{"credHelpers": {"https://index.docker.io/v1/": "wado-absent"}}"#;
+        assert!(registry_auth(config.as_bytes(), "docker.io").is_err());
+    }
 
     #[test]
     fn reference_maps_coordinate_to_repository() {

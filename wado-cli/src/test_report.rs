@@ -13,14 +13,14 @@
 //! what counts as success or failure.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::Notify;
 use wado_compiler::hashmap::IndexMap;
 
 use crate::rss::live_suffix;
+use crate::runtime::Ticker;
 use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
     TodoCompileError,
@@ -30,7 +30,7 @@ use wado_host::sync::lock;
 
 /// How often the heartbeat reporter re-prints progress while
 /// otherwise quiet. A failure/resolved-TODO notice resets this window
-/// (see `HeartbeatState::notify`) so the next heartbeat doesn't immediately
+/// (see `HeartbeatReporter::announce`) so the next heartbeat doesn't immediately
 /// repeat what was just reported.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -39,9 +39,8 @@ pub(crate) enum CompileEvent {
     Ok,
     /// A `#![TODO]` module whose compile error fired as expected.
     TodoModule,
-    /// `detail` carries a message for the rare host-side failures (worker
-    /// panic, blocking-task join error) that have no per-file compiler
-    /// diagnostic of their own.
+    /// `detail` carries a message for the rare host-side failures (no compile
+    /// runtime) that have no per-file compiler diagnostic of their own.
     Failed {
         detail: Option<String>,
     },
@@ -295,14 +294,6 @@ struct HeartbeatState {
     todo_resolved: AtomicU32,
     skip_files: AtomicUsize,
     pending_tests: Mutex<IndexMap<String, usize>>,
-    /// Signalled on every immediate failure/resolved-TODO notice so the
-    /// heartbeat loop can restart its wait — avoids printing a near-
-    /// duplicate heartbeat right after an event that already reported.
-    notify: Notify,
-    /// Held across the ticker's `stop` check and its print, and while
-    /// `stop` is set, so no heartbeat lands inside the final output.
-    printing: Mutex<()>,
-    stop: AtomicBool,
 }
 
 impl HeartbeatState {
@@ -358,6 +349,9 @@ fn print_heartbeat(state: &HeartbeatState) {
 /// otherwise, and a final three-axis summary.
 pub(crate) struct HeartbeatReporter {
     state: Arc<HeartbeatState>,
+    /// Dropped when the run is done, so no heartbeat lands inside the final
+    /// output.
+    ticker: Mutex<Option<Ticker>>,
     failures: FailureRecap,
 }
 
@@ -373,42 +367,29 @@ impl HeartbeatReporter {
             todo_resolved: AtomicU32::new(0),
             skip_files: AtomicUsize::new(0),
             pending_tests: Mutex::new(IndexMap::default()),
-            notify: Notify::new(),
-            printing: Mutex::new(()),
-            stop: AtomicBool::new(false),
         });
 
         print_heartbeat(&state);
 
-        let ticker_state = Arc::clone(&state);
-        tokio::spawn(async move {
-            loop {
-                // Wait for the heartbeat interval, but bail out early (and
-                // restart the wait) if a failure/resolved-TODO notice fires
-                // in the meantime — avoids an immediate near-duplicate line.
-                let notified =
-                    tokio::time::timeout(HEARTBEAT_INTERVAL, ticker_state.notify.notified()).await;
-                let _printing = lock(&ticker_state.printing);
-                if ticker_state.stop.load(Ordering::Relaxed) {
-                    break;
-                }
-                if notified.is_err() {
-                    print_heartbeat(&ticker_state);
-                }
-            }
+        let ticker = Ticker::start(HEARTBEAT_INTERVAL, {
+            let state = Arc::clone(&state);
+            move || print_heartbeat(&state)
         });
 
         Self {
             state,
+            ticker: Mutex::new(Some(ticker)),
             failures: FailureRecap::default(),
         }
     }
 
-    /// Print an immediate one-line notice and wake the heartbeat loop so
-    /// it doesn't immediately repeat the same information.
+    /// Print an immediate one-line notice and restart the heartbeat's
+    /// interval so it doesn't immediately repeat the same information.
     fn announce(&self, line: &str) {
         println!("{line}");
-        self.state.notify.notify_one();
+        if let Some(ticker) = lock(&self.ticker).as_ref() {
+            ticker.restart();
+        }
     }
 
     fn finish_file_if_done(&self, path: &str) {
@@ -534,10 +515,7 @@ impl TestReporter for HeartbeatReporter {
     }
 
     fn on_run_done(&self, grand: &PackageTotals, _multi_pkg: bool, wall: Duration) {
-        let printing = lock(&self.state.printing);
-        self.state.stop.store(true, Ordering::Relaxed);
-        drop(printing);
-        self.state.notify.notify_one();
+        drop(lock(&self.ticker).take());
         println!();
         test::print_three_axis(grand, Some(&test::format_duration(wall)));
     }

@@ -4,7 +4,7 @@
 //! stage and setting that would change the ids is checked, and one Loam does
 //! not generate names itself.
 
-use { TreeMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 use { from_string } from "core:json";
 use { Value } from "core:value";
 use { TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
@@ -93,7 +93,7 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     };
     let mut tokens = tokens_of(&vocab)?;
     let specials = specials_of(&root, &vocab, &mut tokens, pieces)?;
-    let mut ids = TreeMap::<String, i32>::new();
+    let mut ids = HashMap::<String, i32>::new();
     for let [id, token] of tokens.into_iter().enumerate() {
         ids.try_insert(token, id);
     }
@@ -159,7 +159,7 @@ fn is_space_replacement(stage: &Value, pattern: String, content: String) -> bool
 
 /// That the vocabulary spells every byte and every token but an added one is
 /// written in the byte alphabet: what `ByteLevel` encodes and decodes by.
-fn spelled_in_bytes(pipeline: &BpePipeline, ids: &TreeMap<String, i32>) -> Result<(), TokenizerError> {
+fn spelled_in_bytes(pipeline: &BpePipeline, ids: &HashMap<String, i32>) -> Result<(), TokenizerError> {
     let alphabet = byte_chars();
     for let c of alphabet {
         if !ids.contains_key(String::from(c)) {
@@ -179,7 +179,7 @@ fn spelled_in_bytes(pipeline: &BpePipeline, ids: &TreeMap<String, i32>) -> Resul
 
 /// That the vocabulary has a `<0xXX>` token for every byte, where the model
 /// falls back to them.
-fn spelled_in_pieces(model: &TreeMap<String, Value>, ids: &TreeMap<String, i32>) -> Result<(), TokenizerError> {
+fn spelled_in_pieces(model: &TreeMap<String, Value>, ids: &HashMap<String, i32>) -> Result<(), TokenizerError> {
     if model.get("byte_fallback") != Option::Some(Value::Bool(true)) {
         return refused("model: SentencePiece's spelling without byte_fallback is not supported");
     }
@@ -191,7 +191,7 @@ fn spelled_in_pieces(model: &TreeMap<String, Value>, ids: &TreeMap<String, i32>)
 
 /// The ids a `TemplateProcessing` puts before a single sequence. Only special
 /// tokens before it are supported, as a beginning-of-sequence token is.
-fn prefix_of(root: &TreeMap<String, Value>, ids: &TreeMap<String, i32>) -> Result<List<i32>, TokenizerError> {
+fn prefix_of(root: &TreeMap<String, Value>, ids: &HashMap<String, i32>) -> Result<List<i32>, TokenizerError> {
     let Some(value) = root.get("post_processor") else {
         return Result::Ok([]);
     };
@@ -224,7 +224,7 @@ fn prefix_of(root: &TreeMap<String, Value>, ids: &TreeMap<String, i32>) -> Resul
     return refused("post_processor: the single template holds no sequence");
 }
 
-fn id_of(ids: &TreeMap<String, i32>, token: &String, what: String) -> Result<i32, TokenizerError> {
+fn id_of(ids: &HashMap<String, i32>, token: &String, what: String) -> Result<i32, TokenizerError> {
     return match ids.get(*token) {
         Some(id) => Result::Ok(id),
         None => refused(`${what} ${*token} is not in the vocabulary`),
@@ -300,7 +300,7 @@ fn index_of(value: &Value, len: i32) -> Option<i32> {
 /// `"left right"`, the newer as a pair.
 fn merges_of(
     model: &TreeMap<String, Value>,
-    ids: &TreeMap<String, i32>,
+    ids: &HashMap<String, i32>,
 ) -> Result<List<[i32, i32, i32]>, TokenizerError> {
     let Some(List(items)) = model.get("merges") else {
         return refused("model: no merges");

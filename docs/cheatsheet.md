@@ -391,23 +391,23 @@ fn byte_len<S: AsStrSlice>(s: S) -> i32 {
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
 
-Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on one value holding the template's holes, each in its own type, and the literal text around them.
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
     let mut text = "";
     let mut params: List<Param> = [];
     for let h of ReflectTemplate::<T>::members() {   // one unrolled step per hole
-        text.push_str(h.lit());                      // literal before the hole (constant)
+        text.push_str(h.lit(&t));                    // literal before the hole
         text.push_str("?");
         params.push(h.get(&t).to_param());           // the hole's value, typed
     }
-    text.push_str(ReflectTemplate::<T>::tail());     // literal after the last hole
+    text.push_str(ReflectTemplate::<T>::tail(&t));   // literal after the last hole
     return Query { text, params };
 }
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 
-// A hole handle also answers raw() / source() / has_spec() / index(), and
+// A hole handle also answers raw(&t) / has_spec() / index(), and
 // fmt(&t, f) renders through the trait the specifier selects.
 format`x=${x:04}`          // what `x=${x:04}` is sugar for
 String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x

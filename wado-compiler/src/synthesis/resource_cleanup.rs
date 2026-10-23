@@ -831,7 +831,9 @@ impl TirRefVisitor for ResourceProbe<'_> {
             self.found = true;
             return;
         }
-        self.walk_expr_in_frame(expr);
+        // Into closures too: a body owning nothing affine still holds the
+        // closures whose drops this pass elaborates.
+        self.walk_expr(expr);
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
@@ -1199,6 +1201,7 @@ fn variant_drop_arm(
             span,
         ),
         span,
+        consumes: true,
     }
 }
 
@@ -1420,15 +1423,21 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             Flow::Normal
         }
 
-        TirStmtKind::LetDestructure { pattern, value } => {
-            let value = elab_value_expr(value, cx);
-            for live in cx.resources.pattern_bindings(&pattern) {
+        // The pattern consumes its value as an arm's does: the parts no
+        // binding takes drop once the bindings hold theirs.
+        TirStmtKind::LetDestructure { pattern, mut value } => {
+            let bindings = cx.resources.pattern_bindings(&pattern);
+            let extracts = !bindings.is_empty();
+            let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
+                .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
+            for live in bindings {
                 cx.declare(live);
             }
             out.push(TirStmt {
                 kind: TirStmtKind::LetDestructure { pattern, value },
                 span,
             });
+            out.extend(entry);
             Flow::Normal
         }
 
@@ -2482,43 +2491,30 @@ fn wrap_in_block(expr: &mut TirExpr, build: impl FnOnce(TirExpr) -> Vec<TirStmt>
 }
 
 /// Elaborate a `match`: its scrutinee, then each arm as a scope declaring the
-/// arm's bindings. An arm that binds a resource out of the scrutinee moves the
-/// scrutinee, so the arm empties it before its body runs; a scrutinee that is
-/// a temporary is spilled first, so an arm binding nothing leaves it for its
-/// statement to drop.
+/// arm's bindings. Entering an arm consumes a scrutinee that moved or is a
+/// temporary: the parts no binding takes drop, and the scrutinee is emptied,
+/// before the body runs. A temporary is spilled first, so an arm that does not
+/// consume leaves it for its statement to drop.
 fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
+    // An arm that does not consume the scrutinee owns nothing it binds.
     let bindings: Vec<Vec<Live>> = arms
         .iter()
-        .map(|arm| cx.resources.pattern_bindings(&arm.pattern))
+        .map(|arm| {
+            if arm.consumes {
+                cx.resources.pattern_bindings(&arm.pattern)
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
+    let patterns: Vec<(&TirPattern, bool)> = arms
+        .iter()
+        .map(|arm| (&arm.pattern, arm.consumes))
         .collect();
     let extracts = bindings.iter().any(|arm_bindings| !arm_bindings.is_empty());
-    // A moved place stays put until an arm binding out of it is entered.
-    let moved = matches!(scrutinee.kind, TirExprKind::Move { .. });
-    if moved {
-        unwrap_move(scrutinee);
-    }
-    let place = if extracts && cx.carries_resource(scrutinee.type_id) {
-        if is_place(scrutinee, cx) {
-            assert!(
-                moved,
-                "a scrutinee a resource moves out of is marked `Move`: {:?}",
-                scrutinee.span
-            );
-            elab_expr(scrutinee, false, cx);
-            Some((*scrutinee).clone())
-        } else if is_temporary(scrutinee, cx) {
-            elab_expr(scrutinee, true, cx);
-            Some(spill_temporary(scrutinee, cx))
-        } else {
-            elab_expr(scrutinee, true, cx);
-            None
-        }
-    } else {
-        elab_expr(scrutinee, false, cx);
-        None
-    };
+    let place = consumed_scrutinee(scrutinee, &patterns, extracts, cx);
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
-        let emptied = (!arm_bindings.is_empty()).then(|| place.clone()).flatten();
+        let consumed = place.clone().filter(|_| arm.consumes);
         cx.open_scope(Vec::new(), TemporaryScope::Statement);
         if let Some(guard) = arm.guard.as_mut() {
             elab_expr_scope(guard, cx);
@@ -2535,11 +2531,224 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         );
         // Inserted once the body is elaborated: emptying the scrutinee is a
         // move, not a store that drops what it replaces.
-        if let Some(place) = emptied {
-            let null = TirExpr::new(TirExprKind::Null, place.type_id, synth_span());
-            block.stmts.insert(0, expr_stmt(assign(place, null)));
+        if let Some(place) = consumed {
+            let entry = consume_matched(&arm.pattern, place, cx);
+            block.stmts.splice(0..0, entry);
         }
         arm.body = TirExpr::new(TirExprKind::Block(block), arm.body.type_id, arm.body.span);
+    }
+}
+
+/// Elaborate the scrutinee of `patterns`, each paired with whether it
+/// consumes, answering the place a consuming pattern empties: the place a move
+/// names, or the local a value no place holds spills into. A place read without
+/// a move is only borrowed, so no consuming pattern may bind a resource out of
+/// it. A temporary every pattern consumes whole, binding all it holds, needs no
+/// local. `extracts`: whether a consuming pattern binds a resource out of it.
+fn consumed_scrutinee(
+    scrutinee: &mut TirExpr,
+    patterns: &[(&TirPattern, bool)],
+    extracts: bool,
+    cx: &mut Cx,
+) -> Option<TirExpr> {
+    // A moved place stays put until a pattern consuming it is entered.
+    let moved = matches!(scrutinee.kind, TirExprKind::Move { .. });
+    if moved {
+        unwrap_move(scrutinee);
+    }
+    if !cx.carries_resource(scrutinee.type_id) {
+        elab_expr(scrutinee, false, cx);
+        return None;
+    }
+    if is_place(scrutinee, cx) {
+        assert!(
+            moved || !extracts,
+            "a scrutinee a resource moves out of is marked `Move`: {:?}",
+            scrutinee.span
+        );
+        elab_expr(scrutinee, false, cx);
+        return moved.then(|| scrutinee.clone());
+    }
+    assert!(!moved, "only a place moves: {:?}", scrutinee.span);
+    // A value read through a reference (`*self`), or a block ending in a place,
+    // is still its owner's: entering an arm drops none of it.
+    if !is_temporary(scrutinee, cx) {
+        elab_expr(scrutinee, extracts, cx);
+        return None;
+    }
+    // `drop_unbound` reads its place only to build the drops, so a probe
+    // answers whether there are any.
+    let probe = TirExpr::new(TirExprKind::Null, scrutinee.type_id, synth_span());
+    let leaves = patterns.iter().any(|(pattern, consumes)| {
+        !consumes || !drop_unbound(pattern, probe.clone(), cx).is_empty()
+    });
+    elab_expr(scrutinee, true, cx);
+    leaves.then(|| spill_temporary(scrutinee, cx))
+}
+
+/// What entering `pattern`, which matched `place`, does to it: the parts no
+/// binding takes drop, and the place is emptied.
+fn consume_matched(pattern: &TirPattern, place: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
+    let mut stmts = drop_unbound(pattern, place.clone(), cx);
+    stmts.push(empty_place(place));
+    stmts
+}
+
+/// Drop each part of `place` that `pattern`, which it matched, binds nothing
+/// of: what a by-value pattern leaves of its scrutinee (WEP: Affine Types).
+fn drop_unbound(pattern: &TirPattern, place: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
+    let type_id = place.type_id;
+    if !cx.carries_resource(type_id) {
+        return Vec::new();
+    }
+    // The `self` of a `Drop::drop` body gives up its fields one by one.
+    let destructures = match cx.resources.layout(type_id) {
+        Layout::Holder {
+            drop_impl: None, ..
+        } => true,
+        Layout::Holder { .. } => {
+            matches!(place.kind, TirExprKind::Local { index, .. } if cx.drop_self == Some(index))
+        }
+        Layout::Resource
+        | Layout::End
+        | Layout::List { .. }
+        | Layout::Array { .. }
+        | Layout::Opaque => false,
+    };
+    match pattern {
+        TirPattern::Binding { .. } | TirPattern::Narrow { name: Some(_), .. } => Vec::new(),
+        TirPattern::Struct { fields, .. } if destructures => {
+            let listed: IndexMap<u32, &TirPattern> = fields
+                .iter()
+                .map(|field| (field.field_index, &field.pattern))
+                .collect();
+            drop_unbound_fields(&place, |index| listed.get(&index).copied(), cx)
+        }
+        TirPattern::Tuple(elements, _) => {
+            drop_unbound_fields(&place, |index| elements.get(index as usize), cx)
+        }
+        TirPattern::Variant {
+            case_index,
+            bindings,
+            payload_type,
+            ..
+        } if destructures => {
+            assert!(bindings.len() <= 1, "a case has one payload");
+            let payload = TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(place),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                *payload_type,
+                synth_span(),
+            );
+            match bindings.first() {
+                Some(binding) => drop_unbound(binding, payload, cx),
+                None if cx.carries_resource(*payload_type) => {
+                    drop_if_held(payload, *payload_type, cx)
+                }
+                None => Vec::new(),
+            }
+        }
+        TirPattern::Or(alternatives) if !cx.resources.pattern_bindings(pattern).is_empty() => {
+            drop_unbound_alternatives(alternatives, place, cx)
+        }
+        // What implements `Drop` gives up no part, which the move check holds.
+        TirPattern::Struct { .. } | TirPattern::Variant { .. } | TirPattern::Or(_) => {
+            assert!(
+                cx.resources.pattern_bindings(pattern).is_empty(),
+                "nothing moves out of a type that implements `Drop`: {pattern:?}"
+            );
+            drop_if_held(place, type_id, cx)
+        }
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. }
+        | TirPattern::Narrow { name: None, .. }
+        | TirPattern::PerInstance { .. } => drop_if_held(place, type_id, cx),
+    }
+}
+
+/// Drop each resource-carrying field of `place` that its pattern, which
+/// `listed` answers by field index, binds nothing of. A field the pattern
+/// leaves out binds nothing.
+fn drop_unbound_fields<'p>(
+    place: &TirExpr,
+    listed: impl Fn(u32) -> Option<&'p TirPattern>,
+    cx: &mut Cx,
+) -> Vec<TirStmt> {
+    let Layout::Holder {
+        parts: Parts::Fields(fields),
+        ..
+    } = cx.resources.layout(place.type_id)
+    else {
+        unreachable!("a struct or tuple pattern matches a holder of fields");
+    };
+    let mut stmts = Vec::new();
+    for field in affine_fields(place, &fields, cx) {
+        let TirExprKind::FieldAccess { field_index, .. } = field.kind else {
+            unreachable!("`affine_fields` projects each field");
+        };
+        let field_ty = field.type_id;
+        stmts.extend(match listed(field_index) {
+            Some(pattern) => drop_unbound(pattern, field, cx),
+            None => drop_if_held(field, field_ty, cx),
+        });
+    }
+    stmts
+}
+
+/// Drop what the alternative of an or-pattern that matched `place` binds
+/// nothing of, through a `match` that finds which one it was.
+fn drop_unbound_alternatives(
+    alternatives: &[TirPattern],
+    place: TirExpr,
+    cx: &mut Cx,
+) -> Vec<TirStmt> {
+    let span = synth_span();
+    let arms = alternatives
+        .iter()
+        .map(|alternative| {
+            let drops = drop_unbound(alternative, place.clone(), cx);
+            let mut pattern = alternative.clone();
+            BindNothing.visit_pattern(&mut pattern);
+            TirMatchArm {
+                pattern,
+                guard: None,
+                body: TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(drops, span)),
+                    TypeTable::UNIT,
+                    span,
+                ),
+                span,
+                consumes: true,
+            }
+        })
+        .collect();
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(place),
+            arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![expr_stmt(match_expr)]
+}
+
+/// Turn each binding of a pattern into a wildcard, so matching it again stores
+/// into no local the arm's own match bound.
+struct BindNothing;
+
+impl TirMutVisitor for BindNothing {
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        if matches!(pattern, TirPattern::Binding { .. }) {
+            *pattern = TirPattern::Wildcard;
+        }
+        self.walk_pattern(pattern);
     }
 }
 

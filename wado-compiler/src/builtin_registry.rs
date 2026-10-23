@@ -194,6 +194,9 @@ impl BuiltinRegistry {
                     "Formatter" => type_table
                         .borrow_mut()
                         .make_compiler_struct(CompilerItem::Formatter),
+                    "String" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::String),
                     "ByteList" => type_table.borrow_mut().make_byte_list(),
                     other => panic!("core:builtin names unknown type `{other}`"),
                 }

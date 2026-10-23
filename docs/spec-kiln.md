@@ -461,10 +461,11 @@ Loam reads a checkpoint only as far as its header ends:
 <!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
-pub fn read_header(content: Stream<u8>) -> ByteList {
+pub fn read_header(mut content: Stream<u8>) -> ByteList {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
-        let chunk = content.read(HEADER_CHUNK);
+        let [end, chunk] = content.start_read(HEADER_CHUNK).finish();
+        content = end;
         prefix.extend(&(chunk.items as ByteList));
         if chunk.result != CopyResult::Completed || holds_header(&prefix) {
             break;
@@ -644,19 +645,24 @@ An `Error` event does not fail the build. A generator fails only by returning an
 ### The Probe
 
 A generator may export `probe` beside `generate`. It reports how many leading
-bytes of an input determine the output. The host calls it once per input file,
-with that file's path and content, and with the options when the generator
-declares an `Options` struct.
+bytes of an input determine the output. The host calls it once per input file.
+The parameters are matched by name, so a probe may leave out any it does not
+read. The host supplies four: `path` and `content`, `type` (the file's `type`,
+as `input-file` carries it), and `options` when the generator declares an
+`Options` struct. Each has the type `generate` is handed it as, and the probe
+returns `Result<u64, E>` with `generate`'s `E`. A probe taking any other
+parameter or type does not compile.
 
 This probe says the first line decides everything:
 
 <!-- {"source": "wado-cli/tests/integration/kiln_probe.rs"} -->
 
 ```wado
-export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
     let mut n: u64 = 0;
     loop {
-        let chunk = content.read(1);
+        let [end, chunk] = content.start_read(1).finish();
+        content = end;
         if chunk.items.len() > 0 {
             n += 1;
             if chunk.items[0] == b'\n' {
@@ -672,6 +678,9 @@ export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
 }
 ```
 
+- The host reads a file only as far as the probe pulls its stream, and then
+  reads it to its extent and no further. A probe of a checkpoint reads the
+  header, never the payloads behind it.
 - `generate` sees each input cut to its extent. Reading further gets the end
   of the stream.
 - The extent must be decided by the bytes inside it.

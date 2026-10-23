@@ -284,18 +284,18 @@ type a template literal denotes). See WEP 2026-01-10.
 
 Returns the per-hole members.
 
-#### `fn tail() -> String`
+#### `fn tail(t: &Self) -> String`
 
 `#[compiler_item("reflect_template_tail")]`
 
-The literal text after the last hole — the whole template when it has
-none — with escapes processed.
+The literal text after the last hole of `t` — the whole template when
+it has none — with escapes processed.
 
-#### `fn raw_tail() -> String`
+#### `fn raw_tail(t: &Self) -> String`
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
-`tail()` with escapes preserved.
+`tail(t)` with escapes preserved.
 
 ### `pub trait Ref with ()`
 
@@ -762,14 +762,11 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 What a `WaitableSet` waits on: a value the host reports events for by its
 handle. It is sealed, so a set joins only what it can account for: the
 standard library implements it on the calls, and a variant whose cases each
-hold one derives it with `impl Waitable for V;`. A stream or future end is
-none: each copy on one waits inside the binding, so the host never has an
-event left to report for it.
+hold one derives it with `impl Waitable for V;`. A bare stream or future end
+is none, since no copy on it is in flight: a copy started on a stream end,
+`ReadCopy` or `WriteCopy`, is one.
 
-#### `fn waitable_id(&self) -> Option<ResourceId>`
-
-The handle the host reports this value by, or None where it is ready
-without the host.
+#### `fn wait_on(&self) -> WaitOn`
 
 ### `pub trait Sequence with ()`
 
@@ -1044,27 +1041,38 @@ Readable end of an async sequence (WASI Component Model stream).
 
 `#[cm("stream-new")]`
 
-#### `fn read(&self, max: i32) -> StreamChunk<T>`
+#### `fn begin_read(&self, max: i32) -> StartedRead<T>`
 
 `#[cm("stream-read")]`
 
-One Component Model copy of up to `max` elements, blocking until at
-least one arrives or the writable end drops. A `Dropped` result can
-carry elements of its own, and reading an end whose result was `Dropped`
-traps, so a loop breaks on the result, never on an empty chunk.
-`read_to_end` is that loop.
+One Component Model copy of up to `max` elements, started and not
+waited for. It is the operation a handler answers, with
+`StartedRead::settled`. A program calls `start_read`, which holds the
+end for the copy: a second copy on an end that is copying traps, and
+a `StartedRead` dropped in flight waits for its copy where a
+`ReadCopy` cancels it.
 
-#### `fn cancel_read(&self)`
+#### `fn cancel_read(&self) -> u32`
 
 `#[cm("stream-cancel-read")]`
 
-Cancel an in-progress read. Blocks until cancellation completes.
+Cancel the copy in flight, blocking until it settles, and return the
+packed word the Component Model answers: the count the copy moved
+shifted left by four, over its `CopyResult`. A `ReadCopy` dropped in
+flight calls it, so a handler that started the copy on another end
+answers it by cancelling there. It traps on an end with no copy in
+flight.
 
 #### `fn drop(self)`
 
 `#[cm("stream-drop-readable")]`
 
 Drop the readable end of the stream.
+
+#### `pub fn start_read(self, max: i32) -> ReadCopy<T>`
+
+Start one copy of up to `max` elements without waiting for it. The end
+moves into the copy, and `ReadCopy::finish` hands it back.
 
 #### `pub fn read_to_end(&self) -> List<T>`
 
@@ -1086,16 +1094,24 @@ doubling past half the address space is what a large file cannot afford.
 
 Writable end of an async sequence (WASI Component Model stream).
 
-#### `fn write(&self, data: List<T>) -> StreamWrite<T>`
+#### `fn begin_write(&self, data: List<T>) -> StartedWrite<T>`
 
 `#[cm("stream-write")]`
 
-One Component Model copy of `data`, blocking until the reader takes at
-least one element or drops. The reader may take a prefix, and what it
-left comes back as `rest`. Writing to an end whose result was
-`Dropped` traps, and an empty `data` is the CM's readiness signal, which
-blocks until a reader rendezvouses rather than writing nothing.
-`write_all` is the loop that finishes the buffer.
+One Component Model copy of `data`, started and not waited for. An
+empty `data` is the CM's readiness signal: it settles once a reader
+rendezvouses, having written nothing. It is the operation a handler
+answers, with `StartedWrite::settled`. A program calls `start_write`,
+which holds the end for the copy: a second copy on an end that is
+copying traps, and a `StartedWrite` dropped in flight waits for its
+copy where a `WriteCopy` cancels it.
+
+#### `fn cancel_write(&self) -> u32`
+
+`#[cm("stream-cancel-write")]`
+
+Cancel the copy in flight, as `Stream::cancel_read` does, for a
+`WriteCopy` dropped in flight.
 
 #### `fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
 
@@ -1104,17 +1120,16 @@ blocks until a reader rendezvouses rather than writing nothing.
 `write_all` for a byte view, lowered once with no value-semantics copy.
 Any element type but a byte is a compile error.
 
-#### `fn cancel_write(&self)`
-
-`#[cm("stream-cancel-write")]`
-
-Cancel an in-progress write. Blocks until cancellation completes.
-
 #### `fn drop(self)`
 
 `#[cm("stream-drop-writable")]`
 
 Drop the writable end, signaling end-of-stream.
+
+#### `pub fn start_write(self, data: List<T>) -> WriteCopy<T>`
+
+Start one copy of `data` without waiting for it. The end moves into the
+copy, and `WriteCopy::finish` hands it back.
 
 #### `pub fn write_all(&self, data: List<T>) -> CopyResult`
 
@@ -3476,10 +3491,9 @@ The flags value with only this bit set.
 
 ### `pub struct TemplateHole<T, V>`
 
-A hole handle minted by `ReflectTemplate::members()`: the literal text
-before the hole, the hole's source text and specifier presence are
-constants, and `get` / `fmt` reach the hole's value in a template.
-See WEP 2026-01-10.
+A hole handle minted by `ReflectTemplate::members()`: the hole's position
+and specifier presence are constants of the shape, and `lit` / `raw` /
+`get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 
 _Fields are private._
 
@@ -3487,18 +3501,14 @@ _Fields are private._
 
 The hole's position in the template.
 
-#### `pub fn lit(&self) -> String`
+#### `pub fn lit(&self, t: &T) -> String`
 
-The literal text between the previous hole (or the start) and this
-one, escapes processed.
+The literal text in `t` between the previous hole (or the start) and
+this one, escapes processed.
 
-#### `pub fn raw(&self) -> String`
+#### `pub fn raw(&self, t: &T) -> String`
 
-`lit()` with escapes preserved: `\n` is a backslash and an `n`.
-
-#### `pub fn source(&self) -> String`
-
-The hole's expression as written: `"user.name"`.
+`lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
 
 #### `pub fn has_spec(&self) -> bool`
 
@@ -4374,10 +4384,10 @@ _Fields are private._
 The identity of `r`. A static function rather than a method, so it
 takes no name from any resource.
 
-### `pub struct StreamChunk<T>`
+### `pub struct StreamChunk<affine T>`
 
-What one `Stream::read` copied, and how that copy ended. A copy carries
-elements and the peer's drop together, so `result` is what says more follows.
+What one read copy moved, and how that copy ended. A copy carries elements
+and the peer's drop together, so `result` is what says more follows.
 
 #### `items: List<T>`
 
@@ -4385,8 +4395,8 @@ elements and the peer's drop together, so `result` is what says more follows.
 
 ### `pub struct StreamWrite<affine T>`
 
-What one `StreamWritable::write` did not deliver, and how its copy ended.
-A reader may take a prefix, and the elements it left come back in `rest`.
+What one write copy did not deliver, and how it ended. A reader may take a
+prefix, and the elements it left come back in `rest`.
 
 #### `rest: List<T>`
 
@@ -4400,6 +4410,77 @@ value comes back in `rest` where the reader dropped first.
 #### `rest: Option<T>`
 
 #### `result: FutureWriteResult`
+
+### `pub affine struct StartedRead<affine T>`
+
+A read copy as `Stream::begin_read` started it: one the host may still be
+copying into `buffer`, or one a handler settled with its `items`.
+
+_Fields are private._
+
+#### `pub fn settled(chunk: StreamChunk<T>) -> StartedRead<T>`
+
+A copy that already moved `chunk`, for a handler to answer
+`Stream::begin_read` with.
+
+### `pub affine struct ReadCopy<affine T>`
+
+One copy started on a stream end, holding the end until it is finished.
+Dropping one in flight cancels it, and drops what it had copied.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>]`
+
+The end and what the copy moved. Waits for a copy that has not settled,
+so a copy that never joined a set finishes as well.
+
+#### `impl Drop for ReadCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for ReadCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
+### `pub affine struct StartedWrite<affine T>`
+
+A write copy as `StreamWritable::begin_write` started it: one the host may
+still be copying out of `buffer`, which holds `data` lowered, or one a
+handler settled.
+
+_Fields are private._
+
+#### `pub fn settled(written: StreamWrite<T>) -> StartedWrite<T>`
+
+A copy that already ended as `written` says, for a handler to answer
+`StreamWritable::begin_write` with.
+
+#### `impl Drop for StartedWrite<T>`
+
+##### `fn drop(self)`
+
+What the copy did not deliver is still the writer's, so it drops here.
+
+### `pub affine struct WriteCopy<affine T>`
+
+One copy started on a writable end, holding the end until it is finished.
+Dropping one in flight cancels it.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>]`
+
+The end and what the copy left of its data. Waits for a copy that has
+not settled, so a copy that never joined a set finishes as well.
+
+#### `impl Drop for WriteCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for WriteCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
 
 ### `pub affine struct WaitableSet<affine W: Waitable>`
 
@@ -4478,7 +4559,7 @@ Example (HTTP POST body):
 let [body_rx, body_tx] = Stream::<u8>::new();
 let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
 let task = Client::send(req);       // host subtask starts
-body_tx.write(body_bytes);          // rendezvous with host read
+body_tx.write_all(body_bytes);      // rendezvous with host read
 body_tx.drop();
 let resp = task.wait();             // block for response
 ```
@@ -4508,7 +4589,7 @@ returned, which owns handles only a lift reaches.
 
 #### `impl Waitable for AsyncCall<T>`
 
-##### `fn waitable_id(&self) -> Option<ResourceId>`
+##### `fn wait_on(&self) -> WaitOn`
 
 ### `pub struct ParseIntError`
 
@@ -5543,11 +5624,13 @@ Walks by reference: an element yielded by value is copied out.
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
 
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
+
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _`
 
-In-place sort with comparator. Stable, O(n log n) worst case.
-
-#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
+In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
+handed references as `iter_ref` hands them out: a `Ref` element in
+place, a scalar as a read-only snapshot.
 
 #### `pub fn sort(&mut self)`
 
@@ -5724,16 +5807,32 @@ Result type - either Ok(T) or Err(E)
 
 #### `Err(E)`
 
+### `pub variant WaitOn`
+
+How a `WaitableSet` learns that a `Waitable` is ready.
+
+#### `Host(ResourceId)`
+
+The host reports its event by this handle.
+
+#### `Settled(ReadyEvent)`
+
+It is ready already, with this event: the host has none left to report.
+
 ### `pub variant ReadyEvent`
 
 What the host reported for a `WaitableSet` member.
 
 #### `Unreported`
 
-The member has no handle for the host to report, so it is ready
-without one.
+The member has no handle for the host to report and no event of its
+own, so it is ready without one.
 
 #### `Call(CallState)`
+
+#### `Copied(CopyResult)`
+
+A started stream copy settled, ending as this says.
 
 ## Enums
 

@@ -239,6 +239,12 @@ macro_rules! with_body_facts {
             /// The type a type pattern (`p: T`) ascribes, keyed by the
             /// pattern's [`AstId`] — the `LetStmt`'s for a `let … else`.
             ann_pattern_ascription => pattern_ascriptions: $crate::tir::TypeId,
+            /// The type a struct pattern's field or a case pattern takes
+            /// apart, keyed by the field's [`AstId`] or the case name's: what
+            /// the move check asks of a pattern moving a part out of a type
+            /// that implements `Drop`.
+            #[allow(dead_code, reason = "only the move check reads it, through `Semantics`")]
+            ann_destructured_type => destructured_types: $crate::tir::TypeId,
             /// The element a range's context expected, which typed its
             /// endpoints, keyed by the [`crate::ast::RangeExpr`]'s [`AstId`]: a
             /// numeric type, or the variable standing for one until it is
@@ -363,6 +369,9 @@ pub(crate) struct TypeAnnotations {
     /// `resolve_function` / `resolve_method` resolved them. Reify reads these
     /// instead of re-resolving each param.
     pub(crate) fn_param_types: IndexMap<AstId, Vec<tir::TypeId>>,
+    /// The `affine` binders a function/method body sees, per its `AstId`, by
+    /// type: what the move check and reify treat as move-only there.
+    pub(crate) fn_affine_params: IndexMap<AstId, Vec<tir::TypeId>>,
     /// Resolved return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, tir::TypeId>,
@@ -569,6 +578,7 @@ impl TypeAnnotations {
             + self.function_task_returns.len()
             + self.method_impl_type_params.len()
             + self.fn_param_types.len()
+            + self.fn_affine_params.len()
             + self.fn_return_types.len()
             + self.effect_ops.len()
             + self.decl_type_params.len()

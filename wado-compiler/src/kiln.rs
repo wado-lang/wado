@@ -14,6 +14,7 @@ pub mod metadata;
 pub mod options;
 pub mod options_check;
 pub mod plan;
+pub mod probe_check;
 
 pub use cache::{
     CacheKeyInputs, FileHash, compose_cache_key, content_hash, empty_options_canonical,
@@ -32,3 +33,4 @@ pub use options::{
 };
 pub use options_check::{CanonicalOptions, OptionsAnchor, validate as validate_options};
 pub use plan::{Plan, PlanError, build_plan, depends_on};
+pub use probe_check::check_probe;

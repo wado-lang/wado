@@ -1,0 +1,39 @@
+// `T::method(&t, ...)` passes the receiver as its first argument, and the
+// method's parameters exclude it. Inferring the method's own type parameters
+// and filling its defaults both pair each parameter with the argument after
+// the receiver.
+
+trait Conv with () {
+    fn conv<U>(&self, u: U) -> U;
+    fn scaled(&self, by: i32 = 10) -> i32;
+}
+
+struct Unit {
+    n: i32,
+}
+
+impl Conv for Unit {
+    fn conv<U>(&self, u: U) -> U {
+        return u;
+    }
+
+    fn scaled(&self, by: i32) -> i32 {
+        return self.n * by;
+    }
+}
+
+fn through<T: Conv>(t: &T) -> String {
+    return T::conv(t, "kept");
+}
+
+fn defaulted<T: Conv>(t: &T) -> i32 {
+    return T::scaled(t);
+}
+
+test "a method type parameter is inferred from the argument after the receiver" {
+    assert through(&Unit { n: 1 }) == "kept";
+}
+
+test "a default fills the parameter after the receiver" {
+    assert defaulted(&Unit { n: 3 }) == 30;
+}

@@ -615,16 +615,15 @@ test "each keyed vector form answers what its scalar form does" {
 
 test "a keyed draw depends on its key and nothing else" {
     let keyed = Squares64::from_seed(Seed::from_u64(1));
-    assert keyed.at(coord_key(3, 7)) == keyed.at(coord_key(3, 7));
-    assert keyed.at(coord_key(3, 7)) != keyed.at(coord_key(7, 3));
+    let first = keyed.at(coord_key(3, 7));
+    assert first != keyed.at(coord_key(7, 3));
 
-    // Between the two reads above, other keys were drawn; a stream would have
-    // moved on.
+    // Other keys are drawn before the second read; a stream would have moved on.
     let mut seen: List<u64> = [];
     for let mut i = 0; i < 1000; i += 1 {
         seen.push(keyed.at(i as i64 as u64));
     }
-    assert keyed.at(coord_key(3, 7)) == keyed.at(coord_key(3, 7));
+    assert keyed.at(coord_key(3, 7)) == first;
     for let mut i = 0; i < seen.len(); i += 1 {
         assert seen[i] == keyed.at(i as i64 as u64);
     }

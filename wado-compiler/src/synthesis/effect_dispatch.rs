@@ -924,12 +924,14 @@ fn build_dispatch_wrapper_function(
                     guard: None,
                     body: TirExpr::new(TirExprKind::Block(then_block), TypeTable::UNIT, then_span),
                     span: then_span,
+                    consumes: true,
                 },
                 TirMatchArm {
                     pattern: TirPattern::Wildcard,
                     guard: None,
                     body: TirExpr::new(TirExprKind::Block(else_block), TypeTable::UNIT, else_span),
                     span: else_span,
+                    consumes: false,
                 },
             ],
         },
@@ -2544,10 +2546,11 @@ pub fn rewrite_resource_drops(project: &Package) {
 }
 
 /// Post-monomorphize half of [`rewrite_call_sites_to_wrappers`]: a `#[cm]` call
-/// whose receiver was a type parameter matched no instantiation until now.
-pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage) {
+/// whose receiver was a type parameter matched no instantiation until now. The
+/// functions ahead of `from` were rewritten already.
+pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage, from: usize) {
     rewrite_resource_calls(
-        &flat.functions,
+        &flat.functions[from..],
         &flat.resource_wrappers,
         &flat.type_table,
         &flat.entry_module_source,

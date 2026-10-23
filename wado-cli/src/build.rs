@@ -20,6 +20,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, CompileOptions};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{self, openable_dir};
+use wado_host::sync::joined;
 
 pub struct BuildOptions {
     /// `--world <fq>`: build only this hosted world. Mutually exclusive with `lib`.
@@ -300,14 +301,10 @@ pub async fn build_world_components(
         });
     }
     let mut exit_code = None;
-    while let Some(joined) = builds.join_next().await {
-        match joined {
-            Ok(Ok(())) => {}
-            Ok(Err(failure)) => {
-                eprint!("{}", failure.message);
-                exit_code.get_or_insert(failure.exit_code);
-            }
-            Err(join) => std::panic::resume_unwind(join.into_panic()),
+    while let Some(build) = builds.join_next().await {
+        if let Err(failure) = joined(build) {
+            eprint!("{}", failure.message);
+            exit_code.get_or_insert(failure.exit_code);
         }
     }
     exit_code.map_or(Ok(()), |code| Err(CliExit::silent_failure(code)))

@@ -41,11 +41,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
     let mut params: List<SqlParam> = [];
     for let h of ReflectTemplate::<T>::members() {
-        query.push_str(h.lit());                // literal text before this hole
+        query.push_str(h.lit(&t));              // literal text before this hole
         query.push_str("?");
         params.push(h.get(&t).to_sql_param());  // the value, storage shared
     }
-    query.push_str(ReflectTemplate::<T>::tail());
+    query.push_str(ReflectTemplate::<T>::tail(&t));
     return SqlQuery { query, params };
 }
 

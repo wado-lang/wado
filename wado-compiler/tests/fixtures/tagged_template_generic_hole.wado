@@ -6,8 +6,7 @@ use { println, Stdout } from "core:cli";
 fn count<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(h.source());
-        out.push_str(&"=");
+        out.push_str(h.lit(&t));
         h.fmt(&t, &mut Formatter::new(&mut out));
         out.push_str(&"|");
     }
@@ -70,4 +69,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "x=5|x=   5|\nx=hi|x=  hi|\nx=1|y=two|1=1|\nx=true|y=c|1=1|\n<3.5>\nx=<7>|x= <7>|\nx=9|x=   9|\n0xff [1, 2] 255\n1;2;1;\ns;3;s;\nx=6|x=   6|\n"}
+{"stdout": "a5|b   5|\nahi|b  hi|\n1|two|1|\ntrue|c|1|\n<3.5>\na<7>|b <7>|\na9|b   9|\n0xff [1, 2] 255\n1;2;1;\ns;3;s;\na6|b   6|\n"}

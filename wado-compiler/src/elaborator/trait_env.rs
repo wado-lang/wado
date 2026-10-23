@@ -598,6 +598,8 @@ pub(super) struct TraitDeclHeader {
     /// declares `Self::X` while resolving that trait's own method signatures,
     /// before any digest exists.
     pub(super) assoc_types: Vec<ast::AssociatedTypeDecl>,
+    /// An `affine trait`, whose `Self` may be move-only.
+    pub(super) is_affine: bool,
     pub(super) span: Span,
 }
 
@@ -1056,6 +1058,7 @@ impl TraitEnv {
                             supertraits: trait_decl.supertraits.clone(),
                             methods: method_headers(defs, &trait_decl.methods),
                             assoc_types: trait_decl.associated_types.clone(),
+                            is_affine: trait_decl.is_affine,
                             span: trait_decl.span,
                         },
                     );

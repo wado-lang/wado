@@ -5,7 +5,6 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TemplateHole, TemplateShape, TypeId};
 use crate::type_table::TypeTable;
-use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -71,8 +70,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The template's shape, or `None` where a hole cannot be a member of one:
-    /// an error or an undecided inference variable. A hole also carries its
-    /// source text, which only a tag reads.
+    /// an error or an undecided inference variable.
     fn resolve_template_shape(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -92,17 +90,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     sound = false;
                 }
-                TemplateHole {
-                    ty,
-                    spec,
-                    source: unparse_expr_source(expr),
-                }
+                TemplateHole { ty, spec }
             })
             .collect();
-        sound.then_some(TemplateShape {
-            segments: parts.segments,
-            holes,
-        })
+        sound.then_some(TemplateShape { holes })
     }
 
     /// Whether `ty` can be a hole of a shape: decided, and free of a type pack.

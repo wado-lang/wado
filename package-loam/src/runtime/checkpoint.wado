@@ -1,5 +1,5 @@
 use json from "core:json";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
 
 /// A checkpoint that disagrees with the graph, or is not a safetensors file.
@@ -30,14 +30,14 @@ pub global METADATA_KEY: String = "__metadata__";
 
 /// The header's tensor entries, `METADATA_KEY` skipped.
 struct Header {
-    entries: TreeMap<String, HeaderEntry>,
+    entries: HashMap<String, HeaderEntry>,
 }
 
 impl Deserialize for Header {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Header, DeserializeError> {
         let on_duplicate = d.on_duplicate_field();
         let mut map = d.begin_map()?;
-        let mut entries = TreeMap::<String, HeaderEntry>::new();
+        let mut entries = HashMap::<String, HeaderEntry>::new();
         while let Some(key) = map.next_key::<String>()? {
             if key == METADATA_KEY {
                 let _ = map.next_value::<IgnoredAny>()?;
@@ -56,7 +56,7 @@ impl Deserialize for Header {
 
 /// A checkpoint's header, read, and where its payloads start.
 pub struct Checkpoint {
-    entries: TreeMap<String, HeaderEntry>,
+    entries: HashMap<String, HeaderEntry>,
     data_start: i32,
 }
 
@@ -158,4 +158,42 @@ impl Checkpoint {
         }
         return Result::Ok(view.slice(start, end));
     }
+}
+
+/// A checkpoint published in shards, each shard's header read, keyed by the
+/// file name the index gives the shard.
+pub struct Shards {
+    headers: HashMap<String, Checkpoint>,
+}
+
+/// The header of each shard in `shards`, keyed as `shards` is. A shard's
+/// payloads may be absent.
+pub fn read_shards(shards: &HashMap<String, ByteList>) -> Result<Shards, LoadError> {
+    let mut headers = HashMap::<String, Checkpoint>::new();
+    for let [name, bytes] of shards.entries() {
+        let header = read_checkpoint(bytes).map_err(|e| LoadError { reason: `${name}: ${e}` })?;
+        headers[*name] = header;
+    }
+    return Result::Ok(Shards { headers });
+}
+
+impl Shards {
+    /// `e`'s bytes within the shard named `shard`, of `shards`, which these
+    /// headers were read from.
+    pub fn payload(
+        &self,
+        shards: &HashMap<String, ByteList>,
+        shard: String,
+        e: &Expected,
+    ) -> Result<ByteSlice, LoadError> {
+        if let Some(header) = self.headers.get_ref_str(&shard) && let Some(bytes) = shards.get_ref_str(&shard) {
+            return header.payload(bytes, e).map_err(|err| LoadError { reason: `${shard}: ${err}` });
+        }
+        return Result::Err(shard_not_given(&e.tensor, &shard));
+    }
+}
+
+/// Why a tensor cannot be read: the shard the index places it in is absent.
+pub fn shard_not_given(tensor: &String, shard: &String) -> LoadError {
+    return LoadError { reason: `${*tensor}: the index places it in ${*shard}, which is not given` };
 }

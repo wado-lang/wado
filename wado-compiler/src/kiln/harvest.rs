@@ -202,13 +202,11 @@ pub fn remap_decl_files(
 
 #[cfg(test)]
 mod tests {
+    use futures::executor::block_on;
+
     use super::*;
     use crate::compiler_host::DependencyManifest;
     use crate::module_source::TestPackages;
-
-    fn block_on<F: Future>(future: F) -> F::Output {
-        futures::executor::block_on(future)
-    }
 
     fn ast_of(source: &str) -> Module {
         parse(source).ast

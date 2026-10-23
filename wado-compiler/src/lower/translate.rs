@@ -33,7 +33,7 @@ use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
     field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    variant_tag_helper_name,
+    template_segment_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -125,7 +125,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         builtin_registry,
         wasm_assets,
         trait_env,
-        moved_local_spans,
         #[cfg(debug_assertions)]
         pruned,
     } = flat;
@@ -161,7 +160,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             #[cfg(debug_assertions)]
             pruned,
         }),
-        moved_local_spans,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, FuncRef> =
@@ -276,10 +274,6 @@ struct Translator<'a> {
     /// callees are interned on first sight as `extern_stub`s appended after the
     /// in-package functions. Replaces the former post-pass `assign_func_ids`.
     interner: RefCell<Interner>,
-    /// Last-use spans (WEP 2026-05-21). A `Local` read whose span is listed is
-    /// a move-eligible local's final use, so its defensive value copy is
-    /// elided.
-    moved_local_spans: IndexSet<Span>,
 }
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
@@ -314,8 +308,10 @@ impl Interner {
         // package *does* define means the call and the definition disagree on
         // some other part of the identity — the call then binds to a body-less
         // stub and only surfaces as an unsatisfied trait bound at WIR build.
+        // A module of intrinsics or imports defines nothing, so a call into one
+        // is a stub whatever the package names its own functions.
         #[cfg(debug_assertions)]
-        {
+        if !func_ref.module_source.is_builtin() && !func_ref.module_source.is_binding() {
             let name = &func_ref.name;
             let same_name = |k: &FunctionId| match k {
                 FunctionId::Free(f) => f.name == *name,
@@ -349,14 +345,13 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
 }
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment in `in_place` replaces whole.
-fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32> {
-    struct Scan<'a> {
-        in_place: &'a IndexSet<Span>,
+/// assignment writing in place replaces whole.
+fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
+    struct Scan {
         deferred: IndexSet<u32>,
         replaced: IndexSet<u32>,
     }
-    impl TirRefVisitor for Scan<'_> {
+    impl TirRefVisitor for Scan {
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Let {
                 local_index,
@@ -374,7 +369,7 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
-                && self.in_place.contains(&expr.span)
+                && expr.marks().in_place
             {
                 self.replaced.insert(index);
             }
@@ -385,7 +380,6 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32
         return IndexSet::default();
     };
     let mut scan = Scan {
-        in_place,
         deferred: IndexSet::default(),
         replaced: IndexSet::default(),
     };
@@ -427,13 +421,12 @@ struct FunctionTranslator<'a, 'p> {
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
-    /// [`value_copy::last_use::Ownership::written_args`], `None` where the
-    /// ownership walk did not run, which leaves every argument copied.
-    written_args: Option<IndexSet<Span>>,
-    /// Assignments that write into the storage their place holds, by span
-    /// (WEP 2026-10-13).
-    in_place_assigns: IndexSet<Span>,
-    /// Locals declared without a value that such an assignment replaces whole.
+    /// Whether the ownership walk marked which arguments are written
+    /// ([`tir::ExprMarks::written`]). Where it did not run, every argument is
+    /// copied.
+    args_checked: bool,
+    /// Locals declared without a value that an assignment writing in place
+    /// ([`tir::ExprMarks::in_place`]) replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
     /// whether to write in place or to store.
     guarded_locals: IndexSet<u32>,
@@ -512,7 +505,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &resolver,
                     base.value_copy,
                     &base.points_to,
-                    &base.moved_local_spans,
                     &value_copy::reach::StorageReach::new(
                         &type_table,
                         &base.struct_fields_map,
@@ -532,16 +524,14 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .body
                 .as_ref()
                 .is_some_and(|b| !value_copy::last_use::has_unsupported_form(b));
-        let in_place_assigns = if analyzed {
-            ownership.in_place_assigns
-        } else {
-            value_copy::last_use::unanalyzed_in_place_assigns(
+        if !analyzed {
+            value_copy::last_use::mark_unanalyzed_in_place_assigns(
                 func,
                 &base.type_table.borrow(),
                 base.value_copy,
-            )
-        };
-        let guarded_locals = guarded_locals(func, &in_place_assigns);
+            );
+        }
+        let guarded_locals = guarded_locals(func);
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
@@ -549,7 +539,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             IndexSet::default()
         };
-        let written_args = analyzed.then_some(ownership.written_args);
         // Keyed on the *return* type rather than `needs_copy_analysis`: the
         // payload is read out of the receiver, so it need not be any local's
         // type.
@@ -570,8 +559,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals,
             ref_targets,
             moved_roots,
-            written_args,
-            in_place_assigns,
+            args_checked: analyzed,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -597,8 +585,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
-            written_args: None,
-            in_place_assigns: IndexSet::default(),
+            args_checked: false,
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -855,7 +842,7 @@ impl FunctionTranslator<'_, '_> {
         };
         // `dead.unwrap()` is as fresh as `dead`: a call handing its argument
         // back hands over whatever the argument's read hands over.
-        wrap(&IndexSet::default()) && wrap(&self.moves.sole_moved_reads(value, &type_table))
+        wrap(&IndexSet::default()) && wrap(&self.moves.moved_reads(value, &type_table))
     }
 
     /// Whether an immutable binding may alias `value`'s storage instead of
@@ -1119,12 +1106,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 (**ref_expr).clone()
             }
-            _ if self.in_place_assigns.contains(&expr.span)
-                && value_copy::last_use::can_write_in_place(
-                    expr,
-                    &self.base.type_table.borrow(),
-                ) =>
-            {
+            _ if expr.marks().in_place => {
                 // A handle of a reference type, so every later pass reads the
                 // writes below as going through it.
                 let ref_type = self
@@ -1183,18 +1165,10 @@ impl FunctionTranslator<'_, '_> {
     /// too. One out of bounds takes the call itself, which traps with its
     /// message. The list, index and value are evaluated first, as for the call.
     fn try_expand_in_place_element_assign(&self, call: &TirExpr) -> Option<Vec<StmtId>> {
-        let TirExprKind::Call { func, args, .. } = &call.kind else {
+        let TirExprKind::Call { args, .. } = &call.kind else {
             return None;
         };
-        // A span is no identity: a call the translator synthesizes for a
-        // closure carries the span of the source it stands for.
-        if !self.in_place_assigns.contains(&call.span)
-            || !self
-                .base
-                .value_copy
-                .list_element_assigns
-                .contains(&func.module_source, &func.name)
-        {
+        if !call.marks().in_place {
             return None;
         }
         let [list, index, value] = args.iter().map(|a| &a.expr).collect::<Vec<_>>()[..] else {
@@ -2571,7 +2545,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
-        // the shape only.
+        // and `template_segment<T>` the shape only.
         if func.is_builtin_named("hole_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
@@ -2583,11 +2557,16 @@ impl FunctionTranslator<'_, '_> {
             };
             return Some(self.bridge_call(ta[0], name, args, "hole_get"));
         }
-        if func.is_builtin_named("hole_fmt") {
-            let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
-            let name =
-                hole_fmt_helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
-            return Some(self.bridge_call(ta[0], name, args, "hole_fmt"));
+        for (builtin, helper_name) in [
+            ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
+            ("template_segment", template_segment_helper_name),
+        ] {
+            if func.is_builtin_named(builtin) {
+                let ta = Self::marker_type_args::<1>(type_args, mi, builtin);
+                let name =
+                    helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
+                return Some(self.bridge_call(ta[0], name, args, builtin));
+            }
         }
 
         let helper_name_for: fn(&str, &str) -> String =
@@ -3000,10 +2979,8 @@ impl FunctionTranslator<'_, '_> {
                 .value_copy
                 .confined_params
                 .is_confined(c, param_index)
-        }) && self
-            .written_args
-            .as_ref()
-            .is_some_and(|written| !written.contains(&value_copy::last_use::strip_casts(arg).span))
+        }) && self.args_checked
+            && !value_copy::last_use::strip_casts(arg).marks().written
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's

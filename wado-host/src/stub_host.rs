@@ -2,12 +2,12 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, SourceError,
+    GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
 };
 use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::discovery::normalize_path;
@@ -85,6 +85,18 @@ impl CompilerHost for StubHost {
         self.filesystem.source_exists(path).await
     }
 
+    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+        self.filesystem.open_source(path).await
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, SourceError> {
+        self.filesystem.load_source_prefix(path, extent).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         assert_diagnostic_is_attributed(&diagnostic);
         self.filesystem.collect_diagnostic(diagnostic);
@@ -141,7 +153,7 @@ impl CompilerHost for StubHost {
     async fn probe_generator(
         &self,
         component_wasm: &[u8],
-        request: &GeneratorRequest,
+        request: &ProbeRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
         let (engine, component) = GENERATORS.get_or_compile(component_wasm)?;
         probe_for(self, &engine, &component, request).await

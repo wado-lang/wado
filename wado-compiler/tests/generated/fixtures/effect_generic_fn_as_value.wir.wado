@@ -67,7 +67,7 @@ type "functype//effect_generic_fn_as_value.wado/effect_generic_fn_as_value.wado/
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
@@ -76,6 +76,10 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 type "functype//effect_generic_fn_as_value.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(32)
+
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
+
+type "functype//core:rt/write_string_to_stream$spec1$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -86,12 +90,12 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:effect_generic_fn_as_value.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 108, 97, 121, 101, 100), used: 7 };
-global global:effect_generic_fn_as_value.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 117, 100), used: 4 };
+global global:effect_generic_fn_as_value.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 108, 97, 121, 101, 100), used: 7 };
+global global:effect_generic_fn_as_value.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 117, 100), used: 4 };
 
 fn "effect_generic_fn_as_value.wado/run"() with Stdout {
     let f_11: ref struct;
@@ -107,9 +111,9 @@ fn "effect_generic_fn_as_value.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_52 = $sroa_$pattern_temp_0_0_13_51;
     $sroa_$pattern_temp_0_0_13_51 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:effect_generic_fn_as_value.wado::$const_obj_3;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_52, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_52 = $moved_4_42; $moved_4_42 = 0; $sroa_$pattern_temp_0_1_14_52);
+    $mv_arg_2 = global:effect_generic_fn_as_value.wado::$const_obj_0;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14_52, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_52 = $moved_4_42; $moved_4_42 = 0; $sroa_$pattern_temp_0_1_14_52);
     f_11 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_generic_fn_as_value.wado//$Closure_3" {  }, func: ref.func "closure/effect_generic_fn_as_value.wado/$closure_wrapper_0" };
     let $indirect_call_3: ref "canonical//CanonicalClosure_0";
     call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"(f_11)).env);
@@ -147,7 +151,7 @@ fn "effect_generic_fn_as_value.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_52 = $moved_4_42;
     $moved_4_42 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_42 = $sroa_$pattern_temp_0_1_14_52; $sroa_$pattern_temp_0_1_14_52 = 0; $moved_4_42, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_42 = $sroa_$pattern_temp_0_0_13_51; $sroa_$pattern_temp_0_0_13_51 = 0; $moved_4_42);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_42 = $sroa_$pattern_temp_0_0_13_51; $sroa_$pattern_temp_0_0_13_51 = 0; $moved_4_42);
 }
 
 fn "effect_generic_fn_as_value.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -301,8 +305,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -315,6 +321,26 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l32;
         };
     };
+}
+
+fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $mv$message$repr, 0, 7);
+    builtin::array_set_u8(new_repr, 7, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 8);
+    });
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+}
+
+fn "core:rt/write_string_to_stream$spec1$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(5)), 0, $mv$message$repr, 0, 4);
+    builtin::array_set_u8(new_repr, 4, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 5);
+    });
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -345,9 +371,9 @@ fn "effect_generic_fn_as_value.wado/effect_generic_fn_as_value.wado/$Closure_5::
     $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;
     $sroa_$pattern_temp_0_0_13 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:effect_generic_fn_as_value.wado::$const_obj_5;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+    $mv_arg_2 = global:effect_generic_fn_as_value.wado::$const_obj_2;
+    "core:rt/write_string_to_stream$spec1$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
 }
 
 fn "effect_generic_fn_as_value.wado/effect_generic_fn_as_value.wado/$Closure_7::$call$dae[self]"(n) {

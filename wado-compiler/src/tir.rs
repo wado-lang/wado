@@ -3,7 +3,7 @@
 //! reference a local index, every call a resolved target, and all syntactic
 //! sugar is already desugared.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -446,20 +446,19 @@ pub enum AnonShape {
     Template(TemplateShape),
 }
 
-/// One hole of a template shape: its expression's type, its specifier as
-/// written, and its expression's source text.
+/// One hole of a template shape: its expression's type and its specifier as
+/// written.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateHole {
     pub ty: TypeId,
     pub spec: Option<String>,
-    pub source: String,
 }
 
-/// The static part of a tagged template literal: the raw literal segments —
-/// one more than the holes, cooked forms derived on demand — and the holes.
+/// The static part of a tagged template literal: its holes. The literal
+/// segments are no part of it: a value carries its own, so templates differing
+/// only in their text share one type and one instantiation of the tag.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateShape {
-    pub segments: Vec<String>,
     pub holes: Vec<TemplateHole>,
 }
 
@@ -468,6 +467,34 @@ impl TemplateShape {
     #[must_use]
     pub fn field_name(k: usize) -> String {
         format!("h{k}")
+    }
+
+    /// Segment `k`, cooked or raw, as `builtin::template_segment` numbers it.
+    #[must_use]
+    pub fn segment_key(k: usize, raw: bool) -> u32 {
+        (2 * k + usize::from(raw)) as u32
+    }
+
+    /// The segment `key` numbers, and whether it is the raw form.
+    #[must_use]
+    pub fn segment_of(key: u32) -> (usize, bool) {
+        ((key / 2) as usize, key % 2 == 1)
+    }
+
+    /// The field holding the segment `key` numbers. The segments follow the
+    /// holes, so a hole's field index is its own.
+    #[must_use]
+    pub fn segment_field(&self, key: u32) -> (String, u32) {
+        let name = match Self::segment_of(key) {
+            (k, false) => format!("s{k}"),
+            (k, true) => format!("r{k}"),
+        };
+        (name, self.holes.len() as u32 + key)
+    }
+
+    /// The segment keys, one cooked and one raw per segment, in field order.
+    pub fn segment_keys(&self) -> std::ops::Range<u32> {
+        0..Self::segment_key(self.holes.len() + 1, false)
     }
 
     #[must_use]
@@ -804,6 +831,26 @@ pub struct TirExpr {
     pub kind: TirExprKind,
     pub type_id: TypeId,
     pub span: Span,
+    /// What a pass decided about this node, written where it decided it while
+    /// it held the body by reference. The node is its own identity: a span is
+    /// none, since every synthesized node shares one, and a copy carries the
+    /// decision along.
+    marks: Cell<ExprMarks>,
+}
+
+/// What lowering's ownership walk decided about one expression.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExprMarks {
+    /// An assignment, or a `List::index_assign` call, that writes into the
+    /// storage its place holds rather than repointing the place: a holder of
+    /// that storage may read it afterwards (WEP 2026-10-13).
+    pub in_place: bool,
+    /// A value read, a whole local's or a materialization out of an aggregate,
+    /// that hands its storage over, so it needs no copy (WEP 2026-05-21).
+    pub moves: bool,
+    /// A by-value argument whose storage the call's evaluation may write before
+    /// the callee is done with it: a confined parameter still copies it.
+    pub written: bool,
 }
 
 impl TirExpr {
@@ -812,7 +859,19 @@ impl TirExpr {
             kind,
             type_id,
             span,
+            marks: Cell::default(),
         }
+    }
+
+    #[must_use]
+    pub fn marks(&self) -> ExprMarks {
+        self.marks.get()
+    }
+
+    pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
+        let mut marks = self.marks.get();
+        set(&mut marks);
+        self.marks.set(marks);
     }
 
     /// The place `self` moves out of, or `self` where it moves nothing.
@@ -1397,6 +1456,10 @@ pub struct TirMatchArm {
     pub guard: Option<TirExpr>,
     pub body: TirExpr,
     pub span: Span,
+    /// Whether entering the arm consumes the scrutinee. Only the path a
+    /// refutable `let` takes when its pattern fails to match does not: it
+    /// leaves the scrutinee to its owner (WEP: Affine Types).
+    pub consumes: bool,
 }
 
 #[derive(Debug, Clone)]

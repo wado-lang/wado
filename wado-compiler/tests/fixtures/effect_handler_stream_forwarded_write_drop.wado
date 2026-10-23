@@ -1,0 +1,55 @@
+// A write copy a handler started on another end is cancelled through the
+// handler when the program drops it in flight, as a read copy is. Nothing
+// reads from that end before the drop returns, so waiting for the copy instead
+// would block for good.
+
+use { println, Stdout } from "core:cli";
+
+affine struct Proxy {
+    inner: Option<StreamWritable<u8>>,
+}
+
+impl Proxy {
+    fn inner(&self) -> &StreamWritable<u8> {
+        let Some(inner) = &self.inner else {
+            unreachable();
+        };
+        return inner;
+    }
+}
+
+impl StreamWritable<u8> for Proxy {
+    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
+        let _ = this;
+        resume self.inner().begin_write(data);
+    }
+
+    fn cancel_write(&mut self, this: &StreamWritable<u8>) -> u32 {
+        let _ = this;
+        resume self.inner().cancel_write();
+    }
+
+    ..forward
+}
+
+export fn run() with Stdout {
+    let [inner_rx, inner_tx] = Stream::<u8>::new();
+    let [outer_rx, outer_tx] = Stream::<u8>::new();
+    let mut proxy = Proxy { inner: Option::Some(inner_tx) };
+    with StreamWritable<u8> => &mut proxy do {
+        builtin::drop(outer_tx.start_write([1, 2]));
+    }
+    outer_rx.drop();
+    println("dropped");
+
+    // The cancel left the inner end usable.
+    let reading = inner_rx.start_read(8);
+    let [tx, written] = proxy.inner.take().unwrap().start_write([4, 5]).finish();
+    tx.drop();
+    let [rx, chunk] = reading.finish();
+    rx.drop();
+    println(`${chunk.items:?} ${written.result:?}`);
+}
+
+__DATA__
+{"stdout": "dropped\n[4, 5] CopyResult::Completed\n"}

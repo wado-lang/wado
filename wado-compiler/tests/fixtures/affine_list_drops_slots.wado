@@ -10,8 +10,8 @@ test {
         ends.push(rx2);
         kept = ends.pop();
     }
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
     let Some(end) = kept else { unreachable(); };
     end.drop();
-    assert tx2.write([1]).result == CopyResult::Dropped;
+    assert tx2.write_all([1]) == CopyResult::Dropped;
 }

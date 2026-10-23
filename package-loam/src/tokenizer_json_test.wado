@@ -1,4 +1,4 @@
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { to_string } from "core:json";
 use { BpePipeline, read } from "./tokenizer_json.wado";
 use { byte_chars, byte_token } from "./runtime/tokenizer.wado";
@@ -11,7 +11,7 @@ global SPECIAL_ID: i32 = 256;
 /// A vocabulary of every byte's character, then `<|endoftext|>`, then
 /// `extra`, as JSON.
 fn vocab(extra: List<String>) -> String {
-    let mut tokens = TreeMap::<String, i32>::new();
+    let mut tokens = HashMap::<String, i32>::new();
     for let c of byte_chars() {
         tokens[String::from(c)] = tokens.len();
     }
@@ -157,7 +157,7 @@ test "a special token may hold what no byte is spelled as" {
 /// `▁a`. `<bos>` is added at its own id, and `<eot>` extends the vocabulary.
 /// `byte_fallback` is `fallback`.
 fn gemma(fallback: String) -> String {
-    let mut tokens = TreeMap::<String, i32>::new();
+    let mut tokens = HashMap::<String, i32>::new();
     tokens["<unk>"] = 0;
     tokens["<bos>"] = 1;
     for let b of 0..<256 {

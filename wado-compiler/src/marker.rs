@@ -13,8 +13,11 @@
 //!
 //! ```wado
 //! impl Waitable for V {
-//!     fn waitable_id(&self) -> Option<ResourceId> {
-//!         return match self { Self::A($member) => $member.waitable_id(), Self::B => null };
+//!     fn wait_on(&self) -> WaitOn {
+//!         return match self {
+//!             Self::A($member) => $member.wait_on(),
+//!             Self::B => WaitOn::Settled(ReadyEvent::Unreported),
+//!         };
 //!     }
 //! }
 //! ```
@@ -30,9 +33,9 @@
 //! resolved with the rest of the module.
 
 use crate::ast::{
-    AstId, Block, CallExpr, EffectsSource, Expr, Function, GenericType, IdentExpr, ImplBlock, Item,
-    Literal, LiteralExpr, MatchArm, MatchExpr, MethodCallExpr, Module, NamedType, Param,
-    PathSegment, Pattern, ReturnKeyword, ReturnStmt, SelfKind, Stmt, Type, Visibility,
+    AstId, Block, CallExpr, EffectsSource, Expr, Function, IdentExpr, ImplBlock, Item, MatchArm,
+    MatchExpr, MethodCallExpr, Module, NamedType, Param, PathSegment, Pattern, ReturnKeyword,
+    ReturnStmt, SelfKind, Stmt, Type, Visibility,
 };
 use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
 use crate::defs::DefTable;
@@ -45,6 +48,9 @@ use crate::token::Span;
 
 /// The builtin each written-out `From` marker calls.
 pub(crate) const WRAP_IN_CASE: &str = "wrap_in_case";
+
+/// The method each written-out `Waitable` marker defines.
+const WAIT_ON: &str = "wait_on";
 
 /// What a marker is written out from.
 enum Derived {
@@ -175,6 +181,25 @@ fn ident(id: AstId, name: &str, span: Span) -> Expr {
     })
 }
 
+/// `a::b`, as the parser spells a path.
+fn path(fresh: &mut impl FnMut() -> AstId, segments: [&str; 2], span: Span) -> Expr {
+    Expr::Ident(IdentExpr {
+        id: fresh(),
+        name: segments.join("::"),
+        span,
+        segments: segments
+            .iter()
+            .map(|name| PathSegment {
+                id: fresh(),
+                name: name.to_string(),
+                span,
+            })
+            .collect(),
+        type_args: Vec::new(),
+        type_args_on_prefix: false,
+    })
+}
+
 fn named_type(id: AstId, name: &str, span: Span) -> Type {
     Type::Named(NamedType::new(id, name.to_string(), span))
 }
@@ -229,25 +254,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
         source.refreshed(&mut fresh),
     ];
     let return_type = named_type(fresh(), "Self", span);
-    let callee = Expr::Ident(IdentExpr {
-        id: fresh(),
-        name: format!("builtin::{WRAP_IN_CASE}"),
-        span,
-        segments: vec![
-            PathSegment {
-                id: fresh(),
-                name: "builtin".to_string(),
-                span,
-            },
-            PathSegment {
-                id: fresh(),
-                name: WRAP_IN_CASE.to_string(),
-                span,
-            },
-        ],
-        type_args: Vec::new(),
-        type_args_on_prefix: false,
-    });
+    let callee = path(&mut fresh, ["builtin", WRAP_IN_CASE], span);
     let value_name = format!("{INTERNAL_PREFIX}value");
     let call = Expr::Call(Box::new(CallExpr {
         id: fresh(),
@@ -271,7 +278,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
     method(module, "from", vec![param], return_type, call, span)
 }
 
-/// `fn waitable_id(&self) -> Option<ResourceId> { return match self { … }; }`.
+/// `fn wait_on(&self) -> WaitOn { return match self { … }; }`.
 fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) -> Function {
     let mut fresh = || module.alloc_ast_id();
     let member = format!("{INTERNAL_PREFIX}member");
@@ -287,7 +294,7 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
                 let call = Expr::MethodCall(Box::new(MethodCallExpr {
                     id: fresh(),
                     receiver: ident(fresh(), &member, span),
-                    method: "waitable_id".to_string(),
+                    method: WAIT_ON.to_string(),
                     method_id: fresh(),
                     method_span: span,
                     type_args: Vec::new(),
@@ -297,12 +304,15 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
                 }));
                 (vec![binding], call)
             } else {
-                let null = Expr::Literal(LiteralExpr {
+                let settled = Expr::Call(Box::new(CallExpr {
                     id: fresh(),
-                    value: Literal::Null,
+                    callee: path(&mut fresh, ["WaitOn", "Settled"], span),
+                    type_args: Vec::new(),
+                    args: vec![path(&mut fresh, ["ReadyEvent", "Unreported"], span)],
+                    has_trailing_comma: false,
                     span,
-                });
-                (Vec::new(), null)
+                }));
+                (Vec::new(), settled)
             };
             MatchArm {
                 id: fresh(),
@@ -337,18 +347,6 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
         default: None,
         span,
     };
-    let return_type = Type::Generic(GenericType {
-        id: fresh(),
-        name: "Option".to_string(),
-        args: vec![named_type(fresh(), "ResourceId", span)],
-        span,
-    });
-    method(
-        module,
-        "waitable_id",
-        vec![self_param],
-        return_type,
-        value,
-        span,
-    )
+    let return_type = named_type(fresh(), "WaitOn", span);
+    method(module, WAIT_ON, vec![self_param], return_type, value, span)
 }

@@ -10,7 +10,7 @@ type "functype//wasi/wasi:demo/Fields::id" = fn(i32) -> i32;  // TypeId(2)
 
 type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_export__run" = fn();  // TypeId(3)
 
-type "functype//wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#thing" = fn(i32);  // TypeId(4)
+type "functype//wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields" = fn(i32);  // TypeId(4)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
@@ -22,7 +22,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Api::get_thing from "wasi/wasi:demo/Api::get_thing";
 import fn wasi/wasi:demo/Fields::id from "wasi/wasi:demo/Fields::id";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#thing from "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#thing";
+import fn wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields from "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Api_get_thing"() with Api {
@@ -40,7 +40,7 @@ fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_export__run"() {
         let $cm_handle_2: i32;
         $cm_handle_2 = t;
         t = 0;
-        "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#thing"($cm_handle_2);
+        "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields"($cm_handle_2);
     }
     "wasi/task-return"(0);
 }

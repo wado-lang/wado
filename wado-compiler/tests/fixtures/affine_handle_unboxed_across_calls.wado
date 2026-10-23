@@ -32,11 +32,11 @@ test {
     let tx = pick(builtin::black_box(true), tx_a, tx_b);
     builtin::drop(tx);
     let held = Holder { rx: rx_a };
-    assert held.rx.read(1).result == CopyResult::Dropped;
+    assert held.rx.read_to_end().is_empty();
     let [rx_c, tx_c] = Stream::<u8>::new();
     builtin::drop(tx_c);
     let rx = pick_by_break(builtin::black_box(true), rx_b, rx_c);
-    assert rx.read(1).result == CopyResult::Dropped;
+    assert rx.read_to_end().is_empty();
 }
 
 __DATA__

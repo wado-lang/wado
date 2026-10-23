@@ -30,6 +30,7 @@ use wado_host::kiln::driver::{
     Harvested, PipelineError, PipelineOutcome, ProviderError, emit_counting_errors,
     harvest_invocations, merge_across_packages, run_pipeline,
 };
+use wado_host::sync::joined;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -362,7 +363,7 @@ pub async fn try_compile_with_run_cache(
     };
     // The entry file never goes through `load_source`, so the watch would
     // otherwise miss the one file the caller named.
-    base_host.run_cache().observe(path, source.as_bytes());
+    base_host.run_cache().observe(path, None, source.as_bytes());
     if let Some(project) = &manifest_pair {
         for file in resolution_inputs(&project.root) {
             base_host.run_cache().depend_on_file(&file);
@@ -671,9 +672,7 @@ async fn materialize_git_dependencies(
             continue;
         };
         let (url, version, sha) = (url.clone(), version.clone(), sha.clone());
-        tokio::task::spawn_blocking(move || materialize(&url, &version, &sha))
-            .await
-            .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?
+        joined(tokio::task::spawn_blocking(move || materialize(&url, &version, &sha)).await)
             .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?;
     }
     Ok(())

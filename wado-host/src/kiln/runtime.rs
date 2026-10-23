@@ -14,12 +14,17 @@
 //!
 //! See WEP 2026-04-12 (Kiln) §"The generator contract".
 
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 use anyhow::Result;
 use wasmtime::component::types::{ComponentItem, Type};
-use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
-use wasmtime::{Engine, Store};
+use wasmtime::component::{
+    Component, Destination, Func, HasSelf, Instance, Linker, StreamProducer, StreamReader,
+    StreamResult, Val,
+};
+use wasmtime::{AsContextMut, Engine, Store, StoreContextMut};
 use wasmtime_wasi::WasiCtx;
 use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
 
@@ -28,7 +33,7 @@ use wado_compiler::name::to_cm_name;
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
     GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, GeneratorSourceSpan,
+    GeneratorRunnerError, GeneratorSourceSpan, ProbeRequest, SourceReader,
 };
 
 use crate::engine::fuel_engine;
@@ -170,18 +175,98 @@ async fn instantiate(
     Ok((store, instance))
 }
 
-/// A file's content as a host-produced `stream<u8>`, which the generator reads
-/// at its own pace.
-fn content_stream(
+/// The file at `path` as a host-produced `stream<u8>`, which the generator
+/// reads at its own pace.
+fn host_stream(
     store: &mut Store<KilnHostState>,
-    f: &GeneratorInputFile,
+    path: &str,
+    producer: impl StreamProducer<KilnHostState, Item = u8>,
 ) -> Result<Val, GeneratorRunnerError> {
-    StreamReader::new(&mut *store, f.content.clone())
+    StreamReader::new(&mut *store, producer)
         .and_then(|s| s.try_into_stream_any(&mut *store))
         .map(Val::Stream)
         .map_err(|e| {
-            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", f.path))
+            GeneratorRunnerError::Host(format!("input `{path}`: host stream create: {e:#}"))
         })
+}
+
+/// A file as a `stream<u8>` that reads each range as the guest asks for it,
+/// into the guest's buffer, so the host reads no further than the probe pulls.
+/// A read short of what was asked is the end of the file.
+struct RangeStream {
+    source: Arc<dyn SourceReader>,
+    at: u64,
+}
+
+impl<D> StreamProducer<D> for RangeStream {
+    type Item = u8;
+    type Buffer = Option<u8>;
+
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        mut store: StoreContextMut<'a, D>,
+        dst: Destination<'a, u8, Option<u8>>,
+        _: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let this = self.get_mut();
+        let Some(capacity) = dst.remaining(store.as_context_mut()) else {
+            unreachable!("only a guest reads a generator's input");
+        };
+        if capacity == 0 {
+            return Poll::Ready(Ok(StreamResult::Completed));
+        }
+        let mut direct = dst.as_direct(store, capacity);
+        let read = match this.source.read_at(this.at, direct.remaining()) {
+            Ok(read) => read,
+            Err(e) => return Poll::Ready(Err(wasmtime::format_err!("{e}"))),
+        };
+        direct.mark_written(read);
+        this.at += read as u64;
+        Poll::Ready(Ok(if read < capacity {
+            StreamResult::Dropped
+        } else {
+            StreamResult::Completed
+        }))
+    }
+}
+
+/// The arguments `func`, the generator's `export`, takes, each from `supply` by
+/// its parameter's name and type. Matched by name, since an export may leave
+/// out the parameters it does not read. `supply` answers `None` for a name the
+/// host does not supply: compiling a generator refuses one, but a prebuilt
+/// generator was compiled elsewhere.
+fn args_by_name(
+    store: &mut Store<KilnHostState>,
+    func: &Func,
+    export: &str,
+    mut supply: impl FnMut(
+        &mut Store<KilnHostState>,
+        &str,
+        &Type,
+    ) -> Result<Option<Val>, GeneratorRunnerError>,
+) -> Result<Vec<Val>, GeneratorRunnerError> {
+    let params: Vec<(String, Type)> = func
+        .ty(&*store)
+        .params()
+        .map(|(name, ty)| (name.to_string(), ty))
+        .collect();
+    params
+        .iter()
+        .map(|(name, ty)| {
+            supply(store, name, ty)?.ok_or_else(|| {
+                GeneratorRunnerError::Host(format!(
+                    "`{export}` takes an unknown parameter `{name}`"
+                ))
+            })
+        })
+        .collect()
+}
+
+/// The `type` the use site gave a file, as the `option<string>` a generator
+/// reads it as.
+fn type_val(use_type: Option<&String>) -> Val {
+    Val::Option(use_type.map(|t| Box::new(Val::String(t.clone()))))
 }
 
 /// Build an `input-file` record `Val` of the shape `record` declares. A
@@ -200,8 +285,8 @@ fn input_file_val(
             field.name.to_string(),
             match field.name {
                 "path" => Val::String(f.path.clone()),
-                "content" => content_stream(store, f)?,
-                "type" => Val::Option(f.use_type.clone().map(|t| Box::new(Val::String(t)))),
+                "content" => host_stream(store, &f.path, f.content.clone())?,
+                "type" => type_val(f.use_type.as_ref()),
                 other => {
                     return Err(GeneratorRunnerError::Host(format!(
                         "`input-file` has an unknown field `{other}`"
@@ -299,8 +384,9 @@ fn record_string(fields: &[(String, Val)], name: &str) -> Result<String, Generat
 /// source of truth for widths, enum-vs-string, and field order. Field names
 /// arrive as raw Wado identifiers and are mapped to the component's CM
 /// kebab-case names here; enum cases arrive already in their CM names.
-fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, String> {
+fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, GeneratorRunnerError> {
     canonical_to_val(&CanonicalValue::Struct(options.values.clone()), ty)
+        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))
 }
 
 fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
@@ -464,17 +550,11 @@ pub async fn run_generator(
                 GeneratorRunnerError::Host("generator exports no `generate`".to_string())
             })?;
 
-        // Matched by name: `options` exists only for a non-empty `Options`, and a
-        // component built before `module` existed lacks that parameter.
-        let params: Vec<(String, Type)> = generate
-            .ty(&store)
-            .params()
-            .map(|(name, ty)| (name.to_string(), ty))
-            .collect();
-        let mut args: Vec<Val> = Vec::with_capacity(params.len());
-        for (name, ty) in &params {
-            args.push(match name.as_str() {
-                "primary" => input_file_val(&mut store, &request.primary, ty)?,
+        // `options` exists only for a non-empty `Options`, and a component built
+        // before `module` existed lacks that parameter.
+        let args = args_by_name(&mut store, &generate, "generate", |store, name, ty| {
+            Ok(Some(match name {
+                "primary" => input_file_val(store, &request.primary, ty)?,
                 "inputs" => {
                     let Type::List(list) = ty else {
                         unreachable!("`inputs` is a list in every generator world");
@@ -484,20 +564,15 @@ pub async fn run_generator(
                         request
                             .inputs
                             .iter()
-                            .map(|f| input_file_val(&mut store, f, &element))
+                            .map(|f| input_file_val(store, f, &element))
                             .collect::<Result<_, _>>()?,
                     )
                 }
                 "module" => Val::String(request.module.clone()),
-                "options" => options_to_val(&request.options, ty)
-                    .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
-                other => {
-                    return Err(GeneratorRunnerError::Host(format!(
-                        "`generate` takes an unknown parameter `{other}`"
-                    )));
-                }
-            });
-        }
+                "options" => options_to_val(&request.options, ty)?,
+                _ => return Ok(None),
+            }))
+        })?;
 
         // `call_async` drives the async task-return export to completion; its
         // error is a host/runtime failure, distinct from the generator's own
@@ -527,31 +602,28 @@ pub async fn run_generator(
     (outcome, emitted)
 }
 
-/// Call the generator's optional `probe` once per input file, in declaration
-/// order, and return the extent each reported. An empty vector means the
-/// generator exports no probe, which is the whole file for every input.
+/// Call the generator's `probe` once per input file of `request`, reading each
+/// from its reader in `files`, and return the extent each reported, `None`
+/// where it reaches the end of the file.
 ///
 /// A fresh instance per call, so a probe carries nothing between inputs and
 /// the host stays free to choose how it instantiates.
-pub async fn run_probe(
+async fn run_probe(
     engine: &Engine,
     component: &Component,
-    request: &GeneratorRequest,
+    request: &ProbeRequest,
+    files: Vec<Arc<dyn SourceReader>>,
     policy: KilnRunPolicy,
 ) -> (
     Result<Vec<Option<u64>>, GeneratorRunnerError>,
     Vec<GeneratorDiagnostic>,
 ) {
-    if !exports(component, engine, "probe") {
-        return (Ok(Vec::new()), Vec::new());
-    }
-
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
     let diagnostics_inner = diagnostics.clone();
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
-        let mut extents = Vec::with_capacity(1 + request.inputs.len());
-        for file in request.files() {
+        let mut extents = Vec::with_capacity(request.files.len());
+        for (file, source) in request.files.iter().zip(files) {
             let (mut store, instance) =
                 instantiate(engine, component, policy, diagnostics_inner.clone()).await?;
 
@@ -559,18 +631,24 @@ pub async fn run_probe(
                 unreachable!("the component type carries a `probe` export");
             };
 
-            // `probe(path, content[, options])`, matching `generate`: the
-            // options parameter is present only when the generator declares a
-            // non-empty `Options`.
-            let options_ty = probe.ty(&store).params().nth(2).map(|(_, t)| t);
-            let content = content_stream(&mut store, file)?;
-            let mut args = vec![Val::String(file.path.clone()), content];
-            if let Some(ty) = &options_ty {
-                args.push(
-                    options_to_val(&request.options, ty)
-                        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
-                );
-            }
+            let len = source.byte_len();
+            let mut source = Some(source);
+            let args = args_by_name(&mut store, &probe, "probe", |store, name, ty| {
+                Ok(Some(match name {
+                    "path" => Val::String(file.path.clone()),
+                    "content" => host_stream(
+                        store,
+                        &file.path,
+                        RangeStream {
+                            source: source.take().expect("`probe` takes one `content`"),
+                            at: 0,
+                        },
+                    )?,
+                    "type" => type_val(file.use_type.as_ref()),
+                    "options" => options_to_val(&request.options, ty)?,
+                    _ => return Ok(None),
+                }))
+            })?;
 
             let mut results = [Val::Bool(false)];
             probe
@@ -581,7 +659,7 @@ pub async fn run_probe(
             let [result] = results;
             match result {
                 Val::Result(Ok(payload)) => match payload.as_deref() {
-                    Some(Val::U64(n)) => extents.push(Some(*n)),
+                    Some(Val::U64(n)) => extents.push(Some(*n).filter(|n| *n < len)),
                     other => {
                         return Err(GeneratorRunnerError::Host(format!(
                             "probe returned a non-u64 extent: {other:?}"
@@ -623,15 +701,28 @@ pub async fn generate_for<H: CompilerHost + ?Sized>(
 }
 
 /// [`run_probe`] under the default policy, for a host's
-/// [`CompilerHost::probe_generator`].
+/// [`CompilerHost::probe_generator`]. A generator exporting no probe answers
+/// empty, and `host` opens no file for it.
 pub async fn probe_for<H: CompilerHost + ?Sized>(
     host: &H,
     engine: &Engine,
     component: &Component,
-    request: &GeneratorRequest,
+    request: &ProbeRequest,
 ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+    if !exports(component, engine, "probe") {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::with_capacity(request.files.len());
+    for file in &request.files {
+        files.push(host.open_source(&file.path).await.map_err(|source| {
+            GeneratorRunnerError::LoadInput {
+                path: file.path.clone(),
+                source,
+            }
+        })?);
+    }
     let (outcome, diagnostics) =
-        run_probe(engine, component, request, KilnRunPolicy::default()).await;
+        run_probe(engine, component, request, files, KilnRunPolicy::default()).await;
     relay_diagnostics(host, diagnostics);
     outcome
 }

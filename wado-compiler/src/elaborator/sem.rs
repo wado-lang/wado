@@ -52,6 +52,7 @@ pub(crate) enum FactKind {
     LocalSymbol,
     LocalType,
     ExpressionType,
+    DestructuredType,
     MethodDispatch,
     StaticMethodDispatch,
     CallParamTypes,
@@ -144,6 +145,10 @@ impl ModuleSemantics {
         FactKind::ExpressionType,
         FactMap::Body(|t| &t.expression_types),
     );
+    pub(crate) const DESTRUCTURED_TYPES: Fact<TypeId> = Fact::new(
+        FactKind::DestructuredType,
+        FactMap::Body(|t| &t.destructured_types),
+    );
     pub(crate) const METHOD_DISPATCH: Fact<types::MethodDispatch> = Fact::new(
         FactKind::MethodDispatch,
         FactMap::Body(|t| &t.method_dispatch),
@@ -169,6 +174,7 @@ impl ModuleSemantics {
             .chain(Self::LOCAL_SYMBOLS.keys(self))
             .chain(Self::LOCAL_TYPES.keys(self))
             .chain(Self::EXPRESSION_TYPES.keys(self))
+            .chain(Self::DESTRUCTURED_TYPES.keys(self))
             .chain(Self::METHOD_DISPATCH.keys(self))
             .chain(Self::STATIC_METHOD_DISPATCH.keys(self))
             .chain(Self::CALL_PARAM_TYPES.keys(self))

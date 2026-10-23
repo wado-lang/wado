@@ -1,0 +1,69 @@
+// A whole-local read that no path reads the local again after hands the value
+// over, so a write to where it went pays no copy. Each function below reaches
+// that read along a path the ownership walk must follow: past a reference that
+// already ended, out of a labeled block, around a loop, down each branch.
+
+fn make(n: i32) -> List<i32> {
+    let mut xs: List<i32> = [];
+    xs.push(n);
+    return xs;
+}
+
+fn after_reference() -> i32 {
+    let a = make(1);
+    let n = (&a).len();
+    let mut b = a;
+    b.push(n);
+    return b.len();
+}
+
+fn after_labeled_break(c: bool) -> i32 {
+    let a = make(1);
+    let n = pick: {
+        if c {
+            break pick: 1;
+        }
+        2
+    };
+    let mut b = a;
+    b.push(n);
+    return b.len();
+}
+
+fn each_iteration(n: i32) -> i32 {
+    let mut items: List<List<i32>> = [];
+    let mut i = 0;
+    while i < n {
+        let v = make(i);
+        items.push(v);
+        items[i].push(0);
+        i += 1;
+    }
+    return items.len();
+}
+
+fn each_branch(c: bool) -> i32 {
+    let a = make(1);
+    let mut b = if c {
+        a
+    } else {
+        let mut t = a;
+        t.push(0);
+        t
+    };
+    b.push(1);
+    return b.len();
+}
+
+export fn run() {
+    assert after_reference() == 2;
+    assert after_labeled_break(true) == 2;
+    assert each_iteration(3) == 3;
+    assert each_branch(false) == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

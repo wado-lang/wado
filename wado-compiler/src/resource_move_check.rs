@@ -7,15 +7,13 @@ use std::rc::Rc;
 
 use crate::ast::{
     self, AssignExpr, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
-    IdentExpr, ImplBlock, Item, Pattern, Stmt, for_each_pattern_binding,
+    IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::ownership::{
-    self, BodyFacts, Modes, OperandMode, PlacePath, affine_params, trait_scope,
-};
+use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
 use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
@@ -60,6 +58,8 @@ enum MoveError {
     DropOnCopyable { type_name: String },
     /// A field moved out of a value whose type implements `Drop`.
     DropPartialMove { type_name: String },
+    /// The `self` of a `Drop::drop` body moved as a whole.
+    DropSelfMove { type_name: String },
     /// `..base` over a type that implements `Drop`.
     DropSpread { type_name: String },
     /// A value read after a local it refers into moved, dropped, or went to a
@@ -139,6 +139,12 @@ impl From<ResourceMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 format!(
                     "`{type_name}` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with"
+                ),
+            ),
+            MoveError::DropSelfMove { type_name } => (
+                Code::TypeMismatch,
+                format!(
+                    "the `drop` of `{type_name}` cannot move `self` as a whole: wherever it went, it would drop and run `drop` again"
                 ),
             ),
             MoveError::DropSpread { type_name } => (
@@ -255,7 +261,7 @@ struct Checker<'a> {
     out: &'a mut Vec<ResourceMoveError>,
 }
 
-impl Checker<'_> {
+impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
         self.out.push(ResourceMoveError {
             kind,
@@ -267,44 +273,54 @@ impl Checker<'_> {
     fn check_item(&mut self, item: &Item) {
         self.check_affine_declaration(item);
         match item {
-            Item::Function(func) => self.check_function(func, &[], false),
+            Item::Function(func) => self.check_function(func, false),
             Item::Impl(b) => {
-                let scope = affine_params(&b.type_params);
-                self.check_impl_trait(b, &scope);
-                let drop_body = self.drops.implemented_by(b, self.sem);
+                self.check_impl_trait(b);
+                let drop_impl = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
-                    self.check_function(method, &scope, drop_body);
+                    self.check_function(method, drop_impl);
                 }
             }
             Item::Trait(t) => {
-                let scope = trait_scope(t);
                 for method in &t.methods {
-                    self.check_function(method, &scope, false);
+                    self.check_function(method, false);
                 }
             }
             Item::Interface(i) => {
                 for method in &i.methods {
-                    self.check_function(method, &[], false);
+                    self.check_function(method, false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new(), false, Vec::new()),
+            Item::Test(test) => self.check_body(&test.body, &[], None, Vec::new()),
             _ => {}
         }
     }
 
-    fn check_function(&mut self, func: &Function, outer: &[String], drop_body: bool) {
+    fn check_function(&mut self, func: &Function, drop_impl: bool) {
         let Some(body) = &func.body else {
             return;
         };
-        let mut scope = outer.to_vec();
-        scope.extend(affine_params(&func.type_params));
+        // A body no walk reached records no types, so nothing in it is known
+        // to be affine.
+        let Some(scope) = self.sem.affine_params(func.id) else {
+            assert!(
+                !self.sem.is_complete(),
+                "complete semantics walk every body"
+            );
+            return;
+        };
+        let drop_self = func
+            .params
+            .iter()
+            .find(|p| drop_impl && matches!(p.self_kind, SelfKind::Value))
+            .map(|p| p.id);
         let outside = func
             .params
             .iter()
             .filter(|p| self.is_mut_ref_local(p.id))
             .map(|p| (p.id, p.name.clone()))
             .collect();
-        self.check_body(body, scope, drop_body, outside);
+        self.check_body(body, scope, drop_self, outside);
     }
 
     fn is_mut_ref_local(&self, id: AstId) -> bool {
@@ -317,16 +333,16 @@ impl Checker<'_> {
     fn check_body(
         &mut self,
         body: &Block,
-        affine_params: Vec<String>,
-        drop_body: bool,
+        affine_params: &'a [TypeId],
+        drop_self: Option<AstId>,
         outside: Vec<(AstId, String)>,
     ) {
         let facts = SemFacts {
             sem: self.sem,
-            affine_params: &affine_params,
+            affine_params,
         };
         let modes = ownership::body_modes(body, &facts);
-        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_body);
+        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_self);
         walker.visit_block(body);
         walker.refuse_escapes(&outside);
     }
@@ -376,7 +392,7 @@ impl Checker<'_> {
 
     /// An affine type implements only an `affine trait`: an unmarked trait's
     /// default bodies are checked with `Self` copyable.
-    fn check_impl_trait(&mut self, b: &ImplBlock, scope: &[String]) {
+    fn check_impl_trait(&mut self, b: &ImplBlock) {
         let Some(trait_type) = &b.trait_type else {
             return;
         };
@@ -386,12 +402,12 @@ impl Checker<'_> {
         let mut type_name = String::new();
         unparse_type_into(&b.ty, &mut type_name);
         if Some(t.id) == self.drops.trait_id {
-            if !self.impl_self_is_affine(b, scope) {
+            if !self.impl_self_is_affine(b) {
                 self.push(MoveError::DropOnCopyable { type_name }, trait_type.span());
             }
             return;
         }
-        if t.is_affine || !self.impl_self_is_affine(b, scope) {
+        if t.is_affine || !self.impl_self_is_affine(b) {
             return;
         }
         self.push(
@@ -405,10 +421,13 @@ impl Checker<'_> {
 
     /// Whether the implementing type is affine: affine in every instantiation,
     /// or written with an `affine` parameter of the impl as an argument.
-    fn impl_self_is_affine(&self, b: &ImplBlock, scope: &[String]) -> bool {
+    fn impl_self_is_affine(&self, b: &ImplBlock) -> bool {
         let mut mentioned = Vec::new();
         b.ty.mentioned_names(&mut mentioned);
-        let names_affine_param = mentioned.iter().any(|name| scope.contains(name));
+        let names_affine_param = b
+            .type_params
+            .iter()
+            .any(|p| p.is_affine && mentioned.contains(&p.name));
         names_affine_param
             || self
                 .sem
@@ -518,7 +537,7 @@ impl Flow {
 /// `affine` type parameters.
 pub(crate) struct SemFacts<'s> {
     pub(crate) sem: &'s Semantics,
-    pub(crate) affine_params: &'s [String],
+    pub(crate) affine_params: &'s [TypeId],
 }
 
 impl BodyFacts for SemFacts<'_> {
@@ -552,9 +571,11 @@ struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
-    affine_params: Vec<String>,
-    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
-    drop_body: bool,
+    affine_params: &'a [TypeId],
+    /// The `self` of a `Drop::drop` body, which may move its fields out.
+    drop_self: Option<AstId>,
+    /// The scrutinees a pattern takes apart, so no binding holds them whole.
+    decomposed: IndexSet<AstId>,
     flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
@@ -614,14 +635,15 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
     fn new(
         checker: &'c mut Checker<'a>,
         modes: Rc<Modes>,
-        affine_params: Vec<String>,
-        drop_body: bool,
+        affine_params: &'a [TypeId],
+        drop_self: Option<AstId>,
     ) -> Self {
         MoveWalker {
             checker,
             modes,
             affine_params,
-            drop_body,
+            drop_self,
+            decomposed: IndexSet::default(),
             flow: Flow::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -644,8 +666,8 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         let mut inner = MoveWalker::new(
             &mut *self.checker,
             Rc::clone(&self.modes),
-            self.affine_params.clone(),
-            self.drop_body,
+            self.affine_params,
+            self.drop_self,
         );
         inner.flow.clone_from(&self.flow);
         inner.guard_bindings.clone_from(&self.guard_bindings);
@@ -665,12 +687,12 @@ impl MoveWalker<'_, '_> {
     fn facts(&self) -> SemFacts<'_> {
         SemFacts {
             sem: self.sem(),
-            affine_params: &self.affine_params,
+            affine_params: self.affine_params,
         }
     }
 
     fn is_affine(&self, type_id: TypeId) -> bool {
-        self.sem().is_affine(type_id, &self.affine_params)
+        self.sem().is_affine(type_id, self.affine_params)
     }
 
     fn expr_is_affine(&self, id: AstId) -> bool {
@@ -895,6 +917,11 @@ impl MoveWalker<'_, '_> {
             self.report(MoveError::UseAfterMove { name, moved_at }, place.root.span);
             return;
         }
+        if self.is_drop_self(expr) && !self.decomposed.contains(&expr.id()) {
+            let type_name = self.type_name_of(expr);
+            self.report(MoveError::DropSelfMove { type_name }, place.root.span);
+            return;
+        }
         self.refuse_move_out_of_drop(expr);
         self.flow
             .moved
@@ -915,8 +942,7 @@ impl MoveWalker<'_, '_> {
     /// field.
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
         while let Some((holder, _)) = self.field_step(expr) {
-            let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
-            if !own_self && self.implements_drop(holder) {
+            if !self.is_drop_self(holder) && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
                 self.report(MoveError::DropPartialMove { type_name }, expr.span());
             }
@@ -925,16 +951,104 @@ impl MoveWalker<'_, '_> {
     }
 
     fn implements_drop(&self, expr: &Expr) -> bool {
-        let types = &self.sem().types;
         self.sem()
             .expression_type(expr.id())
-            .and_then(|ty| types.nominal_def(ty))
-            .is_some_and(|def| {
-                self.checker
-                    .drops
-                    .implementors
-                    .contains(&types.defs().ast_id(def))
-            })
+            .is_some_and(|ty| self.type_implements_drop(ty))
+    }
+
+    /// Whether `ty`, or the type a newtype over it represents, implements
+    /// `Drop`: a newtype inherits its base's.
+    fn type_implements_drop(&self, ty: TypeId) -> bool {
+        let types = &self.sem().types;
+        let head = types.representation_head(ty);
+        types.nominal_def(head).is_some_and(|def| {
+            self.checker
+                .drops
+                .implementors
+                .contains(&types.defs().ast_id(def))
+        })
+    }
+
+    /// Refuse a by-value `pattern` that moves an affine part out of a value
+    /// whose type implements `Drop`, at any depth, as
+    /// [`Self::refuse_move_out_of_drop`] refuses the field move. `scrutinee`
+    /// is what the pattern matches, where an expression names it: the `self`
+    /// of a `Drop::drop` body may still give up its own fields.
+    fn refuse_destructured_drop(&mut self, pattern: &Pattern, scrutinee: Option<&Expr>) {
+        let own_self = scrutinee.is_some_and(|expr| self.is_drop_self(expr));
+        self.refuse_destructured_drop_at(pattern, own_self);
+    }
+
+    fn is_drop_self(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Ident(id) if self.drop_self.is_some_and(
+            |param| self.sem().referenced_symbol(id.id) == Some(param)
+        ))
+    }
+
+    fn refuse_destructured_drop_at(&mut self, pattern: &Pattern, own_self: bool) {
+        match pattern {
+            Pattern::Struct { fields, span, .. } => {
+                if let Some(first) = fields.first()
+                    && !own_self
+                    && fields.iter().any(|field| self.binds_affine(&field.pattern))
+                {
+                    self.refuse_destructured_part(first.id, *span);
+                }
+                for field in fields {
+                    self.refuse_destructured_drop_at(&field.pattern, false);
+                }
+            }
+            Pattern::Variant {
+                name_id,
+                bindings,
+                span,
+                ..
+            } => {
+                if !own_self && bindings.iter().any(|binding| self.binds_affine(binding)) {
+                    self.refuse_destructured_part(*name_id, *span);
+                }
+                for binding in bindings {
+                    self.refuse_destructured_drop_at(binding, false);
+                }
+            }
+            Pattern::Tuple(elements, _) => {
+                for element in elements {
+                    self.refuse_destructured_drop_at(element, false);
+                }
+            }
+            Pattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.refuse_destructured_drop_at(alternative, own_self);
+                }
+            }
+            Pattern::Typed { pattern, .. } => self.refuse_destructured_drop_at(pattern, own_self),
+            Pattern::Ident { .. }
+            | Pattern::MutIdent { .. }
+            | Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => {}
+        }
+    }
+
+    /// Refuse the part a pattern node at `span` moves out of the type it takes
+    /// apart, which the walk recorded at `site`, where that type implements
+    /// `Drop`.
+    fn refuse_destructured_part(&mut self, site: AstId, span: Span) {
+        let Some(ty) = self.sem().destructured_type(site) else {
+            return;
+        };
+        if self.type_implements_drop(ty) {
+            let type_name = self.sem().types.type_name(ty);
+            self.report(MoveError::DropPartialMove { type_name }, span);
+        }
+    }
+
+    /// Whether `pattern` binds an affine value by value.
+    fn binds_affine(&self, pattern: &Pattern) -> bool {
+        let mut affine = false;
+        for_each_pattern_binding(pattern, &mut |id| affine |= self.is_affine_local(id));
+        affine
     }
 
     /// Forgets the moves an assignment to `place` refills: the place and every
@@ -1487,6 +1601,7 @@ impl MoveWalker<'_, '_> {
 
     /// `pattern` binds afresh to what `value` refers into.
     fn bind_to(&mut self, pattern: &Pattern, value: &Expr) {
+        self.refuse_destructured_drop(pattern, Some(value));
         self.bind_pattern(pattern);
         let owners = self.owners_of(value);
         self.hold_bindings(pattern, &owners);
@@ -1603,6 +1718,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
                 if let Some(value) = &l.value {
+                    self.note_decomposed(value, [&l.pattern]);
                     self.visit_at(value);
                 }
                 // A `let ... else` whose pattern fails consumes nothing; its
@@ -1746,6 +1862,7 @@ impl MoveWalker<'_, '_> {
                 LoopHead::None => {}
                 LoopHead::Condition(condition) => walker.visit_condition(condition),
                 LoopHead::Binding(pattern, owners) => {
+                    walker.refuse_destructured_drop(pattern, None);
                     walker.bind_pattern(pattern);
                     walker.hold_bindings(pattern, owners);
                 }
@@ -1832,7 +1949,19 @@ impl MoveWalker<'_, '_> {
         then_div && else_div
     }
 
+    /// Note `value` as decomposed where none of `patterns` keeps it whole.
+    fn note_decomposed<'p>(
+        &mut self,
+        value: &Expr,
+        patterns: impl IntoIterator<Item = &'p Pattern>,
+    ) {
+        if !patterns.into_iter().any(keeps_whole) {
+            self.decomposed.insert(value.id());
+        }
+    }
+
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
+        self.note_decomposed(scrutinee, arms.iter().map(|arm| &arm.pattern));
         self.visit_at(scrutinee);
         let owners = self.owners_of(scrutinee);
         let base = std::mem::take(&mut self.flow);
@@ -1841,6 +1970,7 @@ impl MoveWalker<'_, '_> {
         for arm in arms {
             self.flow.clone_from(&base);
             let diverged = self.in_scope(|walker| {
+                walker.refuse_destructured_drop(&arm.pattern, Some(scrutinee));
                 walker.bind_pattern(&arm.pattern);
                 walker.hold_bindings(&arm.pattern, &owners);
                 if let Some(guard) = &arm.guard {
@@ -1882,6 +2012,7 @@ impl MoveWalker<'_, '_> {
                 for element in elements {
                     match element {
                         ConditionElement::Let { pattern, expr, .. } => {
+                            self.note_decomposed(expr, [&**pattern]);
                             self.visit_at(expr);
                             self.bind_to(pattern, expr);
                         }
@@ -1912,6 +2043,22 @@ impl MoveWalker<'_, '_> {
                 }
             }
         }
+    }
+}
+
+/// Whether a value `pattern` matches stays whole: bound to one name, or dropped
+/// at once by `_`. A destructuring pattern takes it apart field by field.
+fn keeps_whole(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard => true,
+        Pattern::Typed { pattern, .. } => keeps_whole(pattern),
+        Pattern::Or(alternatives) => alternatives.iter().any(keeps_whole),
+        Pattern::Tuple(..)
+        | Pattern::Variant { .. }
+        | Pattern::Struct { .. }
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
+        | Pattern::Error(_) => false,
     }
 }
 

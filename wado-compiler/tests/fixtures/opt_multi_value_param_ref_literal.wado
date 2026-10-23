@@ -44,17 +44,17 @@ fn ordered_sum(v: &View) -> i32 {
 
 export fn run() {
     let data: List<u8> = builtin::black_box([b'1', b'2', b'3', b'4', b'5']);
-    let r1 = digit_sum(&View { data: &data, start: builtin::black_box(1), end: 4 });
+    let r1 = digit_sum(&View { data: &data, start: builtin::black_box(1), end: builtin::black_box(4) });
     assert r1 == 9;
-    let r2 = digit_sum(&View { data: &data, start: builtin::black_box(2), end: 2 });
+    let r2 = digit_sum(&View { data: &data, start: builtin::black_box(2), end: builtin::black_box(2) });
     assert r2 == -1;
-    let r3 = checked_sum(&View { data: &data, start: builtin::black_box(0), end: 5 });
+    let r3 = checked_sum(&View { data: &data, start: builtin::black_box(0), end: builtin::black_box(5) });
     assert r3 == 15;
-    let r4 = checked_sum(&View { data: &data, start: builtin::black_box(3), end: 1 });
+    let r4 = checked_sum(&View { data: &data, start: builtin::black_box(3), end: builtin::black_box(1) });
     assert r4 == -2;
-    let r5 = ordered_sum(&View { data: &data, start: builtin::black_box(0), end: 2 });
+    let r5 = ordered_sum(&View { data: &data, start: builtin::black_box(0), end: builtin::black_box(2) });
     assert r5 == 3;
-    let r6 = ordered_sum(&View { data: &data, start: builtin::black_box(2), end: 2 });
+    let r6 = ordered_sum(&View { data: &data, start: builtin::black_box(2), end: builtin::black_box(2) });
     assert r6 == 0;
 }
 

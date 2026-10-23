@@ -145,7 +145,7 @@ fn marked<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut in_big = Big::Code;
     let mut in_scan = Lex::Code;
     for let h of ReflectTemplate::<T>::members() {
-        let lit = h.lit();
+        let lit = h.lit(&t);
         out.push_str(&lit);
         in_small = small(in_small, &lit);
         in_big = big(in_big, &lit);
@@ -161,7 +161,7 @@ fn marked<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
         }
         h.fmt(&t, &mut Formatter::new(&mut out));
     }
-    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(&ReflectTemplate::<T>::tail(&t));
     return out;
 }
 

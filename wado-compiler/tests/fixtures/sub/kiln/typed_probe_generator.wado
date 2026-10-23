@@ -1,0 +1,43 @@
+// A Kiln generator whose probe takes a file's `type` and leaves out `path` and
+// `options`: a `header` is decided by its first line, and any other file by
+// every byte of it.
+
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn probe(mut content: Stream<u8>, type: Option<String>) -> Result<u64, Error> {
+    if !type matches { Some("header") } {
+        content.drop();
+        return Result::Ok(u64::MAX);
+    }
+    let mut n: u64 = 0;
+    loop {
+        let [end, chunk] = content.start_read(1).finish();
+        content = end;
+        if chunk.items.len() > 0 {
+            n += 1;
+            if chunk.items[0] == b'\n' {
+                break;
+            }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
+        }
+    }
+    content.drop();
+    return Result::Ok(n);
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let head = read_text(req.primary.content).unwrap();
+    let mut lengths = "";
+    for let input of req.inputs {
+        lengths.push_str(`${read_text(input.content).unwrap().len()}, `);
+    }
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn head() -> i32 { return ${head.trim()}; }\npub fn lengths() -> List<i32> { return [${lengths}]; }`,
+            is_entry: true,
+        }],
+    });
+}

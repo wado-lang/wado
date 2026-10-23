@@ -73,7 +73,7 @@ fn report(diagnostic: Diagnostic) {
     KilnHost::emit_diagnostic(diagnostic);
 }
 
-/// How many bytes each `read` asks for while draining an input. Large enough
+/// How many bytes each copy asks for while draining an input. Large enough
 /// that a schema-sized file costs a handful of reads, small enough that the
 /// guest never holds a second copy of anything big.
 global READ_CHUNK: i32 = 65536;
@@ -84,7 +84,7 @@ global READ_CHUNK: i32 = 65536;
 pub fn read_all(content: Stream<u8>) -> ByteList {
     let mut out = List::<u8>::with_capacity(READ_CHUNK);
     loop {
-        let chunk = content.read(READ_CHUNK);
+        let chunk = content.begin_read(READ_CHUNK).settle(&content);
         out.extend(&chunk.items);
         if chunk.result != CopyResult::Completed {
             break;
@@ -98,7 +98,7 @@ fn decode_to_end(content: &Stream<u8>) -> Result<String, Utf8Error> {
     let mut out = String::with_capacity(READ_CHUNK);
     let mut pending: List<u8> = [];
     loop {
-        let chunk = content.read(READ_CHUNK);
+        let chunk = content.begin_read(READ_CHUNK).settle(content);
         pending.extend(&chunk.items);
         let pending_at = out.len();
         let taken = out.push_utf8(&(pending as ByteList)).map_err(|e| e.rebased(pending_at))?;

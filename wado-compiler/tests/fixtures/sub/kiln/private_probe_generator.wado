@@ -1,0 +1,18 @@
+// A Kiln generator with a private helper named `probe`, which is no probe of
+// the generator world's.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+fn probe(n: i32) -> i32 {
+    return n + 1;
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn answer() -> i32 { return ${probe(41)}; }`,
+            is_entry: true,
+        }],
+    });
+}

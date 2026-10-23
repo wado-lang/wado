@@ -344,6 +344,7 @@ fn build_variant_copy_body(
                 guard: None,
                 body,
                 span,
+                consumes: true,
             }
         })
         .collect();

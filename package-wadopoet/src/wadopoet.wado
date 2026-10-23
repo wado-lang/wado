@@ -1132,7 +1132,7 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut out = String::with_capacity(64);
     let mut ctx = Ctx::Code;
     for let h of ReflectTemplate::<T>::members() {
-        let lit = h.lit();
+        let lit = h.lit(&t);
         out.push_str(&lit);
         ctx = advance(ctx, &lit);
         // A backslash left pending at a hole binds the hole's first byte, and
@@ -1146,7 +1146,7 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
             escape_in_place(&mut out, at, quote);
         }
     }
-    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(&ReflectTemplate::<T>::tail(&t));
     return out;
 }
 

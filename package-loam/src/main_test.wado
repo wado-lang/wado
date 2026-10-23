@@ -66,9 +66,9 @@ struct Inputs {
 }
 
 impl Stream<u8> for Inputs {
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
         let _ = [this, max];
-        resume StreamChunk { items: self.content as List<u8>, result: CopyResult::Dropped };
+        resume StartedRead::settled(StreamChunk { items: self.content as List<u8>, result: CopyResult::Dropped });
     }
 
     fn drop(&mut self, this: &Stream<u8>) {
@@ -161,6 +161,71 @@ test "gen --checkpoint checks the graph against the checkpoint's header" {
     assert on_graph("gen", &dir, ["--checkpoint", `${dir}/good.safetensors`]) matches { Ok(_) };
     let refused = on_graph("gen", &dir, ["--checkpoint", `${dir}/bad.safetensors`]).unwrap_err();
     assert refused == `loam: '${dir}/bad.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+}
+
+/// `W` in the second of two shards, as `index.json` places it, the first holding
+/// only a tensor the graph does not read.
+fn shards(dir: &String) with Preopens {
+    let unread = StoredTensor {
+        name: "V",
+        dtype: "F32",
+        shape: [1],
+        data: ByteList::filled(4, 0),
+    };
+    fs::write(`${*dir}/g-00001-of-00002.safetensors`, &write_safetensors(&[unread])).unwrap();
+    fs::write(`${*dir}/g-00002-of-00002.safetensors`, &checkpoint([2, 3])).unwrap();
+    fs::write(
+        `${*dir}/index.json`,
+        &"{\"weight_map\": {\"V\": \"g-00001-of-00002.safetensors\", \"W\": \"g-00002-of-00002.safetensors\"}}",
+    ).unwrap();
+}
+
+test "gen --index reads each weight from the shard the index places it in" {
+    let dir = scratch("gen-shards");
+    shards(&dir);
+    let printed = on_graph("gen", &dir, [
+        "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
+        `${dir}/g-00002-of-00002.safetensors`,
+    ]).unwrap();
+    assert printed.contains("header.payload(shards, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",");
+}
+
+test "a weight whose shard is not given names the shard" {
+    let dir = scratch("gen-absent-shard");
+    shards(&dir);
+    let refused = on_graph("gen", &dir, [
+        "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`,
+    ]).unwrap_err();
+    assert refused == `loam: '${dir}/index.json': W: the index places it in g-00002-of-00002.safetensors, which is not given`;
+}
+
+test "a shard that disagrees with the graph is named by its path" {
+    let dir = scratch("gen-bad-shard");
+    shards(&dir);
+    fs::write(`${dir}/g-00002-of-00002.safetensors`, &checkpoint([2, 4])).unwrap();
+    let refused = on_graph("gen", &dir, [
+        "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
+        `${dir}/g-00002-of-00002.safetensors`,
+    ]).unwrap_err();
+    assert refused == `loam: '${dir}/g-00002-of-00002.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+}
+
+test "a shard the index does not name is refused" {
+    let dir = scratch("gen-stray-shard");
+    shards(&dir);
+    fs::write(`${dir}/other.safetensors`, &write_safetensors(&[])).unwrap();
+    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err(
+    );
+    assert refused == `loam: '${dir}/other.safetensors': the index names no shard of this file name`;
+}
+
+test "several checkpoints with no index are refused" {
+    let dir = scratch("gen-shards-no-index");
+    shards(&dir);
+    let refused = on_graph("gen", &dir, [
+        "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint", `${dir}/g-00002-of-00002.safetensors`,
+    ]).unwrap_err();
+    assert refused == "loam: 2 checkpoints and no index; the shards of one are given beside the index placing each tensor";
 }
 
 test "dump reports each node's lowering and each tensor's shape" {
@@ -267,7 +332,7 @@ test "one file is named" {
 
 test "a tokenizer takes no options" {
     let refused = loam(["gen", "--type", "hf-tokenizer", "--options", "o.json", "tokenizer.json"]).unwrap_err();
-    assert refused == "loam gen: a tokenizer takes no --checkpoint and no --options";
+    assert refused == "loam gen: a tokenizer takes no --checkpoint, --index or --options";
 }
 
 test "an argument error names the subcommand and shows the usage" {

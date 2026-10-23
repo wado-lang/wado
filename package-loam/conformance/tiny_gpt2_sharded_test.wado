@@ -1,0 +1,183 @@
+//! The tiny GPT-2 decoder of `tiny_gpt2.wado`, its checkpoint given in shards
+//! beside the index placing each tensor, against the logits onnxruntime
+//! computes from the single file.
+
+use { Cpu, Tensor } from "lib:loam";
+use { HashMap } from "core:collections";
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            inputs: [
+                { path: "../tests/models/tiny-gpt2/sharded/model.safetensors.index.json", type: "safetensors-index" },
+                { path: "../tests/models/tiny-gpt2/sharded/model-00001-of-00003.safetensors", type: "safetensors" },
+                { path: "../tests/models/tiny-gpt2/sharded/model-00002-of-00003.safetensors", type: "safetensors" },
+                { path: "../tests/models/tiny-gpt2/sharded/model-00003-of-00003.safetensors", type: "safetensors" },
+            ],
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// The shards, keyed by the file names the index places tensors in.
+fn every_shard() -> HashMap<String, ByteList> {
+    let mut shards = HashMap::<String, ByteList>::new();
+    shards["model-00001-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00001-of-00003.safetensors");
+    shards["model-00002-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00002-of-00003.safetensors");
+    shards["model-00003-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00003-of-00003.safetensors");
+    return shards;
+}
+
+fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
+    let [ids, ids_extents] = ints_of(input_ids);
+    let [mask, mask_extents] = ints_of(attention_mask);
+    let [want, want_extents] = tensor_of(logits);
+
+    let weights = Prepared::load(&mut Cpu {}, &every_shard()).unwrap();
+    let got = forward(
+        &mut Cpu {},
+        &Tensor::<i64, [Batch, Seq]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [Batch, Seq]> { data: mask, extents: mask_extents },
+        &weights,
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "a sharded checkpoint reproduces the logits of the single file for four tokens" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+    );
+}
+
+test "and for seven" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+    );
+}
+
+test "a shard left out of the load is named with a tensor it holds" {
+    let mut given = every_shard();
+    given.remove("model-00003-of-00003.safetensors");
+    let e = Prepared::load(&mut Cpu {}, &given).unwrap_err();
+    assert `${e}` == "onnx::MatMul_1588: the index places it in model-00003-of-00003.safetensors, which is not given";
+}

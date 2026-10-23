@@ -1,0 +1,24 @@
+// A template's shape is its holes' types and specifiers, so two templates that
+// differ only in their literal text or in how a hole is spelled are one type,
+// and each value carries its own text.
+use { println, Stdout } from "core:cli";
+
+fn holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> T {
+    return t;
+}
+
+fn pick<T>(first: bool, a: T, b: T) -> T {
+    if first { return a; }
+    return b;
+}
+
+export fn run() with Stdout {
+    let a = builtin::black_box(1);
+    let b = builtin::black_box(2);
+    let t = pick(builtin::black_box(false), holes`x=${a}`, holes`y\t=${b}!`);
+    println(format(t));
+    println(String::raw(t));
+}
+
+__DATA__
+{"stdout": "y\t=2!\ny\\t=2!\n"}

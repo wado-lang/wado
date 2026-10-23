@@ -8,7 +8,17 @@ use { from_string } from "core:json";
 use fs from "core:fs";
 use { FsError, FsErrorKind, Preopens } from "core:fs";
 use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
-use { Model, Options, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
+use { CheckpointFile } from "./safetensors.wado";
+use {
+    Model,
+    Options,
+    check,
+    generate_model,
+    generate_tokenizer,
+    read_header,
+    spelling_of,
+    weights_of,
+} from "./compile.wado";
 use { render_dump, render_dump_json } from "./dump.wado";
 
 // `--type` and `--options` are the `with` clause's words, so a use site reads
@@ -17,8 +27,11 @@ struct GenArgs {
     type: Option<String> = null,
     /// A JSON file holding the `generator.options` a use site writes.
     options: Option<String> = null,
-    /// A safetensors checkpoint, whose header the graph is checked against.
-    checkpoint: Option<String> = null,
+    /// A safetensors checkpoint, whose header the graph is checked against, or
+    /// each shard of one beside `--index`.
+    checkpoint: List<String> = [],
+    /// The index of a sharded checkpoint, placing each tensor in its shard.
+    index: Option<String> = null,
     /// The package spec the generated module imports its runtime from.
     runtime: String = "lib:loam",
     output: Option<String> = null,
@@ -44,7 +57,7 @@ variant Command {
 }
 impl Deserialize for Command;
 
-global USAGE: String = "Usage: loam gen --type <type> [--options <options.json>] [--checkpoint <file.safetensors>] [--runtime <spec>] [--output <file>] <file>
+global USAGE: String = "Usage: loam gen --type <type> [--options <options.json>] [--checkpoint <file.safetensors>]... [--index <index.json>] [--runtime <spec>] [--output <file>] <file>
        loam dump --type <type> [--options <options.json>] [--format <text|json>] <file>
        <type> is onnx, onnxtext or hf-tokenizer, as a use site's `type` says (dump reads a graph)";
 
@@ -81,17 +94,21 @@ fn command_name(argv: &List<String>) -> String {
 fn cmd_gen(g: GenArgs) -> Result<String, String> with Preopens {
     let path = one_file("loam gen", &g.files)?;
     let source = if g.type matches { Some("hf-tokenizer") } {
-        if g.checkpoint matches { Some(_) } || g.options matches { Some(_) } {
-            return Result::Err("loam gen: a tokenizer takes no --checkpoint and no --options");
+        if !g.checkpoint.is_empty() || g.index matches { Some(_) } || g.options matches { Some(_) } {
+            return Result::Err("loam gen: a tokenizer takes no --checkpoint, --index or --options");
         }
         generate_tokenizer(&path, read_file(&path)?, &g.runtime)?;
     } else {
         let model = checked_model("loam gen", &path, &g.type, &g.options)?;
-        let mut headers: List<[String, ByteList]> = [];
-        if let Some(checkpoint) = g.checkpoint {
-            headers.push([checkpoint, read_file_header(&checkpoint)?]);
+        let mut indexes: List<[String, ByteList]> = [];
+        if let Some(index) = g.index {
+            indexes.push([index, read_file(&index)?]);
         }
-        generate_model(&model, &path, headers, &g.runtime)?;
+        let mut files: List<CheckpointFile> = [];
+        for let checkpoint of g.checkpoint {
+            files.push(CheckpointFile { path: checkpoint, header: read_file_header(&checkpoint)? });
+        }
+        generate_model(&model, &path, weights_of(indexes, files)?, &g.runtime)?;
     };
     let Some(output) = g.output else {
         return Result::Ok(source);

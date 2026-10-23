@@ -206,15 +206,20 @@ with Fetch => &Canned {} do {
 A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
 `Ready<W>` beside the event. `poll` asks without blocking. The event is a
-`ReadyEvent`: `Call` with the `CallState` a call moved to, or `Unreported` for a
-member with no handle for the host to report. A set that drops drops its
-remaining members first.
+`ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
+`CopyResult` a started stream copy ended on, or `Unreported` for a member that
+neither has a handle for the host to report nor an event of its own. A member
+whose event is already known joins ready with that event, whether the host
+reported it to another set or the call or copy settled as it started. A set
+that drops drops its remaining members first.
 
-A member is any type implementing `Waitable`. The trait is sealed: the standard
-library implements it on the calls, since a hand-written `waitable_id` could
-name a handle its value does not own. A stream or future end is no member: each
-copy on one waits inside the binding, so the host never has an event left to
-report for it. A set waiting on two kinds takes a variant over them, which
+A member is any type implementing `Waitable`, whose `wait_on` answers either the
+handle the host reports the member by or the event it is ready with. The trait
+is sealed: the standard library implements it on the calls and on the started
+stream copies (`ReadCopy`, `WriteCopy`), since a hand-written `wait_on` could
+name a handle its value does not own. A bare stream or future end is no member: no
+copy on it is in flight, so the host has no event to report for it. A set
+waiting on two kinds takes a variant over them, which
 derives the trait with the marker `impl Waitable for V;`. Each case holds one member, or none for one that is
 ready without the host:
 
@@ -293,20 +298,38 @@ keep running afterwards, for example to write a response's trailers.
 
 ### Streams and Futures
 
-`Stream<T>` and `Future<T>` are unbuffered channels. A `write` blocks until the
-other end reads, and a `read` blocks until the other end writes, so the two ends
-must be driven by different tasks. A component cannot start a task of its own,
-so one end goes to another task: an async import's subtask, or the caller of an
-`export async fn`. A task that drives both ends blocks forever.
+`Stream<T>` and `Future<T>` are unbuffered channels. A write settles once the
+other end reads, and a read once the other end writes. A task that waits on one
+end before it starts the copy on the other blocks forever, so it either starts
+both copies before waiting, or hands one end to another task: an async import's
+subtask, or the caller of an `export async fn`.
 
 A future's ends are each used once, so both consume their end:
 `Future::read(self)` and `FutureWritable::write(self, value)`. A second read or
 write is a use after move. A `FutureWritable` dropped before its write traps
 with a message naming it, since the reader would otherwise wait forever.
 
+A stream copy is started and finished in two steps, so a task can wait on
+several at once. `Stream::start_read(self, max)` returns a `ReadCopy<T>` and
+`StreamWritable::start_write(self, data)` a `WriteCopy<T>`. Each moves the end
+into the copy, since the Component Model traps on a second copy on an end that
+is copying. `finish` waits where the copy has not settled, and hands back the
+end with what the copy moved. Both copies are `Waitable`, and a set reports a
+settled one as `ReadyEvent::Copied`. Dropping a copy that has not settled
+cancels it. `read_to_end`, `read_to_end_bytes`, `write_all` and `write_raw_all`
+borrow the end and copy until the stream ends.
+
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
-take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `WriteCopy::finish` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+
+A handler for `Stream<T>` or `StreamWritable<T>` answers the operations a copy
+starts with, `begin_read` and `begin_write`. It returns a copy that has already
+settled, built by `StartedRead::settled` or `StartedWrite::settled`, or one it
+started on another end, so every copy a program makes goes through it, a
+started one included. A copy dropped in flight is cancelled by `cancel_read` or
+`cancel_write` on the end the program holds. A handler that started the copy on
+another end answers that operation by cancelling there.
 
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands

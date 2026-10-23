@@ -368,6 +368,12 @@ pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
     format!("$hole_get${mangled_shape}${mangled_hole}")
 }
 
+/// Name of the synthesized segment-read helper for a template shape. Lowering
+/// rewrites `builtin::template_segment::<T>` calls to it (WEP 2026-01-10).
+pub fn template_segment_helper_name(mangled_shape: &str) -> String {
+    format!("$template_segment${mangled_shape}")
+}
+
 /// Name of the synthesized hole-render helper for a template shape. Lowering
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
@@ -481,6 +487,18 @@ pub fn cm_stream_read_value_func_name(element: &str) -> String {
 /// The helper reading a stream of the WASI record `element`.
 pub fn cm_stream_read_func_name(element: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_stream_read_{element}")
+}
+
+/// The function lifting what a read copied from a stream of the element mangled
+/// as `element`.
+pub fn cm_stream_lift_value_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_lift_val_{element}")
+}
+
+/// The function lifting what a read copied from a stream of the WASI record
+/// `element`.
+pub fn cm_stream_lift_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_lift_{element}")
 }
 
 /// The `wado:callback/callback` function the host calls a closure back through,

@@ -538,6 +538,13 @@ impl Semantics {
         self.fact_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
     }
 
+    /// The type the struct pattern field or case name pattern `id` takes
+    /// apart, as the body walk recorded it.
+    pub(crate) fn destructured_type(&self, id: AstId) -> Option<TypeId> {
+        self.fact_at(ModuleSemantics::DESTRUCTURED_TYPES, id)
+            .copied()
+    }
+
     /// [`Self::expression_type`] from every walk that reached the expression:
     /// a tuple `for-of`'s body is walked once per element.
     pub fn expression_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
@@ -618,12 +625,29 @@ impl Semantics {
 
     /// Whether a value of `type_id` is move-only in a body whose `affine` type
     /// parameters are `affine_params`.
-    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
         self.state
             .as_ref()
             .expect("the move check runs on annotated semantics")
             .tysys
             .is_affine(type_id, affine_params)
+    }
+
+    /// The `affine` binders the body of the function declared at `func` sees.
+    /// `None` for a body no walk reached, as in the partial semantics the
+    /// language service reads after an analysis phase bailed.
+    pub(crate) fn affine_params(&self, func: AstId) -> Option<&[TypeId]> {
+        let module = self
+            .module_of_id(func)
+            .expect("a function is declared in a module");
+        self.state
+            .as_ref()?
+            .module_semantics
+            .get(module)?
+            .types
+            .fn_affine_params
+            .get(&func)
+            .map(Vec::as_slice)
     }
 
     /// The index of the first field or case of the struct or variant declared
@@ -1712,13 +1736,11 @@ pub(crate) fn member_visible(public_only: bool, inherent: bool, visibility: Visi
 
 #[cfg(test)]
 mod tests {
+    use futures::executor::block_on;
+
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
-
-    fn block_on<F: std::future::Future>(future: F) -> F::Output {
-        tokio::runtime::Runtime::new().unwrap().block_on(future)
-    }
 
     /// The body walk's facts stay in the [`ModuleSemantics`] that recorded
     /// them, and `Semantics` reads through to it rather than holding a copy.

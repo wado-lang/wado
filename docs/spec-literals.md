@@ -1065,14 +1065,13 @@ are filled as in any call (see [Default Arguments](./spec-functions.md#default-a
 parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
-Each template shape has an anonymous type of its own, holding one field per
-hole. The shape is the template's segments, specifiers, hole types and hole
-source texts. So
-`` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
-even where `a` and `b` share a type. The type is unnameable and reached only
-through the bound; a diagnostic and `Reflect::type_name()` show it as its text
-with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
-at 50 characters with `...`.
+Each template shape has an anonymous type of its own. The shape is the
+template's holes, each a type and a specifier, so `` tag`a=${a}` `` and
+`` tag`b: ${b}` `` are one type where `a` and `b` share one, and one
+instantiation of the tag. A value of it holds each hole and the literal text the
+site wrote. The type is unnameable and reached only through the bound; a
+diagnostic and `Reflect::type_name()` show it as its holes, each spelled by its
+type and specifier, `` `${i32:04}` ``, cut at 50 characters with `...`.
 
 `ReflectTemplate` is
 [sealed](./spec-reflection.md#sealed-traits), as the whole family is. Its
@@ -1087,11 +1086,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
     let mut params: List<SqlParam> = [];
     for let h of ReflectTemplate::<T>::members() {
-        query.push_str(h.lit());                // literal text before this hole
+        query.push_str(h.lit(&t));              // literal text before this hole
         query.push_str("?");
         params.push(h.get(&t).to_sql_param());  // the value, storage shared
     }
-    query.push_str(ReflectTemplate::<T>::tail());
+    query.push_str(ReflectTemplate::<T>::tail(&t));
     return SqlQuery { query, params };
 }
 
@@ -1102,16 +1101,16 @@ test "the tag sees each hole in its own type" {
 ```
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
-`lit()` / `raw()` (the preceding segment, escapes processed or preserved),
-`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`lit(&t)` / `raw(&t)` (the preceding segment of `t`, escapes processed or
+preserved), `get(&t)` (the value, `V`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states).
-`ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
-hole. Every answer but `get` and `fmt` is a constant. A hole handle is minted
-only by `members()`.
+`ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
+last hole. `index()` and `has_spec()` are constants of the shape. A hole handle
+is minted only by `members()`.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
-empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
+empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple
 (`Holes = [List<i32>]`) is an error at the call. A bound on the pack
 (`..V: ToSqlParam`) makes a hole whose type lacks it an error at the call,
 naming that type.

@@ -1,4 +1,5 @@
-use { EmitError, NameCollision, UnmappedDtype, emit, expr_source } from "./emit.wado";
+use { HashMap } from "core:collections";
+use { EmitError, NameCollision, Placement, UnmappedDtype, emit, expr_source } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -333,6 +334,30 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     assert out.contains(
         "W1: backend.keep_rhs(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
+}
+
+test "a sharded checkpoint's weights are read each from the shard the index places it in" {
+    let graph = read(&MLP).unwrap();
+    let mut placed = HashMap::<String, String>::new();
+    for let [i, name] of ["W1", "B1", "W2", "B2"].enumerate() {
+        placed[name] = if i < 2 { "m-00001-of-00002.safetensors" } else { "m-00002-of-00002.safetensors" };
+    }
+    let out = emit(&graph, &infer(&graph, &Schema { layout: mlp_layout() }).unwrap(), &RUNTIME, true, Placement::Shards(
+        placed,
+    )).unwrap();
+
+    assert out.contains("use { HashMap } from \"core:collections\";\n");
+    assert out.contains(
+        "pub fn load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError> with _ {",
+    );
+    assert out.contains("let header = read_shards(shards)?;");
+    assert out.contains(
+        "W2: backend.keep_rhs(&Tensor::<f32, [Hidden, Out]> { data: List::<f32>::from_le_bytes(header.payload(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
+    );
+}
+
+test "a single file's module imports no map" {
+    assert !generate(MLP, mlp_layout()).unwrap().contains("core:collections");
 }
 
 test "a graph carrying some weights embeds those and loads the rest" {
@@ -1073,6 +1098,40 @@ g (float[N, 2] map) => (float[N, 2] Y)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(map)],");
+}
+
+test "a tensor named as the map a sharded load takes keeps its name where the module imports none" {
+    let source = `
+g (float[N, 2] HashMap) => (float[N, 2] Y)
+<>
+{
+    Y = Relu(HashMap)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("backend.read(HashMap)");
+}
+
+test "a sharded checkpoint that supplies no weight imports no map" {
+    let source = `
+g (float[N, 2] X) => (float[N, 2] Y)
+<float[2] B = {1.0, 2.0}>
+{
+    Y = Add(X, B)
+}
+`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("B", ["In"]),
+        ],
+    }).unwrap();
+    let out = emit(&graph, &checked, &RUNTIME, true, Placement::Shards(HashMap::new())).unwrap();
+
+    assert !out.contains("core:collections");
+    assert out.contains("pub fn embedded(");
 }
 
 test "a renamed tensor steps past a tensor already named as the renaming would" {
