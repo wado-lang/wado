@@ -13,7 +13,7 @@ use {
     DeserializeErrorKind,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 
 use {
     to_string,
@@ -1950,6 +1950,9 @@ struct PathLeaf {
 struct PathRoot {
     items: List<PathLeaf> = [],
     by: TreeMap<String, PathLeaf> = TreeMap::new(),
+    hashed: HashMap<String, PathLeaf> = HashMap::new(),
+    set: TreeSet<i32> = TreeSet::new(),
+    hashed_set: HashSet<i32> = HashSet::new(),
     stage: Option<Tagged> = null,
     either: Result<PathLeaf, i32> = Result::Err(0),
 }
@@ -1961,6 +1964,9 @@ fn path_of(json: String) -> String {
 test "an error names the fields and elements it was reached through" {
     assert path_of(`{"items":[{"n":1},{"n":"x"}]}`) == "items[1].n";
     assert path_of(`{"by":{"k":{"n":true}}}`) == `by["k"].n`;
+    assert path_of(`{"hashed":{"k":{"n":true}}}`) == `hashed["k"].n`;
+    assert path_of(`{"set":[1,"x"]}`) == "set[1]";
+    assert path_of(`{"hashed_set":[1,"x"]}`) == "hashed_set[1]";
     assert path_of(`{"stage":{"type":"Join"}}`) == "stage.type";
     assert path_of(`{"stage":{"type":"Split","pattern":1}}`) == "stage.pattern";
     assert path_of(`{"either":{"Ok":{"n":null}}}`) == "either.Ok.n";

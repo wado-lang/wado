@@ -2147,23 +2147,20 @@ pub fn inline_functions(
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(&sites);
-    let no_callees = IndexSet::default();
-    let cold = unreached_through(project, &call_sites, |caller| {
-        if live[caller] {
-            &scans[caller].hot_callees
-        } else {
-            &no_callees
+    let (live_ref, no_callees) = (&live, &IndexSet::default());
+    let live_edges = |pick: fn(&BodyScan) -> &IndexSet<FuncId>| {
+        move |caller: usize| {
+            if live_ref[caller] {
+                pick(&scans[caller])
+            } else {
+                no_callees
+            }
         }
-    });
+    };
+    let cold = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
-    let looped = unreached_through(project, &call_sites, |caller| {
-        if live[caller] {
-            &scans[caller].unlooped_callees
-        } else {
-            &no_callees
-        }
-    });
+    let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
     let called_cold = called_cold(scans, &live, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();

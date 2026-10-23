@@ -161,24 +161,18 @@ pub struct DeserializeError {
 impl DeserializeError {
     /// This error, reached through the field `name`.
     pub fn within_field<S: AsStrSlice>(&self, name: S) -> DeserializeError {
-        let mut e = *self;
-        e.path = if e.path.is_empty() || e.path.starts_with("[") {
-            `${name}${e.path}`
-        } else {
-            `${name}.${e.path}`
-        };
-        return e;
+        return self.within(`${name}`);
     }
 
     /// This error, reached through the element or entry `key`: a list's index,
     /// a map's key, written as `Inspect` writes it.
     pub fn within_item<K: Inspect>(&self, key: &K) -> DeserializeError {
+        return self.within(`[${key:?}]`);
+    }
+
+    fn within(&self, step: String) -> DeserializeError {
         let mut e = *self;
-        e.path = if e.path.is_empty() || e.path.starts_with("[") {
-            `[${key:?}]${e.path}`
-        } else {
-            `[${key:?}].${e.path}`
-        };
+        e.path = if e.path.is_empty() || e.path.starts_with("[") { `${step}${e.path}` } else { `${step}.${e.path}` };
         return e;
     }
 }
