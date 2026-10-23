@@ -259,7 +259,7 @@ pub enum CopyResult {
 
 /// What one read copy moved, and how that copy ended. A copy carries elements
 /// and the peer's drop together, so `result` is what says more follows.
-pub struct StreamChunk<T> {
+pub struct StreamChunk<affine T> {
     pub items: List<T>,
     pub result: CopyResult,
 }
@@ -312,7 +312,7 @@ pub resource Stream<T> {
     fn drop(self);
 }
 
-impl<T> Stream<T> {
+impl<affine T> Stream<T> {
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed result it settled on.
     #[cm("stream-cancel-read")]
@@ -328,7 +328,9 @@ impl<T> Stream<T> {
         let started = self.begin_read(max);
         return ReadCopy { copy: Option::Some([self, started]) };
     }
+}
 
+impl<T> Stream<T> {
     /// Read until the writable end drops, and return everything it wrote.
     /// Only the result stops it: an empty `Completed` copy is the writer
     /// offering nothing this time, and more can still follow.
@@ -365,12 +367,12 @@ internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 /// A read copy as `Stream::begin_read` started it: one the host may still be
 /// copying into `buffer`, or one a handler settled with its `items`.
 #[compiler_item("started_read")]
-pub affine struct StartedRead<T> {
+pub affine struct StartedRead<affine T> {
     internal buffer: CopyBuffer,
     internal items: List<T>,
 }
 
-impl<T> StartedRead<T> {
+impl<affine T> StartedRead<T> {
     /// A copy that already moved `chunk`, for a handler to answer
     /// `Stream::begin_read` with.
     pub fn settled(chunk: StreamChunk<T>) -> StartedRead<T> {
@@ -394,11 +396,11 @@ impl<T> StartedRead<T> {
 
 /// One copy started on a stream end, holding the end until it is finished.
 /// Dropping one in flight cancels it, and drops what it had copied.
-pub affine struct ReadCopy<T> {
+pub affine struct ReadCopy<affine T> {
     copy: Option<[Stream<T>, StartedRead<T>]>,
 }
 
-impl<T> ReadCopy<T> {
+impl<affine T> ReadCopy<T> {
     /// The end and what the copy moved. Waits for a copy that has not settled,
     /// so a copy that never joined a set finishes as well.
     pub fn finish(self) -> [Stream<T>, StreamChunk<T>] {
@@ -409,7 +411,7 @@ impl<T> ReadCopy<T> {
     }
 }
 
-impl<T> Drop for ReadCopy<T> {
+impl<affine T> Drop for ReadCopy<T> {
     fn drop(self) {
         let Some([end, mut started]) = self.copy else {
             return;
@@ -420,7 +422,7 @@ impl<T> Drop for ReadCopy<T> {
     }
 }
 
-impl<T> Waitable for ReadCopy<T> {
+impl<affine T> Waitable for ReadCopy<T> {
     fn waitable_id(&self) -> Option<ResourceId> {
         let Some([_, started]) = &self.copy else {
             unreachable();
@@ -458,7 +460,7 @@ internal fn write_copy_is_final(result: CopyResult, delivered: i32) -> bool {
     return result != CopyResult::Completed || delivered <= 0;
 }
 
-impl<T> StreamWritable<T> {
+impl<affine T> StreamWritable<T> {
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed result it settled on.
     #[cm("stream-cancel-write")]
@@ -494,12 +496,12 @@ impl<T> StreamWritable<T> {
 /// still be copying out of `buffer`, which holds `data` lowered, or one a
 /// handler settled.
 #[compiler_item("started_write")]
-pub affine struct StartedWrite<T> {
+pub affine struct StartedWrite<affine T> {
     internal buffer: CopyBuffer,
     internal data: List<T>,
 }
 
-impl<T> StartedWrite<T> {
+impl<affine T> StartedWrite<T> {
     /// A copy that already ended as `written` says, for a handler to answer
     /// `StreamWritable::begin_write` with.
     pub fn settled(written: StreamWrite<T>) -> StartedWrite<T> {
@@ -523,11 +525,11 @@ impl<T> StartedWrite<T> {
 
 /// One copy started on a writable end, holding the end until it is finished.
 /// Dropping one in flight cancels it.
-pub affine struct WriteCopy<T> {
+pub affine struct WriteCopy<affine T> {
     copy: Option<[StreamWritable<T>, StartedWrite<T>]>,
 }
 
-impl<T> WriteCopy<T> {
+impl<affine T> WriteCopy<T> {
     /// The end and what the copy left of its data. Waits for a copy that has
     /// not settled, so a copy that never joined a set finishes as well.
     pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>] {
@@ -537,7 +539,7 @@ impl<T> WriteCopy<T> {
     }
 }
 
-impl<T> Drop for WriteCopy<T> {
+impl<affine T> Drop for WriteCopy<T> {
     fn drop(self) {
         let Some([end, mut started]) = self.copy else {
             return;
@@ -548,7 +550,7 @@ impl<T> Drop for WriteCopy<T> {
     }
 }
 
-impl<T> Waitable for WriteCopy<T> {
+impl<affine T> Waitable for WriteCopy<T> {
     fn waitable_id(&self) -> Option<ResourceId> {
         let Some([_, started]) = &self.copy else {
             unreachable();
