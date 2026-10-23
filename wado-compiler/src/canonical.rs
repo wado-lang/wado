@@ -428,7 +428,7 @@ pub enum CmCallTarget {
     /// A lowered import: the function `operation` of the interface declared as
     /// `interface`, by its local alias name
     /// (`"wasi:cli/Stdout::write_via_stream"`).
-    WasiAlias {
+    Import {
         alias: String,
         interface: String,
         operation: String,
@@ -439,14 +439,14 @@ pub enum CmCallTarget {
 impl CmCallTarget {
     pub fn import_name(&self) -> Cow<'_, str> {
         match self {
-            Self::WasiAlias { alias, .. } => Cow::Borrowed(alias),
+            Self::Import { alias, .. } => Cow::Borrowed(alias),
             Self::Canonical(intrinsic) => Cow::Owned(intrinsic.import_name()),
         }
     }
 
     pub fn canonical(&self) -> Option<&CanonicalIntrinsic> {
         match self {
-            Self::WasiAlias { .. } => None,
+            Self::Import { .. } => None,
             Self::Canonical(intrinsic) => Some(intrinsic),
         }
     }

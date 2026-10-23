@@ -7,7 +7,7 @@
 
 use crate::ast::{
     AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, InterfaceDecl, Item,
-    Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport, cm_import_of,
+    Module, StrLit, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport, cm_import_of,
     for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
@@ -1277,7 +1277,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     sharing
                         .entry(basename)
                         .or_default()
-                        .push(format!("\"{}\"", cm.interface_path()));
+                        .push(StrLit::new(cm.interface_path()).as_written());
                 }
             }
         }
@@ -1432,11 +1432,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             },
             several => AnalyzeError::AmbiguousName {
                 module_source: module_source.clone(),
-                name: format!("\"{name}\""),
+                name: name.to_string(),
                 candidates: several
                     .iter()
-                    .filter_map(|(_, symbol)| {
-                        Some(format!("\"{}\"", symbol.cm_import()?.interface_path()))
+                    .map(|(_, symbol)| {
+                        let cm = symbol
+                            .cm_import()
+                            .expect("an interface found by its `#[cm]`");
+                        StrLit::new(cm.interface_path()).as_written()
                     })
                     .collect(),
                 span,
