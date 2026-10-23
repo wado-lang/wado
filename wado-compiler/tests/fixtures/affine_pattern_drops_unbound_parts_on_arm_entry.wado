@@ -1,0 +1,193 @@
+// A by-value pattern consumes its scrutinee as the arm is entered: each binding
+// takes its part, and a part no binding names drops right then. A refutable
+// pattern that does not match consumes nothing.
+
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+affine struct P {
+    a: Tok,
+    b: Tok,
+}
+
+affine variant Slot {
+    Empty,
+    One(Tok),
+    Two([Tok, Tok]),
+}
+
+fn two() -> [Tok, Tok] {
+    return [Tok { id: 1 }, Tok { id: 2 }];
+}
+
+test "a wildcard arm drops the whole scrutinee" {
+    let d = DROPS;
+    let t = Tok { id: 1 };
+    match t {
+        _ => {
+            assert DROPS - d == 1;
+        },
+    }
+    assert DROPS - d == 1;
+}
+
+test "a field pattern keeps no part of what it binds nothing of" {
+    let d = DROPS;
+    let t = Tok { id: 7 };
+    match t {
+        Tok { id } => {
+            assert id == 7;
+            assert DROPS - d == 1;
+        },
+    }
+}
+
+test "a struct pattern drops the fields it leaves out" {
+    let d = DROPS;
+    let p = P { a: Tok { id: 1 }, b: Tok { id: 2 } };
+    match p {
+        P { a, .. } => {
+            assert DROPS - d == 1;
+            assert eat(a) == 1;
+            assert DROPS - d == 2;
+        },
+    }
+    assert DROPS - d == 2;
+}
+
+test "a temporary's unbound element drops on entry" {
+    let d = DROPS;
+    match two() {
+        [_, b] => {
+            assert DROPS - d == 1;
+            assert eat(b) == 2;
+        },
+    }
+    assert DROPS - d == 2;
+}
+
+test "a payload's unbound element drops on entry" {
+    let d = DROPS;
+    let s = Slot::Two([Tok { id: 1 }, Tok { id: 2 }]);
+    match s {
+        Two([a, _]) => {
+            assert DROPS - d == 1;
+            assert eat(a) == 1;
+        },
+        _ => {},
+    }
+    assert DROPS - d == 2;
+}
+
+test "an or-pattern drops what its matching alternative leaves out" {
+    let d = DROPS;
+    let s = Slot::Two([Tok { id: 1 }, Tok { id: 2 }]);
+    match s {
+        One(t) | Two([_, t]) => {
+            assert DROPS - d == 1;
+            assert eat(t) == 2;
+        },
+        Empty => {},
+    }
+    assert DROPS - d == 2;
+}
+
+test "a guard that fails consumes nothing" {
+    let d = DROPS;
+    let s = Slot::One(Tok { id: 1 });
+    match s {
+        One(t) && t.id > 5 => {
+            assert eat(t) == 0;
+        },
+        _ => {
+            assert DROPS - d == 1;
+        },
+    }
+    assert DROPS - d == 1;
+}
+
+test "an if let that matches consumes the scrutinee" {
+    let d = DROPS;
+    let s = Slot::One(Tok { id: 1 });
+    if let One(_) = s {
+        assert DROPS - d == 1;
+    }
+    assert DROPS - d == 1;
+}
+
+test "an if let that does not match leaves the scrutinee" {
+    let d = DROPS;
+    let s = Slot::Two([Tok { id: 1 }, Tok { id: 2 }]);
+    scope: {
+        if let One(t) = s {
+            assert eat(t) == 0;
+        } else {
+            assert DROPS - d == 0;
+            let again = s;
+            let paired = again matches { Two(_) };
+            assert paired;
+        }
+    }
+    assert DROPS - d == 2;
+}
+
+global ZERO: Tok = Tok { id: 0 };
+
+test "a constant pattern drops the whole scrutinee" {
+    let d = DROPS;
+    let t = Tok { id: 0 };
+    match t {
+        ZERO => {
+            assert DROPS - d == 1;
+        },
+        _ => {},
+    }
+    assert DROPS - d == 1;
+}
+
+fn pair() -> P {
+    return P { a: Tok { id: 1 }, b: Tok { id: 2 } };
+}
+
+test "a field of a temporary drops with the rest of it" {
+    let d = DROPS;
+    scope: {
+        match pair().a {
+            _ => {},
+        }
+    }
+    assert DROPS - d == 2;
+}
+
+test "matches consumes nothing, a guard's binding included" {
+    let d = DROPS;
+    let s = Slot::One(Tok { id: 3 });
+    let big = s matches { One(t) && t.id > 1 };
+    assert big;
+    assert DROPS - d == 0;
+    let again = s;
+    let one = again matches { One(_) };
+    assert one;
+}
+
+test "a destructuring let drops the fields it leaves out" {
+    let d = DROPS;
+    let p = P { a: Tok { id: 1 }, b: Tok { id: 2 } };
+    let P { a, .. } = p;
+    assert DROPS - d == 1;
+    assert eat(a) == 1;
+    assert DROPS - d == 2;
+}

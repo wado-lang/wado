@@ -1,0 +1,23 @@
+// A case test reads its operand and takes nothing of it, so a nested pattern
+// still shares the tuple it tests rather than copying one element out.
+
+variant Tree {
+    Leaf(i32),
+    Branch([Tree, Tree]),
+    Empty,
+}
+
+export fn run() {
+    let tree = Tree::Branch([Tree::Leaf(10), Tree::Leaf(20)]);
+    let s = match tree {
+        Branch([Leaf(a), Leaf(b)]) => a + b,
+        _ => 0,
+    };
+    assert s == 30;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

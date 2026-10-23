@@ -614,7 +614,6 @@ fn "spec_worlds_http_request.wado/$cm_binding__Request_get_headers"(self) with R
 }
 
 fn "spec_worlds_http_request.wado/$cm_binding__Fields_get"(self, name) with Fields {
-    let $load_7: i32;
     let $name_packed: i64;
     let $result_6: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let $elem_addr_8: i32;
@@ -669,7 +668,6 @@ fn "spec_worlds_http_request.wado/$cm_binding__Fields_get"(self, name) with Fiel
             if $count_10 > 0 {
                 drop("mem/realloc"($base_9, $count_10, 1, 0));
             }
-            $result_11 = struct.new "core:prelude//List<u8>" { repr: bytes = $result_11.repr; $load_7 = $result_11.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_7)), 0, bytes, 0, $load_7); $array_clone_dst_2, used: $load_7 };
             if @unlikely(local.tee $base_9($result_6.used) >= builtin::array_len($result_6.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_6);

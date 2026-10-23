@@ -295,10 +295,11 @@ alias), replacing the old "copy-everything-then-elide" scheme. As implemented it
 is caller-side and single-phase (`lower::translate` emits `$value_copy$T` only
 where it cannot prove move / share / fresh; no elision pass):
 
-- Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
-  `moved_local_spans`. The elaborator reads names only. It sees a `&x`, but a
-  method call references its receiver with no `&` written, so its final uses
-  count only for a local the TIR walk finds no kept reference pinning. This also covers a **place-level move**: at a struct /
+- Move — `last_use::analyze_ownership`, whose backward walk over TIR decides a
+  read is final and marks it on its node. It runs on the body lowering sees, so
+  a read synthesis wrote is judged like one the source spelled. A final read
+  moves unless a kept reference pins its local, its callers pass it uncopied,
+  or it binds a match scrutinee's storage. This also covers a **place-level move**: at a struct /
   tuple literal, a whole-value or clean-field materialization aliases out of a
   _dead_ aggregate (the root is dead after the literal, sibling reads neither
   mutate nor move it, and the materialized fields are disjoint owners) instead of
@@ -591,16 +592,16 @@ Verified against the tree.
   expressions it writes, so it predicts none of the temps pattern lowering
   mints after it. A miss left the fold no helper to call, which
   `wrap_value_copy` asserts on.
-- [x] A `break LABEL` resumes where its labeled block ends, at both levels that
-  compute last-use liveness. Each kept a stack of exit sets that only loops
-  pushed, so every such break fell back to _every_ local live. A template
-  string lowers to a labeled block, so one interpolation anywhere in a
-  function retired its whole last-use set. That showed most often as a
-  whole-array copy of a `String` handed to a callee that keeps it. The
-  source-level walk had
-  the same fallback, and is fixed here rather than left. No fixture changes
-  with that half fixed: a template is not a labeled block where that walk
-  runs.
+- [x] One walk decides a read final: the TIR walk lowering runs. The
+  elaborator's source-level last-use pass reached lowering keyed by span, which
+  every synthesized node shares, so it moved a synthesized read final or not.
+  A read synthesis wrote is now judged like any other, and the pass is gone.
+- [x] A `break LABEL` resumes where its labeled block ends in the last-use walk.
+  It kept a stack of exit sets that only loops pushed, so every such break fell
+  back to _every_ local live. A template string lowers to a labeled block, so
+  one interpolation anywhere in a function retired its whole last-use set. That
+  showed most often as a whole-array copy of a `String` handed to a callee that
+  keeps it.
 - [x] A caller takes the whole `&mut` handle as written when the callee names a
   write it cannot re-root there. Re-rooting kept only the writes whose owner
   was the handle's own type and dropped the rest, so a callee writing through

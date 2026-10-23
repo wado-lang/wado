@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::ast::{
     self, AssignExpr, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
-    IdentExpr, ImplBlock, Item, Pattern, Stmt, for_each_pattern_binding,
+    IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
@@ -271,9 +271,9 @@ impl Checker<'_> {
             Item::Impl(b) => {
                 let scope = affine_params(&b.type_params);
                 self.check_impl_trait(b, &scope);
-                let drop_body = self.drops.implemented_by(b, self.sem);
+                let drop_impl = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
-                    self.check_function(method, &scope, drop_body);
+                    self.check_function(method, &scope, drop_impl);
                 }
             }
             Item::Trait(t) => {
@@ -287,15 +287,20 @@ impl Checker<'_> {
                     self.check_function(method, &[], false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new(), false, Vec::new()),
+            Item::Test(test) => self.check_body(&test.body, Vec::new(), None, Vec::new()),
             _ => {}
         }
     }
 
-    fn check_function(&mut self, func: &Function, outer: &[String], drop_body: bool) {
+    fn check_function(&mut self, func: &Function, outer: &[String], drop_impl: bool) {
         let Some(body) = &func.body else {
             return;
         };
+        let drop_self = func
+            .params
+            .iter()
+            .find(|p| drop_impl && matches!(p.self_kind, SelfKind::Value))
+            .map(|p| p.id);
         let mut scope = outer.to_vec();
         scope.extend(affine_params(&func.type_params));
         let outside = func
@@ -304,7 +309,7 @@ impl Checker<'_> {
             .filter(|p| self.is_mut_ref_local(p.id))
             .map(|p| (p.id, p.name.clone()))
             .collect();
-        self.check_body(body, scope, drop_body, outside);
+        self.check_body(body, scope, drop_self, outside);
     }
 
     fn is_mut_ref_local(&self, id: AstId) -> bool {
@@ -318,7 +323,7 @@ impl Checker<'_> {
         &mut self,
         body: &Block,
         affine_params: Vec<String>,
-        drop_body: bool,
+        drop_self: Option<AstId>,
         outside: Vec<(AstId, String)>,
     ) {
         let facts = SemFacts {
@@ -326,7 +331,7 @@ impl Checker<'_> {
             affine_params: &affine_params,
         };
         let modes = ownership::body_modes(body, &facts);
-        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_body);
+        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_self);
         walker.visit_block(body);
         walker.refuse_escapes(&outside);
     }
@@ -553,8 +558,8 @@ struct MoveWalker<'a, 'c> {
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
     affine_params: Vec<String>,
-    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
-    drop_body: bool,
+    /// The `self` of a `Drop::drop` body, which may move its fields out.
+    drop_self: Option<AstId>,
     flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
@@ -615,13 +620,13 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         checker: &'c mut Checker<'a>,
         modes: Rc<Modes>,
         affine_params: Vec<String>,
-        drop_body: bool,
+        drop_self: Option<AstId>,
     ) -> Self {
         MoveWalker {
             checker,
             modes,
             affine_params,
-            drop_body,
+            drop_self,
             flow: Flow::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -645,7 +650,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             &mut *self.checker,
             Rc::clone(&self.modes),
             self.affine_params.clone(),
-            self.drop_body,
+            self.drop_self,
         );
         inner.flow.clone_from(&self.flow);
         inner.guard_bindings.clone_from(&self.guard_bindings);
@@ -915,8 +920,7 @@ impl MoveWalker<'_, '_> {
     /// field.
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
         while let Some((holder, _)) = self.field_step(expr) {
-            let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
-            if !own_self && self.implements_drop(holder) {
+            if !self.is_drop_self(holder) && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
                 self.report(MoveError::DropPartialMove { type_name }, expr.span());
             }
@@ -925,16 +929,104 @@ impl MoveWalker<'_, '_> {
     }
 
     fn implements_drop(&self, expr: &Expr) -> bool {
-        let types = &self.sem().types;
         self.sem()
             .expression_type(expr.id())
-            .and_then(|ty| types.nominal_def(ty))
-            .is_some_and(|def| {
-                self.checker
-                    .drops
-                    .implementors
-                    .contains(&types.defs().ast_id(def))
-            })
+            .is_some_and(|ty| self.type_implements_drop(ty))
+    }
+
+    /// Whether `ty`, or the type a newtype over it represents, implements
+    /// `Drop`: a newtype inherits its base's.
+    fn type_implements_drop(&self, ty: TypeId) -> bool {
+        let types = &self.sem().types;
+        let head = types.representation_head(ty);
+        types.nominal_def(head).is_some_and(|def| {
+            self.checker
+                .drops
+                .implementors
+                .contains(&types.defs().ast_id(def))
+        })
+    }
+
+    /// Refuse a by-value `pattern` that moves an affine part out of a value
+    /// whose type implements `Drop`, at any depth, as
+    /// [`Self::refuse_move_out_of_drop`] refuses the field move. `scrutinee`
+    /// is what the pattern matches, where an expression names it: the `self`
+    /// of a `Drop::drop` body may still give up its own fields.
+    fn refuse_destructured_drop(&mut self, pattern: &Pattern, scrutinee: Option<&Expr>) {
+        let own_self = scrutinee.is_some_and(|expr| self.is_drop_self(expr));
+        self.refuse_destructured_drop_at(pattern, own_self);
+    }
+
+    fn is_drop_self(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Ident(id) if self.drop_self.is_some_and(
+            |param| self.sem().referenced_symbol(id.id) == Some(param)
+        ))
+    }
+
+    fn refuse_destructured_drop_at(&mut self, pattern: &Pattern, own_self: bool) {
+        match pattern {
+            Pattern::Struct { fields, span, .. } => {
+                if let Some(first) = fields.first()
+                    && !own_self
+                    && fields.iter().any(|field| self.binds_affine(&field.pattern))
+                {
+                    self.refuse_destructured_part(first.id, *span);
+                }
+                for field in fields {
+                    self.refuse_destructured_drop_at(&field.pattern, false);
+                }
+            }
+            Pattern::Variant {
+                name_id,
+                bindings,
+                span,
+                ..
+            } => {
+                if !own_self && bindings.iter().any(|binding| self.binds_affine(binding)) {
+                    self.refuse_destructured_part(*name_id, *span);
+                }
+                for binding in bindings {
+                    self.refuse_destructured_drop_at(binding, false);
+                }
+            }
+            Pattern::Tuple(elements, _) => {
+                for element in elements {
+                    self.refuse_destructured_drop_at(element, false);
+                }
+            }
+            Pattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.refuse_destructured_drop_at(alternative, own_self);
+                }
+            }
+            Pattern::Typed { pattern, .. } => self.refuse_destructured_drop_at(pattern, own_self),
+            Pattern::Ident { .. }
+            | Pattern::MutIdent { .. }
+            | Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => {}
+        }
+    }
+
+    /// Refuse the part a pattern node at `span` moves out of the type it takes
+    /// apart, which the walk recorded at `site`, where that type implements
+    /// `Drop`.
+    fn refuse_destructured_part(&mut self, site: AstId, span: Span) {
+        let Some(ty) = self.sem().destructured_type(site) else {
+            return;
+        };
+        if self.type_implements_drop(ty) {
+            let type_name = self.sem().types.type_name(ty);
+            self.report(MoveError::DropPartialMove { type_name }, span);
+        }
+    }
+
+    /// Whether `pattern` binds an affine value by value.
+    fn binds_affine(&self, pattern: &Pattern) -> bool {
+        let mut affine = false;
+        for_each_pattern_binding(pattern, &mut |id| affine |= self.is_affine_local(id));
+        affine
     }
 
     /// Forgets the moves an assignment to `place` refills: the place and every
@@ -1487,6 +1579,7 @@ impl MoveWalker<'_, '_> {
 
     /// `pattern` binds afresh to what `value` refers into.
     fn bind_to(&mut self, pattern: &Pattern, value: &Expr) {
+        self.refuse_destructured_drop(pattern, Some(value));
         self.bind_pattern(pattern);
         let owners = self.owners_of(value);
         self.hold_bindings(pattern, &owners);
@@ -1746,6 +1839,7 @@ impl MoveWalker<'_, '_> {
                 LoopHead::None => {}
                 LoopHead::Condition(condition) => walker.visit_condition(condition),
                 LoopHead::Binding(pattern, owners) => {
+                    walker.refuse_destructured_drop(pattern, None);
                     walker.bind_pattern(pattern);
                     walker.hold_bindings(pattern, owners);
                 }
@@ -1841,6 +1935,7 @@ impl MoveWalker<'_, '_> {
         for arm in arms {
             self.flow.clone_from(&base);
             let diverged = self.in_scope(|walker| {
+                walker.refuse_destructured_drop(&arm.pattern, Some(scrutinee));
                 walker.bind_pattern(&arm.pattern);
                 walker.hold_bindings(&arm.pattern, &owners);
                 if let Some(guard) = &arm.guard {

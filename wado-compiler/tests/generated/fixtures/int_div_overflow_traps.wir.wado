@@ -1886,20 +1886,20 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128::div_rem"(self, divis
     let abs_dividend: ref "core:prelude/int128.wado//u128";
     let abs_divisor: ref "core:prelude/int128.wado//u128";
     let hi_20: i64;
-    let self_40: ref "core:prelude/int128.wado//i128";
-    let $av_60: i64;
+    let self_39: ref "core:prelude/int128.wado//i128";
+    let $av_57: i64;
     $load_0 = divisor.high;
     if @unlikely((local.tee $load_1(divisor.low) == 0_i64) & ($load_0 == 0_i64)) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("i128 division by zero"), 21);
         unreachable;
     }
-    dividend_neg = local.tee $av_60(local.tee $load_2(self.high)) < 0_i64;
+    dividend_neg = local.tee $av_57(local.tee $load_2(self.high)) < 0_i64;
     divisor_neg = $load_0 < 0_i64;
     abs_dividend = $inline_core_prelude_int128_wado_i128__abs_u128_2: block -> ref "core:prelude/int128.wado//u128" {
-        if $av_60 < 0_i64 {
-            multivalue_bind [$av_60, hi_20] = i64.sub128(0_i64, 0_i64, self.low, $load_2);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_2: struct.new "core:prelude/int128.wado//u128" { low: $av_60, high: hi_20 };
+        if $av_57 < 0_i64 {
+            multivalue_bind [$av_57, hi_20] = i64.sub128(0_i64, 0_i64, self.low, $load_2);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_2: struct.new "core:prelude/int128.wado//u128" { low: $av_57, high: hi_20 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_2: struct.new "core:prelude/int128.wado//u128" { low: self.low, high: $load_2 };
     };
@@ -1911,13 +1911,11 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128::div_rem"(self, divis
         break $inline_core_prelude_int128_wado_i128__abs_u128_9: struct.new "core:prelude/int128.wado//u128" { low: $load_1, high: $load_0 };
     };
     multivalue_bind [abs_divisor, abs_dividend] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(abs_dividend, abs_divisor);
-    $load_0 = abs_divisor.low;
-    $load_1 = abs_divisor.high;
-    self = struct.new "core:prelude/int128.wado//i128" { low: $load_0, high: $load_1 };
+    self = struct.new "core:prelude/int128.wado//i128" { low: abs_divisor.low, high: abs_divisor.high };
     if dividend_neg != divisor_neg {
         divisor = self;
-        multivalue_bind [$load_1, $load_0] = i64.sub128(0_i64, 0_i64, divisor.low, divisor.high);
-        self = struct.new "core:prelude/int128.wado//i128" { low: $load_1, high: $load_0 };
+        multivalue_bind [$load_0, $load_1] = i64.sub128(0_i64, 0_i64, divisor.low, divisor.high);
+        self = struct.new "core:prelude/int128.wado//i128" { low: $load_0, high: $load_1 };
     } else if @unlikely(self.high < 0_i64) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("i128 division overflow"), 22);
@@ -1925,9 +1923,9 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128::div_rem"(self, divis
     }
     divisor = struct.new "core:prelude/int128.wado//i128" { low: abs_dividend.low, high: abs_dividend.high };
     if dividend_neg {
-        self_40 = divisor;
-        multivalue_bind [$load_0, $load_1] = i64.sub128(0_i64, 0_i64, self_40.low, self_40.high);
-        divisor = struct.new "core:prelude/int128.wado//i128" { low: $load_0, high: $load_1 };
+        self_39 = divisor;
+        multivalue_bind [$load_1, $load_0] = i64.sub128(0_i64, 0_i64, self_39.low, self_39.high);
+        divisor = struct.new "core:prelude/int128.wado//i128" { low: $load_1, high: $load_0 };
     }
     return self, divisor;
 }

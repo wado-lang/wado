@@ -1,0 +1,38 @@
+// The `self` of a `Drop::drop` body may give up its fields to a pattern, as
+// to a field move, and the fields it leaves out drop as the pattern binds.
+
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+affine struct Pair {
+    a: Tok,
+    b: Tok,
+}
+
+impl Drop for Pair {
+    fn drop(self) {
+        let Pair { a, .. } = self;
+        assert DROPS == 1;
+        assert eat(a) == 1;
+    }
+}
+
+test {
+    scope: {
+        let p = Pair { a: Tok { id: 1 }, b: Tok { id: 2 } };
+    }
+    assert DROPS == 2;
+}
