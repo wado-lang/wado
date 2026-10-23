@@ -60,6 +60,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         let Ok(n) = i64::from_str(&given[1]) else {
             usage();
         };
+        if n <= 0 {
+            usage();
+        }
         max_shard_bytes = Option::Some(n);
         given = given.into_iter().skip(2).collect();
     }
@@ -67,6 +70,10 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         usage();
     }
     let [source, stem] = [given[0], given[1]];
+    // A shard is named after the stem's last segment.
+    let Some(base) = fs::file_name(&stem) else {
+        usage();
+    };
     // A filesystem error names its path; a read or print error does not.
     let [kept, stored] = split_weights(read_model(&source));
     let text = or_exit(print(&kept), `${source}: `);
@@ -79,7 +86,7 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
     let weights = stored.len();
     let filled = shard_tensors(stored, max);
     let count = filled.len();
-    let base = fs::file_name(&stem).unwrap().to_string();
+    let base = base.to_string();
     let dir = fs::parent(&stem).map(|p| p.to_string()).unwrap_or("");
     let mut shards: List<[String, List<StoredTensor>]> = [];
     for let [i, shard] of filled.into_iter().enumerate() {

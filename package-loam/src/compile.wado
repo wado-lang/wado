@@ -1,15 +1,16 @@
 //! What a graph or a tokenizer becomes, apart from where it was read: the Kiln
 //! generator and the `loam` command both run it.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Deserialize } from "core:serde";
+use fs from "core:fs";
 use { Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
 use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
-use { declared_header_end, read_checkpoint, read_shards } from "./runtime/checkpoint.wado";
-use { check_checkpoint, check_shards, placement, read_index } from "./safetensors.wado";
+use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { check_checkpoint, check_shard, check_shards_given, placement, read_index } from "./safetensors.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -149,28 +150,27 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
             let index = read_index(&text_of(&index_path, sharded.index)?).map_err(|e| at(&index_path, &e))?;
             let placed = placement(graph, &index).map_err(|e| at(&index_path, &e))?;
             let generated = emit_with(Placement::Shards(placed))?;
-            let mut given = TreeMap::<String, ByteList>::new();
+            let mut named = TreeSet::<String>::new();
+            for let [_, shard] of index.entries() {
+                named.insert(*shard);
+            }
+            let mut given = TreeSet::<String>::new();
             for let shard of sharded.shards {
-                let name = file_name(&shard.path);
-                if !index.values().any(|placed_in| placed_in == name) {
+                // An index names a shard by its file name. A path that was
+                // read names a file, so it has one.
+                let name = fs::file_name(&shard.path).unwrap().to_string();
+                if !named.contains(name) {
                     return Result::Err(at(&shard.path, &"the index names no shard of this file name"));
                 }
-                if !given.try_insert(name, shard.header) {
+                if !given.insert(name) {
                     return Result::Err(at(&shard.path, &"another shard has this file name"));
                 }
+                let checkpoint = read_checkpoint(&shard.header).map_err(|e| at(&shard.path, &e))?;
+                check_shard(graph, shapes, &placed, &name, &checkpoint).map_err(|e| at(&shard.path, &e))?;
             }
-            let shards = read_shards(&given).map_err(|e| at(&index_path, &e))?;
-            check_shards(graph, shapes, &placed, &shards).map_err(|e| at(&index_path, &e))?;
+            check_shards_given(&placed, &given).map_err(|e| at(&index_path, &e))?;
             Result::Ok(generated);
         },
-    };
-}
-
-/// The last segment of `path`, which is what an index names a shard by.
-fn file_name(path: &String) -> String {
-    return match path.rsplit_once("/") {
-        Some([_, name]) => name.to_string(),
-        None => *path,
     };
 }
 

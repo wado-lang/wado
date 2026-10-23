@@ -178,29 +178,22 @@ pub fn read_shards(shards: &TreeMap<String, ByteList>) -> Result<Shards, LoadErr
 }
 
 impl Shards {
-    /// The byte range holding `e` within the shard named `shard`.
-    pub fn range(&self, shard: String, e: &Expected) -> Result<[i32, i32], LoadError> {
-        return self.header(&shard, e)?.range(e);
-    }
-
-    /// `e`'s bytes within the shard named `shard`, of `shards`, which this
-    /// header was read from.
+    /// `e`'s bytes within the shard named `shard`, of `shards`, which these
+    /// headers were read from.
     pub fn payload(
         &self,
         shards: &TreeMap<String, ByteList>,
         shard: String,
         e: &Expected,
     ) -> Result<ByteSlice, LoadError> {
-        let header = self.header(&shard, e)?;
-        return header.payload(shards.get_ref_str(&shard).unwrap(), e);
+        if let Some(header) = self.headers.get_ref_str(&shard) && let Some(bytes) = shards.get_ref_str(&shard) {
+            return header.payload(bytes, e).map_err(|err| LoadError { reason: `${shard}: ${err}` });
+        }
+        return Result::Err(shard_not_given(&e.tensor, &shard));
     }
+}
 
-    fn header(&self, shard: &String, e: &Expected) -> Result<&Checkpoint, LoadError> {
-        let Some(header) = self.headers.get_ref_str(shard) else {
-            return Result::Err(
-                LoadError { reason: `${e.tensor}: the index places it in ${*shard}, which is not given` },
-            );
-        };
-        return Result::Ok(header);
-    }
+/// Why a tensor cannot be read: the shard the index places it in is absent.
+pub fn shard_not_given(tensor: &String, shard: &String) -> LoadError {
+    return LoadError { reason: `${*tensor}: the index places it in ${*shard}, which is not given` };
 }

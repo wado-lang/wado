@@ -146,8 +146,10 @@ pub fn emit(
         w.line(`    ${name},`);
     }
     w.line(wado`} from "${*runtime}";`);
-    if placement matches { Shards(_) } {
-        w.line("use { TreeMap } from \"core:collections\";");
+    // Only a sharded `load` names the map.
+    let imports_map = placement matches { Shards(_) } && loads_weights(graph);
+    if imports_map {
+        w.line(`use { ${MAP} } from "core:collections";`);
     }
     w.blank();
 
@@ -155,7 +157,7 @@ pub fn emit(
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
     let carriers = symbol_carriers(graph, shapes);
-    let names = Names::of(graph, checked, &literals.spelled, &axes, &carriers)?;
+    let names = Names::of(graph, checked, &literals.spelled, &axes, &carriers, imports_map)?;
     let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
@@ -237,8 +239,12 @@ impl Names {
         literals: &List<String>,
         axes: &List<String>,
         carriers: &List<Carrier>,
+        imports_map: bool,
     ) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
+        if imports_map {
+            reserved.insert(MAP);
+        }
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
                 builtin::cold_path();
@@ -350,8 +356,6 @@ fn module_idents() -> TreeSet<String> {
     for let name of RUNTIME_NAMES {
         reserved.insert(name);
     }
-    // A sharded checkpoint's module imports it.
-    reserved.insert("TreeMap");
     reserved.insert("forward");
     reserved.insert("pass");
     reserved.insert("Outputs");
@@ -388,6 +392,9 @@ global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
 /// The struct the constructors of `Prepared` take its kept literals from.
 global KEPT: String = "Kept";
 global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
+
+/// The map a sharded `load` takes the shards in, keyed by file name.
+global MAP: String = "TreeMap";
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.
@@ -703,7 +710,7 @@ fn emit_constructor(
             File => ["a safetensors checkpoint", "checkpoint", "&ByteList", "read_checkpoint"],
             Shards(_) => [
                 "the shards of a safetensors checkpoint, by the file name its index gives each", "shards",
-                "&TreeMap<String, ByteList>", "read_shards",
+                `&${MAP}<String, ByteList>`, "read_shards",
             ],
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);

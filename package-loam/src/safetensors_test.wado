@@ -1,15 +1,16 @@
 //! The build's check of a checkpoint's header against the graph it supplies.
 
-use { TreeMap } from "core:collections";
+use { TreeSet } from "core:collections";
 use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
-use { read_checkpoint, read_shards } from "./runtime/checkpoint.wado";
+use { read_checkpoint } from "./runtime/checkpoint.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 use {
     StoredTensor,
     check_checkpoint,
-    check_shards,
+    check_shard,
+    check_shards_given,
     placement,
     read_index,
     shard_name,
@@ -100,15 +101,17 @@ test "a weight named as the format's metadata stays in the graph, which can name
 }
 
 /// The check of `GRAPH` against the shards in `given`, which `index` places its
-/// weights in.
+/// weights in, a failure in a shard after the shard's name.
 fn check_sharded(index: String, given: List<[String, List<StoredTensor>]>) -> Result<(), String> {
     let [graph, checked] = checked_graph();
-    let mut shards = TreeMap::<String, ByteList>::new();
-    for let [name, stored] of given {
-        shards[name] = write_safetensors(&stored);
-    }
     let placed = placement(&graph, &read_index(&index)?).map_err(|e| `${e}`)?;
-    return check_shards(&graph, &checked.shapes, &placed, &read_shards(&shards).unwrap()).map_err(|e| `${e}`);
+    let mut shards = TreeSet::<String>::new();
+    for let [name, stored] of given {
+        let checkpoint = read_checkpoint(&write_safetensors(&stored)).unwrap();
+        check_shard(&graph, &checked.shapes, &placed, &name, &checkpoint).map_err(|e| `${name}: ${e}`)?;
+        shards.insert(name);
+    }
+    return check_shards_given(&placed, &shards).map_err(|e| `${e}`);
 }
 
 global INDEX: String = `{"metadata": {"total_size": 24}, "weight_map": {"W": "m-00002-of-00002.safetensors"}}`;
@@ -142,7 +145,7 @@ test "a weight is looked for in its own shard alone" {
         ],
         ["m-00002-of-00002.safetensors", []],
     ]).unwrap_err();
-    assert refused == "W: the checkpoint has no such tensor";
+    assert refused == "m-00002-of-00002.safetensors: W: the checkpoint has no such tensor";
 }
 
 test "an index that is not one is refused" {

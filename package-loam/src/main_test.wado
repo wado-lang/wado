@@ -199,6 +199,17 @@ test "a weight whose shard is not given names the shard" {
     assert refused == `loam: '${dir}/index.json': W: the index places it in g-00002-of-00002.safetensors, which is not given`;
 }
 
+test "a shard that disagrees with the graph is named by its path" {
+    let dir = scratch("gen-bad-shard");
+    shards(&dir);
+    fs::write(`${dir}/g-00002-of-00002.safetensors`, &checkpoint([2, 4])).unwrap();
+    let refused = on_graph("gen", &dir, [
+        "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
+        `${dir}/g-00002-of-00002.safetensors`,
+    ]).unwrap_err();
+    assert refused == `loam: '${dir}/g-00002-of-00002.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+}
+
 test "a shard the index does not name is refused" {
     let dir = scratch("gen-stray-shard");
     shards(&dir);

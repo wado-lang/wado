@@ -216,10 +216,18 @@ test "a tensor whose shard is not given names the shard" {
     assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
 }
 
-test "a tensor its shard lacks names itself" {
+test "a tensor its shard lacks names itself and the shard" {
     let given = two_shards();
     let e = read_shards(&given).unwrap().payload(&given, "m-00001-of-00002.safetensors", &b()).unwrap_err();
-    assert `${e}` == "b: the checkpoint has no such tensor";
+    assert `${e}` == "m-00001-of-00002.safetensors: b: the checkpoint has no such tensor";
+}
+
+test "a shard read but then left out of the payloads names the shard" {
+    let mut given = two_shards();
+    let shards = read_shards(&given).unwrap();
+    given.remove("m-00002-of-00002.safetensors");
+    let e = shards.payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
+    assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
 }
 
 test "a shard that is no safetensors file is named" {

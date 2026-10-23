@@ -84,7 +84,7 @@ each shard's is its header. A build refuses:
 - a tensor whose shard is not given, naming the shard.
 
 Each tensor is then checked against its shard's header as against a single
-file's. The WEP's The Graph Is the Schema, the Checkpoint Is Data gives the
+file's, and a disagreement names the shard. The WEP's The Graph Is the Schema, the Checkpoint Is Data gives the
 loader one `ByteList`. A sharded module's loader takes the shards keyed by the
 file names the index uses instead:
 

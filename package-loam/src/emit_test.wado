@@ -1100,6 +1100,40 @@ g (float[N, 2] map) => (float[N, 2] Y)
     assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(map)],");
 }
 
+test "a tensor named as the map a sharded load takes keeps its name where the module imports none" {
+    let source = `
+g (float[N, 2] TreeMap) => (float[N, 2] Y)
+<>
+{
+    Y = Relu(TreeMap)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("backend.read(TreeMap)");
+}
+
+test "a sharded checkpoint that supplies no weight imports no map" {
+    let source = `
+g (float[N, 2] X) => (float[N, 2] Y)
+<float[2] B = {1.0, 2.0}>
+{
+    Y = Add(X, B)
+}
+`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("B", ["In"]),
+        ],
+    }).unwrap();
+    let out = emit(&graph, &checked, &RUNTIME, true, Placement::Shards(TreeMap::new())).unwrap();
+
+    assert !out.contains("core:collections");
+    assert out.contains("pub fn embedded(");
+}
+
 test "a renamed tensor steps past a tensor already named as the renaming would" {
     for let [first, second] of [
         ["refuse", "refuse_"],

@@ -2,10 +2,10 @@
 //! element type, shape and byte range, then the payloads back to back.
 
 use { from_string, to_string, to_string_pretty } from "core:json";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Deserialize } from "core:serde";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
-use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, Shards } from "./runtime/checkpoint.wado";
+use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, shard_not_given } from "./runtime/checkpoint.wado";
 use { element_count } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
@@ -32,13 +32,16 @@ pub fn check_checkpoint(
     shapes: &TreeMap<String, Shape>,
     checkpoint: &Checkpoint,
 ) -> Result<(), LoadError> {
-    return check_each_left(graph, shapes, |e| checkpoint.range(e));
+    return check_held(graph, shapes, checkpoint, |_| true);
 }
 
 /// The shard `index` places each initializer the graph carries no data for in.
 pub fn placement(graph: &Graph, index: &TreeMap<String, String>) -> Result<TreeMap<String, String>, LoadError> {
     let mut placed = TreeMap::<String, String>::new();
-    for let vi of left_to_checkpoint(graph) {
+    for let vi of &graph.initializers {
+        if vi.data matches { Some(_) } {
+            continue;
+        }
         let Some(shard) = index.get(vi.name) else {
             return Result::Err(LoadError { reason: `${vi.name}: the index places it in no shard` });
         };
@@ -47,33 +50,43 @@ pub fn placement(graph: &Graph, index: &TreeMap<String, String>) -> Result<TreeM
     return Result::Ok(placed);
 }
 
-/// Whether `shards` holds every initializer the graph carries no data for, each
-/// in the shard `placed` names, as the build compiles it. `placed` is what
-/// `placement` answers for the graph.
-pub fn check_shards(
+/// Whether `checkpoint`, the shard named `shard`, holds each initializer
+/// `placed` puts in it, as the build compiles it. `placed` is what `placement`
+/// answers for the graph.
+pub fn check_shard(
     graph: &Graph,
     shapes: &TreeMap<String, Shape>,
     placed: &TreeMap<String, String>,
-    shards: &Shards,
+    shard: &String,
+    checkpoint: &Checkpoint,
 ) -> Result<(), LoadError> {
-    return check_each_left(graph, shapes, |e| shards.range(placed[e.tensor], e));
+    return check_held(graph, shapes, checkpoint, |tensor| placed[*tensor] == *shard);
 }
 
-/// `locate` for each initializer the graph leaves to a checkpoint.
-fn check_each_left(
-    graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
-    locate: fn(&Expected) -> Result<[i32, i32], LoadError>,
-) -> Result<(), LoadError> {
-    for let vi of left_to_checkpoint(graph) {
-        locate(&expected(&vi, &shapes.get(vi.name).unwrap()))?;
+/// Whether every shard `placed` puts a tensor in is among `given`.
+pub fn check_shards_given(placed: &TreeMap<String, String>, given: &TreeSet<String>) -> Result<(), LoadError> {
+    for let [tensor, shard] of placed.entries() {
+        if !given.contains(*shard) {
+            return Result::Err(shard_not_given(tensor, shard));
+        }
     }
     return Result::Ok(());
 }
 
-/// The initializers the graph carries no data for, which a checkpoint supplies.
-fn left_to_checkpoint(graph: &Graph) -> List<ValueInfo> {
-    return graph.initializers.iter_ref().filter(|vi| vi.data matches { None }).map(|vi| *vi).collect();
+/// Whether `checkpoint` holds each initializer the graph carries no data for
+/// that `holds` names.
+fn check_held(
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    checkpoint: &Checkpoint,
+    holds: fn(&String) -> bool,
+) -> Result<(), LoadError> {
+    for let vi of &graph.initializers {
+        if vi.data matches { None } && holds(&vi.name) {
+            checkpoint.range(&expected(vi, &shapes.get(vi.name).unwrap()))?;
+        }
+    }
+    return Result::Ok(());
 }
 
 /// A sharded checkpoint's index, `model.safetensors.index.json` as Hugging Face
@@ -95,7 +108,9 @@ pub fn read_index(text: &String) -> Result<TreeMap<String, String>, String> {
 /// `tensors` in order, in shards of at most `max_bytes` of payload each: a
 /// shard closes before the tensor that would take it past the size, and a
 /// tensor larger than a shard has one of its own.
-pub fn shard_tensors(tensors: List<StoredTensor>, max_bytes: i64) -> List<List<StoredTensor>> {
+pub fn shard_tensors(tensors: List<StoredTensor>, max_bytes: i64) -> List<List<StoredTensor>>
+    contract max_bytes > 0
+{
     let mut shards: List<List<StoredTensor>> = [];
     let mut open: List<StoredTensor> = [];
     let mut held: i64 = 0;
