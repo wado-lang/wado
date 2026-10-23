@@ -1523,50 +1523,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-<<<<<<< HEAD
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b221: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b221: block {
         l222: loop {
             break_if b221 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-||||||| abe826435
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b227: block {
-        l228: loop {
-            break_if b227 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-=======
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b227: block {
-        l228: loop {
-            break_if b227 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
->>>>>>> origin/main
             i = i + 1;
             continue l222;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-<<<<<<< HEAD
         l224: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
-||||||| abe826435
-        l230: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
-=======
-        l230: loop {
             ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
             count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
                     break $inline_cm_await_blocked_7: $mv$data$start;
->>>>>>> origin/main
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -1676,28 +1648,12 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     $licm_arith_139 = self_11 >= 0;
     $tmpl_buf_140 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_844 = self_12.used;
-<<<<<<< HEAD
     b231: block {
         l232: loop {
             break_if b231 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
-            $sroa_slot_435 = 0;
-            $sroa_slot_436 = 0;
-            $inline_decode_char_at_3: block {
-||||||| abe826435
-    b237: block {
-        l238: loop {
-            break_if b237 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
-            $sroa_slot_435 = 0;
-            $sroa_slot_436 = 0;
-            $inline_decode_char_at_3: block {
-=======
-    b237: block {
-        l238: loop {
-            break_if b237 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
             $sroa_slot_438 = 0;
             $sroa_slot_439 = 0;
             $inline_decode_char_at_1: block {
->>>>>>> origin/main
                 if local.tee b0(builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_446)) <u 128 {
                     $sroa_slot_438 = b0;
                     $sroa_slot_439 = 1;
@@ -1723,22 +1679,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 $sroa_slot_439 = 4;
                 break $inline_decode_char_at_1;
             };
-<<<<<<< HEAD
-            $sroa_$iter_0_byte_index_446 = $sroa_$iter_0_byte_index_446 + $sroa_slot_436;
-            if select i32($licm_arith_131, start_140 >= self_11, 0) {
-                new_used_139 = 1;
-                break b231;
-||||||| abe826435
-            $sroa_$iter_0_byte_index_446 = $sroa_$iter_0_byte_index_446 + $sroa_slot_436;
-            if select i32($licm_arith_131, start_140 >= self_11, 0) {
-                new_used_139 = 1;
-                break b237;
-=======
             $sroa_$iter_0_byte_index_446 = $sroa_$iter_0_byte_index_446 + $sroa_slot_439;
             if select i32($licm_arith_139, start_148 >= self_11, 0) {
                 new_used_147 = 1;
-                break b237;
->>>>>>> origin/main
+                break b231;
             }
             if $sroa_slot_438 == 34 {
                 if @unlikely(local.tee new_used_191($hfs_used_844 + 1) > builtin::array_len(self_12.repr)) {
@@ -1858,25 +1802,11 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 if val_i64_73 == 0_i64 {
                     builtin::array_set_u8(arr, start_538, 48);
                 } else {
-<<<<<<< HEAD
-                    temp = val_i64_68;
+                    temp = val_i64_73;
                     b257: block {
                         l258: loop {
                             break_if b257 temp == 0_i64;
-                            pos_87 = pos_87 - 1;
-||||||| abe826435
-                    temp = val_i64_68;
-                    b263: block {
-                        l264: loop {
-                            break_if b263 temp == 0_i64;
-                            pos_87 = pos_87 - 1;
-=======
-                    temp = val_i64_73;
-                    b263: block {
-                        l264: loop {
-                            break_if b263 temp == 0_i64;
                             pos_92 = pos_92 - 1;
->>>>>>> origin/main
                             digit = builtin::i32_wrap_i64(temp & 15_i64);
                             builtin::array_set_u8(arr, pos_92, select i32(digit < 10, 48 + digit, (97 + digit) - 10) & 255);
                             temp = temp >>u 4_i64;

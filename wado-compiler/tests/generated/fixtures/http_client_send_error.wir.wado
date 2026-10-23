@@ -566,27 +566,15 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(148)
 
 type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(149)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(150)
+type "functype//wasi/resource-drop:wasi/http/types.wado#response" = fn(i32);  // TypeId(150)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/http/types.wado#error-code" = fn(i32);  // TypeId(151)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(151)
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#response" = fn(i32);  // TypeId(152)
+type "functype//wasi/future-drop-readable:transmission-wasi/http/types.wado#error-code" = fn(i32);  // TypeId(152)
 
-<<<<<<< HEAD
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(153)
-||||||| abe826435
-type "functype//wasi/future-drop-readable:transmission-wasi/http/types.wado#error-code" = fn(i32);  // TypeId(153)
-=======
 type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(153)
->>>>>>> origin/main
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-wasi/http/types.wado#error-code" = fn(i32);  // TypeId(154)
-||||||| abe826435
-type "functype//wasi/resource-drop:wasi/http/types.wado#response" = fn(i32);  // TypeId(154)
-=======
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(154)
->>>>>>> origin/main
 
 type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(155)
 
@@ -1834,22 +1822,10 @@ fn "core:prelude/types.wado/delivered_at$sroa[return]"(handle) {
     let $v1_4: i32;
     let self_9: ref "core:prelude//List<core:prelude/types.wado/Resolution>";
     at = 0;
-<<<<<<< HEAD
     b234: block {
         l235: loop {
             break_if b234 at >= global:core:prelude/types.wado::DELIVERED.used;
-            if self_10 = global:core:prelude/types.wado::DELIVERED; $v1_4 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(at >=u $v1_4) {
-||||||| abe826435
-    b233: block {
-        l234: loop {
-            break_if b233 at >= global:core:prelude/types.wado::DELIVERED.used;
-            if self_10 = global:core:prelude/types.wado::DELIVERED; $v1_4 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(at >=u $v1_4) {
-=======
-    b233: block {
-        l234: loop {
-            break_if b233 at >= global:core:prelude/types.wado::DELIVERED.used;
             if self_9 = global:core:prelude/types.wado::DELIVERED; $v1_4 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(at >=u $v1_4) {
->>>>>>> origin/main
                 cold_path;
                 "core:prelude/types.wado/delivered_at$cold0$dae[handle]"(at, $v1_4);
                 unreachable;
@@ -1878,36 +1854,6 @@ fn "core:prelude/types.wado/drop_resolved"(subtask) {
     "wasi/subtask-drop"(subtask.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
-    let i: i32;
-    i = 0;
-    b240: block {
-        l241: loop {
-            break_if b240 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l241;
-        };
-    };
-}
-
-||||||| abe826435
-fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
-    let i: i32;
-    i = 0;
-    b239: block {
-        l240: loop {
-            break_if b239 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l240;
-        };
-    };
-}
-
-=======
->>>>>>> origin/main
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
@@ -1956,38 +1902,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b241: block {
-        l242: loop {
-            break_if b241 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b242: block {
+        l243: loop {
+            break_if b242 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l242;
+            continue l243;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-<<<<<<< HEAD
         l245: loop {
-            ptr_17 = ptr_15 + $mv$data$start;
-            count_18 = $mv$data$end - $mv$data$start;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee packed_21("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: packed_21;
-||||||| abe826435
-        l244: loop {
-            ptr_17 = ptr_15 + $mv$data$start;
-            count_18 = $mv$data$end - $mv$data$start;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee packed_21("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: packed_21;
-=======
-        l244: loop {
             ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
             count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
                     break $inline_cm_await_blocked_7: $mv$data$start;
->>>>>>> origin/main
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -2485,19 +2415,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
     start_20 = 0;
     new_used_19 = 0;
-<<<<<<< HEAD
     b271: block {
         l272: loop {
-            $sroa_slot_187 = 0;
-||||||| abe826435
-    b272: block {
-        l273: loop {
-            $sroa_slot_187 = 0;
-=======
-    b272: block {
-        l273: loop {
             $sroa_slot_189 = 0;
->>>>>>> origin/main
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__9: block {
                 if start_20 >= $mv$content$used {
                     $sroa_slot_189 = 0;
@@ -3275,28 +3195,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     state = 0;
     end = self.used;
     $load_4 = self.repr;
-<<<<<<< HEAD
-    $sroa_$iter_0_index_57 = 0;
+    $sroa_$iter_0_index_58 = 0;
     b398: block {
         l399: loop {
-            break_if b398 $sroa_$iter_0_index_57 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($load_4, $sroa_$iter_0_index_57);
-            $sroa_$iter_0_index_57 = $sroa_$iter_0_index_57 + 1;
-||||||| abe826435
-    $sroa_$iter_0_index_57 = 0;
-    b399: block {
-        l400: loop {
-            break_if b399 $sroa_$iter_0_index_57 >= end;
-            ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($load_4, $sroa_$iter_0_index_57);
-            $sroa_$iter_0_index_57 = $sroa_$iter_0_index_57 + 1;
-=======
-    $sroa_$iter_0_index_58 = 0;
-    b399: block {
-        l400: loop {
-            break_if b399 $sroa_$iter_0_index_58 >= end;
+            break_if b398 $sroa_$iter_0_index_58 >= end;
             ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($load_4, $sroa_$iter_0_index_58);
             $sroa_$iter_0_index_58 = $sroa_$iter_0_index_58 + 1;
->>>>>>> origin/main
             if ref_val.value == $mv$reported$handle {
                 return $load_6 = self.used; if @unlikely(state >=u $load_6) {
                     cold_path;
