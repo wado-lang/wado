@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792745148500,
+  "lastUpdate": 1792761136933,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69817,6 +69817,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d26824c631702cfda584bff12d31cfccc5402305",
+          "message": "Merge pull request #2429 from wado-lang/claude/upbeat-knuth-rwam10\n\nfeat(stream): wait on several stream copies at once",
+          "timestamp": "2026-10-23T21:56:53+09:00",
+          "tree_id": "fef5528baa7f3d611ff7b4520215592ef6a6afeb",
+          "url": "https://github.com/wado-lang/wado/commit/d26824c631702cfda584bff12d31cfccc5402305"
+        },
+        "date": 1792761136342,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3062,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7391,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19756,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295356,
             "unit": "bytes"
           }
         ]
