@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792717162700,
+  "lastUpdate": 1792721202884,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69665,6 +69665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9eb8b8bdd992bf94df5ce35002b31db2613b2548"
         },
         "date": 1792717161753,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "863c217a09a707faa06c98568ffb38f9f699df6f",
+          "message": "Merge pull request #2425 from wado-lang/loam-probe\n\nfeat(loam): a build reads a checkpoint's header and none of its weights",
+          "timestamp": "2026-10-23T10:45:28+09:00",
+          "tree_id": "8d945f7e9148a430200053fba5362beb413a73ff",
+          "url": "https://github.com/wado-lang/wado/commit/863c217a09a707faa06c98568ffb38f9f699df6f"
+        },
+        "date": 1792721201915,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
