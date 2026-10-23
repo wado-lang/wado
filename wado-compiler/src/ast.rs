@@ -2150,6 +2150,18 @@ impl CmImport {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 
+    /// Whether `name`, an interface name written in a `use`, names this
+    /// interface: a name without a version names it at any version.
+    pub fn is_named_by(&self, name: &CmImport) -> bool {
+        self.namespace == name.namespace
+            && self.package == name.package
+            && self.interface == name.interface
+            && name
+                .version
+                .as_ref()
+                .is_none_or(|v| self.version.as_ref() == Some(v))
+    }
+
     /// Whether this is its package's default interface, the one named after the
     /// package (`acme:geo/geo`): what a Wado library exports.
     pub fn is_package_default(&self) -> bool {
@@ -2264,12 +2276,13 @@ impl WorldExport {
 /// - Namespace: `use name from "..."` (import entire module as namespace)
 #[derive(Debug, Clone)]
 pub enum UseItem {
-    /// Simple import: `name` or `name as alias`
+    /// Simple import: `name`, `name as alias`, or `"ns:pkg/iface" as alias`
     Simple {
         /// `AstId` for the name identifier — used by LSP to record a use→def
         /// edge from the specifier name back to the imported symbol.
         id: AstId,
         name: String,
+        spelling: UseNameSpelling,
         /// Span of just the `name` identifier (narrower than the whole item).
         name_span: Span,
         alias: Option<String>,
@@ -2291,6 +2304,15 @@ pub enum UseItem {
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String, name_span: Span },
+}
+
+/// How a `use` item spells the name it imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UseNameSpelling {
+    Ident,
+    /// A full interface name as a string (`"wasi:cli/stdout"`), which always
+    /// takes `as`, since a string is no identifier to bind.
+    InterfaceName,
 }
 
 /// Simple use item (used within effect function imports)

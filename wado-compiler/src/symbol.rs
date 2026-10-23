@@ -9,7 +9,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{AstId, CmImport, Visibility};
+use crate::ast::{AstId, CmImport, UseNameSpelling, Visibility};
 use crate::module_source::ModuleSource;
 use crate::name::{mangle_local_method, split_local_method};
 use crate::token::Span;
@@ -399,6 +399,55 @@ impl SymbolTable {
     ) -> Option<Visibility> {
         let visibility = self.effective_visibility_in_module(target, name)?;
         (!visibility.reachable_from(target.same_package(from))).then_some(visibility)
+    }
+
+    /// Each interface `target` offers that the full interface name `name` names,
+    /// with a member name it is offered under. A name without a version may
+    /// name the interface at several versions.
+    pub fn interfaces_named<'a>(
+        &'a self,
+        target: &'a ModuleSource,
+        name: &CmImport,
+    ) -> Vec<(String, &'a Symbol)> {
+        let members = self
+            .get_module_symbols(target)
+            .into_iter()
+            .map(|sym| sym.name.clone())
+            .chain(self.reexport_names(target));
+        let mut found: Vec<(String, &Symbol)> = Vec::new();
+        for member in members {
+            let Some(symbol) = self.lookup_in_module(target, &member) else {
+                continue;
+            };
+            let names_it = matches!(symbol.kind, SymbolKind::Effect(_))
+                && symbol.cm_import().is_some_and(|cm| cm.is_named_by(name));
+            if names_it && !found.iter().any(|(_, s)| s.defined_at == symbol.defined_at) {
+                found.push((member, symbol));
+            }
+        }
+        found
+    }
+
+    /// The member of `target` a `use` item names: its own name, or, for an
+    /// interface's full name, the one member that interface is offered under.
+    pub fn use_item_member(
+        &self,
+        target: &ModuleSource,
+        name: &str,
+        spelling: UseNameSpelling,
+    ) -> Option<String> {
+        match spelling {
+            UseNameSpelling::Ident => Some(name.to_owned()),
+            UseNameSpelling::InterfaceName => {
+                match self
+                    .interfaces_named(target, &CmImport::parse(name)?)
+                    .as_slice()
+                {
+                    [(member, _)] => Some(member.clone()),
+                    _ => None,
+                }
+            }
+        }
     }
 
     /// Every member `from` may name through a namespace import of `target`:

@@ -179,7 +179,7 @@ disagreement is an error naming both files.
 
 ## Roadmap
 
-- [ ] A string-named import parses, and reaches an interface of a `.wasm` or a
+- [x] A string-named import parses, and reaches an interface of a `.wasm` or a
   WIT-generated module by its full name, with or without its version.
 - [ ] A name items of different ranks share goes to the higher rank, and one
   two items of one rank share is an error naming what it could mean. The

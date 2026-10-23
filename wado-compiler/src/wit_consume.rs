@@ -12,7 +12,7 @@ use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
     NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
-    VariantCase, VariantDecl, Visibility, cm_import_of,
+    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_import_of,
 };
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -221,6 +221,7 @@ impl Builder {
             items: vec![UseItem::Simple {
                 id: self.id(),
                 name: "TreeMap".to_string(),
+                spelling: UseNameSpelling::Ident,
                 name_span: syn(),
                 alias: None,
                 local_span: syn(),

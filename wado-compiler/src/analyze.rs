@@ -6,9 +6,9 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, InterfaceDecl, Item,
-    Module, UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
-    walk_generic_params, walk_item,
+    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes,
+    InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
+    cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -181,6 +181,14 @@ pub enum AnalyzeError {
         interfaces: Vec<String>,
         span: Span,
     },
+    /// A full interface name without a version, where the module offers the
+    /// interface at more than one.
+    InterfaceVersionRequired {
+        module_source: ModuleSource,
+        name: String,
+        versions: Vec<String>,
+        span: Span,
+    },
     /// Duplicate top-level definition within a single module.
     ///
     /// `span` is the location of the duplicate; `first` is the location of
@@ -323,6 +331,24 @@ impl AnalyzeError {
                      '{module_source}' ({}); name it through one, as `{}::{name}`",
                     interfaces.join(", "),
                     interfaces[0],
+                ),
+                *span,
+            ),
+            AnalyzeError::InterfaceVersionRequired {
+                module_source,
+                name,
+                versions,
+                span,
+            } => (
+                Code::ImportNotFound,
+                format!(
+                    "module '{module_source}' offers '{name}' at more than one version; \
+                     write the one you mean: {}",
+                    versions
+                        .iter()
+                        .map(|version| format!("`\"{name}@{version}\"`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
                 ),
                 *span,
             ),
@@ -1169,7 +1195,20 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Register re-exports (without creating new symbols)
                 for use_item in &use_decl.items {
                     match use_item {
-                        UseItem::Simple { name, alias, .. } => {
+                        UseItem::Simple {
+                            name,
+                            spelling,
+                            alias,
+                            ..
+                        } => {
+                            // `validate_imports` reports a full name that names no one interface.
+                            let Some(name) =
+                                &self
+                                    .symbols
+                                    .use_item_member(&source_module, name, *spelling)
+                            else {
+                                continue;
+                            };
                             let export_name = alias.as_ref().unwrap_or(name);
                             self.symbols.register_reexport(
                                 module_source,
@@ -1356,6 +1395,43 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Ok(())
     }
 
+    /// The name a `use` item looks up in its source module (see
+    /// [`SymbolTable::use_item_member`]); `None` once the error that a full
+    /// interface name names no interface, or several versions of one, is
+    /// reported.
+    fn lookup_name(
+        &self,
+        from: &ModuleSource,
+        module_source: &ModuleSource,
+        name: &str,
+        spelling: UseNameSpelling,
+        span: Span,
+    ) -> Result<Option<String>, Bail> {
+        if let Some(member) = self.symbols.use_item_member(module_source, name, spelling) {
+            return Ok(Some(member));
+        }
+        let wanted = CmImport::parse(name).expect("the parser admits only an interface name");
+        let found = self.symbols.interfaces_named(module_source, &wanted);
+        let error = match found.as_slice() {
+            [] => AnalyzeError::ImportNotFound {
+                module_source: module_source.clone(),
+                name: name.to_string(),
+                span,
+            },
+            several => AnalyzeError::InterfaceVersionRequired {
+                module_source: module_source.clone(),
+                name: name.to_string(),
+                versions: several
+                    .iter()
+                    .filter_map(|(_, symbol)| symbol.cm_import()?.version.clone())
+                    .collect(),
+                span,
+            },
+        };
+        self.logger.error_in(from, error)?;
+        Ok(None)
+    }
+
     /// Reject an import whose local name the module also declares: the name
     /// would mean two declarations at once. An alias says which one is meant.
     fn reject_import_collision(
@@ -1446,11 +1522,23 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     match use_item {
                         UseItem::Simple {
                             name,
+                            spelling,
                             name_span,
                             alias,
                             local_span,
                             ..
                         } => {
+                            let Some(lookup) = self.lookup_name(
+                                from_module_source,
+                                &module_source,
+                                name,
+                                *spelling,
+                                *name_span,
+                            )?
+                            else {
+                                continue;
+                            };
+                            let name = &lookup;
                             self.import_symbol(
                                 from_module_source,
                                 &module_source,
