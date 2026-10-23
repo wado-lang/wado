@@ -740,7 +740,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// ([`super::sig::ImplSig::slots`]).
     fn record_impl_sig(&mut self, impl_block: &ast::ImplBlock, impl_is_concrete: bool) {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.enter_impl_frame(
             &impl_block.ty,
             impl_block.trait_type.as_ref(),
@@ -1302,6 +1302,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Walk a function's body, with its parameters bound, and check how it ends.
     fn walk_fn_body(&mut self, func: &Function, return_type: TypeId, ctx: &mut FunctionContext) {
+        let affine_params = self.annotate_ctx.trait_ctx.affine_params();
+        self.sem.types.fn_affine_params.insert(func.id, affine_params);
         if let Some(b) = func.body.as_ref() {
             self.resolve_block(b, ctx, None);
         }
@@ -1394,7 +1396,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         for method in &impl_block.methods {
             let mut frame_scope = block.enter_inherited_type_param_scope();
-            frame_scope.annotate_ctx.trait_ctx.type_params.clear();
+            frame_scope.annotate_ctx.trait_ctx.clear_binders();
             let frame = frame_scope.enter_impl_method_frame(
                 method,
                 &impl_block.ty,
@@ -1787,7 +1789,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
     ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
 
         let self_slot = scope
             .tysys
@@ -1796,14 +1798,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .make_type_param("Self".to_string(), 0);
         // Before the parameters, since each one's bounds pin the `Self` they
         // mean, and inside the declaration that is this trait.
+        let trait_def = scope.tysys.def_at(id);
         let declaring = SelfBinding {
             type_id: self_slot,
-            declaring_trait: Some(scope.tysys.def_at(id)),
+            declaring_trait: Some(trait_def),
         };
         scope.set_self_binding(declaring);
+        let is_affine = scope
+            .tysys
+            .trait_env
+            .decl_header_of(&trait_def)
+            .expect("a trait has a header")
+            .is_affine;
         scope.bind_param(
             "Self",
-            BinderInScope::undeclared(0, self_slot),
+            BinderInScope {
+                is_affine,
+                ..BinderInScope::undeclared(0, self_slot)
+            },
             vec![ScopedBound::new(
                 ast::TraitBound {
                     // The trait's own declaration node, which the resolution
@@ -2579,7 +2591,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Resolve a function for its facts.
     pub(super) fn resolve_function(&mut self, func: &Function) {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         scope.sem.decls.clear_fn_local_items();
 
@@ -2766,7 +2778,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         });
 
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.sem.decls.clear_fn_local_items();
 
         let frame = scope.enter_impl_method_frame(

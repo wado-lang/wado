@@ -1,0 +1,36 @@
+// A type parameter is `affine` by its declaration, not by its name: a method's
+// own `T` shadowing the impl's `T` is a different parameter, marked or not.
+use { println, Stdout } from "core:cli";
+
+struct Holder<affine T> {
+    v: T,
+}
+
+impl<affine T> Holder<T> {
+    // The method's unmarked `T` copies freely, though the impl's is `affine`.
+    fn dup<#[allow(shadowed_name)] T>(x: T) -> [T, T] {
+        return [x, x];
+    }
+}
+
+impl<T> Holder<T> {
+    // `self.v` is the impl's unmarked `T`, though the method's `T` is `affine`.
+    fn pair<#[allow(shadowed_name)] affine T>(&self, t: T) -> [T, i32] {
+        return [t, both(self.v, self.v)];
+    }
+}
+
+fn both<U>(a: U, b: U) -> i32 {
+    return 2;
+}
+
+export fn run() with Stdout {
+    let [a, b] = Holder::<String>::dup::<i32>(7);
+    println(`dup: ${a} ${b}`);
+    let h = Holder { v: 3 };
+    let [s, n] = h.pair("x");
+    println(`pair: ${s} ${n}`);
+}
+
+__DATA__
+{"stdout": "dup: 7 7\npair: x 2\n"}

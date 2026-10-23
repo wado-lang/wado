@@ -625,12 +625,27 @@ impl Semantics {
 
     /// Whether a value of `type_id` is move-only in a body whose `affine` type
     /// parameters are `affine_params`.
-    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
         self.state
             .as_ref()
             .expect("the move check runs on annotated semantics")
             .tysys
             .is_affine(type_id, affine_params)
+    }
+
+    /// The `affine` binders the body of the function declared at `func` sees.
+    pub(crate) fn affine_params(&self, func: AstId) -> &[TypeId] {
+        let module = self
+            .module_of_id(func)
+            .expect("a function is declared in a module");
+        self.state
+            .as_ref()
+            .expect("the move check runs on annotated semantics")
+            .module_semantics[module]
+            .types
+            .fn_affine_params
+            .get(&func)
+            .expect("a walked body records its affine parameters")
     }
 
     /// The index of the first field or case of the struct or variant declared

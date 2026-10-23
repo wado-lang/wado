@@ -151,7 +151,7 @@ impl TypeSystem {
     /// Whether a value of `type_id` is move-only in a body whose `affine`
     /// type parameters are `affine_params`: it holds an affine resource, or
     /// one of those parameters, at any depth.
-    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
         holds_resource(
             &AffineParams {
                 types: self,
@@ -890,7 +890,7 @@ fn reaches(
 /// them counts as an affine resource.
 struct AffineParams<'a> {
     types: &'a TypeSystem,
-    affine_params: &'a [String],
+    affine_params: &'a [TypeId],
 }
 
 impl HeldTypes for AffineParams<'_> {
@@ -900,7 +900,7 @@ impl HeldTypes for AffineParams<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         let is_affine_param = match self.types.type_table.borrow().get(type_id) {
-            ResolvedType::TypeParam { name, .. } => self.affine_params.contains(name),
+            ResolvedType::TypeParam { .. } => self.affine_params.contains(&type_id),
             ResolvedType::AssocTypeProjection {
                 owning_trait,
                 assoc_name,

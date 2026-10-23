@@ -328,9 +328,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope: Vec<TypeId> = self
             .annotate_ctx
             .trait_ctx
-            .type_params
-            .values()
-            .map(|b| b.type_id)
+            .binders()
+            .map(|(_, b)| b.type_id)
             .collect();
         self.tysys
             .type_table

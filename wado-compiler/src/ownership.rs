@@ -5,7 +5,7 @@
 
 use crate::ast::{
     AstId, Block, Condition, ConditionElement, Expr, GenericParam, IdentExpr, Literal, MatchArm,
-    Stmt, TraitDecl, UnaryOp,
+    Stmt, UnaryOp,
 };
 use crate::hashmap::IndexMap;
 use crate::symbol::{Symbol, SymbolKind};
@@ -36,16 +36,6 @@ pub(crate) fn affine_params<'a>(params: impl IntoIterator<Item = &'a GenericPara
         .filter(|p| p.is_affine)
         .map(|p| p.name.clone())
         .collect()
-}
-
-/// The `affine` type parameters a default method body of `t` sees: an
-/// `affine trait`'s `Self` among them.
-pub(crate) fn trait_scope(t: &TraitDecl) -> Vec<String> {
-    let mut scope = affine_params(&t.type_params);
-    if t.is_affine {
-        scope.push("Self".to_string());
-    }
-    scope
 }
 
 /// A place a body reads: a binding and the field path into it (`h.f.g`).

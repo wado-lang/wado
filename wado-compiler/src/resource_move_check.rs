@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::ownership::{
-    self, BodyFacts, Modes, OperandMode, PlacePath, affine_params, trait_scope,
+    self, BodyFacts, Modes, OperandMode, PlacePath, affine_params,
 };
 use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
@@ -267,24 +267,22 @@ impl Checker<'_> {
     fn check_item(&mut self, item: &Item) {
         self.check_affine_declaration(item);
         match item {
-            Item::Function(func) => self.check_function(func, &[], false),
+            Item::Function(func) => self.check_function(func, false),
             Item::Impl(b) => {
-                let scope = affine_params(&b.type_params);
-                self.check_impl_trait(b, &scope);
+                self.check_impl_trait(b, &affine_params(&b.type_params));
                 let drop_impl = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
-                    self.check_function(method, &scope, drop_impl);
+                    self.check_function(method, drop_impl);
                 }
             }
             Item::Trait(t) => {
-                let scope = trait_scope(t);
                 for method in &t.methods {
-                    self.check_function(method, &scope, false);
+                    self.check_function(method, false);
                 }
             }
             Item::Interface(i) => {
                 for method in &i.methods {
-                    self.check_function(method, &[], false);
+                    self.check_function(method, false);
                 }
             }
             Item::Test(test) => self.check_body(&test.body, Vec::new(), None, Vec::new()),
@@ -292,7 +290,7 @@ impl Checker<'_> {
         }
     }
 
-    fn check_function(&mut self, func: &Function, outer: &[String], drop_impl: bool) {
+    fn check_function(&mut self, func: &Function, drop_impl: bool) {
         let Some(body) = &func.body else {
             return;
         };
@@ -301,8 +299,7 @@ impl Checker<'_> {
             .iter()
             .find(|p| drop_impl && matches!(p.self_kind, SelfKind::Value))
             .map(|p| p.id);
-        let mut scope = outer.to_vec();
-        scope.extend(affine_params(&func.type_params));
+        let scope = self.sem.affine_params(func.id).to_vec();
         let outside = func
             .params
             .iter()
@@ -322,7 +319,7 @@ impl Checker<'_> {
     fn check_body(
         &mut self,
         body: &Block,
-        affine_params: Vec<String>,
+        affine_params: Vec<TypeId>,
         drop_self: Option<AstId>,
         outside: Vec<(AstId, String)>,
     ) {
@@ -523,7 +520,7 @@ impl Flow {
 /// `affine` type parameters.
 pub(crate) struct SemFacts<'s> {
     pub(crate) sem: &'s Semantics,
-    pub(crate) affine_params: &'s [String],
+    pub(crate) affine_params: &'s [TypeId],
 }
 
 impl BodyFacts for SemFacts<'_> {
@@ -557,7 +554,7 @@ struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
-    affine_params: Vec<String>,
+    affine_params: Vec<TypeId>,
     /// The `self` of a `Drop::drop` body, which may move its fields out.
     drop_self: Option<AstId>,
     flow: Flow,
@@ -619,7 +616,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
     fn new(
         checker: &'c mut Checker<'a>,
         modes: Rc<Modes>,
-        affine_params: Vec<String>,
+        affine_params: Vec<TypeId>,
         drop_self: Option<AstId>,
     ) -> Self {
         MoveWalker {

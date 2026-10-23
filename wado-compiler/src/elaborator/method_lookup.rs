@@ -1220,7 +1220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.clear_binders();
                 scope.register_generic_params(method_type_params, base);
                 method_type_params
                     .iter()
@@ -1956,7 +1956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // just type_params and assoc_type_bindings — other parts (bounds,
         // self_type, …) are kept from the parent for this lookup.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
         // Set up type parameters for resolving generic associated types
