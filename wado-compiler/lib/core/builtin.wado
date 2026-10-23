@@ -674,11 +674,12 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask, blocking until it resolves.
+/// Cancel an in-progress subtask, blocking until it resolves. Returns the
+/// status it resolved with.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn subtask_cancel(handle: i32);
+pub fn subtask_cancel(handle: i32) -> i32;
 
 /// Join a waitable (subtask/stream/future) to a waitable set, or leave its
 /// set where `ws` is 0.

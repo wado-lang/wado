@@ -12,15 +12,15 @@ use crate::defs::{DefId, DefTable};
 use crate::module_source::ModuleSource;
 
 /// A Component Model type some declaration names: the identity every key
-/// compares, beside the CM name the ABI spells.
+/// compares.
 ///
-/// The CM name is a rendering and never a way back. A CM name alone puts every
-/// package in one namespace, and its package puts every interface in one.
+/// It carries no CM name: a `#[cm]` attribute may spell one the Wado name does
+/// not derive, so the registry answers it from `(module, name)`.
 #[derive(Debug, Clone)]
 pub struct CmDecl {
     def: DefId,
     module: ModuleSource,
-    cm_name: String,
+    name: String,
 }
 
 impl PartialEq for CmDecl {
@@ -38,14 +38,12 @@ impl std::hash::Hash for CmDecl {
 }
 
 impl CmDecl {
-    /// `def` under the CM name the ABI spells it by. The declaring module comes
-    /// off the table, never from a caller.
     #[must_use]
-    pub fn new(defs: &DefTable, def: DefId, cm_name: &str) -> Self {
+    pub fn new(defs: &DefTable, def: DefId) -> Self {
         Self {
             def,
             module: defs.module(def).clone(),
-            cm_name: cm_name.to_string(),
+            name: defs.name(def).to_string(),
         }
     }
 
@@ -54,10 +52,10 @@ impl CmDecl {
         self.def
     }
 
-    /// The name the Component Model ABI spells this type by.
+    /// The Wado name, which keys the registry's entry for the type.
     #[must_use]
-    pub fn cm_name(&self) -> &str {
-        &self.cm_name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     #[must_use]
@@ -68,7 +66,7 @@ impl CmDecl {
     /// The injective spelling a canonical import name embeds.
     #[must_use]
     pub fn name_suffix(&self) -> String {
-        format!("{}#{}", self.module.to_path_string(), self.cm_name)
+        format!("{}#{}", self.module.to_path_string(), self.name)
     }
 
     /// The CM package the declaring interface sits in (`"http"`, `"cli"`, …),

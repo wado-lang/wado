@@ -149,8 +149,7 @@ pub fn resolve_import_plan(
     for canonical in needed_canonicals {
         canonical.for_each_decl(&mut |decl, kind| {
             if kind == CmDeclKind::Resource
-                && let Some(source) =
-                    registry.interface_declaring_cm_name(decl.module(), decl.cm_name())
+                && let Some((source, _)) = registry.declared_cm_type(decl)
             {
                 worklist.push(source.to_string());
             }

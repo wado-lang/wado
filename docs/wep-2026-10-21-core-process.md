@@ -74,12 +74,13 @@ Three reasons:
   Depending on one hands the speed of security fixes to someone else.
 
 The policy is the subset both OS mechanisms express, so the two backends agree
-everywhere but the one row the table marks. On Linux it is roughly what Seatbelt
-provides on macOS:
+everywhere but the rows the table marks not restricted. On Linux it is roughly
+what Seatbelt provides on macOS:
 
 | To restrict                     | macOS (Seatbelt)                       | Linux               |
 | ------------------------------- | -------------------------------------- | ------------------- |
 | Read and write, per subtree     | `file-read*` / `file-write*`           | Landlock            |
+| Metadata, per subtree           | `file-read-metadata`                   | not restricted      |
 | Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`  |
 | Network                         | `network-outbound` / `network-inbound` | seccomp on `socket` |
 | Signals and abstract sockets    | isolated by default                    | Landlock scopes     |
@@ -418,6 +419,9 @@ cannot be taken back.
   guest exits.
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
+- Which open descriptors a child inherits is not stated. A descriptor the host
+  holds open across the spawn keeps the access it was opened with, whatever the
+  child's grants.
 
 ## Related WEPs
 

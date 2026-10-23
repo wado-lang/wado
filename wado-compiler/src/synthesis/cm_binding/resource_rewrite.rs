@@ -16,7 +16,7 @@ use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_lift_func_name,
     cm_stream_lift_value_func_name, cm_stream_read_func_name, cm_stream_read_value_func_name,
-    cm_stream_write_func_name, minted_name, to_cm_name,
+    cm_stream_write_func_name, minted_name,
 };
 use crate::package::Package;
 use crate::tir::{
@@ -278,12 +278,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> V
     let (_, elem_pkg) = CmNamespace::split_package(&source)
         .expect("`find_binding_source` yields only bundled-namespace sources");
     let (elem_size, elem_align) = cm_layout_i32(&ast_type, registry);
-    // The same fallback the other builder of this declaration uses: one
-    // declaration renders to one CM name, whichever site reaches it first.
-    let cm_record_name = registry
-        .get_struct_cm_name_by_source(&source, &elem_name)
-        .map_or_else(|| to_cm_name(&elem_name), str::to_string);
-    let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
+    let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id);
     synthesize_stream_read_funcs(
         StreamReadNames {
             begin: cm_stream_read_func_name(&elem_name),
@@ -1842,9 +1837,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
         // by the receiver's payload, so they go straight to a canonical call.
-        let parameterized =
-            parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry)
-                .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
+        let parameterized = parameterize_stream_cm_name(&cm_name, expr, self.tt)
+            .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
         if let Some(intrinsic) = parameterized {
             self.rewrite_call(expr, BindingTarget::Canonical(intrinsic));
             return;
@@ -1996,10 +1990,13 @@ fn resource_decl(
     let def = tt
         .nominal_def(tt.representation_head(resource_type))
         .expect("a resource is declared");
-    let cm = cm_interface_registry
-        .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
-        .expect("a dropped resource has a Component Model name");
-    CmDecl::new(tt.defs(), def, cm)
+    assert!(
+        cm_interface_registry
+            .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+            .is_some(),
+        "a dropped resource has a Component Model name"
+    );
+    CmDecl::new(tt.defs(), def)
 }
 
 /// `resource.drop()` on a resource of type `resource_type`: the call a user
@@ -2100,15 +2097,11 @@ fn parameterize_future_cm_name(
 }
 
 /// The stream drop / cancel intrinsic for `cm_name`, parameterized by the
-/// receiver's element. A record element takes its `#[cm("…")]` name, so a
-/// non-mechanical mapping (`DNSRecord` → `dns-record`) is not mangled; only a
-/// user-authored element outside the registry falls back to `PascalCase` →
-/// kebab-case.
+/// receiver's element.
 fn parameterize_stream_cm_name(
     cm_name: &str,
     expr: &TirExpr,
     tt: &TypeTable,
-    cm_interface_registry: &CmInterfaceRegistry,
 ) -> Option<CanonicalIntrinsic> {
     if !is_drop_or_cancel(cm_name) {
         return None;
@@ -2120,27 +2113,14 @@ fn parameterize_stream_cm_name(
         return None;
     }
     let payload = cm_payload_type_from_type_id(tt, elem).map_or_else(
-        || {
-            // The element's declaring interface keys the CM-name lookup. Its
-            // `module_source` is the loader identity (a `.wado` path); the
-            // registry bridges it to the versioned `#[cm(...)]` key.
-            let elem_name = tt.base_type_name(elem);
-            let elem_source = tt
-                .nominal_head(tt.representation_head(elem))
-                .map(|(_, m)| m.to_string());
-            let cm_elem = elem_source
-                .as_deref()
-                .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
-                .unwrap_or_else(|| to_cm_name(&elem_name));
-            CmStreamPayload::Record(stream_element_decl(tt, elem, &cm_elem))
-        },
+        || CmStreamPayload::Record(stream_element_decl(tt, elem)),
         CmStreamPayload::Value,
     );
     CanonicalIntrinsic::stream_op(cm_name, payload)
 }
 
-/// The declaration a `stream<T>` element names, under the CM name `cm_name`.
-fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
+/// The declaration a `stream<T>` element names.
+fn stream_element_decl(tt: &TypeTable, elem: TypeId) -> CmDecl {
     let def = tt
         .nominal_def(tt.representation_head(elem))
         .unwrap_or_else(|| {
@@ -2149,25 +2129,7 @@ fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
                 tt.type_name(elem)
             )
         });
-    CmDecl::new(tt.defs(), def, cm_name)
-}
-
-/// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the
-/// interface identified by the coarse `module_source` string, across the
-/// registry's stream-eligible categories (struct, resource, variant, enum,
-/// flags). Returns `None` for an unregistered name.
-fn registered_cm_name(
-    name: &str,
-    module_source: &str,
-    registry: &CmInterfaceRegistry,
-) -> Option<String> {
-    registry
-        .get_struct_cm_name_by_module(module_source, name)
-        .or_else(|| registry.get_resource_cm_name_by_module(module_source, name))
-        .or_else(|| registry.get_variant_cm_name_by_module(module_source, name))
-        .or_else(|| registry.get_enum_cm_name_by_module(module_source, name))
-        .or_else(|| registry.get_flags_cm_name_by_module(module_source, name))
-        .map(str::to_string)
+    CmDecl::new(tt.defs(), def)
 }
 
 #[cfg(test)]

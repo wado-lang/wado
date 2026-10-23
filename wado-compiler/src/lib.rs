@@ -307,12 +307,13 @@ fn bind_monomorphized<H: CompilerHost>(
     mono: &mut Monomorphization,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
-    // Ahead of the rewrites: both consume the pristine `#[cm]` call shape the
-    // scan matches.
-    let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(flat)
-        .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?;
     let mut unbound = 0;
     loop {
+        // Ahead of the rewrites: both consume the pristine `#[cm]` call shape
+        // the scan matches, which a fresh instance still carries.
+        let validated =
+            synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(flat, unbound)
+                .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?;
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(flat, unbound);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(flat, &validated, unbound);
         let bound = flat.functions.len();

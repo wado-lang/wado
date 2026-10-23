@@ -14,7 +14,7 @@ use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
     CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
-    CmInterfaceRegistry, CmTypeGen, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
+    CmInterfaceRegistry, CmTypeGen, CmTypeKind, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
     FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
@@ -188,8 +188,9 @@ pub fn build_component(
                     let aliased_idx = ctx.decl_type_idx(decl.def()).unwrap_or_else(|| {
                         // WASI imports are generated first, so the defining
                         // interface's instance is already available to alias from.
-                        let inst_idx = ctx.instance_idx(&decl_instance_key(project, decl));
-                        builder.alias_export(inst_idx, decl.cm_name(), ComponentExportKind::Type);
+                        let (instance_key, cm_name) = decl_export(project, decl);
+                        let inst_idx = ctx.instance_idx(&instance_key);
+                        builder.alias_export(inst_idx, cm_name, ComponentExportKind::Type);
                         let idx = ctx.register_anon_type();
                         ctx.bind_decl_type(decl.def(), idx);
                         idx
@@ -1358,12 +1359,12 @@ fn payload_type_to_cm_key(
     }
 }
 
-/// The imported instance whose type exports `decl`, found from the module that
-/// declares it rather than searched for by its CM name.
-fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
-    let fq = project
+/// The key of the imported instance whose type exports `decl`, and the CM name
+/// it exports `decl` under.
+fn decl_export<'a>(project: &'a NirPackage, decl: &CmDecl) -> (String, &'a str) {
+    let (fq, cm_name) = project
         .cm_interface_registry
-        .interface_declaring_cm_name(decl.module(), decl.cm_name())
+        .declared_cm_type(decl)
         .unwrap_or_else(|| {
             panic!(
                 "`{}` is declared by no imported CM interface",
@@ -1373,7 +1374,7 @@ fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
     let import = CmImport::parse(fq).unwrap_or_else(|| {
         panic!("CM interface `{fq}` has no `scheme:pkg/iface` shape");
     });
-    cm_instance_key(&import.package, &import.interface)
+    (cm_instance_key(&import.package, &import.interface), cm_name)
 }
 
 /// The outer type index a canonical's declaration is bound to, or the alias its
@@ -1385,10 +1386,8 @@ fn canonical_decl_type_idx(
 ) -> u32 {
     ctx.decl_type_idx(decl.def())
         .or_else(|| {
-            let fq = project
-                .cm_interface_registry
-                .interface_declaring_cm_name(decl.module(), decl.cm_name())?;
-            export_alias_idx(ctx, fq, decl.cm_name())
+            let (fq, cm_name) = project.cm_interface_registry.declared_cm_type(decl)?;
+            export_alias_idx(ctx, fq, cm_name)
         })
         .unwrap_or_else(|| unaliased(&format!("the canonical's type `{}`", decl.name_suffix())))
 }
@@ -1427,10 +1426,11 @@ fn prebuild_value_named_types(
         if ctx.has_decl_type(def) {
             continue;
         }
-        let declaring = registry.interface_declaring_cm_name(decl.module(), decl.cm_name());
-        if declaring.is_some_and(|fq| export_alias_idx(ctx, fq, decl.cm_name()).is_some()) {
+        let declared = registry.declared_cm_type(&decl);
+        if declared.is_some_and(|(fq, cm_name)| export_alias_idx(ctx, fq, cm_name).is_some()) {
             continue;
         }
+        let declaring = declared.map(|(fq, _)| fq);
         let type_gen = match (lib_type_gen.as_mut(), declaring) {
             (Some(type_gen), _) => type_gen,
             (None, Some(_)) => &mut local_type_gen,
@@ -2417,7 +2417,7 @@ fn generate_cm_imports(
             // packages) against this emitter's owning interface.
             let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             for (name, &idx) in &enum_export_indices {
-                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
+                shared_type_gen.register_named(CmTypeKind::Enum, iface, name, idx);
             }
             for variant_name in &needed_variants {
                 if let Some((_, cases)) = interface_variants.get(variant_name) {
@@ -2493,6 +2493,12 @@ fn generate_cm_imports(
                             wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
                         );
                         flags_export_indices.insert(flags_name.clone(), local_type_idx);
+                        shared_type_gen.register_named(
+                            CmTypeKind::Flags,
+                            &source,
+                            flags_name,
+                            local_type_idx,
+                        );
                         local_type_idx += 1;
                     }
                 }
@@ -2500,13 +2506,14 @@ fn generate_cm_imports(
 
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
-            // Register flags and variant export indices into shared_type_gen
-            for (name, &idx) in &flags_export_indices {
-                shared_type_gen.register_existing(&format!("flags:{name}"), idx);
-            }
             for (name, &idx) in &variant_export_indices {
                 if let Some((variant_cm_name, _)) = interface_variants.get(name) {
-                    shared_type_gen.register_existing(&format!("variant:{variant_cm_name}"), idx);
+                    shared_type_gen.register_named(
+                        CmTypeKind::Variant,
+                        iface,
+                        variant_cm_name,
+                        idx,
+                    );
                 }
             }
 
