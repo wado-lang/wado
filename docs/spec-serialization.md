@@ -84,14 +84,22 @@ A derived impl writes each kind of type in one shape:
 Reading back is the mirror. A variant is read by its discriminant where the
 format reports one, as an NSD format does, and by its wire name otherwise.
 
-A variant is externally tagged, as in Rust's serde, and no other representation
-exists. In JSON:
+A variant is externally tagged, as in Rust's serde, unless it declares an
+internal tag. No untagged representation exists. In JSON:
 
 | Value                            | JSON                          |
 | -------------------------------- | ----------------------------- |
 | `Color::Red`                     | `"Red"`                       |
 | `Shape::Circle(5.0)`             | `{"Circle": 5.0}`             |
 | `Shape::Rectangle([10.0, 20.0])` | `{"Rectangle": [10.0, 20.0]}` |
+
+`#[wire(tag = "key")]` on a `variant` tags it internally: each case is written
+as a struct whose first field is `key`, holding the case's wire name, followed
+by the fields of its payload. A case carries no payload or a struct, and a
+payload field whose wire name is `key` is a compile error. Reading, a tag that
+names no case is `UnknownVariant`, and a missing tag is `MissingField`.
+
+> Not yet implemented: `#[wire(tag = "...")]` is not recognized.
 
 The standard library's own impls:
 

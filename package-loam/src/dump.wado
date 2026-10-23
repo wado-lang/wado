@@ -3,7 +3,7 @@
 //! renders as text for a reader or as JSON for a test. See WEP 2026-09-20
 //! § "The Generator Reports Every Fusion Decision".
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { to_string } from "core:json";
 use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
@@ -160,7 +160,7 @@ fn node_report(
     lowering: Lowering,
     checked: &Checked,
     decided: &Plan,
-    taken: &TreeMap<String, List<String>>,
+    taken: &HashMap<String, List<String>>,
     fuse: bool,
 ) -> NodeReport {
     // An optional output left unnamed is not computed.
@@ -199,8 +199,8 @@ fn node_report(
 
 /// The tensors `decided` fuses into each kernel that writes, by the tensor it
 /// writes, in graph order.
-fn taken_in(graph: &Graph, decided: &Plan) -> TreeMap<String, List<String>> {
-    let mut taken = TreeMap::<String, List<String>>::new();
+fn taken_in(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
+    let mut taken = HashMap::<String, List<String>>::new();
     for let node of &graph.nodes {
         if let Some(Fused(into)) = decided.decisions.get(node.outputs[0]) {
             let mut list = taken.get(into).unwrap_or([]);

@@ -3,13 +3,13 @@
 
 use { TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
-use { emit } from "./emit.wado";
+use { Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
 use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
 use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
-use { check_checkpoint } from "./safetensors.wado";
+use { CheckpointFile, check_checkpoint, check_shards, placement, read_index } from "./safetensors.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -85,23 +85,70 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
     return Result::Ok(Model { graph, checked, fuse: options.fuse });
 }
 
-/// The module `model`'s `forward` runs in, importing its runtime from the
-/// package spec `runtime`, once `model` is checked against each checkpoint
-/// header in `headers`, keyed by its path.
-pub fn generate_model(
-    model: &Model,
-    path: &String,
-    headers: List<[String, ByteList]>,
-    runtime: &String,
-) -> Result<String, String> {
-    // Emitting first refuses an element type no kernel holds, which the check
-    // below takes as given.
-    let generated = emit(&model.graph, &model.checked, runtime, model.fuse).map_err(|e| at(path, &e))?;
-    for let [input_path, header] of headers {
-        let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
-        check_checkpoint(&model.graph, &model.checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;
+/// What a graph's weights are checked against: nothing, one checkpoint file,
+/// or the shards of one beside the index placing each tensor in its shard.
+pub variant Weights {
+    Unchecked,
+    File(CheckpointFile),
+    Shards(Sharded),
+}
+
+/// A sharded checkpoint: its index, by path and bytes, and the shards given.
+pub struct Sharded {
+    pub index_path: String,
+    pub index: ByteList,
+    pub shards: List<CheckpointFile>,
+}
+
+/// What the checkpoint files and indexes given amount to: a sharded
+/// checkpoint where an index is given, and one file otherwise.
+pub fn weights_of(indexes: List<[String, ByteList]>, files: List<CheckpointFile>) -> Result<Weights, String> {
+    if indexes.len() > 1 {
+        return Result::Err(`loam: ${indexes.len()} indexes, and a sharded checkpoint has one`);
     }
-    return Result::Ok(generated);
+    if let Some([index_path, index]) = indexes.into_iter().next() {
+        return Result::Ok(Weights::Shards(Sharded { index_path, index, shards: files }));
+    }
+    if files.len() > 1 {
+        return Result::Err(
+            `loam: ${files.len()} checkpoints and no index; the shards of one are given beside the index placing each tensor`,
+        );
+    }
+    return Result::Ok(match files.into_iter().next() {
+        Some(file) => Weights::File(file),
+        None => Weights::Unchecked,
+    });
+}
+
+/// The module `model`'s `forward` runs in, importing its runtime from the
+/// package spec `runtime`, once `model` is checked against `weights`.
+pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &String) -> Result<String, String> {
+    let graph = &model.graph;
+    let shapes = &model.checked.shapes;
+    // Emitting first refuses an element type no kernel holds, which the checks
+    // below take as given.
+    let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, model.fuse, weights_from).map_err(
+        |e| at(path, &e),
+    );
+    return match weights {
+        Unchecked => emit_with(Placement::File),
+        File(file) => {
+            let generated = emit_with(Placement::File)?;
+            let checkpoint = read_checkpoint(&file.header).map_err(|e| at(&file.path, &e))?;
+            check_checkpoint(graph, shapes, &checkpoint).map_err(|e| at(&file.path, &e))?;
+            Result::Ok(generated);
+        },
+        Shards(sharded) => {
+            let index_path = sharded.index_path;
+            let index = read_index(&text_of(&index_path, sharded.index)?).map_err(|e| at(&index_path, &e))?;
+            let placed = placement(graph, &index).map_err(|e| at(&index_path, &e))?;
+            let generated = emit_with(Placement::Shards(placed))?;
+            check_shards(graph, shapes, &index_path, &index, &placed, sharded.shards).map_err(
+                |r| at(&r.path, &r.reason),
+            )?;
+            Result::Ok(generated);
+        },
+    };
 }
 
 /// The `Tokenizer` the `tokenizer.json` at `path` describes.

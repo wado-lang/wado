@@ -415,22 +415,26 @@ test "Value eq null" {
     assert !(Value::Null == Value::Bool(false));
 }
 
+#[allow(self_comparison)]
 test "Value eq bool" {
     assert Value::Bool(true) == Value::Bool(true);
     assert !(Value::Bool(true) == Value::Bool(false));
     assert !(Value::Bool(true) == Value::Null);
 }
 
+#[allow(self_comparison)]
 test "Value eq float" {
     assert Value::Float(1.0) == Value::Float(1.0);
     assert !(Value::Float(1.0) == Value::Float(2.0));
 }
 
+#[allow(self_comparison)]
 test "Value eq string" {
     assert Value::String("a") == Value::String("a");
     assert !(Value::String("a") == Value::String("b"));
 }
 
+#[allow(self_comparison)]
 test "Value eq array" {
     assert Value::List([]) == Value::List([]);
     assert Value::List([Value::Float(1.0)]) == Value::List([Value::Float(1.0)]);
@@ -438,6 +442,7 @@ test "Value eq array" {
     assert !(Value::List([Value::Float(1.0)]) == Value::List([]));
 }
 
+#[allow(self_comparison)]
 test "Value eq object" {
     assert Value::Object(obj([])) == Value::Object(obj([]));
     assert Value::Object(obj([

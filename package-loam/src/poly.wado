@@ -3,7 +3,7 @@
 //! run knows. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are
 //! Values".
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 /// A condition on the symbols the build relies on and cannot prove, as a
 /// clamped `Slice` bound read as unclamped is: `slack` is at least 0 for every
@@ -158,7 +158,7 @@ fn owes(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, 
 impl Derivation {
     /// The derived symbol as the generated module computes it, or, where not
     /// `code`, as a message writes it.
-    fn written(&self, names: &TreeMap<String, String>, code: bool) -> String {
+    fn written(&self, names: &HashMap<String, String>, code: bool) -> String {
         let args: List<String> = self.operands.into_iter().map(|o| o.written(names, code)).collect();
         return match self.op {
             Min | Max => {
@@ -347,7 +347,7 @@ impl Poly {
     fn derived(op: Op, operands: List<Poly>, origin: &String) -> Poly {
         let d = Derivation { op, operands, origin: *origin };
         return Poly::of(Symbol {
-            name: d.written(&TreeMap::<String, String>::new(), false),
+            name: d.written(&HashMap::<String, String>::new(), false),
             range: d.range(),
             derivation: Option::Some(d),
         });
@@ -810,11 +810,11 @@ impl Poly {
     /// The polynomial as an arithmetic expression, each input symbol spelled as
     /// `names` maps it, which it must, and each derived one as the runtime
     /// computes it.
-    pub fn spelled(&self, names: &TreeMap<String, String>) -> String {
+    pub fn spelled(&self, names: &HashMap<String, String>) -> String {
         return self.written(names, true);
     }
 
-    fn written(&self, names: &TreeMap<String, String>, code: bool) -> String {
+    fn written(&self, names: &HashMap<String, String>, code: bool) -> String {
         if self.terms.is_empty() {
             return "0";
         }
@@ -848,6 +848,6 @@ impl Poly {
 
 impl Display for Poly {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(self.written(&TreeMap::<String, String>::new(), false));
+        f.write_str(self.written(&HashMap::<String, String>::new(), false));
     }
 }

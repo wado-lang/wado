@@ -308,8 +308,10 @@ impl Interner {
         // package *does* define means the call and the definition disagree on
         // some other part of the identity — the call then binds to a body-less
         // stub and only surfaces as an unsatisfied trait bound at WIR build.
+        // A module of intrinsics or imports defines nothing, so a call into one
+        // is a stub whatever the package names its own functions.
         #[cfg(debug_assertions)]
-        {
+        if !func_ref.module_source.is_builtin() && !func_ref.module_source.is_binding() {
             let name = &func_ref.name;
             let same_name = |k: &FunctionId| match k {
                 FunctionId::Free(f) => f.name == *name,
