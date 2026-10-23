@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::ast::{
     self, AssignExpr, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
-    IdentExpr, ImplBlock, Item, Pattern, Stmt, for_each_pattern_binding,
+    IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
@@ -271,9 +271,9 @@ impl Checker<'_> {
             Item::Impl(b) => {
                 let scope = affine_params(&b.type_params);
                 self.check_impl_trait(b, &scope);
-                let drop_body = self.drops.implemented_by(b, self.sem);
+                let drop_impl = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
-                    self.check_function(method, &scope, drop_body);
+                    self.check_function(method, &scope, drop_impl);
                 }
             }
             Item::Trait(t) => {
@@ -287,15 +287,20 @@ impl Checker<'_> {
                     self.check_function(method, &[], false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new(), false, Vec::new()),
+            Item::Test(test) => self.check_body(&test.body, Vec::new(), None, Vec::new()),
             _ => {}
         }
     }
 
-    fn check_function(&mut self, func: &Function, outer: &[String], drop_body: bool) {
+    fn check_function(&mut self, func: &Function, outer: &[String], drop_impl: bool) {
         let Some(body) = &func.body else {
             return;
         };
+        let drop_self = func
+            .params
+            .iter()
+            .find(|p| drop_impl && matches!(p.self_kind, SelfKind::Value))
+            .map(|p| p.id);
         let mut scope = outer.to_vec();
         scope.extend(affine_params(&func.type_params));
         let outside = func
@@ -304,7 +309,7 @@ impl Checker<'_> {
             .filter(|p| self.is_mut_ref_local(p.id))
             .map(|p| (p.id, p.name.clone()))
             .collect();
-        self.check_body(body, scope, drop_body, outside);
+        self.check_body(body, scope, drop_self, outside);
     }
 
     fn is_mut_ref_local(&self, id: AstId) -> bool {
@@ -318,7 +323,7 @@ impl Checker<'_> {
         &mut self,
         body: &Block,
         affine_params: Vec<String>,
-        drop_body: bool,
+        drop_self: Option<AstId>,
         outside: Vec<(AstId, String)>,
     ) {
         let facts = SemFacts {
@@ -326,7 +331,7 @@ impl Checker<'_> {
             affine_params: &affine_params,
         };
         let modes = ownership::body_modes(body, &facts);
-        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_body);
+        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_self);
         walker.visit_block(body);
         walker.refuse_escapes(&outside);
     }
@@ -553,8 +558,8 @@ struct MoveWalker<'a, 'c> {
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
     affine_params: Vec<String>,
-    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
-    drop_body: bool,
+    /// The `self` of a `Drop::drop` body, which may move its fields out.
+    drop_self: Option<AstId>,
     flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
@@ -615,13 +620,13 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         checker: &'c mut Checker<'a>,
         modes: Rc<Modes>,
         affine_params: Vec<String>,
-        drop_body: bool,
+        drop_self: Option<AstId>,
     ) -> Self {
         MoveWalker {
             checker,
             modes,
             affine_params,
-            drop_body,
+            drop_self,
             flow: Flow::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -645,7 +650,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             &mut *self.checker,
             Rc::clone(&self.modes),
             self.affine_params.clone(),
-            self.drop_body,
+            self.drop_self,
         );
         inner.flow.clone_from(&self.flow);
         inner.guard_bindings.clone_from(&self.guard_bindings);
@@ -915,8 +920,7 @@ impl MoveWalker<'_, '_> {
     /// field.
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
         while let Some((holder, _)) = self.field_step(expr) {
-            let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
-            if !own_self && self.implements_drop(holder) {
+            if !self.is_drop_self(holder) && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
                 self.report(MoveError::DropPartialMove { type_name }, expr.span());
             }
@@ -949,9 +953,14 @@ impl MoveWalker<'_, '_> {
     /// is what the pattern matches, where an expression names it: the `self`
     /// of a `Drop::drop` body may still give up its own fields.
     fn refuse_destructured_drop(&mut self, pattern: &Pattern, scrutinee: Option<&Expr>) {
-        let own_self =
-            self.drop_body && matches!(scrutinee, Some(Expr::Ident(id)) if id.name == "self");
+        let own_self = scrutinee.is_some_and(|expr| self.is_drop_self(expr));
         self.refuse_destructured_drop_at(pattern, own_self);
+    }
+
+    fn is_drop_self(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Ident(id) if self.drop_self.is_some_and(
+            |param| self.sem().referenced_symbol(id.id) == Some(param)
+        ))
     }
 
     fn refuse_destructured_drop_at(&mut self, pattern: &Pattern, own_self: bool) {

@@ -1,0 +1,57 @@
+// Comparing two values of an affine variant reads them through references:
+// neither operand drops at the comparison, only at its own scope exit.
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+affine variant Slot {
+    Empty,
+    Full,
+}
+
+impl Drop for Slot {
+    fn drop(self) {
+        DROPS += 100;
+    }
+}
+
+affine variant Held {
+    None,
+    One(Tok),
+}
+
+fn slots() with Stdout {
+    let a = Slot::Full;
+    let c = Slot::Empty;
+    let same = c == a;
+    println(`slots: same=${same} drops=${DROPS}`);
+}
+
+fn held() with Stdout {
+    let a = Held::One(Tok { id: 1 });
+    let c = Held::None;
+    let differ = !(c == a);
+    println(`held: differ=${differ} drops=${DROPS}`);
+}
+
+export fn run() with Stdout {
+    slots();
+    println(`after slots: drops=${DROPS}`);
+    DROPS = 0;
+    held();
+    println(`after held: drops=${DROPS}`);
+}
+
+__DATA__
+{"stdout": "slots: same=false drops=0\nafter slots: drops=200\nheld: differ=true drops=0\nafter held: drops=1\n"}

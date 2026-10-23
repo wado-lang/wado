@@ -2490,9 +2490,10 @@ impl<'a> Analyzer<'a> {
         let stmts = &block.stmts;
         let mut end = stmts.len();
         while end > 0 {
-            let run = field_let_run(stmts, end);
+            // A pass that records nothing walks the run as it walks any `let`s.
+            let run = record.then(|| field_let_run(stmts, end)).flatten();
             let start = run.unwrap_or(end - 1);
-            if record && run.is_some() {
+            if run.is_some() {
                 let mut live_out = live.clone();
                 let mut values = Vec::new();
                 for stmt in &stmts[start..end] {
@@ -3314,10 +3315,11 @@ impl MoveEligible {
         matches!(&value.kind, TirExprKind::Local { index, .. } if self.locals.contains(index))
     }
 
-    /// The value locals every read in `value` moves. Two moves of one local lie
-    /// on disjoint paths, as each is a read no path reads again after, so
-    /// whichever runs hands over storage nothing reaches afterward. A reference
-    /// moved hands over the reference, not what it names.
+    /// The value locals every read in `value` moves. Two whole-local moves of
+    /// one local lie on disjoint paths, as each is a read no path reads again
+    /// after, and place moves on one path take distinct fields of a dead
+    /// aggregate, so what runs hands over storage nothing reaches afterward. A
+    /// reference moved hands over the reference, not what it names.
     pub fn moved_reads(&self, value: &TirExpr, type_table: &TypeTable) -> IndexSet<u32> {
         let mut reads: IndexMap<u32, bool> = IndexMap::default();
         let mut sites = ReadSites {
