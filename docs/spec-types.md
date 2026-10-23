@@ -1333,7 +1333,9 @@ export fn run() {
 An affine type implements only an `affine trait`, whose default bodies are
 checked with `Self` affine. A trait without the mark may copy `Self` in a
 default body, so implementing it for an affine type is an error at the impl
-(`AFFINE_DECLARATION`).
+(`AFFINE_DECLARATION`). An `affine trait`'s signatures treat `Self` as affine
+too, so `Self` given for a parameter without the mark is an error
+(`AFFINE_ARGUMENT`).
 
 <!-- {"fixture":"affine_impl_of_affine_trait.wado"} -->
 

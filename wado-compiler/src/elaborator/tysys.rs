@@ -899,8 +899,14 @@ impl HeldTypes for AffineParams<'_> {
     }
 
     fn held(&self, type_id: TypeId) -> Held {
-        let is_affine_param = match self.types.type_table.borrow().get(type_id) {
-            ResolvedType::TypeParam { .. } => self.affine_params.contains(&type_id),
+        let table = self.types.type_table.borrow();
+        let is_affine_param = match table.get(type_id) {
+            ResolvedType::TypeParam { .. } => {
+                let key = table.type_key(type_id);
+                self.affine_params
+                    .iter()
+                    .any(|&param| table.type_key(param) == key)
+            }
             ResolvedType::AssocTypeProjection {
                 owning_trait,
                 assoc_name,
@@ -925,6 +931,7 @@ impl HeldTypes for AffineParams<'_> {
             }
             _ => false,
         };
+        drop(table);
         if is_affine_param {
             Held::Resource
         } else {

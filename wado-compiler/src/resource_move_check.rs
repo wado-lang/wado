@@ -253,7 +253,7 @@ struct Checker<'a> {
     out: &'a mut Vec<ResourceMoveError>,
 }
 
-impl Checker<'_> {
+impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
         self.out.push(ResourceMoveError {
             kind,
@@ -283,18 +283,24 @@ impl Checker<'_> {
                     self.check_function(method, false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new(), None, Vec::new()),
+            Item::Test(test) => self.check_body(&test.body, &[], None, Vec::new()),
             _ => {}
         }
     }
 
     fn check_function(&mut self, func: &Function, drop_impl: bool) {
-        // A body no walk reached records no types, so nothing in it is known
-        // to be affine.
-        let (Some(body), Some(scope)) = (&func.body, self.sem.affine_params(func.id)) else {
+        let Some(body) = &func.body else {
             return;
         };
-        let scope = scope.to_vec();
+        // A body no walk reached records no types, so nothing in it is known
+        // to be affine.
+        let Some(scope) = self.sem.affine_params(func.id) else {
+            assert!(
+                !self.sem.is_complete(),
+                "complete semantics walk every body"
+            );
+            return;
+        };
         let drop_self = func
             .params
             .iter()
@@ -319,13 +325,13 @@ impl Checker<'_> {
     fn check_body(
         &mut self,
         body: &Block,
-        affine_params: Vec<TypeId>,
+        affine_params: &'a [TypeId],
         drop_self: Option<AstId>,
         outside: Vec<(AstId, String)>,
     ) {
         let facts = SemFacts {
             sem: self.sem,
-            affine_params: &affine_params,
+            affine_params,
         };
         let modes = ownership::body_modes(body, &facts);
         let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_self);
@@ -557,7 +563,7 @@ struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
-    affine_params: Vec<TypeId>,
+    affine_params: &'a [TypeId],
     /// The `self` of a `Drop::drop` body, which may move its fields out.
     drop_self: Option<AstId>,
     flow: Flow,
@@ -619,7 +625,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
     fn new(
         checker: &'c mut Checker<'a>,
         modes: Rc<Modes>,
-        affine_params: Vec<TypeId>,
+        affine_params: &'a [TypeId],
         drop_self: Option<AstId>,
     ) -> Self {
         MoveWalker {
@@ -649,7 +655,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         let mut inner = MoveWalker::new(
             &mut *self.checker,
             Rc::clone(&self.modes),
-            self.affine_params.clone(),
+            self.affine_params,
             self.drop_self,
         );
         inner.flow.clone_from(&self.flow);
@@ -670,12 +676,12 @@ impl MoveWalker<'_, '_> {
     fn facts(&self) -> SemFacts<'_> {
         SemFacts {
             sem: self.sem(),
-            affine_params: &self.affine_params,
+            affine_params: self.affine_params,
         }
     }
 
     fn is_affine(&self, type_id: TypeId) -> bool {
-        self.sem().is_affine(type_id, &self.affine_params)
+        self.sem().is_affine(type_id, self.affine_params)
     }
 
     fn expr_is_affine(&self, id: AstId) -> bool {

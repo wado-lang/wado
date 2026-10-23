@@ -345,6 +345,13 @@ impl TraitContext {
             .chain(self.shadowed.iter().map(|(name, binder)| (name, binder)))
     }
 
+    /// Bind `name` to `binder`, keeping the binder it shadows.
+    pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
+        if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
+            self.shadowed.push((name.to_string(), shadowed));
+        }
+    }
+
     /// Unbind every type parameter, for a frame naming its own.
     pub(super) fn clear_binders(&mut self) {
         self.type_params.clear();
@@ -566,10 +573,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
         for (slot, (name, &type_id)) in names.iter().zip(args).enumerate() {
-            scope.annotate_ctx.trait_ctx.type_params.insert(
-                name.clone(),
-                BinderInScope::undeclared(base + slot as u32, type_id),
-            );
+            scope
+                .annotate_ctx
+                .trait_ctx
+                .bind(name, BinderInScope::undeclared(base + slot as u32, type_id));
         }
         body(&mut scope)
     }
@@ -940,10 +947,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         binder: BinderInScope,
         bounds: Vec<ScopedBound>,
     ) {
-        let ctx = &mut self.annotate_ctx.trait_ctx;
-        if let Some(shadowed) = ctx.type_params.insert(name.to_string(), binder) {
-            ctx.shadowed.push((name.to_string(), shadowed));
-        }
+        self.annotate_ctx.trait_ctx.bind(name, binder);
         self.annotate_ctx
             .trait_ctx
             .type_param_bounds
@@ -1252,21 +1256,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(arg) = arg else {
                 continue;
             };
-            if self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&param.name)
-            {
+            let resolved_arg = self.resolve_type(arg);
+            let ctx = &mut self.annotate_ctx.trait_ctx;
+            let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
+            // The impl's own parameter keeps the name, but the trait's mark
+            // still reaches what it binds.
+            if ctx.type_params.contains_key(&param.name) {
+                ctx.shadowed.push((param.name.clone(), binder));
                 continue;
             }
-            let resolved_arg = self.resolve_type(arg);
-            let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.bind_param(
-                &param.name,
-                BinderInScope::declared(idx, resolved_arg, param),
-                bounds,
-            );
+            self.bind_param(&param.name, binder, bounds);
         }
     }
 }
