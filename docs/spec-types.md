@@ -1295,6 +1295,12 @@ export fn run() {
 }
 ```
 
+The mark belongs to the parameter's declaration, not its name: a method's
+`T` that shadows its impl's `affine T` is unmarked unless written so, and a
+value of the impl's `T` stays affine in that method. An `impl` method restates
+every `affine` its trait's method declares, since a call through the trait
+moves in what an unmarked body may copy (`AFFINE_ARGUMENT`).
+
 An associated type without the mark may be copied wherever a body projects
 it. An `impl` binding an affine type to one is an error at the binding, under
 the same code. `Iterator` and `IntoIterator` leave `Item` and `Iter`
