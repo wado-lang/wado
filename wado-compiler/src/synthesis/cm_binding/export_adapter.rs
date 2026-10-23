@@ -184,7 +184,7 @@ fn lower_to_flat_inner(
                 cm_interface_registry: ctx.cm_interface_registry,
                 type_table: ctx.type_table,
                 wasi_package: ctx.cm_package,
-                names: names.clone(),
+                names,
             };
             let elem_type_id = type_args[0];
             let elem_ast_type = {
