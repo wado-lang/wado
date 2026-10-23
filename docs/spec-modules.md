@@ -449,13 +449,21 @@ or side-car `.wit` is involved.
   them. An exported interface is named by its interface name as a string, which
   takes `as`: `use { "a:x/trip" as Trip } from "./dup.wasm"`. A module generated
   from WIT, such as `wasi:cli`, offers each of its interfaces by full name the
-  same way.
+  same way. A full name may leave out its version where the module offers that
+  interface at one version; where it offers two, the version is required.
 - An exported interface becomes a Wado `interface`, also offered under its
-  short name: its last label in `PascalCase` (`Trip`). Where two exports share
-  a short name, importing it is an error that names their full names, and only
-  a full-name import reaches either. Its named types become Wado items of the
-  corresponding kind: a record a `struct`, a variant a `variant`, an enum an
-  `enum`, flags a `flags`, and a type alias a newtype.
+  short name: its last label in `PascalCase` (`Trip`). Where two interfaces
+  share a short name, importing it is an error that names their full names, and
+  only a full-name import reaches either.
+- An interface's named types become Wado items of the corresponding kind: a
+  record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
+  and a type alias a newtype. Each is named through its interface
+  (`Geo::Point`), and also by its own name at module level, where a name two
+  interfaces' types share is an error to import.
+- A non-WASI interface the component imports is an item of its module too,
+  named by the same rules as an export. An interface name has one declaration
+  in the whole program, so two components importing it name one Wado
+  interface, and their shapes of it must agree.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
@@ -465,10 +473,6 @@ or side-car `.wit` is involved.
   and a world-level function keeps its name over an interface function of the
   same name. Any other interface, an imported one included, is reached only
   through its name.
-
-> Not yet implemented: a full-name import, and the error for a shared short
-> name ([WEP](./wep-2026-10-22-component-export-names.md)).
-
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`
@@ -477,6 +481,10 @@ or side-car `.wit` is involved.
   [Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries).
   A `stream<T>` or `future<T>` value is the readable end; the writable end stays
   with whoever created the pair.
+
+> Not yet implemented: a full-name import, the error for a shared short name,
+> types named through their interface, and one declaration per imported
+> interface name ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 The dependency is statically composed into the output, so the result is one
 self-contained component that runs standalone.

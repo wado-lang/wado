@@ -57,10 +57,10 @@ A string is not an identifier, so a string-named import takes `as`.
 ### A short name collides into an error
 
 Each interface is also offered under its short name, its last label in
-`PascalCase`, as it is today. Where the short names of two exports coincide,
-the short name is an error at the `use` that names their full names. Only the
-renamed import reaches either. A short name never answers with the first
-export, nor with an unspecified one.
+`PascalCase`, as it is today. Where the short names of two interfaces
+coincide, the short name is an error at the `use` that names their full names.
+Only the renamed import reaches either. A short name never answers with the
+first interface, nor with an unspecified one.
 
 This is the rule a package's default interfaces already follow for their
 functions
@@ -94,35 +94,70 @@ An operation is bound to its interface's declaration, not to the spelling
 [known gap](./wep-2026-08-12-declaration-identity.md#known-gap-a-cm-operation-is-bound-by-its-spelling)
 that rejected two same-named interfaces declaring one operation.
 
+### An interface's types are named through it
+
+A type an interface declares is named through that interface, as the ES module
+integration exports a type inside its instance: `Geo::Point`. Two interfaces of
+one component may then each declare a `Point`. A type is also offered under its
+own name at module level, as the `wasi:*` modules offer theirs, and a name two
+interfaces' types share follows the short-name rule: importing it is an error,
+and only the path through an interface reaches either.
+
+### The version may be left out
+
+A full name may leave out its version where the module offers that interface at
+one version: `"wasi:cli/stdout"` reaches `wasi:cli/stdout@0.3.0`. Where it
+offers two, the version is required, and a name without one is an error naming
+both.
+
+### A component's imports are items of its module
+
+A component's non-WASI import is an interface its consumer provides through a
+`with` handler, so the consumer has to name it. The ES module integration
+resolves an import as a module specifier and never offers it as an export.
+Wado goes further: an imported interface is an item of the component's module,
+named by the same rules as an export. Marl, built as a component, imports the
+hook its consumer supplies and exports the renderer that calls it:
+
+```wado
+use { RenderHook, render_highlighted } from "./marl.wasm" with { type: "wasm" };
+
+with RenderHook => &mut hook do {
+    let html = render_highlighted(source);
+}
+```
+
+Its full name is `"wado-lang:marl/render-hook" as RenderHook`.
+
+An interface name has one declaration in the whole program, as
+[§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md) asks of
+every WIT name. Two components that import `x:y/log` name one Wado interface,
+so one handler serves both. Their shapes of it must agree, and a disagreement
+is an error naming both files.
+
 ## Roadmap
 
 - [ ] A string-named import parses, and reaches an interface of a `.wasm` or a
-  WIT-generated module by its full name.
-- [ ] A short name two exports share is an error naming their full names. The
+  WIT-generated module by its full name, with or without its version.
+- [ ] A short name two interfaces share is an error naming their full names. The
   fixture from issue #2421 imports both `trip` interfaces by full name.
 - [ ] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.
+- [ ] An interface's types are named through it, and a type name two
+  interfaces share is an error at module level.
+- [ ] A component's imported interface is named as an export is, and two
+  components importing one interface name one declaration, whose shapes must
+  agree.
 
-## Open question: where an interface's types are named
+## Known gap: a component that imports and exports one interface
 
-Two interfaces of one component may each declare a type of one name. The ES
-module integration exports a type inside its instance, so the type would be
-named through its interface (`One::Point`). Wado names a type only at module
-level today, and the `wasi:*` modules offer their types flat.
-
-## Open question: a component's imports
-
-A component's non-WASI import is an interface its consumer provides, through a
-`with` handler. The consumer names it today as an item of the `.wasm` module.
-Under the ES module integration an import is not an export of the module: it is
-resolved as a module specifier.
-
-## Open question: the version in a full name
-
-A component spells an interface name with its version (`wasi:cli/stdout@0.3.0`).
-Whether a full-name import must write the version, or may leave it out where
-one version is offered, is not decided.
+A component may import an interface and export the same one, as a filter that
+wraps whatever provides `x:y/filter` does. Its module would then offer one
+interface name for two declarations: the import its consumer handles and the
+export its consumer calls. Naming that interface in a `use`, by either name, is
+an error. What it admits is a component no Wado program can call through that
+interface.
 
 ## Known gap: a component's world name is not observed
 
