@@ -1853,7 +1853,11 @@ impl MoveWalker<'_, '_> {
     }
 
     /// Note `value` as decomposed where none of `patterns` keeps it whole.
-    fn note_decomposed<'p>(&mut self, value: &Expr, patterns: impl IntoIterator<Item = &'p Pattern>) {
+    fn note_decomposed<'p>(
+        &mut self,
+        value: &Expr,
+        patterns: impl IntoIterator<Item = &'p Pattern>,
+    ) {
         if !patterns.into_iter().any(keeps_whole) {
             self.decomposed.insert(value.id());
         }

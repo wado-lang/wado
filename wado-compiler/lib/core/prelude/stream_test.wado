@@ -138,5 +138,8 @@ test "a copy a handler settled reports what the handler said" {
     let chunk = StartedRead::<u8>::settled(StreamChunk { items: [], result: CopyResult::Cancelled }).settle(&rx);
     rx.drop();
     assert chunk.result == CopyResult::Cancelled;
-    assert StartedWrite::<u8>::settled(StreamWrite { rest: [3], result: CopyResult::Dropped }).settle().rest == [3];
+    assert StartedWrite::<u8>::settled(StreamWrite {
+        rest: [3],
+        result: CopyResult::Dropped,
+    }).settle().rest == [3];
 }
