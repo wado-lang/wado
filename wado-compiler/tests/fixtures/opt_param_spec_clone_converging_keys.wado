@@ -8,17 +8,18 @@
 // parameter counts differ: at O1 the module failed validation, and under
 // coverage the next round found one callee called with two arities.
 
+use { println, Stdout } from "core:cli";
 use { encode, encode_url, encode_with, Encoding } from "core:base64";
 
-test {
+export fn run() with Stdout {
     let d: ByteList = b"ab";
-    assert encode(&d) == "YWI=";
-    assert encode_url(&d) == "YWI";
-    assert encode_with(&d, Encoding::UrlSafe) == "YWI=";
-    assert encode_with(&d, Encoding::NoPadding) == "YWI";
+    println(encode(&d));
+    println(encode_url(&d));
+    println(encode_with(&d, Encoding::UrlSafe));
+    println(encode_with(&d, Encoding::NoPadding));
 }
 
 __DATA__
 {
-    "stdout": ""
+    "stdout": "YWI=\nYWI\nYWI=\nYWI\n"
 }
