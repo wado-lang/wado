@@ -11,7 +11,7 @@ test "a read offering more room than one copy moves does not trap" {
 test "a read copy dropped in flight cancels, and the writer sees the end go" {
     let [rx, tx] = Stream::<u8>::new();
     let reading = rx.start_read(4);
-    assert reading.waitable_id() matches { Some(_) };
+    assert reading.wait_on() matches { Host(_) };
     builtin::drop(reading);
     let [tx, written] = tx.start_write([1]).finish();
     tx.drop();
@@ -21,7 +21,7 @@ test "a read copy dropped in flight cancels, and the writer sees the end go" {
 test "a write copy dropped in flight cancels, and the reader sees the end go" {
     let [rx, tx] = Stream::<u8>::new();
     let writing = tx.start_write([1, 2]);
-    assert writing.waitable_id() matches { Some(_) };
+    assert writing.wait_on() matches { Host(_) };
     builtin::drop(writing);
     let [rx, chunk] = rx.start_read(4).finish();
     rx.drop();
@@ -63,13 +63,13 @@ test "a write copy a set reported drops without a cancel" {
     assert chunk.items == [5];
 }
 
-test "a copy that settled as it started is ready the moment it joins" {
+test "a copy that settled as it started joins ready with its result" {
     let [reader, writer] = Stream::<u8>::new();
     let writing = writer.start_write([6]);
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
     set.join(reader.start_read(4));
     let ready = set.wait();
-    assert ready.event matches { Unreported };
+    assert ready.event matches { Copied(Completed) };
     let [rx, chunk] = ready.member.finish();
     rx.drop();
     let [tx, _] = writing.finish();

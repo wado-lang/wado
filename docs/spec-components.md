@@ -207,14 +207,17 @@ A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
 `Ready<W>` beside the event. `poll` asks without blocking. The event is a
 `ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
-`CopyResult` a started stream copy ended on, or `Unreported` for a member with
-no handle for the host to report. A set that drops drops its remaining members
-first.
+`CopyResult` a started stream copy ended on, or `Unreported` for a member that
+neither has a handle for the host to report nor an event of its own. A member
+whose event is already known joins ready with that event, whether the host
+reported it to another set or the call or copy settled as it started. A set
+that drops drops its remaining members first.
 
-A member is any type implementing `Waitable`. The trait is sealed: the standard
-library implements it on the calls and on the started stream copies
-(`ReadCopy`, `WriteCopy`), since a hand-written `waitable_id` could name a
-handle its value does not own. A bare stream or future end is no member: no
+A member is any type implementing `Waitable`, whose `wait_on` answers either the
+handle the host reports the member by or the event it is ready with. The trait
+is sealed: the standard library implements it on the calls and on the started
+stream copies (`ReadCopy`, `WriteCopy`), since a hand-written `wait_on` could
+name a handle its value does not own. A bare stream or future end is no member: no
 copy on it is in flight, so the host has no event to report for it. A set
 waiting on two kinds takes a variant over them, which
 derives the trait with the marker `impl Waitable for V;`. Each case holds one member, or none for one that is

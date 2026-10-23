@@ -426,11 +426,11 @@ impl<affine T> Drop for ReadCopy<T> {
 }
 
 impl<affine T> Waitable for ReadCopy<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
+    fn wait_on(&self) -> WaitOn {
         let Some([_, started]) = &self.copy else {
             unreachable();
         };
-        return started.buffer.waitable_id();
+        return started.buffer.wait_on();
     }
 }
 
@@ -554,11 +554,11 @@ impl<affine T> Drop for WriteCopy<T> {
 }
 
 impl<affine T> Waitable for WriteCopy<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
+    fn wait_on(&self) -> WaitOn {
         let Some([_, started]) = &self.copy else {
             unreachable();
         };
-        return started.buffer.waitable_id();
+        return started.buffer.wait_on();
     }
 }
 
@@ -627,10 +627,9 @@ impl CopyBuffer {
         return CopyBuffer { handle: 0, packed, ptr: 0, size: 0, align: 1 };
     }
 
-    /// Whether the host may still be copying: the copy blocked, and no set
-    /// has reported it.
+    /// Whether the host may still be copying.
     fn in_flight(&self) -> bool {
-        return self.packed == CM_BLOCKED && settled_copy_at(self.handle) matches { None };
+        return self.wait_on() matches { Host(_) };
     }
 
     /// The packed result the copy settled on, waiting for it where it has not.
@@ -652,12 +651,17 @@ impl CopyBuffer {
         return true;
     }
 
-    /// The handle a set waits on for a copy that blocked.
-    fn waitable_id(&self) -> Option<ResourceId> {
-        if self.packed != CM_BLOCKED {
-            return null;
-        }
-        return Option::Some(ResourceId { handle: self.handle });
+    /// The host reports a copy that blocked, once: a set that took the report
+    /// recorded it in `SETTLED_COPIES`.
+    fn wait_on(&self) -> WaitOn {
+        let packed = if self.packed != CM_BLOCKED {
+            self.packed;
+        } else if let Some(at) = settled_copy_at(self.handle) {
+            SETTLED_COPIES[at].packed;
+        } else {
+            return WaitOn::Host(ResourceId { handle: self.handle });
+        };
+        return WaitOn::Settled(ReadyEvent::Copied(copy_result(packed)));
     }
 }
 
@@ -705,9 +709,15 @@ fn cm_await_copy(handle: i32) -> i32 {
 /// `ReadCopy` or `WriteCopy`, is one.
 #[compiler_item("waitable")]
 pub affine trait Waitable with () {
-    /// The handle the host reports this value by, or None where it is ready
-    /// without the host.
-    fn waitable_id(&self) -> Option<ResourceId>;
+    fn wait_on(&self) -> WaitOn;
+}
+
+/// How a `WaitableSet` learns that a `Waitable` is ready.
+pub variant WaitOn {
+    /// The host reports its event by this handle.
+    Host(ResourceId),
+    /// It is ready already, with this event: the host has none left to report.
+    Settled(ReadyEvent),
 }
 
 /// The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
@@ -741,8 +751,8 @@ internal fn call_state(raw: u32) -> CallState {
 
 /// What the host reported for a `WaitableSet` member.
 pub variant ReadyEvent {
-    /// The member has no handle for the host to report, so it is ready
-    /// without one.
+    /// The member has no handle for the host to report and no event of its
+    /// own, so it is ready without one.
     Unreported,
     Call(CallState),
     /// A started stream copy settled, ending as this says.
@@ -852,21 +862,13 @@ impl<affine W: Waitable> WaitableSet<W> {
     /// Moves `member` into the set. A member joins one set at a time, so
     /// whether the host has an event left for it is settled here.
     pub fn join(&mut self, member: W) {
-        let Some(id) = member.waitable_id() else {
-            self.ready.push(Ready { member, event: ReadyEvent::Unreported });
-            return;
-        };
-        if let Some(state) = delivered_state(id.handle) {
-            self.ready.push(Ready { member, event: ReadyEvent::Call(state) });
-            return;
+        match member.wait_on() {
+            Host(id) => {
+                builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
+                self.members.push(member);
+            },
+            Settled(event) => self.ready.push(Ready { member, event }),
         }
-        if let Some(at) = settled_copy_at(id.handle) {
-            let result = copy_result(SETTLED_COPIES[at].packed);
-            self.ready.push(Ready { member, event: ReadyEvent::Copied(result) });
-            return;
-        }
-        builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
-        self.members.push(member);
     }
 
     /// Blocks until a member has an event, and moves it out. A member ready
@@ -904,6 +906,8 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
         builtin::waitable_join(reported.handle, 0);
+        // Found before the event is recorded, which settles the member.
+        let at = self.member_at(reported.handle);
         match reported.event {
             Call(state) => {
                 if state.is_resolved() {
@@ -913,10 +917,14 @@ impl<affine W: Waitable> WaitableSet<W> {
             Copied(_) => SETTLED_COPIES.push(CopySettlement { handle: reported.handle, packed: reported.payload }),
             Unreported => unreachable(),
         }
+        return Ready { member: self.members.remove(at), event: reported.event };
+    }
+
+    fn member_at(&self, handle: i32) -> i32 {
         let mut at = 0;
         for let member of self.members.iter_ref() {
-            if member.waitable_id().map(|id: ResourceId| id.handle) == Option::Some(reported.handle) {
-                return Ready { member: self.members.remove(at), event: reported.event };
+            if member.wait_on() matches { Host(id) && id.handle == handle } {
+                return at;
             }
             at += 1;
         }
@@ -950,8 +958,12 @@ pub resource Subtask {
 }
 
 impl Waitable for Subtask {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return Option::Some(ResourceId::of(self));
+    fn wait_on(&self) -> WaitOn {
+        let id = ResourceId::of(self);
+        if let Some(state) = delivered_state(id.handle) {
+            return WaitOn::Settled(ReadyEvent::Call(state));
+        }
+        return WaitOn::Host(id);
     }
 }
 
@@ -1047,11 +1059,11 @@ impl<affine T> Drop for AsyncCall<T> {
 }
 
 impl<affine T> Waitable for AsyncCall<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        if let Some(subtask) = &self.subtask {
-            return Option::Some(ResourceId::of(subtask));
-        }
-        return null;
+    fn wait_on(&self) -> WaitOn {
+        return match &self.subtask {
+            Some(subtask) => subtask.wait_on(),
+            None => WaitOn::Settled(ReadyEvent::Call(CallState::Returned)),
+        };
     }
 }
 

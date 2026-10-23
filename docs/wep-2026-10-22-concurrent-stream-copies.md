@@ -76,8 +76,8 @@ copy starts with a resource operation, `Stream::begin_read(&self, max)` or
 `StartedWrite<T>`. `start_read` and `start_write` call it and take the end, and
 so do the loops. A handler answers with a copy that has already settled,
 `StartedRead::settled(chunk)` or `StartedWrite::settled(written)`: its data is
-in memory, so it has no host copy to wait on. Such a copy joins a set as ready,
-and dropping it cancels nothing.
+in memory, so it has no host copy to wait on. Such a copy joins a set ready with
+the result the handler gave, and dropping it cancels nothing.
 
 The operations are public, since a handler in another package implements them.
 A program that calls `begin_read` itself holds no copy in its end, so a second
@@ -102,8 +102,9 @@ waitable set. Holding the end inside the started copy makes both unwritable.
 
 The host reports a copy's event once. A set that reports it records the packed
 result by handle, as it records a delivered subtask resolution, and `finish`
-reads it there. A copy that did not block at the start holds its result and has
-no handle to report, so it joins a set as ready without the host.
+reads it there. A copy that did not block at the start holds its result, so it
+joins a set ready with `Copied` and that result, as a copy the host reported
+does. Either way one end of stream reads as one event.
 
 ### Dropping
 
@@ -144,6 +145,3 @@ and `read` read stdout and stderr through one set.
 - A `StartedRead` dropped on its own, outside a `ReadCopy`, holds no end to
   lift through, so it frees its buffer and leaks what the elements it moved
   hold in memory or handles.
-- A copy that settled as it started joins a set as `Unreported`, though its
-  result is known, so the same end of stream reads as `Unreported` or
-  `Copied(Dropped)` depending on whether the copy blocked.
