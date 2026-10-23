@@ -57,12 +57,11 @@ A string is not an identifier, so a string-named import takes `as`.
 ### A short name collides into an error
 
 Each interface is also offered under its short name, its last label in
-`PascalCase`, as it is today, and each type an interface declares, a resource
-included, under its own name. These names and the plain-named exports share
-the module's one namespace. Where two of them coincide, whether two interfaces,
-two types, or a type and an interface, the name is an error at the `use` that
-names what it could mean. Only a path through a full name reaches either. A
-short name never answers with the first item, nor with an unspecified one.
+`PascalCase`, as it is today. These names, the plain-named exports, and the
+default interface's functions and types share the module's one namespace.
+Where two of them coincide, the name is an error at the `use` that names what
+it could mean. Only a path through a full name reaches either. A short name
+never answers with the first item, nor with an unspecified one.
 
 This is the rule a package's default interfaces already follow for their
 functions
@@ -115,40 +114,22 @@ interface Geo {
 }
 ```
 
-A component's module also offers the type under its own name, as if it held
-`pub use { Geo::{Point} };`, within the short-name rule above.
+`Geo::Point` is the type's only name. No form names it `Point`: not a `use`
+of the interface's types, not a re-export, and not a type alias. Each of those
+was weighed, as `pub use { Geo::{Point} };`, `pub Point = Geo::Point;` and
+`pub Geo::Point as Point;`, and each adds language surface that a path already
+covers. Source and component then read alike, since neither offers the short
+name.
+
+The default interface is the exception, because it is its module
+([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)).
+A Wado library declares its exported types at module level, so the default
+interface's types are items of the component's module, as its functions are.
 
 A module that declares types in an interface makes that module their declaring
 module, as
 [§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
 requires of every module declaring a `#[cm]` type.
-
-### A `use` without `from` names this module's items
-
-`use { … }` without `from` selects from the module it is written in. It is
-otherwise the `use` it already was: the same `Iface::{…}` selection, the same
-`as`, and a visibility modifier re-exports at that reach. This is how a type an
-interface declares reaches module level:
-
-```wado
-pub use { Geo::{Point} };          // Point, the same type as Geo::Point
-internal use { Geo::{Point as P} };
-```
-
-Its interface publishes such a type, so `export use` never names one, as it
-never names a `#[cm]` type
-([Published Types](./spec-components.md#published-types)).
-
-The ES module integration draws the same line: `export { x } from "m"`
-re-exports another module's binding and `export { x as y }` this one's, as
-`pub use { … } from "M"` and `pub use { … }` do. `Iface::{…}` already selects
-an interface's operations, so selecting its types adds no new syntax.
-
-Three alternatives were weighed. `pub S from I::S;` gives `from` a path where
-it takes a module specifier. `pub S = I::S;` reads as a type alias, which Wado
-does not have: `type S = T` declares a distinct newtype. `pub I::S as S;` is a
-second re-export form beside `pub use`, and without a modifier it reads as an
-expression statement.
 
 ### The version may be left out
 
@@ -192,11 +173,9 @@ disagreement is an error naming both files.
 - [ ] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.
-- [ ] A Wado `interface` declares types, named through it, and
-  `use { Iface::{T} };` without `from` brings one to module level at any
-  visibility.
-- [ ] A component's interface types are named through their interface, and
-  offered at module level under the short-name rule.
+- [ ] A Wado `interface` declares types, named only through it.
+- [ ] A component's interface types are named only through their interface,
+  except the default interface's, which are items of the module.
 - [ ] A component's imported interface is named as an export is, and two
   components importing one interface name one declaration, whose shapes must
   agree.

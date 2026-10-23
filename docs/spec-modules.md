@@ -455,11 +455,10 @@ or side-car `.wit` is involved.
   short name: its last label in `PascalCase` (`Trip`).
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
-  and a type alias a newtype. Each is named through its interface
-  (`Geo::Point`), and also by its own name at module level, as if the module
-  held `pub use { Geo::{Point} };`.
-- Short names, module-level type names, plain-named exports and the default
-  interface's functions (below) share the module's one namespace. A name two
+  and a type alias a newtype. Each is named only through its interface
+  (`Geo::Point`), except the default interface's (below).
+- Short names, plain-named exports and the default interface's functions and
+  types share the module's one namespace. A name two
   of them share is an error to import that names what it could mean, and only a
   path through a full name reaches either.
   A `wasi:*` module is Wado source, so its module-level names are the ones its
@@ -471,11 +470,11 @@ or side-car `.wit` is involved.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
-  Each of its functions is also a free function of the module, imported by bare
-  name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. A world-level function keeps its name over an interface
-  function of the same name. Any other interface, an imported one included, is reached only
-  through its name.
+  Each of its functions is also a free function of the module, and each of its
+  types an item of the module, imported by bare name. So a `use` of a library
+  reads the same whether its source is Wado code or a component. A world-level
+  function keeps its name over an interface function of the same name. Any
+  other interface, an imported one included, is reached only through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`
@@ -587,8 +586,7 @@ by name instead.
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - No `use * as name` and no default imports
 - All imports must be explicit, except [the prelude](#the-prelude) and the [`builtin` namespace](#the-builtin-namespace)
-- `Effect::{op1, op2}` imports an effect's operations and types ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
-- Without `from`, `use { … };` selects from the module it is written in ([Re-exports](#re-exports-pub-use))
+- `Effect::{op1, op2}` imports an effect's operations ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
 
 <!-- {"fixture":"spec_modules_import_rules.wado"} -->
 
@@ -685,16 +683,10 @@ Re-export rules:
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a nameless import (`pub use _ from "..."`) are compile errors.
-- A `use` without `from` re-exports this module's own items under another
-  path: `pub use { Geo::{Point} };` makes the type `Geo::Point` an item
-  `Point` of the module, as ES's `export { x as y }` does
 - `export use` names types only, and publishes each one in the importing
   package's Component Model interface
   ([Published Types](./spec-components.md#published-types)). Naming anything
   else is a compile error
-
-> Not yet implemented: a `use` without `from`
-> ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 

@@ -77,7 +77,7 @@ publishes each one, in one of two ways:
   declares it. This is how a package publishes a type a Kiln generator wrote
   for it, where no `export` can be written. An `export use` names a
   non-generic struct, enum, variant, flags or newtype. It never names a `#[cm]`
-  type or a type an `interface` declares, whose own interface publishes it.
+  type, whose own interface publishes it.
 
 An adopted type takes the name the `export use` gives it:
 `export use { FileType as Kind } from "core:fs";` publishes `variant kind`, and

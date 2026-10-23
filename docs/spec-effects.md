@@ -60,9 +60,7 @@ test {
 ```
 
 An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
-`resource`), named through it as `Geo::Point`. A
-[`use` without `from`](./spec-modules.md#re-exports-pub-use) brings one to
-module level.
+`resource`). Such a type is named only through its interface, as `Geo::Point`.
 
 > Not yet implemented: a type declared in an interface
 > ([WEP](./wep-2026-10-22-component-export-names.md)).
@@ -230,7 +228,7 @@ test {
 
 ### Import Rules
 
-- `use {Effect::{op1, op2}} from "..."` imports operations by name, and the types the interface declares the same way. A wildcard, `use {Effect::{*}}`, is not allowed.
+- `use {Effect::{op1, op2}} from "..."` imports operations by name. A wildcard, `use {Effect::{*}}`, is not allowed.
 - An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation)).
 - An operation may be renamed as any import may ([Renaming Imports](./spec-modules.md#renaming-imports)). Two effects' operations of the same name are told apart by renaming one, or by calling it as `Effect::op()`:
 
