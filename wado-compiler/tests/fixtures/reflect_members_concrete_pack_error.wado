@@ -8,7 +8,7 @@ struct P {
 fn holes<T: ReflectTemplate<Holes = [List<i32>]>>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(h.lit());
+        out.push_str(h.lit(&t));
     }
     return out;
 }

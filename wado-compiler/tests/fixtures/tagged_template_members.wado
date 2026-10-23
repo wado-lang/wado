@@ -10,7 +10,7 @@ use { println, Stdout } from "core:cli";
 use { ReflectTemplate, TemplateHole } from "core:prelude";
 
 fn show<T, V>(h: &TemplateHole<T, V>, t: &T, out: &mut String) {
-    out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} spec=${h.has_spec()} value=`);
+    out.push_str(&`[${h.index()} lit=${h.lit(t):?} raw=${h.raw(t):?} spec=${h.has_spec()} value=`);
     h.fmt(t, &mut Formatter::new(out));
     out.push_str(&"]");
 }
@@ -20,7 +20,7 @@ fn describe<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     for let h of ReflectTemplate::<T>::members() {
         show(&h, &t, &mut out);
     }
-    out.push_str(&`[tail=${ReflectTemplate::<T>::tail():?} raw=${ReflectTemplate::<T>::raw_tail():?}]`);
+    out.push_str(&`[tail=${ReflectTemplate::<T>::tail(&t):?} raw=${ReflectTemplate::<T>::raw_tail(&t):?}]`);
     return out;
 }
 

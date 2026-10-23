@@ -39,13 +39,13 @@ fn html<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut out = "";
     let mut ctx = Context::Text;
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit());
-        ctx = advance(ctx, &h.lit());
+        out.push_str(&h.lit(&t));
+        ctx = advance(ctx, &h.lit(&t));
         let mut rendered = "";
         h.fmt(&t, &mut Formatter::new(&mut rendered));
         escape(ctx, &rendered, &mut out);
     }
-    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(&ReflectTemplate::<T>::tail(&t));
     return out;
 }
 

@@ -284,18 +284,18 @@ type a template literal denotes). See WEP 2026-01-10.
 
 Returns the per-hole members.
 
-#### `fn tail() -> String`
+#### `fn tail(t: &Self) -> String`
 
 `#[compiler_item("reflect_template_tail")]`
 
-The literal text after the last hole — the whole template when it has
-none — with escapes processed.
+The literal text after the last hole of `t` — the whole template when
+it has none — with escapes processed.
 
-#### `fn raw_tail() -> String`
+#### `fn raw_tail(t: &Self) -> String`
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
-`tail()` with escapes preserved.
+`tail(t)` with escapes preserved.
 
 ### `pub trait Ref with ()`
 
@@ -3491,9 +3491,9 @@ The flags value with only this bit set.
 
 ### `pub struct TemplateHole<T, V>`
 
-A hole handle minted by `ReflectTemplate::members()`: the literal text
-before the hole and the hole's specifier presence are constants, and
-`get` / `fmt` reach the hole's value in a template. See WEP 2026-01-10.
+A hole handle minted by `ReflectTemplate::members()`: the hole's position
+and specifier presence are constants of the shape, and `lit` / `raw` /
+`get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 
 _Fields are private._
 
@@ -3501,14 +3501,14 @@ _Fields are private._
 
 The hole's position in the template.
 
-#### `pub fn lit(&self) -> String`
+#### `pub fn lit(&self, t: &T) -> String`
 
-The literal text between the previous hole (or the start) and this
-one, escapes processed.
+The literal text in `t` between the previous hole (or the start) and
+this one, escapes processed.
 
-#### `pub fn raw(&self) -> String`
+#### `pub fn raw(&self, t: &T) -> String`
 
-`lit()` with escapes preserved: `\n` is a backslash and an `n`.
+`lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
 
 #### `pub fn has_spec(&self) -> bool`
 
@@ -5624,13 +5624,13 @@ Walks by reference: an element yielded by value is copied out.
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
 
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
+
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _`
 
 In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
 handed references as `iter_ref` hands them out: a `Ref` element in
 place, a scalar as a read-only snapshot.
-
-#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
 
 #### `pub fn sort(&mut self)`
 

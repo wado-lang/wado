@@ -15,10 +15,8 @@ use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use crate::escape::unescape_template_string;
 
-/// A template's static parts: the raw segments — one more than the holes —
-/// and each hole's resolved type and specifier, in source order.
+/// Each hole's resolved type and specifier, in source order.
 pub(super) struct TemplateParts {
-    pub segments: Vec<String>,
     pub holes: Vec<(TypeId, Option<String>)>,
 }
 
@@ -44,16 +42,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TemplateParts> {
-        let mut segments = Vec::new();
         let mut holes = Vec::new();
-        let mut pending = String::new();
         let mut sound = true;
         for part in &template.parts {
             match part {
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let ty = self.resolve_expr(expr, ctx, None);
                     let ty = self.apply_infer_holes(ty);
-                    segments.push(std::mem::take(&mut pending));
                     holes.push((ty, format.as_ref().map(|f| f.spec.clone())));
                 }
                 // The gate reify relies on: it decodes these segments with no
@@ -66,12 +61,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         sound = false;
                     }
-                    pending.push_str(raw);
                 }
             }
         }
-        segments.push(pending);
-        sound.then_some(TemplateParts { segments, holes })
+        sound.then_some(TemplateParts { holes })
     }
 
     /// A specifier binds under any tag, whether or not the tag renders the

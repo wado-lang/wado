@@ -52,7 +52,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//inline_array_append_nested.wado/inline_array_append_nested.wado/Container::process$sroa[&mut(self.items)]" = fn(ref "core:prelude//List<i32>");  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
@@ -79,7 +79,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:inline_array_append_nested.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(108, 101, 110, 61);
+global global:inline_array_append_nested.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(108, 101, 110, 61);
 
 fn "inline_array_append_nested.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
@@ -120,10 +120,10 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     }
     value_9 = $local_1.used;
     $local_1.used = i;
-    builtin::array_copy<u8>($local_1.repr, value_9, global:inline_array_append_nested.wado::$const_obj_4, 0, 4);
+    builtin::array_copy<u8>($local_1.repr, value_9, global:inline_array_append_nested.wado::$const_obj_0, 0, 4);
     i = local.tee value_9($sroa_c_items_50.used) < 0;
     value_9 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(value_9); select i64(x < 0_i64, 0_i64 - x, x)));
-    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, i, value_9);
+    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, i, value_9);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i, x, value_9);
     value_9 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x >> 32_i64);
@@ -371,7 +371,7 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

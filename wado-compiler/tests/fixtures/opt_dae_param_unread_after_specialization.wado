@@ -1,0 +1,38 @@
+// Test: a parameter a specialization stops reading is dropped, though the
+// original took its address.
+//
+// `tag` reads its segments through `&t`, so `t` is address-taken there.
+// param_spec substitutes every segment read with its constant, which leaves
+// the clone reading `t` nowhere. `dae` refused it anyway, on the clone's copy
+// of the original's address-taken set, so each call still built and passed
+// every segment `String` the clone never looks at. With `t` gone each clone
+// takes nothing, and the loop folds to the lengths.
+
+#[inline("never")]
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit(&t));
+    }
+    out.push_str(&ReflectTemplate::<T>::tail(&t));
+    return out;
+}
+
+export fn run() {
+    let mut s = 0;
+    for let i of 0..<builtin::black_box(10) {
+        s += tag`a${i}bb${i}ccc`.len() + tag`dd${i}e${i}f`.len();
+    }
+    assert s == 100;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "s = s + 10;"
+    ],
+    "wir_not_expect:O2": [
+        "array.new_fixed<u8>(97)"
+    ]
+}

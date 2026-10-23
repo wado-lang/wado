@@ -102,7 +102,8 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter: ref null "effect_handler_continue_cross.wado//$Dispatch_effect_handler_continue_cross.wado/Counter" = ref.null none;
-global global:effect_handler_continue_cross.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(114, 61);
+global global:effect_handler_continue_cross.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 67, 111, 117, 110, 116, 101, 114, 58, 58, 110, 101, 120, 116, 96), used: 40 };
+global global:effect_handler_continue_cross.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(114, 61);
 
 fn "effect_handler_continue_cross.wado/helper"() with Counter {
     let inner: ref "effect_handler_continue_cross.wado//Inner";
@@ -128,13 +129,14 @@ fn "effect_handler_continue_cross.wado/helper"() with Counter {
                 if @likely(ref.is_null(local.tee $local_0_7(global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter)) == 0) {
                     global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_7)).outer;
                     $local_2_9 = block -> i32 {
-                        let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_1_8.op_next)).env);
+                        let $indirect_call_2: ref "canonical//CanonicalClosure_0";
+                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_8.op_next)).env);
                     };
                     global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = $local_0_7;
                     break $inline__effect_dispatch__effect_handler_continue_cross_wado_Counter__next_0: $local_2_9;
                 } else {
-                    "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
+                    let $mv_arg_1: ref "core:prelude/string.wado//String";
+                    "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_continue_cross.wado::$const_obj_0).repr, $mv_arg_1.used);
                     unreachable;
                 }
                 unreachable;
@@ -147,12 +149,12 @@ fn "effect_handler_continue_cross.wado/helper"() with Counter {
         if @likely(ref.is_null(local.tee $local_0_7(global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter)) == 0) {
             global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_7)).outer;
             $local_2_9 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_1_8.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_8.op_next)).env);
             };
             global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = $local_0_7;
             break $inline__effect_dispatch__effect_handler_continue_cross_wado_Counter__next_1: $local_2_9;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
+            "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_continue_cross.wado::$const_obj_0).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
@@ -178,7 +180,7 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_19 = $local_2.used;
     $local_2.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_19, global:effect_handler_continue_cross.wado::$const_obj_3, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_19, global:effect_handler_continue_cross.wado::$const_obj_2, 0, 2);
     start_19 = r < 0;
     r = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(r); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_19 {

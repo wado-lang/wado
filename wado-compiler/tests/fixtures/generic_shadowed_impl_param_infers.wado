@@ -1,0 +1,25 @@
+// A method's `T` shadowing the impl's `T` leaves the impl's still in scope:
+// `self.v` is of it, and a generic call takes it as the caller's own parameter.
+use { println, Stdout } from "core:cli";
+
+struct Holder<T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn width<#[allow(shadowed_name)] T>(&self, t: T) -> i32 {
+        return one(self.v) + one(t);
+    }
+}
+
+fn one<U>(a: U) -> i32 {
+    return 1;
+}
+
+export fn run() with Stdout {
+    let h = Holder { v: 3 };
+    println(`${h.width("x")}`);
+}
+
+__DATA__
+{"stdout": "2\n"}

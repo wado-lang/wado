@@ -1,0 +1,20 @@
+// A trait's `affine U` binds the impl's argument affine whatever the impl names
+// it: `impl<U> Sink<U>` copies `v` no more than `impl<X> Sink<X>` may.
+trait Sink<affine U> with () {
+    fn put(&mut self, v: U) -> i32;
+}
+
+struct S {}
+
+impl<U> Sink<U> for S {
+    fn put(&mut self, v: U) -> i32 {
+        let a = v;
+        let b = v;
+        return 0;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":12:17: analysis error: affine value `v` used after it was moved (moved at 11:17)"}
