@@ -56,8 +56,6 @@ failed read was reached through. A struct field is written by its wire name,
 and so is the payload of a case and an internal tag. An element of a list or a
 set is written as `[i]`, and a map value as its key, as `Inspect` writes the key
 (`by["k"]`). Displayed, the error leads with its path: `items[1].n: <message>`.
-Each step is added where the read has already failed, so a read that succeeds
-pays nothing for it.
 
 > Not yet implemented: an element of a tuple adds no step to the path.
 

@@ -4806,7 +4806,6 @@ pub struct VariantDecl {
 /// - Unit variants: `None` → payload is `None` (parser level), becomes `()` in TIR
 /// - Scalar payloads: `Some(T)` → payload is `Some(T)`
 /// - Tuple payloads: `Rectangle([f64, f64])` → payload is `Some([f64, f64])`
-/// - Struct payloads: `Named({ w: f64 })` → payload is `Some({ w: f64 })`
 #[derive(Debug, Clone)]
 pub struct VariantCase {
     pub id: AstId,
