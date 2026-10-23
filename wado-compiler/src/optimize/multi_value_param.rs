@@ -132,11 +132,13 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
         let mut reads = c.reads.clone();
         let agrees = c.forwards.iter().all(|f| {
             candidates.get(f).is_some_and(|g| {
+                // The argument is the local itself, or a reference to it.
+                assert_eq!(
+                    type_table.type_key(g.aggregate),
+                    type_table.type_key(c.aggregate)
+                );
                 reads.extend(g.taken().1);
-                // One type can carry two keys, a type argument spelled once
-                // as its instance and once as the struct it resolved to.
                 g.through_ref == c.through_ref
-                    && type_table.type_key(g.aggregate) == type_table.type_key(c.aggregate)
             })
         });
         if !agrees {
