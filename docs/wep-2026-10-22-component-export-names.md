@@ -54,16 +54,29 @@ use { "a:x/trip" as Trip, "b:y/trip" as YTrip, twin } from "./dup.wasm" with { t
 
 A string is not an identifier, so a string-named import takes `as`.
 
-### A short name collides into an error
+### A name the component gives outranks one Wado derives
 
-Each interface is also offered under its short name, its last label in
-`PascalCase`, as it is today. These names, the plain-named exports, and the
-default interface's functions and types share the module's one namespace.
-Where two of them coincide, the name is an error at the `use` that names what
-it could mean. Only a path through a full name reaches either. A short name
-never answers with the first item, nor with an unspecified one.
+Each interface is also offered under its basename: the last label of its
+interface name, without the version, in `PascalCase` (`a:x/trip@0.1.0` is
+`Trip`), as it is today. These names share the module's one namespace with the
+plain-named exports and the default interface's functions and types, in three
+ranks:
 
-This is the rule a package's default interfaces already follow for their
+1. A plain-named export. The component gave the name.
+2. A function or a type of the default interface. A Wado library declares
+   these at module level, so a `use` of the library reads the same from source
+   and from a component.
+3. An interface's basename. Wado derived the name.
+
+Where two names of different ranks coincide, the higher rank keeps it, as a
+world-level function already keeps its name over a default interface's
+function. A library `acme:counter` that exports `struct Counter` keeps
+`Counter` for the type, and its default interface is reached by its full name.
+Where two names of one rank coincide, the name is an error at the `use` that
+names what it could mean, and only a path through a full name reaches either.
+A name never answers with the first item found, nor with an unspecified one.
+
+The error is the rule a package's default interfaces already follow for their
 functions
 ([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)),
 made general.
@@ -77,7 +90,7 @@ also be imported by its full name:
 use { "wasi:cli/stdout" as Stdout } from "wasi:cli";
 ```
 
-The short-name rule does not reach them. A `wasi:*` module is Wado source, and
+The ranking does not reach them. A `wasi:*` module is Wado source, and
 its module-level names are the ones its `pub use` list chooses: `wasi:sockets`
 offers the `ErrorCode` of `wasi:sockets/types`, though
 `wasi:sockets/ip-name-lookup` declares one too.
@@ -168,9 +181,9 @@ disagreement is an error naming both files.
 
 - [ ] A string-named import parses, and reaches an interface of a `.wasm` or a
   WIT-generated module by its full name, with or without its version.
-- [ ] A module-level name two items of a component share is an error naming
-  what it could mean. The fixture from issue #2421 imports both `trip`
-  interfaces by full name.
+- [ ] A name items of different ranks share goes to the higher rank, and one
+  two items of one rank share is an error naming what it could mean. The
+  fixture from issue #2421 imports both `trip` interfaces by full name.
 - [ ] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.

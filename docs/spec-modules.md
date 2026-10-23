@@ -452,16 +452,19 @@ or side-car `.wit` is involved.
   same way. A full name may leave out its version where the module offers that
   interface at one version; where it offers two, the version is required.
 - An exported interface becomes a Wado `interface`, also offered under its
-  short name: its last label in `PascalCase` (`Trip`).
+  basename: the last label of its interface name, without the version, in
+  `PascalCase` (`Trip`).
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
   and a type alias a newtype. Each belongs to its interface, as a type an
   `interface` declares does ([Effect Definition](./spec-effects.md#effect-definition)),
   except the default interface's (below).
-- Short names, plain-named exports and the default interface's functions and
-  types share the module's one namespace. Importing a name two of them share is
-  an error, and the error names each item the name could mean. Only a path
-  through a full name reaches either. A `wasi:*` module is Wado source, so its
+- The module's names share one namespace, in three ranks: a plain-named
+  export, then a function or type of the default interface (below), then an
+  interface's basename. Where names of different ranks coincide, the higher
+  rank keeps the name. Importing a name two items of one rank share is an
+  error, and the error names each item the name could mean. A full name reaches
+  an item whatever its rank. A `wasi:*` module is Wado source, so its
   module-level names are the ones its own `pub use` list gives.
 - A non-WASI interface the component imports is an item of its module too,
   named by the same rules as an export. An interface name has one declaration
@@ -473,9 +476,8 @@ or side-car `.wit` is involved.
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
   Each of its functions is also a free function of the module, and each of its
   types an item of the module, imported by bare name. So a `use` of a library
-  reads the same whether its source is Wado code or a component. A world-level
-  function keeps its name over an interface function of the same name. Any
-  other interface, an imported one included, is reached only through its name.
+  reads the same whether its source is Wado code or a component. Any other
+  interface, an imported one included, is reached only through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`
@@ -485,7 +487,7 @@ or side-car `.wit` is involved.
   A `stream<T>` or `future<T>` value is the readable end; the writable end stays
   with whoever created the pair.
 
-> Not yet implemented: a full-name import, the error for a shared short name,
+> Not yet implemented: a full-name import, the ranks of a shared name,
 > types named through their interface, and one declaration per imported
 > interface name ([WEP](./wep-2026-10-22-component-export-names.md)).
 
