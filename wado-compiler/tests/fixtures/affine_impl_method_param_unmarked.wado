@@ -1,0 +1,20 @@
+// A trait method's `affine T` admits a move-only argument, so an impl that
+// leaves it unmarked could copy one in its body: the impl must restate it.
+trait Sink with () {
+    fn put<affine T>(&mut self, v: T) -> i32;
+}
+
+struct S {}
+
+impl Sink for S {
+    fn put<T>(&mut self, v: T) -> i32 {
+        let a = v;
+        let b = v;
+        return 2;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":10:12: type error: method `put` declares `T` unmarked, but `Sink` declares `affine T`: its body may copy an argument the trait admits as move-only"}
