@@ -1350,7 +1350,10 @@ pub(super) fn generate_hole_bridge_helpers(
     helpers.extend(generate_read_bridge_helpers(
         type_table,
         &segments,
-        (|subject, _| template_segment_helper_name(subject), Read::Value),
+        (
+            |subject, _| template_segment_helper_name(subject),
+            Read::Value,
+        ),
         struct_type,
         ref_struct_type,
         span,

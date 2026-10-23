@@ -1386,11 +1386,10 @@ impl FunctionTranslator<'_, '_> {
             .map(Vec::as_slice)
     }
 
-    /// Whether a callee's N results can be handed straight to another's N
-    /// parameters, which the lowered `WirType` of each field decides.
+    /// Whether a callee's results hold every field another's parameters take,
+    /// which the lowered `WirType` of each field decides.
     // Not `TypeKey`: it resolves through newtype erasure, so two fields share
     // one and still lower to a ref against an i32.
-    /// Whether every one of `wanted` is among `got`, with the same Wasm type.
     fn abi_fields_cover(&self, got: &[(String, TypeId)], wanted: &[(String, TypeId)]) -> bool {
         wanted.iter().all(|(wn, wt)| {
             got.iter().any(|(gn, gt)| {

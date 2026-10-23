@@ -14,13 +14,13 @@ use crate::nir_arena::{
     ArenaStructField, Body, ExprId, ExprKind, NodeRef, Operand, PackedData, PatKind, StmtKind,
     Tracked,
 };
-use crate::token::Span;
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::TypeTable;
+use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
 use super::body_memo::BodyMemo;
@@ -48,48 +48,83 @@ const MAX_CLONE_EXPRS: usize = 2000;
 
 /// A constant known for a parameter or field. Portable across functions,
 /// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
-/// `Int` / `Float` carry their `TypeId` so a width mismatch is rejected.
+/// `Int` / `Float` carry their type so a width mismatch is rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FieldConst {
-    Int(u64, TypeId),
-    Float(u64, TypeId),
+    Int(u64, ConstType),
+    Float(u64, ConstType),
     Bool(bool),
     Char(char),
-    /// A literal built of constants alone, such as a `String` literal. A read
-    /// is replaced by a fresh copy of it, as the literal at the call builds a
-    /// fresh object.
+    /// A literal built of constants alone, such as a `String` literal. The
+    /// clone builds it once and its reads name that one object, as the
+    /// caller's reads named the one it passed.
     Literal(Arc<ConstLiteral>),
+}
+
+/// The type of a constant: its key says which constants are one, and its id
+/// types a node rebuilt from it.
+#[derive(Debug, Clone, Copy)]
+struct ConstType {
+    key: TypeKey,
+    id: TypeId,
+}
+
+impl ConstType {
+    fn of(types: &TypeTable, id: TypeId) -> Self {
+        ConstType {
+            key: types.type_key(id),
+            id,
+        }
+    }
+
+    fn admits(&self, types: &TypeTable, at: TypeId) -> bool {
+        self.key == types.type_key(at)
+    }
+}
+
+impl PartialEq for ConstType {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for ConstType {}
+
+impl std::hash::Hash for ConstType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+    }
 }
 
 /// A closed literal tree, held outside any body so a clone can rebuild it.
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum ConstLiteral {
-    Packed(PackedData, TypeId),
+    Packed(PackedData, ConstType),
     Struct {
-        struct_type: TypeId,
+        struct_type: ConstType,
         struct_name: String,
         /// Index, name, value and type of each field.
-        fields: Vec<(u32, String, FieldConst, TypeId)>,
+        fields: Vec<(u32, String, FieldConst, ConstType)>,
     },
 }
 
 impl FieldConst {
     /// The constant an operand holds, or `None` otherwise.
-    fn of_operand(body: &Body, op: Operand) -> Option<Self> {
+    fn of_operand(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
         match op {
-            Operand::Value(_) => Self::of_scalar(body, op),
-            Operand::Expr(expr) => Self::of_literal(body, expr),
+            Operand::Value(_) => Self::of_scalar(body, types, op),
+            Operand::Expr(expr) => Self::of_literal(body, types, expr),
         }
     }
 
     /// The scalar constant an operand holds. Only a scalar may stand for a
-    /// whole parameter: a literal there would be a fresh object at every read,
-    /// and the body's writes to its fields would reach none of them.
-    fn of_scalar(body: &Body, op: Operand) -> Option<Self> {
+    /// whole parameter: a literal there would name a new object, and the
+    /// body's writes to the parameter's fields would reach none of its reads.
+    fn of_scalar(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
-            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, *ty)),
-            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, *ty)),
+            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, ConstType::of(types, *ty))),
+            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, ConstType::of(types, *ty))),
             ValueKind::Bool(b) => Some(FieldConst::Bool(*b)),
             ValueKind::Char(c) => Some(FieldConst::Char(*c)),
             ValueKind::Null
@@ -105,22 +140,24 @@ impl FieldConst {
         }
     }
 
-    fn of_literal(body: &Body, expr: ExprId) -> Option<Self> {
+    fn of_literal(body: &Body, types: &TypeTable, expr: ExprId) -> Option<Self> {
         let node = &body.exprs[expr];
         let literal = match &node.kind {
-            ExprKind::PackedArray(data) => ConstLiteral::Packed(data.clone(), node.type_id),
+            ExprKind::PackedArray(data) => {
+                ConstLiteral::Packed(data.clone(), ConstType::of(types, node.type_id))
+            }
             ExprKind::StructLiteral {
                 struct_type,
                 struct_name,
                 fields,
             } => ConstLiteral::Struct {
-                struct_type: *struct_type,
+                struct_type: ConstType::of(types, *struct_type),
                 struct_name: struct_name.clone(),
                 fields: fields
                     .iter()
                     .map(|f| {
-                        let value = Self::of_operand(body, f.value)?;
-                        let ty = body.operand_type(f.value);
+                        let value = Self::of_operand(body, types, f.value)?;
+                        let ty = ConstType::of(types, body.operand_type(f.value));
                         Some((f.field_index, f.name.clone(), value, ty))
                     })
                     .collect::<Option<_>>()?,
@@ -141,8 +178,10 @@ impl FieldConst {
         span: Span,
     ) -> Option<Operand> {
         let kind = match self {
-            FieldConst::Int(n, ty) => (*ty == at).then_some(ValueKind::Int(*n, at))?,
-            FieldConst::Float(bits, ty) => (*ty == at).then_some(ValueKind::Float(*bits, at))?,
+            FieldConst::Int(n, ty) => ty.admits(types, at).then_some(ValueKind::Int(*n, at))?,
+            FieldConst::Float(bits, ty) => ty
+                .admits(types, at)
+                .then_some(ValueKind::Float(*bits, at))?,
             FieldConst::Bool(b) => ValueKind::Bool(*b),
             FieldConst::Char(c) => ValueKind::Char(*c),
             FieldConst::Literal(literal) => {
@@ -154,9 +193,12 @@ impl FieldConst {
 }
 
 impl ConstLiteral {
-    fn type_id(&self) -> TypeId {
+    fn ty(&self) -> ConstType {
         match self {
-            ConstLiteral::Packed(_, ty) | ConstLiteral::Struct { struct_type: ty, .. } => *ty,
+            ConstLiteral::Packed(_, ty)
+            | ConstLiteral::Struct {
+                struct_type: ty, ..
+            } => *ty,
         }
     }
 
@@ -167,7 +209,7 @@ impl ConstLiteral {
         at: TypeId,
         span: Span,
     ) -> Option<ExprId> {
-        if types.type_key(self.type_id()) != types.type_key(at) {
+        if !self.ty().admits(types, at) {
             return None;
         }
         let kind = match self {
@@ -182,13 +224,13 @@ impl ConstLiteral {
                     .map(|(field_index, name, value, ty)| {
                         Some(ArenaStructField {
                             name: name.clone(),
-                            value: value.operand_at(engine, types, *ty, span)?,
+                            value: value.operand_at(engine, types, ty.id, span)?,
                             field_index: *field_index,
                         })
                     })
                     .collect::<Option<_>>()?;
                 ExprKind::StructLiteral {
-                    struct_type: *struct_type,
+                    struct_type: struct_type.id,
                     struct_name: struct_name.clone(),
                     fields,
                 }
@@ -433,6 +475,7 @@ fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
 /// accounted by that pairing rather than by this walk.
 fn collect_local_uses(
     body: &Body,
+    types: &TypeTable,
     tracked: &IndexSet<u32>,
     alias_reads: &IndexSet<ExprId>,
     signatures: &Signatures,
@@ -460,7 +503,7 @@ fn collect_local_uses(
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
                     uses.writes
-                        .push((*field_index, FieldConst::of_operand(body, *value)));
+                        .push((*field_index, FieldConst::of_operand(body, types, *value)));
                 } else {
                     uses.reads.insert(*field_index);
                 }
@@ -636,6 +679,8 @@ fn summarize_params(
     exec: &Executor,
 ) -> IndexMap<(FuncId, u32), ParamFacts> {
     let functions = &project.functions;
+    let types = project.type_table.borrow();
+    let types: &TypeTable = &types;
     let per_function = exec.map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
@@ -649,12 +694,20 @@ fn summarize_params(
                 pointee.map(|_| signatures.param_locals[index][position])
             })
             .collect();
+        if tracked.is_empty() {
+            return Vec::new();
+        }
         let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
         let (alias_of, alias_reads) = param_aliases(body, &tracked);
-        if !tracked.is_empty() {
-            let with_aliases = tracked.iter().chain(alias_of.keys()).copied().collect();
-            collect_local_uses(body, &with_aliases, &alias_reads, signatures, &mut uses);
-        }
+        let with_aliases = tracked.iter().chain(alias_of.keys()).copied().collect();
+        collect_local_uses(
+            body,
+            types,
+            &with_aliases,
+            &alias_reads,
+            signatures,
+            &mut uses,
+        );
         tracked
             .into_iter()
             .map(|local| {
@@ -745,7 +798,7 @@ fn struct_literal_consts(
         fields
             .iter()
             .filter_map(|field| {
-                FieldConst::of_operand(body, field.value).map(|c| (field.field_index, c))
+                FieldConst::of_operand(body, types, field.value).map(|c| (field.field_index, c))
             })
             .collect(),
     )
@@ -853,7 +906,7 @@ fn collect_roots(
 
     let tracked: IndexSet<u32> = roots.keys().copied().collect();
     let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-    collect_local_uses(body, &tracked, &alias_reads, signatures, &mut uses);
+    collect_local_uses(body, types, &tracked, &alias_reads, signatures, &mut uses);
 
     for (local, use_facts) in &uses {
         let Some(consts) = roots.get_mut(local) else {
@@ -1091,7 +1144,7 @@ fn select_sites(
                         && signatures.scalar_specializable[index]
                         && signatures.param_fixed[index][position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = FieldConst::of_scalar(body, arg)
+                        && let Some(value) = FieldConst::of_scalar(body, types, arg)
                     {
                         bindings.push((param_local, Slot::Whole, value));
                     }
@@ -1104,7 +1157,9 @@ fn select_sites(
         if let Some(bound) = state.bound_slots.get(&callee) {
             let names = &signatures.param_names[index];
             bindings.retain(|(param, slot, _)| {
-                let position = signatures.param_locals[index].iter().position(|p| p == param);
+                let position = signatures.param_locals[index]
+                    .iter()
+                    .position(|p| p == param);
                 let name = &names[position.expect("a binding names a parameter")];
                 !bound.contains(&(name.clone(), *slot))
             });
@@ -1114,7 +1169,9 @@ fn select_sites(
         }
         bindings.sort_unstable_by_key(|(param, slot, _)| (*param, *slot));
         assert!(
-            bindings.windows(2).all(|w| (w[0].0, w[0].1) != (w[1].0, w[1].1)),
+            bindings
+                .windows(2)
+                .all(|w| (w[0].0, w[0].1) != (w[1].0, w[1].1)),
             "a call binds each slot once"
         );
         sites.push(Site {
@@ -1281,6 +1338,8 @@ fn collect_call_constants(
     exec: &Executor,
 ) -> CallConsts {
     let functions = &project.functions;
+    let types = project.type_table.borrow();
+    let types: &TypeTable = &types;
     let positions: Vec<usize> = reachable.iter().copied().collect();
     let per_function = exec.map(&positions, |&pos| {
         let func = functions[pos].borrow();
@@ -1288,7 +1347,7 @@ fn collect_call_constants(
         if !func.is_dead
             && let Some(body) = &func.body
         {
-            collect_body_call_constants(body, &mut constants);
+            collect_body_call_constants(body, types, &mut constants);
         }
         constants
     });
@@ -1297,7 +1356,7 @@ fn collect_call_constants(
         join_call(&mut constants, callee, here);
     }
     for global in &project.globals {
-        collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
+        collect_body_call_constants(global.init.slot_expr().body(), types, &mut constants);
     }
     constants
 }
@@ -1316,7 +1375,7 @@ fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>
     }
 }
 
-fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
+fn collect_body_call_constants(body: &Body, types: &TypeTable, constants: &mut CallConsts) {
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(e) = node else { return };
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
@@ -1326,7 +1385,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
             .iter()
             .map(|arg| {
                 (!arg.is_mut)
-                    .then(|| FieldConst::of_scalar(body, arg.expr))
+                    .then(|| FieldConst::of_scalar(body, types, arg.expr))
                     .flatten()
             })
             .collect();
@@ -1516,7 +1575,9 @@ fn build_clones(
                 .unwrap_or_default();
             for (name, seed) in clone.param_consts {
                 match seeds.get_mut(&name) {
-                    Some(known) if known.pointee == seed.pointee => known.consts.extend(seed.consts),
+                    Some(known) if known.pointee == seed.pointee => {
+                        known.consts.extend(seed.consts)
+                    }
                     Some(_) | None => {
                         seeds.insert(name, seed);
                     }
@@ -1823,9 +1884,16 @@ fn redirect_const_reads(
                     continue;
                 }
                 let name = engine.local_name(local);
-                Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span))
+                Operand::Expr(engine.alloc_expr(
+                    ExprKind::Local { index: local, name },
+                    type_id,
+                    span,
+                ))
             }
-            FieldConst::Int(..) | FieldConst::Float(..) | FieldConst::Bool(_) | FieldConst::Char(_) => {
+            FieldConst::Int(..)
+            | FieldConst::Float(..)
+            | FieldConst::Bool(_)
+            | FieldConst::Char(_) => {
                 let Some(operand) = value.operand_at(engine, types, type_id, span) else {
                     continue;
                 };

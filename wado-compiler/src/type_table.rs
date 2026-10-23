@@ -996,11 +996,10 @@ impl TypeTable {
             AnonShape::Fields(fields) => fields,
             AnonShape::Template(shape) => {
                 let string_type = self.make_compiler_struct(CompilerItem::String);
-                let holes = shape
-                    .holes
-                    .iter()
-                    .enumerate()
-                    .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)));
+                let holes =
+                    shape.holes.iter().enumerate().map(|(k, hole)| {
+                        (TemplateShape::field_name(k), self.hole_field_type(hole.ty))
+                    });
                 let segments = shape
                     .segment_keys()
                     .map(|key| (shape.segment_field(key).0, string_type));

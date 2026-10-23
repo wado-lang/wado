@@ -391,7 +391,7 @@ fn byte_len<S: AsStrSlice>(s: S) -> i32 {
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
 
-Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on one value holding the template's holes, each in its own type, and the literal text around them.
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
