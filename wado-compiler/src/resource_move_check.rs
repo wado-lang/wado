@@ -13,9 +13,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::ownership::{
-    self, BodyFacts, Modes, OperandMode, PlacePath, affine_params,
-};
+use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
 use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
@@ -269,7 +267,7 @@ impl Checker<'_> {
         match item {
             Item::Function(func) => self.check_function(func, false),
             Item::Impl(b) => {
-                self.check_impl_trait(b, &affine_params(&b.type_params));
+                self.check_impl_trait(b);
                 let drop_impl = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
                     self.check_function(method, drop_impl);
@@ -378,7 +376,7 @@ impl Checker<'_> {
 
     /// An affine type implements only an `affine trait`: an unmarked trait's
     /// default bodies are checked with `Self` copyable.
-    fn check_impl_trait(&mut self, b: &ImplBlock, scope: &[String]) {
+    fn check_impl_trait(&mut self, b: &ImplBlock) {
         let Some(trait_type) = &b.trait_type else {
             return;
         };
@@ -388,12 +386,12 @@ impl Checker<'_> {
         let mut type_name = String::new();
         unparse_type_into(&b.ty, &mut type_name);
         if Some(t.id) == self.drops.trait_id {
-            if !self.impl_self_is_affine(b, scope) {
+            if !self.impl_self_is_affine(b) {
                 self.push(MoveError::DropOnCopyable { type_name }, trait_type.span());
             }
             return;
         }
-        if t.is_affine || !self.impl_self_is_affine(b, scope) {
+        if t.is_affine || !self.impl_self_is_affine(b) {
             return;
         }
         self.push(
@@ -407,10 +405,13 @@ impl Checker<'_> {
 
     /// Whether the implementing type is affine: affine in every instantiation,
     /// or written with an `affine` parameter of the impl as an argument.
-    fn impl_self_is_affine(&self, b: &ImplBlock, scope: &[String]) -> bool {
+    fn impl_self_is_affine(&self, b: &ImplBlock) -> bool {
         let mut mentioned = Vec::new();
         b.ty.mentioned_names(&mut mentioned);
-        let names_affine_param = mentioned.iter().any(|name| scope.contains(name));
+        let names_affine_param = b
+            .type_params
+            .iter()
+            .any(|p| p.is_affine && mentioned.contains(&p.name));
         names_affine_param
             || self
                 .sem

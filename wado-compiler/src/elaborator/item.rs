@@ -1303,7 +1303,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Walk a function's body, with its parameters bound, and check how it ends.
     fn walk_fn_body(&mut self, func: &Function, return_type: TypeId, ctx: &mut FunctionContext) {
         let affine_params = self.annotate_ctx.trait_ctx.affine_params();
-        self.sem.types.fn_affine_params.insert(func.id, affine_params);
+        self.sem
+            .types
+            .fn_affine_params
+            .insert(func.id, affine_params);
         if let Some(b) = func.body.as_ref() {
             self.resolve_block(b, ctx, None);
         }

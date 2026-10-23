@@ -549,7 +549,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
-        ctx.shadowed.clear();
+        ctx.clear_binders();
         ctx.type_params = binders;
         body(&mut scope)
     }

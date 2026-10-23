@@ -4,8 +4,7 @@
 //! that moves.
 
 use crate::ast::{
-    AstId, Block, Condition, ConditionElement, Expr, GenericParam, IdentExpr, Literal, MatchArm,
-    Stmt, UnaryOp,
+    AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm, Stmt, UnaryOp,
 };
 use crate::hashmap::IndexMap;
 use crate::symbol::{Symbol, SymbolKind};
@@ -27,15 +26,6 @@ pub(crate) trait BodyFacts {
     /// Whether `ident` names a variable, a local or a global, rather than a
     /// function or a case.
     fn names_variable(&self, ident: &IdentExpr) -> bool;
-}
-
-/// The names of `params` declared `affine`.
-pub(crate) fn affine_params<'a>(params: impl IntoIterator<Item = &'a GenericParam>) -> Vec<String> {
-    params
-        .into_iter()
-        .filter(|p| p.is_affine)
-        .map(|p| p.name.clone())
-        .collect()
 }
 
 /// A place a body reads: a binding and the field path into it (`h.f.g`).
