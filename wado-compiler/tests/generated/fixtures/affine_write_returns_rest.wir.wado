@@ -380,34 +380,29 @@ fn "affine_write_returns_rest.wado/$cm_future_write_core:prelude/string.wado/Str
 }
 
 fn "affine_write_returns_rest.wado/$cm_stream_write_i32"(handle, data) {
-    let $load_1: i32;
+    let $list_len: i32;
     let $list_base: i32;
     let $list_i: i32;
     let $list_addr: i32;
     let $list_elem: i32;
-    let $licm_used_61: i32;
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = data.repr;
-    $load_1 = data.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    if @unlikely(536870911 <u $load_1) {
+    let $licm_used_58: i32;
+    let $licm_repr_59: ref Array<i32>;
+    $list_len = data.used;
+    if @unlikely(536870911 <u $list_len) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
-    $list_base = "mem/realloc"(0, 0, 4, $load_1 * 4);
+    $list_base = "mem/realloc"(0, 0, 4, $list_len * 4);
     $list_i = 0;
-    $array_clone_src_1 = data.repr;
-    $licm_used_61 = data.used;
-    if $load_1 <= $licm_used_61 {
+    $licm_used_58 = data.used;
+    $licm_repr_59 = data.repr;
+    if $list_len <= $licm_used_58 {
         b14: block {
             l15: loop {
-                break_if b14 $list_i >= $load_1;
+                break_if b14 $list_i >= $list_len;
                 $list_addr = $list_base + ($list_i * 4);
-                let $array_clone_dst_7: ref Array<i32>;
-                builtin::array_copy<i32>(local.tee $array_clone_dst_7(builtin::array_new<i32>($licm_used_61)), 0, $array_clone_src_1, 0, $licm_used_61);
-                $list_elem = builtin::array_get_value<i32>(local.tee $array_clone_dst_2($array_clone_dst_7), $list_i);
+                $list_elem = builtin::array_get_value<i32>($licm_repr_59, $list_i);
                 builtin::store_i32($list_addr, $list_elem);
                 $list_i = $list_i + 1;
                 continue l15;
@@ -416,44 +411,42 @@ fn "affine_write_returns_rest.wado/$cm_stream_write_i32"(handle, data) {
     } else {
         b16: block {
             l17: loop {
-                break_if b16 $list_i >= $load_1;
+                break_if b16 $list_i >= $list_len;
                 $list_addr = $list_base + ($list_i * 4);
-                builtin::array_copy<i32>(local.tee $array_clone_dst_7(builtin::array_new<i32>($licm_used_61)), 0, $array_clone_src_1, 0, $licm_used_61);
-                $array_clone_dst_2 = $array_clone_dst_7;
-                if @unlikely($list_i >= $licm_used_61) {
+                if @unlikely($list_i >= $licm_used_58) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($list_i, $licm_used_61, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_write_returns_rest.wado:1"), used: 32 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($list_i, $licm_used_58, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_write_returns_rest.wado:1"), used: 32 });
                     unreachable;
                 }
-                $list_elem = builtin::array_get_value<i32>($array_clone_dst_2, $list_i);
+                $list_elem = builtin::array_get_value<i32>($licm_repr_59, $list_i);
                 builtin::store_i32($list_addr, $list_elem);
                 $list_i = $list_i + 1;
                 continue l17;
             };
         };
     }
-    $licm_used_61 = $inline_cm_await_blocked_6: block -> i32 {
-        if local.tee $list_elem("wasi/stream-write:val-s32"(handle, $list_base, select i32($load_1 < 268435455, $load_1, 268435455))) != -1 {
-            break $inline_cm_await_blocked_6: $list_elem;
+    $licm_used_58 = $inline_cm_await_blocked_4: block -> i32 {
+        if local.tee $list_elem("wasi/stream-write:val-s32"(handle, $list_base, select i32($list_len < 268435455, $list_len, 268435455))) != -1 {
+            break $inline_cm_await_blocked_4: $list_elem;
         }
         $list_elem = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, $list_elem);
         $list_addr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"($list_elem, $list_addr));
-        $licm_used_61 = builtin::load_i32($list_addr + 4);
+        $licm_used_58 = builtin::load_i32($list_addr + 4);
         drop("mem/realloc"($list_addr, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
         "wasi/waitable-set-drop"($list_elem);
-        break $inline_cm_await_blocked_6: $licm_used_61;
+        break $inline_cm_await_blocked_4: $licm_used_58;
     };
-    drop("mem/realloc"($list_base, $load_1 * 4, 4, 0));
-    return struct.new "core:prelude/types.wado//StreamWrite<i32>" { rest: $load_1 = $licm_used_61 >>u 4; $list_base = data.used; if @unlikely($load_1 >u $list_base) {
+    drop("mem/realloc"($list_base, $list_len * 4, 4, 0));
+    return struct.new "core:prelude/types.wado//StreamWrite<i32>" { rest: $list_len = $licm_used_58 >>u 4; $list_base = data.used; if @unlikely($list_len >u $list_base) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::split_off$contract_report0"($load_1, $list_base, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_write_returns_rest.wado:1"), used: 32 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::split_off$contract_report0"($list_len, $list_base, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_write_returns_rest.wado:1"), used: 32 });
         unreachable;
-    }; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee $list_base($list_base - $load_1))), 0, data.repr, $load_1, $list_base); ; data.used = $load_1; struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_2, used: $list_base }, result: (if local.tee $licm_used_61($licm_used_61 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+    }; builtin::array_copy<i32>(local.tee $licm_repr_59(builtin::array_new<i32>(local.tee $list_base($list_base - $list_len))), 0, data.repr, $list_len, $list_base); ; data.used = $list_len; struct.new "core:prelude//List<i32>" { repr: $licm_repr_59, used: $list_base }, result: (if local.tee $licm_used_58($licm_used_58 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
-    } else if @likely($licm_used_61 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+    } else if @likely($licm_used_58 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
         1;
     } else {
         "core:rt/unreachable"();

@@ -1704,10 +1704,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &trait_method_impls(&state.tysys),
                 liveness_scope,
             );
-            // Lowering alone reads the last uses, to elide copies.
-            if build_tir {
-                liveness::compute_last_uses(modules, &direct, &mut state.liveness);
-            }
         }
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it

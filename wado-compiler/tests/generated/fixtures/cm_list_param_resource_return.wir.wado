@@ -72,38 +72,32 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) with Api {
-    let $load_1: i32;
+    let $entries_len: i32;
     let $entries_base: i32;
     let $entries_i: i32;
     let $entries_addr: i32;
     let $entries_elem: u32;
-    let $licm_used_25: i32;
-    let $array_clone_src_1: ref Array<u32>;
-    $array_clone_src_1 = entries.repr;
-    $load_1 = entries.used;
-    let $array_clone_dst_2: ref Array<u32>;
-    builtin::array_copy<u32>(local.tee $array_clone_dst_2(builtin::array_new<u32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    if @unlikely(536870911 <u $load_1) {
+    let $licm_repr_23: ref Array<u32>;
+    $entries_len = entries.used;
+    if @unlikely(536870911 <u $entries_len) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
-    $entries_base = "mem/realloc"(0, 0, 4, $load_1 * 4);
+    $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 4);
     $entries_i = 0;
-    $array_clone_src_1 = entries.repr;
-    $licm_used_25 = entries.used;
+    $licm_repr_23 = entries.repr;
     b1: block {
         l2: loop {
-            break_if b1 $entries_i >= $load_1;
+            break_if b1 $entries_i >= $entries_len;
             $entries_addr = $entries_base + ($entries_i * 4);
-            builtin::array_copy<u32>(local.tee $array_clone_dst_2(builtin::array_new<u32>($licm_used_25)), 0, $array_clone_src_1, 0, $licm_used_25);
-            $entries_elem = builtin::array_get_value<u32>($array_clone_dst_2, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_23, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l2;
         };
     };
-    return "wasi/wasi:demo/Api::make_layout"($entries_base, $load_1);
+    return "wasi/wasi:demo/Api::make_layout"($entries_base, $entries_len);
 }
 
 fn "cm_list_param_resource_return.wado/$cm_binding__Layout_id"(self) with Layout {

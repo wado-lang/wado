@@ -1077,6 +1077,7 @@ fn generate_struct_default_slot_fn(
                     guard: None,
                     body,
                     span,
+                    consumes: true,
                 };
                 TirExpr::new(
                     TirExprKind::Match {
@@ -2161,6 +2162,7 @@ pub(super) fn case_index_dispatch(
             guard: None,
             body: arm_body(case_name, *index),
             span,
+            consumes: true,
         })
         .collect();
     arms.push(TirMatchArm {
@@ -2168,6 +2170,7 @@ pub(super) fn case_index_dispatch(
         guard: None,
         body: unreachable_call(result_type, span),
         span,
+        consumes: true,
     });
     TirExpr::new(
         TirExprKind::Match {
@@ -5401,12 +5404,14 @@ fn variant_case_pairs(
                         guard: None,
                         body,
                         span,
+                        consumes: true,
                     },
                     TirMatchArm {
                         pattern: TirPattern::Wildcard,
                         guard: None,
                         body: otherwise,
                         span,
+                        consumes: true,
                     },
                 ],
             },
@@ -5432,6 +5437,7 @@ fn variant_case_pairs(
                 guard: None,
                 body,
                 span,
+                consumes: true,
             });
             continue;
         }
@@ -5458,6 +5464,7 @@ fn variant_case_pairs(
                 body,
             ),
             span,
+            consumes: true,
         });
     }
     let outer_match = TirExpr::new(

@@ -359,6 +359,7 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
             span,
         ),
         span,
+        consumes: true,
     };
     let some_arm = arm(
         TirPattern::Variant {
@@ -638,6 +639,7 @@ fn generate_inline_task_return(
                 span,
             ),
             span,
+            consumes: true,
         };
         let err_arm = TirMatchArm {
             pattern: TirPattern::Variant {
@@ -658,6 +660,7 @@ fn generate_inline_task_return(
                 span,
             ),
             span,
+            consumes: true,
         };
         let match_expr = TirExpr::new(
             TirExprKind::Match {

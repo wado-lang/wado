@@ -261,8 +261,9 @@ consumes `h.f`, after which `h` is not usable as a whole, each other field may
 still be moved out once, and what `h` still holds drops at scope exit.
 `..base` consumes `base`: a field the literal lists
 replaces the one `base` carried, which is dropped. A type that implements
-`Drop` gives up no field this way, as SE-0429 holds for a type with a `deinit`:
-its `drop` relies on the fields it was built with.
+`Drop` gives up no field this way, nor to a pattern binding an affine part of
+it, as SE-0429 holds for a type with a `deinit`: its `drop` relies on the
+fields it was built with.
 
 ### A reference is read only while its local holds the value
 

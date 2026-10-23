@@ -1,0 +1,23 @@
+// A temporary a pattern leaves part of spills into a local declared empty. The
+// store filling it must not be taken for another synthesized store, one into a
+// tuple a reference holds, which lowering writes in place: writing into the
+// empty local traps.
+
+test "a destructuring let" {
+    let [rx, _] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let mut pair = [rx, 1];
+    let r = &pair;
+    pair = [rx2, 2];
+    assert r.1 == 2;
+}
+
+test "a match" {
+    let mut pair = match Stream::<u8>::new() {
+        [rx, _] => [rx, 1],
+    };
+    let [rx2, tx2] = Stream::<u8>::new();
+    let r = &pair;
+    pair = [rx2, 2];
+    assert r.1 == 2;
+}

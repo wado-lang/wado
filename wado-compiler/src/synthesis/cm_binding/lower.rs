@@ -18,7 +18,7 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
     expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
-    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, ref_expr,
     split_packed_ptr_len, synth_span,
 };
 
@@ -350,6 +350,7 @@ fn synthesize_lower_variant_to_memory(
                     span,
                 ),
                 span,
+                consumes: true,
             });
         } else {
             arms.push(TirMatchArm {
@@ -367,6 +368,7 @@ fn synthesize_lower_variant_to_memory(
                     span,
                 ),
                 span,
+                consumes: true,
             });
         }
     }
@@ -541,6 +543,7 @@ pub(super) fn synthesize_lower_option_to_memory(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -557,6 +560,7 @@ pub(super) fn synthesize_lower_option_to_memory(
             span,
         ),
         span,
+        consumes: true,
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -636,6 +640,63 @@ pub(super) fn buffer_bytes(count: TirExpr, elem_size: i32) -> TirExpr {
     )
 }
 
+/// `List::len(&list)`.
+pub(super) fn list_len(list: TirExpr, ctx: &LowerContext<'_>) -> TirExpr {
+    generic_method_call(
+        borrow_list(list, ctx),
+        &ctx.names.array_fq,
+        "len",
+        ModuleSource::list(),
+        ctx.names.list_len.clone(),
+        vec![],
+        TypeTable::I32,
+    )
+}
+
+/// `(&list).index_value(index)`, the element a lowering loop reads.
+pub(super) fn list_element(
+    list: TirExpr,
+    index: TirExpr,
+    elem_type_id: TypeId,
+    ctx: &LowerContext<'_>,
+) -> TirExpr {
+    let names = &ctx.names;
+    let info = LocalMethodName::new(
+        names.array_fq.clone(),
+        Some(
+            names
+                .index_value
+                .clone()
+                .with_args(vec![FqTypeName::builtin("i32")]),
+        ),
+        "index_value".to_string(),
+    );
+    TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(borrow_list(list, ctx)),
+            FunctionRef {
+                module_source: ModuleSource::list(),
+                name: info.to_mangled_name(),
+                template: Some(names.list_index_value.clone()),
+                monomorph_info: None,
+                method_info: Some(info),
+            },
+            vec![],
+            vec![CallArg::new(index, false)],
+        ),
+        elem_type_id,
+        synth_span(),
+    )
+}
+
+/// The `&list` a `List` method taking `&self` receives, as reify builds a
+/// source receiver: a list handed over by value is copied first, on every
+/// element of a loop.
+fn borrow_list(list: TirExpr, ctx: &LowerContext<'_>) -> TirExpr {
+    let ref_type = ctx.type_table.borrow_mut().make_ref(list.type_id);
+    ref_expr(list, ref_type, synth_span())
+}
+
 /// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
 /// returning the statements plus the locals holding `(base_ptr, len)`.
 ///
@@ -648,7 +709,6 @@ pub(super) fn synthesize_lower_list_to_buffer(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> (Vec<TirStmt>, u32, u32) {
-    let names = &ctx.names;
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
@@ -681,22 +741,14 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // Materialize the list so we can call len/index_value on it repeatedly.
     let list_local = alloc_local(next_local, locals, list_type_id);
     stmts.push(let_stmt("$list_val", list_local, list_type_id, value));
+    let list = || local_ref(list_local, "$list_val", list_type_id);
 
-    // $len = List::len(list)
     let len_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
         "$list_len",
         len_local,
         TypeTable::I32,
-        generic_method_call(
-            local_ref(list_local, "$list_val", list_type_id),
-            &names.array_fq,
-            "len",
-            ModuleSource::list(),
-            names.list_len.clone(),
-            vec![],
-            TypeTable::I32,
-        ),
+        list_len(list(), ctx),
     ));
 
     // $base = realloc(0, 0, elem_align, cm_buffer_bytes($len, elem_size))
@@ -754,41 +806,16 @@ pub(super) fn synthesize_lower_list_to_buffer(
             TypeTable::I32,
         ),
     ));
-    // $elem = list.index_value($i)
     let elem_local = alloc_local(next_local, locals, elem_type_id);
-    let iv_info = LocalMethodName::new(
-        names.array_fq.clone(),
-        Some(
-            names
-                .index_value
-                .clone()
-                .with_args(vec![FqTypeName::builtin("i32")]),
-        ),
-        "index_value".to_string(),
-    );
-    let iv_mangled = iv_info.to_mangled_name();
     loop_body.push(let_stmt(
         "$list_elem",
         elem_local,
         elem_type_id,
-        TirExpr::new(
-            TirExprKind::method_call(
-                Box::new(local_ref(list_local, "$list_val", list_type_id)),
-                FunctionRef {
-                    module_source: ModuleSource::list(),
-                    name: iv_mangled,
-                    template: Some(names.list_index_value.clone()),
-                    monomorph_info: None,
-                    method_info: Some(iv_info),
-                },
-                vec![],
-                vec![CallArg::new(
-                    local_ref(i_local, "$list_i", TypeTable::I32),
-                    false,
-                )],
-            ),
+        list_element(
+            list(),
+            local_ref(i_local, "$list_i", TypeTable::I32),
             elem_type_id,
-            synth_span(),
+            ctx,
         ),
     ));
     loop_body.extend(synthesize_lower_wasi_type_to_memory(
@@ -1096,6 +1123,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -1112,6 +1140,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             span,
         ),
         span,
+        consumes: true,
     };
     loop_body.push(TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
@@ -1351,6 +1380,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 span,
                             ),
                             span,
+                            consumes: true,
                         });
                     } else {
                         arms.push(TirMatchArm {
@@ -1368,6 +1398,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 span,
                             ),
                             span,
+                            consumes: true,
                         });
                     }
                 }
@@ -1687,6 +1718,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
             span,
         ),
         span,
+        consumes: true,
     };
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
@@ -1703,6 +1735,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
             span,
         ),
         span,
+        consumes: true,
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -1840,6 +1873,7 @@ fn flatten_result_case_arm(
                 span,
             ),
             span,
+            consumes: true,
         };
     }
 
@@ -1905,6 +1939,7 @@ fn flatten_result_case_arm(
             span,
         ),
         span,
+        consumes: true,
     }
 }
 
@@ -1956,15 +1991,15 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                             ctx.wasi_package,
                         )
                     };
-                    let field_expr = TirExpr {
-                        kind: TirExprKind::FieldAccess {
+                    let field_expr = TirExpr::new(
+                        TirExprKind::FieldAccess {
                             expr: Box::new(local_ref(val_local, "$struct_val", value_type_id)),
                             field_index: field_idx as u32,
                             field_name: wado_name.clone(),
                         },
-                        type_id: field_type_id,
-                        span: synth_span(),
-                    };
+                        field_type_id,
+                        synth_span(),
+                    );
                     let field_addr = if offset == 0 {
                         addr.clone()
                     } else {
