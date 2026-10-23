@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
+use crate::const_eval::MAX_SEQ_ELEMENTS;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncCell, FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp,
 };
-use crate::const_eval::MAX_SEQ_ELEMENTS;
 use crate::nir_arena::{
     ArenaStructField, Body, ExprId, ExprKind, NodeRef, Operand, PackedData, PatKind, StmtKind,
     Tracked,
@@ -1560,7 +1560,8 @@ fn spec_key(project: &NirPackage, state: &ParamSpecState, site: &Site) -> SpecKe
     for (param_local, slot, value) in &site.bindings {
         let param = callee.params.iter().find(|p| p.local_index == *param_local);
         let param = param.expect("a binding names a parameter");
-        key.bindings.push((param.name.clone(), *slot, value.clone()));
+        key.bindings
+            .push((param.name.clone(), *slot, value.clone()));
     }
     key.bindings
         .sort_unstable_by(|(a, x, _), (b, y, _)| (a, x).cmp(&(b, y)));
