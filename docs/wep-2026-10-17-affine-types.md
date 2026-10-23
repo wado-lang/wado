@@ -451,8 +451,9 @@ pub affine trait Drop with () {
   work. `x.drop()` names a type's `Drop` impl, so a type without one, and an
   `affine T` in a generic body, is dropped by name this way.
 - A type with an impl runs its `drop`. The body may move fields out of `self`,
-  and whatever is left at its end is dropped field by field. `self` is never
-  dropped as a whole again, which would run `drop` once more.
+  and whatever is left at its end is dropped field by field. Moving `self`
+  whole is an error, since wherever it went it would run `drop` once more. A
+  pattern taking it apart is a move of each field, so it stays allowed.
 - A resource's `fn drop(self)` is its `Drop` impl, which calls the Component
   Model's `resource.drop`.
 - Only an affine type implements `Drop`. A copyable type with one would run it

@@ -1,0 +1,38 @@
+// A `drop` body may take `self` apart with a pattern: each field moves to its
+// own binding, and nothing holds `self` whole to drop it again.
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Part {
+    weight: i32,
+}
+
+impl Drop for Part {
+    fn drop(self) {
+        DROPS += self.weight;
+    }
+}
+
+affine struct Pair {
+    left: Part,
+    right: Part,
+}
+
+impl Drop for Pair {
+    fn drop(self) {
+        let Pair { left, right } = self;
+        DROPS += 100;
+        builtin::drop(right);
+        builtin::drop(left);
+    }
+}
+
+export fn run() with Stdout {
+    builtin::drop(Pair { left: Part { weight: 1 }, right: Part { weight: 10 } });
+    println(`${DROPS}`);
+}
+
+__DATA__
+{"stdout": "111\n"}
