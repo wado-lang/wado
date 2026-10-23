@@ -39,7 +39,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:stream_write_via_stream.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 105, 97, 32, 115, 116, 114, 101, 97, 109, 32, 111, 107), used: 13 };
@@ -81,7 +81,7 @@ fn "stream_write_via_stream.wado/run"() with Stdout {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:stream_write_via_stream.wado::$const_obj_0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_6, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6 = $sroa_$pattern_temp_0_1_7; $sroa_$pattern_temp_0_1_7 = 0; $sroa_$pattern_temp_0_0_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_6 = $sroa_$pattern_temp_0_1_7; $sroa_$pattern_temp_0_1_7 = 0; $sroa_$pattern_temp_0_0_6);
 }
 
 fn "stream_write_via_stream.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

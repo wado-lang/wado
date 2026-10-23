@@ -133,7 +133,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(43)
 
-type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(44)
+type "functype//wasi/resource-drop:wasi/sockets/types.wado#TcpSocket" = fn(i32);  // TypeId(44)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
 
@@ -141,7 +141,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(48)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(48)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(49)
 
@@ -154,11 +154,11 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi/wasi:sockets/TcpSocket::create from "wasi/wasi:sockets/TcpSocket::create";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:wasi/sockets/types.wado#tcp-socket from "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket";
+import fn wasi/resource-drop:wasi/sockets/types.wado#TcpSocket from "wasi/resource-drop:wasi/sockets/types.wado#TcpSocket";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
 global global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$0: ref "wasi:sockets/types.wado//ErrorCode" = struct.new "wasi:sockets/types.wado//ErrorCode" { 0 };
 global global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$1: ref "wasi:sockets/types.wado//ErrorCode" = struct.new "wasi:sockets/types.wado//ErrorCode" { 1 };
@@ -257,7 +257,7 @@ fn "spec_effects_resource.wado/$cm_export__$test_0"() {
             let $cm_handle_2: i32;
             $cm_handle_2 = $drop_v_1.value;
             $drop_v_1.value = 0;
-            "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"($cm_handle_2);
+            "wasi/resource-drop:wasi/sockets/types.wado#TcpSocket"($cm_handle_2);
         } else {
         }
     }
@@ -449,7 +449,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

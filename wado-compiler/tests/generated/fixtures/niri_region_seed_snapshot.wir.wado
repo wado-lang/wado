@@ -39,7 +39,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -99,14 +99,14 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     new_used_27 = start_28;
     start_28 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_28 = new_used_27; new_used_27 = 0; start_28, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_28 = $moved_4_49; $moved_4_49 = 0; start_28);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_28 = $moved_4_49; $moved_4_49 = 0; start_28);
     start_28 = builtin::i32_wrap_i64(local.tee $cm_pair_7_52("wasi/stream-new"()));
     $moved_4_49 = builtin::i32_wrap_i64($cm_pair_7_52 >> 32_i64);
     new_used_27 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(new_used_27 = start_28; start_28 = 0; new_used_27);
     start_28 = $moved_4_49;
     $moved_4_49 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_49 = start_28; start_28 = 0; $moved_4_49, s.repr, s.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_49 = new_used_27; new_used_27 = 0; $moved_4_49);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_49 = new_used_27; new_used_27 = 0; $moved_4_49);
 }
 
 fn "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

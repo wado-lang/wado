@@ -344,7 +344,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(104)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(105)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(106)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(106)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(107)
 
@@ -368,7 +368,7 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-cancel-read from "wasi/stream-cancel-read";
@@ -482,7 +482,7 @@ fn "effect_handler_stream_forwarded_write_drop.wado/run"() with Stdout {
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:effect_handler_stream_forwarded_write_drop.wado::$const_obj_8;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_1_1_136, $mv_arg_6.repr, $mv_arg_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(ptr_55 = $sroa_$pattern_temp_1_0_135; $sroa_$pattern_temp_1_0_135 = 0; ptr_55);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr_55 = $sroa_$pattern_temp_1_0_135; $sroa_$pattern_temp_1_0_135 = 0; ptr_55);
     $sroa_$pattern_temp_1_1_136 = $sroa_$pattern_temp_0_0_133;
     $sroa_$pattern_temp_0_0_133 = ref.null none;
     ptr_55 = $sroa_$pattern_temp_1_1_136.value;
@@ -643,7 +643,7 @@ fn "effect_handler_stream_forwarded_write_drop.wado/run"() with Stdout {
     $sroa_$pattern_temp_1_1_136 = $sroa_$pattern_temp_0_0_133;
     $sroa_$pattern_temp_0_0_133 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_133 = $sroa_$pattern_temp_1_1_136; $sroa_$pattern_temp_1_1_136 = ref.null none; $sroa_$pattern_temp_0_0_133, $mv_arg_6.repr, $mv_arg_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(ptr_55 = i_61; i_61 = 0; ptr_55);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr_55 = i_61; i_61 = 0; ptr_55);
     if ref.is_null(proxy) == 0 {
         if ref.is_null((if ref.is_null(local.tee self_76(proxy.inner)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/StreamWritable<u8>>" {
             ref.null none;
@@ -874,7 +874,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_5 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = ref.null none; $moved_5, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

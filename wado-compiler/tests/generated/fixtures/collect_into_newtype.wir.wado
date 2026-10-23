@@ -120,7 +120,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(46)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
 
@@ -140,7 +140,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -180,7 +180,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:collect_into_newtype.wado::$const_obj_1;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_220, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_220 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_1_14_220);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_220 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_1_14_220);
     $sroa_self_repr_309 = global:collect_into_newtype.wado::$const_obj_2;
     $sroa_$pattern_temp_0_1_14_220 = 0;
     result_58 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
@@ -205,7 +205,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_220 = $sroa_$pattern_temp_0_0_13_219;
     $sroa_$pattern_temp_0_0_13_219 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_219 = $sroa_$pattern_temp_0_1_14_220; $sroa_$pattern_temp_0_1_14_220 = 0; $sroa_$pattern_temp_0_0_13_219, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_219 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_0_13_219);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_219 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_0_13_219);
     $mv_arg_2 = "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"($sroa_self_repr_309 = global:collect_into_newtype.wado::$const_obj_2; $sroa_$pattern_temp_0_0_13_219 = 0; result_58 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }; b3: block {
         l4: loop {
             break_if b3 $sroa_$pattern_temp_0_0_13_219 >= 2;
@@ -226,7 +226,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_219 = $sroa_$pattern_temp_0_1_14_220;
     $sroa_$pattern_temp_0_1_14_220 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_220 = $sroa_$pattern_temp_0_0_13_219; $sroa_$pattern_temp_0_0_13_219 = 0; $sroa_$pattern_temp_0_1_14_220, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_220 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_1_14_220);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_220 = $moved_4_210; $moved_4_210 = 0; $sroa_$pattern_temp_0_1_14_220);
     $sroa_self_repr_309 = global:collect_into_newtype.wado::$const_obj_2;
     $sroa_$pattern_temp_0_1_14_220 = 0;
     $sroa_self_f_316 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "collect_into_newtype.wado//$Closure_0" {  }, func: ref.func "closure/collect_into_newtype.wado/$closure_wrapper_0" };
@@ -299,7 +299,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     used_114 = $fused_slot_191;
     $fused_slot_191 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($fused_slot_191 = used_114; used_114 = 0; $fused_slot_191, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($fused_slot_191 = $fused_slot_190; $fused_slot_190 = 0; $fused_slot_191);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($fused_slot_191 = $fused_slot_190; $fused_slot_190 = 0; $fused_slot_191);
     it = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(10, 20, 30), index: 0, end: 3 };
     builtin::array_copy<i32>(builtin::array_new<i32>(3), 0, it.repr, 0, 3);
     it.index = 3;
@@ -344,7 +344,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     $fused_slot_190 = used_114;
     used_114 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(used_114 = $fused_slot_190; $fused_slot_190 = 0; used_114, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(used_114 = $fused_slot_191; $fused_slot_191 = 0; used_114);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_114 = $fused_slot_191; $fused_slot_191 = 0; used_114);
 }
 
 fn "collect_into_newtype.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -466,7 +466,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

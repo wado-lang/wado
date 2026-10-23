@@ -378,7 +378,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(122)
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(123)
+type "functype//wasi/resource-drop:wasi/http/types.wado#Fields" = fn(i32);  // TypeId(123)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(124)
 
@@ -386,7 +386,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(125)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(126)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(127)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(127)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(128)
 
@@ -400,11 +400,11 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi/wasi:http/Fields::has from "wasi/wasi:http/Fields::has";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:wasi/http/types.wado#fields from "wasi/resource-drop:wasi/http/types.wado#fields";
+import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
 global mut global:spec_effects_handler_impl.wado::$effect_spec_effects_handler_impl.wado/Stdin: ref null "spec_effects_handler_impl.wado//$Dispatch_spec_effects_handler_impl.wado/Stdin" = ref.null none;
 global mut global:spec_effects_handler_impl.wado::$effect_wasi:http/types.wado/Fields: ref null "spec_effects_handler_impl.wado//$Dispatch_wasi:http/types.wado/Fields" = ref.null none;
@@ -626,13 +626,13 @@ condition: Stdin::read_line() == \"b\"
                 $moved_3_171 = ref.null none;
                 $av_180 = $local_2_170.value;
                 $local_2_170.value = 0;
-                "wasi/resource-drop:wasi/http/types.wado#fields"($av_180);
+                "wasi/resource-drop:wasi/http/types.wado#Fields"($av_180);
                 break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_1;
             }
             if ref.is_null($moved_3_171) == 0 {
                 $av_180 = $moved_3_171.value;
                 $moved_3_171.value = 0;
-                "wasi/resource-drop:wasi/http/types.wado#fields"($av_180);
+                "wasi/resource-drop:wasi/http/types.wado#Fields"($av_180);
             }
         };
     }
@@ -869,7 +869,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }
@@ -2565,13 +2565,13 @@ fn "spec_effects_handler_impl.wado/spec_effects_handler_impl.wado/$Closure_11::$
             let $cm_handle_2: i32;
             $cm_handle_2 = self.value;
             self.value = 0;
-            "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
+            "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_0;
         }
         if ref.is_null($moved_2) == 0 {
             $cm_handle_2 = $moved_2.value;
             $moved_2.value = 0;
-            "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
+            "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
         }
     };
 }

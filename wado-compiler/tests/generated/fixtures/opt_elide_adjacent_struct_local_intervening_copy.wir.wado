@@ -43,7 +43,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
@@ -61,7 +61,7 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(32);
@@ -110,7 +110,7 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"() w
     start_145 = new_used_144;
     new_used_144 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_144 = start_145; start_145 = 0; new_used_144, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_144 = $moved_4; $moved_4 = 0; new_used_144);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_144 = $moved_4; $moved_4 = 0; new_used_144);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

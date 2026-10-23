@@ -413,7 +413,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(143)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(144)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(144)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(145)
 
@@ -438,7 +438,7 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import fn wasi/wasi:clocks/MonotonicClock::wait_for from "wasi/wasi:clocks/MonotonicClock::wait_for";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -540,7 +540,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:waitable_set_delivered_call.wado::$const_obj_9;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_99, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_99 = $moved_4_89; $moved_4_89 = 0; $sroa_$pattern_temp_0_1_14_99);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_99 = $moved_4_89; $moved_4_89 = 0; $sroa_$pattern_temp_0_1_14_99);
     $moved_1 = local.tee self_14("waitable_set_delivered_call.wado/delivered"());
     self_14 = ref.null none;
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"($moved_1);
@@ -553,7 +553,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     $sroa_$pattern_temp_0_1_14_99 = 0;
     $mv_arg_2 = global:waitable_set_delivered_call.wado::$const_obj_8;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_89, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_89 = $sroa_$pattern_temp_0_0_13_98; $sroa_$pattern_temp_0_0_13_98 = 0; $moved_4_89);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_89 = $sroa_$pattern_temp_0_0_13_98; $sroa_$pattern_temp_0_0_13_98 = 0; $moved_4_89);
     self_14 = local.tee $moved_1("waitable_set_delivered_call.wado/delivered"());
     $moved_1 = ref.null none;
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"(self_14);
@@ -566,7 +566,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     $moved_4_89 = 0;
     $mv_arg_2 = global:waitable_set_delivered_call.wado::$const_obj_7;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_98, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_98 = $sroa_$pattern_temp_0_1_14_99; $sroa_$pattern_temp_0_1_14_99 = 0; $sroa_$pattern_temp_0_0_13_98);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_98 = $sroa_$pattern_temp_0_1_14_99; $sroa_$pattern_temp_0_1_14_99 = 0; $sroa_$pattern_temp_0_0_13_98);
     "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/AsyncCall<()>>::join"(local.tee again(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/AsyncCall<()>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: $sroa_$pattern_temp_0_0_13_98 = builtin::array_len(local.tee elements_20(array.new_fixed<ref null "core:prelude/types.wado//AsyncCall<()>">())); struct.new "core:prelude//List<core:prelude/types.wado/AsyncCall<()>>" { repr: ref.as_non_null($moved_2_22 = elements_20; elements_20 = ref.null none; $moved_2_22), used: $sroa_$pattern_temp_0_0_13_98 }, ready: $sroa_$pattern_temp_0_0_13_98 = builtin::array_len(local.tee elements_24(array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/AsyncCall<()>>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/AsyncCall<()>>>" { repr: ref.as_non_null($moved_2_26 = elements_24; elements_24 = ref.null none; $moved_2_26), used: $sroa_$pattern_temp_0_0_13_98 } }), "waitable_set_delivered_call.wado/delivered"());
     self_14 = local.tee ready("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/AsyncCall<()>>::wait"(again)).member;
     ready.member = ref.null none;
@@ -611,7 +611,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     $sroa_$pattern_temp_0_0_13_98 = $sroa_$pattern_temp_0_1_14_99;
     $sroa_$pattern_temp_0_1_14_99 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_99 = $sroa_$pattern_temp_0_0_13_98; $sroa_$pattern_temp_0_0_13_98 = 0; $sroa_$pattern_temp_0_1_14_99, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_99 = $moved_4_89; $moved_4_89 = 0; $sroa_$pattern_temp_0_1_14_99);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_99 = $moved_4_89; $moved_4_89 = 0; $sroa_$pattern_temp_0_1_14_99);
     "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>::join"(local.tee timers(struct.new "core:prelude/types.wado//WaitableSet<waitable_set_delivered_call.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: $sroa_$pattern_temp_0_1_14_99 = builtin::array_len(local.tee elements_71(array.new_fixed<ref null "core:prelude/types.wado//Box<waitable_set_delivered_call.wado/Timer>">())); struct.new "core:prelude//List<waitable_set_delivered_call.wado/Timer>" { repr: ref.as_non_null($moved_2_73 = elements_71; elements_71 = ref.null none; $moved_2_73), used: $sroa_$pattern_temp_0_1_14_99 }, ready: $sroa_$pattern_temp_0_1_14_99 = builtin::array_len(local.tee elements_75(array.new_fixed<ref null "core:prelude/types.wado//Ready<waitable_set_delivered_call.wado/Timer>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<waitable_set_delivered_call.wado/Timer>>" { repr: ref.as_non_null($moved_2_77 = elements_75; elements_75 = ref.null none; $moved_2_77), used: $sroa_$pattern_temp_0_1_14_99 } }), struct.new "waitable_set_delivered_call.wado//Timer::Only" { discriminant: 0, payload_0: "waitable_set_delivered_call.wado/$cm_binding__MonotonicClock_wait_for"(1000000_i64) });
     $moved_10 = "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>::wait"(timers);
     if ref.is_null((if ref.is_null(local.tee $load_26($moved_10.member)) -> ref null "waitable_set_delivered_call.wado//Timer" {
@@ -639,7 +639,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     $sroa_$pattern_temp_0_1_14_99 = 0;
     $mv_arg_2 = global:waitable_set_delivered_call.wado::$const_obj_4;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_89, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_89 = $sroa_$pattern_temp_0_0_13_98; $sroa_$pattern_temp_0_0_13_98 = 0; $moved_4_89);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_89 = $sroa_$pattern_temp_0_0_13_98; $sroa_$pattern_temp_0_0_13_98 = 0; $moved_4_89);
     if ref.is_null(timers) == 0 {
         "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_delivered_call.wado/Timer>^core:prelude/traits.wado/Drop::drop"(timers);
     }
@@ -936,7 +936,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

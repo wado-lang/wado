@@ -147,7 +147,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(53)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(53)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(54)
 
@@ -169,7 +169,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -332,7 +332,7 @@ condition: env(\"SPEC_WORLDS_UNSET\") == null
         end_23 = start_115;
         start_115 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(start_115 = end_23; end_23 = 0; start_115, $eq_other_Some_3.repr, $eq_other_Some_3.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_115 = new_used_114; new_used_114 = 0; start_115);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_115 = new_used_114; new_used_114 = 0; start_115);
         return;
     }
     $sroa_self_repr_207 = self_20.repr;
@@ -370,7 +370,7 @@ condition: env(\"SPEC_WORLDS_UNSET\") == null
             $moved_5_197 = start_144;
             start_144 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_204 = $moved_5_197; $moved_5_197 = 0; $moved_3_204, $eq_other_Some_3.repr, $eq_other_Some_3.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_198 = $load_29; $load_29 = 0; $moved_6_198);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_198 = $load_29; $load_29 = 0; $moved_6_198);
             continue l18;
         };
     };
@@ -657,7 +657,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }

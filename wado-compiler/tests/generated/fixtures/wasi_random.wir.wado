@@ -52,7 +52,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
@@ -74,7 +74,7 @@ import fn wasi/wasi:random/Insecure::get_insecure_random_u64 from "wasi/wasi:ran
 import fn wasi/wasi:random/Random::get_random_u64 from "wasi/wasi:random/Random::get_random_u64";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -111,7 +111,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasi_random.wado::$const_obj_11;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
     if (r1 != 0_i64) | (r2 != 0_i64) {
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
         $moved_4_11 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
@@ -122,7 +122,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_1_14_21 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_10;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_11, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
     } else {
         $moved_4_11 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
         $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
@@ -133,7 +133,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $moved_4_11 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_9;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
     }
     if r1 != r2 {
         $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
@@ -145,7 +145,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_0_13_20 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_8;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
     } else {
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         $moved_4_11 = builtin::i32_wrap_i64(r2 >> 32_i64);
@@ -156,7 +156,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_1_14_21 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_7;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_11, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
     }
     r2 = "wasi_random.wado/$cm_binding__Insecure_get_insecure_random_u64"();
     r1 = "wasi_random.wado/$cm_binding__Insecure_get_insecure_random_u64"();
@@ -169,7 +169,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     $moved_4_11 = 0;
     $mv_arg_2 = global:wasi_random.wado::$const_obj_6;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
     if r2 != r1 {
         $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee r1("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(r1 >> 32_i64);
@@ -180,7 +180,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_0_13_20 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_5;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
     } else {
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee r1("wasi/stream-new"()));
         $moved_4_11 = builtin::i32_wrap_i64(r1 >> 32_i64);
@@ -191,7 +191,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_1_14_21 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_4;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_11, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
     }
     r1 = local.tee seed("wasi_random.wado/$cm_binding__InsecureSeed_get_insecure_seed"()).0;
     r2 = seed.1;
@@ -204,7 +204,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     $moved_4_11 = 0;
     $mv_arg_2 = global:wasi_random.wado::$const_obj_3;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
     if (r1 != 0_i64) | (r2 != 0_i64) {
         $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(r2 >> 32_i64);
@@ -215,7 +215,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_0_13_20 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_2;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
     } else {
         $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         $moved_4_11 = builtin::i32_wrap_i64(r2 >> 32_i64);
@@ -226,7 +226,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         $sroa_$pattern_temp_0_1_14_21 = 0;
         $mv_arg_2 = global:wasi_random.wado::$const_obj_1;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_11, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
     }
     $moved_4_11 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(r2 >> 32_i64);
@@ -237,7 +237,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     $moved_4_11 = 0;
     $mv_arg_2 = global:wasi_random.wado::$const_obj_0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
 }
 
 fn "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

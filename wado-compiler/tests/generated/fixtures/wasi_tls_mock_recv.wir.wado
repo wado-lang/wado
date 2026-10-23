@@ -373,13 +373,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(124)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(125)
 
-type "functype//wasi/resource-drop:wasi/tls/types.wado#error" = fn(i32);  // TypeId(126)
+type "functype//wasi/resource-drop:wasi/tls/types.wado#Error" = fn(i32);  // TypeId(126)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(127)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(128)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(128)
 
-type "functype//wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>" = fn(i32);  // TypeId(129)
+type "functype//wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#Error>>" = fn(i32);  // TypeId(129)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(130)
 
@@ -416,10 +416,10 @@ import fn wasi/wasi:tls/Error::to_debug_string from "wasi/wasi:tls/Error::to_deb
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/resource-drop:wasi/tls/types.wado#error from "wasi/resource-drop:wasi/tls/types.wado#error";
+import fn wasi/resource-drop:wasi/tls/types.wado#Error from "wasi/resource-drop:wasi/tls/types.wado#Error";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>> from "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#Error>> from "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#Error>>";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/subtask-cancel from "wasi/subtask-cancel";
@@ -492,7 +492,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
         if ref.is_null(e) == 0 {
             $sroa_$pattern_temp_0_0_102 = e.value;
             e.value = 0;
-            "wasi/resource-drop:wasi/tls/types.wado#error"($sroa_$pattern_temp_0_0_102);
+            "wasi/resource-drop:wasi/tls/types.wado#Error"($sroa_$pattern_temp_0_0_102);
         }
         unreachable;
     }
@@ -560,7 +560,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
         $sroa_$pattern_temp_0_0_102 = conn;
         conn = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(conn = $sroa_$pattern_temp_0_0_102; $sroa_$pattern_temp_0_0_102 = 0; conn, $local_12.repr, $local_12.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(conn = $moved_13; $moved_13 = 0; conn);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(conn = $moved_13; $moved_13 = 0; conn);
     } else if $sroa_$pattern_temp_0_1_103 == 1 {
         "core:rt/panic"(local.tee out_96(array.new_data<u8>("recv was not valid UTF-8")), 24);
         unreachable;
@@ -568,10 +568,10 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
         unreachable;
     }
     if ref.is_null(_recv_done) == 0 {
-        "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>"(_recv_done.value);
+        "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#Error>>"(_recv_done.value);
     }
     if ref.is_null(_send_done) == 0 {
-        "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>"(_send_done.value);
+        "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#Error>>"(_send_done.value);
     }
     if ref.is_null(_tls_tx) == 0 {
         "wasi/stream-drop-readable"(_tls_tx.value);
@@ -892,7 +892,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }

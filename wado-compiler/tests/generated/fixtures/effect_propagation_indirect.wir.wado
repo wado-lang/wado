@@ -32,7 +32,7 @@ type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(13)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
@@ -51,7 +51,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "effect_propagation_indirect.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -77,7 +77,7 @@ fn "effect_propagation_indirect.wado/$cm_export__run"() {
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(111, 107);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_8, $mv_field_2, 2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_8 = $sroa_$pattern_temp_0_0_7; $sroa_$pattern_temp_0_0_7 = 0; $sroa_$pattern_temp_0_1_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_8 = $sroa_$pattern_temp_0_0_7; $sroa_$pattern_temp_0_0_7 = 0; $sroa_$pattern_temp_0_1_8);
     "wasi/task-return"(0);
 }
 

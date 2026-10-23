@@ -262,21 +262,21 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(85)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(86)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(86)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code" = fn(i32);  // TypeId(87)
+type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode" = fn(i32);  // TypeId(87)
 
-type "functype//wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry" = fn(i32);  // TypeId(88)
+type "functype//wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry" = fn(i32);  // TypeId(88)
 
-type "functype//wasi/resource-drop:wasi/filesystem/types.wado#descriptor" = fn(i32);  // TypeId(89)
+type "functype//wasi/resource-drop:wasi/filesystem/types.wado#Descriptor" = fn(i32);  // TypeId(89)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/stream-read:wasi/filesystem/types.wado#directory-entry" = fn(i32, i32, i32) -> i32;  // TypeId(91)
+type "functype//wasi/stream-read:wasi/filesystem/types.wado#DirectoryEntry" = fn(i32, i32, i32) -> i32;  // TypeId(91)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(92)
 
-type "functype//wasi/stream-cancel-read:wasi/filesystem/types.wado#directory-entry" = fn(i32) -> u32;  // TypeId(93)
+type "functype//wasi/stream-cancel-read:wasi/filesystem/types.wado#DirectoryEntry" = fn(i32) -> u32;  // TypeId(93)
 
 type "functype//cm_stream_read_record_in_branch.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(94)
 
@@ -296,14 +296,14 @@ import fn wasi/wasi:filesystem/Preopens::get_directories from "wasi/wasi:filesys
 import fn wasi/wasi:filesystem/Descriptor::read_directory from "wasi/wasi:filesystem/Descriptor::read_directory";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code";
-import fn wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry from "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry";
-import fn wasi/resource-drop:wasi/filesystem/types.wado#descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#descriptor";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode";
+import fn wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry from "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry";
+import fn wasi/resource-drop:wasi/filesystem/types.wado#Descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-read:wasi/filesystem/types.wado#directory-entry from "wasi/stream-read:wasi/filesystem/types.wado#directory-entry";
+import fn wasi/stream-read:wasi/filesystem/types.wado#DirectoryEntry from "wasi/stream-read:wasi/filesystem/types.wado#DirectoryEntry";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/stream-cancel-read:wasi/filesystem/types.wado#directory-entry from "wasi/stream-cancel-read:wasi/filesystem/types.wado#directory-entry";
+import fn wasi/stream-cancel-read:wasi/filesystem/types.wado#DirectoryEntry from "wasi/stream-cancel-read:wasi/filesystem/types.wado#DirectoryEntry";
 
 global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelude//List<core:prelude/types.wado/CopySettlement>" = ref.null none;
 global mut global:cm_stream_read_record_in_branch.wado::$modules_initialized: bool = 0;
@@ -363,7 +363,7 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:cm_stream_read_record_in_branch.wado::$const_obj_3;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_69, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_69 = $moved_4_59; $moved_4_59 = 0; $sroa_$pattern_temp_0_1_14_69);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_69 = $moved_4_59; $moved_4_59 = 0; $sroa_$pattern_temp_0_1_14_69);
         if ref.is_null(dirs) == 0 {
             "cm_stream_read_record_in_branch.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
         }
@@ -453,8 +453,8 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
             continue l6;
         };
     };
-    "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"($moved_3_73 = _done; _done = ref.null none; $moved_3_73.value);
-    "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"($moved_3_73 = $moved_13; $moved_13 = ref.null none; $moved_3_73.value);
+    "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode"($moved_3_73 = _done; _done = ref.null none; $moved_3_73.value);
+    "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"($moved_3_73 = $moved_13; $moved_13 = ref.null none; $moved_3_73.value);
     if $load_0 {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_62("wasi/stream-new"()));
         i = builtin::i32_wrap_i64($cm_pair_7_62 >> 32_i64);
@@ -465,7 +465,7 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:cm_stream_read_record_in_branch.wado::$const_obj_1;
         "core:rt/write_string_to_stream$dae[add_newline]"(i, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i = $load_16; $load_16 = 0; i);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = $load_16; $load_16 = 0; i);
     } else {
         i = builtin::i32_wrap_i64(local.tee $cm_pair_7_62("wasi/stream-new"()));
         $load_16 = builtin::i32_wrap_i64($cm_pair_7_62 >> 32_i64);
@@ -476,15 +476,15 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
         i = 0;
         $mv_arg_2 = global:cm_stream_read_record_in_branch.wado::$const_obj_0;
         "core:rt/write_string_to_stream$dae[add_newline]"($load_16, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_16 = $load_0; $load_0 = 0; $load_16);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_16 = $load_0; $load_0 = 0; $load_16);
     }
     if ref.is_null(dir_stream_3) == 0 {
-        "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"(dir_stream_3.value);
+        "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"(dir_stream_3.value);
     }
     if ref.is_null($moved_12) == 0 {
         $load_16 = $moved_12.value;
         $moved_12.value = 0;
-        "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_16);
+        "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_16);
     }
     if ref.is_null(dirs) == 0 {
         "cm_stream_read_record_in_branch.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
@@ -508,7 +508,7 @@ fn "cm_stream_read_record_in_branch.wado/$drop$core:prelude/list.wado/List<[wasi
                     let $cm_handle_2: i32;
                     $cm_handle_2 = $load_2.value;
                     $load_2.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($cm_handle_2);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($cm_handle_2);
                 }
                 $slot_4.0 = ref.null none;
             }
@@ -573,7 +573,7 @@ fn "cm_stream_read_record_in_branch.wado/$cm_binding__Preopens_get_directories"(
                     let $cm_handle_2: i32;
                     $cm_handle_2 = $load_3.value;
                     $load_3.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($cm_handle_2);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($cm_handle_2);
                 }
                 $moved_3_23.0 = ref.null none;
             }
@@ -749,12 +749,12 @@ fn "cm_stream_read_record_in_branch.wado/$initialize_modules$cold0"() {
 
 fn "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec0"(handle, max) {
     max = "mem/realloc"(0, 0, 4, 2400);
-    return struct.new "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: "wasi/stream-read:wasi/filesystem/types.wado#directory-entry"(handle, max, 100), ptr: max, size: 2400, align: 4 }, items: struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(0), used: 0 } };
+    return struct.new "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: "wasi/stream-read:wasi/filesystem/types.wado#DirectoryEntry"(handle, max, 100), ptr: max, size: 2400, align: 4 }, items: struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(0), used: 0 } };
 }
 
 fn "cm_stream_read_record_in_branch.wado/$cm_stream_read_DirectoryEntry$spec1"(handle, max) {
     max = "mem/realloc"(0, 0, 4, 0);
-    return struct.new "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: "wasi/stream-read:wasi/filesystem/types.wado#directory-entry"(handle, max, 0), ptr: max, size: 0, align: 4 }, items: struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(0), used: 0 } };
+    return struct.new "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle, packed: "wasi/stream-read:wasi/filesystem/types.wado#DirectoryEntry"(handle, max, 0), ptr: max, size: 0, align: 4 }, items: struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(0), used: 0 } };
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -910,7 +910,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1558,7 +1558,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/typ
             if $replaced_3.discriminant == 0 {
             } else {
                 if ref.is_null(local.tee $load_3(local.tee $moved_2(ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some"($replaced_3).payload_0).0)) == 0 {
-                    "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"($load_3.value);
+                    "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"($load_3.value);
                 }
                 $moved_2.0 = ref.null none;
                 if ref.is_null(local.tee $load_5($moved_2.1)) == 0 {
@@ -1612,7 +1612,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
                 if ref.is_null(local.tee $load_3($slot_20.0)) == 0 {
                     index = $load_3.value;
                     $load_3.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(index);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"(index);
                 }
                 $slot_20.0 = ref.null none;
             }
@@ -1732,11 +1732,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/typ
             "wasi/waitable-join"(self_9.handle, 0);
             break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_0: 1;
         } {
-            $local_8.buffer.packed = "wasi/stream-cancel-read:wasi/filesystem/types.wado#directory-entry"(end.value);
+            $local_8.buffer.packed = "wasi/stream-cancel-read:wasi/filesystem/types.wado#DirectoryEntry"(end.value);
         }
         $block_v_4 = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle"($moved_3 = $local_8; $local_8 = ref.null none; $moved_3, end);
         if ref.is_null(end) == 0 {
-            "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"(end.value);
+            "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"(end.value);
         }
         $block_v_4;
     } else {
@@ -1753,7 +1753,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/typ
                 })).discriminant == 0 {
                 } else {
                     if ref.is_null(local.tee end(local.tee $variant_payload_7(ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some"($match_scrut_0).payload_0).0)) == 0 {
-                        "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"(end.value);
+                        "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"(end.value);
                     }
                     $variant_payload_7.0 = ref.null none;
                     if ref.is_null(local.tee $moved_3($variant_payload_7.1)) == 0 {
@@ -1788,7 +1788,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/typ
             })).discriminant == 0 {
             } else {
                 if ref.is_null(local.tee end(local.tee $variant_payload_7(ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>,core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>]>::Some"($match_scrut_0).payload_0).0)) == 0 {
-                    "wasi/stream-drop-readable:wasi/filesystem/types.wado#directory-entry"(end.value);
+                    "wasi/stream-drop-readable:wasi/filesystem/types.wado#DirectoryEntry"(end.value);
                 }
                 $variant_payload_7.0 = ref.null none;
                 if ref.is_null(local.tee $moved_3($variant_payload_7.1)) == 0 {

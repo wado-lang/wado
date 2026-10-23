@@ -92,7 +92,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(34)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(35)
 
@@ -112,7 +112,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -240,7 +240,7 @@ fn "effect_handler_bundled_value.wado/run"() with Stdout {
     $load_5 = $local_2_23;
     $local_2_23 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_23 = $load_5; $load_5 = 0; $local_2_23, $local_2_17.repr, $local_2_17.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_23 = $local_2_20; $local_2_20 = 0; $local_2_23);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_23 = $local_2_20; $local_2_20 = 0; $local_2_23);
     global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = $save_effect_handler_bundled_value.wado/Counter;
     global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting = $save_effect_handler_bundled_value.wado/Greeting;
     $local_2_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -261,7 +261,7 @@ fn "effect_handler_bundled_value.wado/run"() with Stdout {
     $local_2_20 = $local_2_23;
     $local_2_23 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_23 = $local_2_20; $local_2_20 = 0; $local_2_23, $local_2_17.repr, $local_2_17.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_23 = $load_5; $load_5 = 0; $local_2_23);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_23 = $load_5; $load_5 = 0; $local_2_23);
 }
 
 fn "effect_handler_bundled_value.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -378,7 +378,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }

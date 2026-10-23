@@ -235,7 +235,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_base
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(105)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(106)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(106)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(107)
 
@@ -255,7 +255,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -939,7 +939,7 @@ condition: fmt_with(&neg, false, false, 10, Alignment::Left) == \"-42       \"
     i_80 = 0;
     buf_55 = global:display_specifiers.wado::$const_obj_46;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_68, buf_55.repr, buf_55.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_68 = $moved_4; $moved_4 = 0; offset_68);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_68 = $moved_4; $moved_4 = 0; offset_68);
 }
 
 fn "display_specifiers.wado/test_format_padding"() with Stdout {
@@ -1595,7 +1595,7 @@ condition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"
     i_104 = 0;
     $local_22 = global:display_specifiers.wado::$const_obj_46;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_92, $local_22.repr, $local_22.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_92 = $moved_4; $moved_4 = 0; offset_92);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_92 = $moved_4; $moved_4 = 0; offset_92);
 }
 
 fn "display_specifiers.wado/test_template_specifiers"() with Stdout {
@@ -4583,7 +4583,7 @@ condition: `${neg_i32:#x}` == \"0xffffffd6\"
     start_5885 = 0;
     $local_151 = global:display_specifiers.wado::$const_obj_46;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_696, $local_151.repr, $local_151.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_696 = i_708; i_708 = 0; offset_696);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_696 = i_708; i_708 = 0; offset_696);
 }
 
 fn "display_specifiers.wado/test_template_specifiers_float"() with Stdout {
@@ -8372,7 +8372,7 @@ condition: `${1.0:.10}` == \"1.0000000000\"
     i_557 = 0;
     $local_144 = global:display_specifiers.wado::$const_obj_46;
     "core:rt/write_string_to_stream$dae[add_newline]"(a_end_552, $local_144.repr, $local_144.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(a_end_552 = $moved_4; $moved_4 = 0; a_end_552);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(a_end_552 = $moved_4; $moved_4 = 0; a_end_552);
 }
 
 fn "display_specifiers.wado/test_fts_precision"() with Stdout {
@@ -8399,7 +8399,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8418,7 +8418,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8437,7 +8437,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8456,7 +8456,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8475,7 +8475,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8494,7 +8494,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8513,7 +8513,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8532,7 +8532,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8551,7 +8551,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8570,7 +8570,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8589,7 +8589,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8608,7 +8608,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8627,7 +8627,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8646,7 +8646,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8665,7 +8665,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8684,7 +8684,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8703,7 +8703,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8722,7 +8722,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8741,7 +8741,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8760,7 +8760,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8779,7 +8779,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8798,7 +8798,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8817,7 +8817,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8836,7 +8836,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8855,7 +8855,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8874,7 +8874,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8893,7 +8893,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8912,7 +8912,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8931,7 +8931,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8950,7 +8950,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8969,7 +8969,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -8988,7 +8988,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9007,7 +9007,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9026,7 +9026,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9045,7 +9045,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9064,7 +9064,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9083,7 +9083,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9102,7 +9102,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9121,7 +9121,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9140,7 +9140,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9159,7 +9159,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9178,7 +9178,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9197,7 +9197,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9216,7 +9216,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9235,7 +9235,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9254,7 +9254,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9273,7 +9273,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9292,7 +9292,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9311,7 +9311,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9330,7 +9330,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9349,7 +9349,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9368,7 +9368,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9387,7 +9387,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9406,7 +9406,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9425,7 +9425,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9444,7 +9444,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9463,7 +9463,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9482,7 +9482,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9501,7 +9501,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9520,7 +9520,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9539,7 +9539,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9558,7 +9558,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9577,7 +9577,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9596,7 +9596,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9615,7 +9615,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9634,7 +9634,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9653,7 +9653,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9672,7 +9672,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9691,7 +9691,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9710,7 +9710,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9729,7 +9729,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9748,7 +9748,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9767,7 +9767,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9786,7 +9786,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9805,7 +9805,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9824,7 +9824,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9843,7 +9843,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9862,7 +9862,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9881,7 +9881,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9900,7 +9900,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9919,7 +9919,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9938,7 +9938,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9957,7 +9957,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9976,7 +9976,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -9995,7 +9995,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10014,7 +10014,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10033,7 +10033,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10052,7 +10052,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10071,7 +10071,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10090,7 +10090,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10109,7 +10109,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10128,7 +10128,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10147,7 +10147,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10166,7 +10166,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10185,7 +10185,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10204,7 +10204,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10223,7 +10223,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10242,7 +10242,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 5) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10261,7 +10261,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = start_222; start_222 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee new_used_221(0 + 6) > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -10280,7 +10280,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     $moved_4_1814 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_221 = start_222; start_222 = 0; new_used_221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_221 = start_222; start_222 = 0; new_used_221);
 }
 
 fn "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -11216,7 +11216,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

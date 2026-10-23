@@ -39,7 +39,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -106,7 +106,7 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     i = start_85;
     start_85 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_85 = i; i = 0; start_85, buf_0.repr, buf_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_85 = new_used_84; new_used_84 = 0; start_85);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_85 = new_used_84; new_used_84 = 0; start_85);
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     if @unlikely(3 > builtin::array_len(buf_0.repr)) {
         cold_path;
@@ -129,7 +129,7 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     start_85 = new_used_84;
     new_used_84 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_84 = start_85; start_85 = 0; new_used_84, buf_0.repr, buf_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_84 = i; i = 0; new_used_84);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_84 = i; i = 0; new_used_84);
 }
 
 fn "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

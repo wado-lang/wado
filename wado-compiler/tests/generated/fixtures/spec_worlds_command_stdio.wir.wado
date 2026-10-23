@@ -208,7 +208,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(72)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(73)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(74)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(74)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(75)
 
@@ -232,7 +232,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelude//List<core:prelude/types.wado/CopySettlement>" = ref.null none;
@@ -351,7 +351,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         "core:rt/cm_stream_write_raw_all_u8"(other_len, out_52, 0, packed);
     });
     "wasi/stream-drop-writable"(packed = ptr; ptr = 0; packed);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(packed = new_used_34; new_used_34 = 0; packed);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(packed = new_used_34; new_used_34 = 0; packed);
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     if @unlikely(local.tee packed(0 + 5) > builtin::array_len(builder.repr)) {
         cold_path;
@@ -392,9 +392,9 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     packed = new_used_34;
     new_used_34 = 0;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_34 = packed; packed = 0; new_used_34, builder.repr, builder.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_34 = ptr; ptr = 0; new_used_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_34 = ptr; ptr = 0; new_used_34);
     if ref.is_null(_done) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(_done.value);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(_done.value);
     }
 }
 
@@ -676,7 +676,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

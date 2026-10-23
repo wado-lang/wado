@@ -518,13 +518,13 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(156)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(157)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(157)
 
-type "functype//wasi/resource-drop:wasi/filesystem/types.wado#descriptor" = fn(i32);  // TypeId(158)
+type "functype//wasi/resource-drop:wasi/filesystem/types.wado#Descriptor" = fn(i32);  // TypeId(158)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(159)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code" = fn(i32);  // TypeId(160)
+type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode" = fn(i32);  // TypeId(160)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(161)
 
@@ -558,10 +558,10 @@ import fn wasi/wasi:filesystem/Descriptor::rename_at from "wasi/wasi:filesystem/
 import fn wasi/wasi:filesystem/Descriptor::unlink_file_at from "wasi/wasi:filesystem/Descriptor::unlink_file_at";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/resource-drop:wasi/filesystem/types.wado#descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#descriptor";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/resource-drop:wasi/filesystem/types.wado#Descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/subtask-cancel from "wasi/subtask-cancel";
@@ -674,7 +674,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_34;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
         if ref.is_null(dirs) == 0 {
             "wasi_filesystem_rename_unlink.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
         }
@@ -700,7 +700,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $moved_4_114 = "wasi_filesystem_rename_unlink.wado/$cm_binding__Descriptor_write_via_stream"(src_file, $moved_4_114 = $load_0; $load_0 = 0; $moved_4_114, 0_i64);
         drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_0_1_14_124, struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("RENAME"), used: 6 }));
         "wasi/stream-drop-writable"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
-        "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
+        "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
         $moved_4_114 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
         $sroa_$pattern_temp_0_1_14_124 = "wasi_filesystem_rename_unlink.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
@@ -710,11 +710,11 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_32;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
         if ref.is_null(src_file) == 0 {
             $moved_4_114 = src_file.value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($moved_4_114);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($moved_4_114);
         }
     } else {
         $moved_4_114 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
@@ -726,19 +726,19 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $moved_4_114 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_31;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
         if ref.is_null(src_result) == 0 {
             if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(local.tee $match_scrut_0(src_result)) {
                 $sroa_$pattern_temp_0_1_14_124 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_0).payload_0).value;
                 src_file.value = 0;
-                "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($sroa_$pattern_temp_0_1_14_124);
+                "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($sroa_$pattern_temp_0_1_14_124);
             } else {
             }
         }
         if ref.is_null($moved_23) == 0 {
             $sroa_$pattern_temp_0_1_14_124 = $moved_23.value;
             $moved_23.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($sroa_$pattern_temp_0_1_14_124);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($sroa_$pattern_temp_0_1_14_124);
         }
         if ref.is_null(dirs) == 0 {
             "wasi_filesystem_rename_unlink.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
@@ -759,7 +759,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $sroa_$pattern_temp_0_1_14_124 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_28;
         "core:rt/write_string_to_stream$dae[add_newline]"($load_0, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
         $moved_4_114 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -770,19 +770,19 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_27;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
         if ref.is_null(src_result) == 0 {
             if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(local.tee $match_scrut_0(src_result)) {
                 $moved_4_114 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_0).payload_0).value;
                 src_file.value = 0;
-                "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($moved_4_114);
+                "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($moved_4_114);
             } else {
             }
         }
         if ref.is_null($moved_23) == 0 {
             $moved_4_114 = $moved_23.value;
             $moved_23.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($moved_4_114);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($moved_4_114);
         }
         if ref.is_null(dirs) == 0 {
             "wasi_filesystem_rename_unlink.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
@@ -804,7 +804,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
             $moved_4_114 = 0;
             $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_25;
             "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
         } else {
             $sroa_$pattern_temp_0_1_14_124 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
             $load_0 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -815,7 +815,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
             $sroa_$pattern_temp_0_1_14_124 = 0;
             $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_24;
             "core:rt/write_string_to_stream$dae[add_newline]"($load_0, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0);
         }
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
@@ -827,7 +827,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_23;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $moved_4_114);
     }
     $match_scrut_5 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_rename_unlink.wado/$cm_binding__Descriptor_open_at$spec1"($moved_23, 0, global:wasi_filesystem_rename_unlink.wado::$const_obj_14, 0, 1));
     let $match_scrut_7: ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
@@ -885,7 +885,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
                 $moved_4_114 = 0;
                 $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_21;
                 "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $load_0; $load_0 = 0; $sroa_$pattern_temp_0_1_14_124);
             } else {
                 $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(56), used: 0 };
                 if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_124(0 + 28) > builtin::array_len($mv_arg_2.repr)) {
@@ -916,14 +916,14 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
                 $moved_4_114 = $load_0;
                 $load_0 = 0;
                 "core:rt/write_string_to_stream$dae[add_newline]"($load_0 = $moved_4_114; $moved_4_114 = 0; $load_0, $mv_arg_2.repr, $mv_arg_2.used);
-                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
             }
         } else {
         }
         if ref.is_null(src_file) == 0 {
             $load_0 = src_file.value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
         }
     } else {
         $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
@@ -935,7 +935,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_18;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
     }
     if ref.is_null(local.tee v_47((if ref.is_null(local.tee v_47("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_rename_unlink.wado/$cm_binding__Descriptor_unlink_file_at"($moved_23, global:wasi_filesystem_rename_unlink.wado::$const_obj_14)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         v_47;
@@ -951,7 +951,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $sroa_$pattern_temp_0_1_14_124 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_16;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
     } else {
         $moved_4_114 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
         $load_0 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -962,7 +962,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $moved_4_114 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_15;
         "core:rt/write_string_to_stream$dae[add_newline]"($load_0, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
     }
     $match_scrut_7 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_rename_unlink.wado/$cm_binding__Descriptor_open_at$spec1"($moved_23, 0, global:wasi_filesystem_rename_unlink.wado::$const_obj_14, 0, 1));
     let $match_scrut_17: ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
@@ -979,7 +979,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
             $load_0 = 0;
             $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_13;
             "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
         } else {
             $sroa_$pattern_temp_0_1_14_124 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
             $moved_4_114 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -990,7 +990,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
             $sroa_$pattern_temp_0_1_14_124 = 0;
             $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_12;
             "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
         }
     } else {
         $moved_4_114 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
@@ -1002,7 +1002,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $moved_4_114 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_11;
         "core:rt/write_string_to_stream$dae[add_newline]"($load_0, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
     }
     if ref.is_null(local.tee v_47((if ref.is_null(local.tee v_47("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_rename_unlink.wado/$cm_binding__Descriptor_unlink_file_at"($moved_23, global:wasi_filesystem_rename_unlink.wado::$const_obj_10)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         v_47;
@@ -1018,7 +1018,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $load_0 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_9;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_124, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_124 = $moved_4_114; $moved_4_114 = 0; $sroa_$pattern_temp_0_1_14_124);
     } else {
         $sroa_$pattern_temp_0_1_14_124 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
         $moved_4_114 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -1029,7 +1029,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         $sroa_$pattern_temp_0_1_14_124 = 0;
         $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_8;
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_114, $mv_arg_2.repr, $mv_arg_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_114 = $load_0; $load_0 = 0; $moved_4_114);
     }
     $moved_4_114 = builtin::i32_wrap_i64(local.tee $cm_pair_7_117("wasi/stream-new"()));
     $load_0 = builtin::i32_wrap_i64($cm_pair_7_117 >> 32_i64);
@@ -1040,12 +1040,12 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
     $moved_4_114 = 0;
     $mv_arg_2 = global:wasi_filesystem_rename_unlink.wado::$const_obj_7;
     "core:rt/write_string_to_stream$dae[add_newline]"($load_0, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $sroa_$pattern_temp_0_1_14_124; $sroa_$pattern_temp_0_1_14_124 = 0; $load_0);
     if ref.is_null($match_scrut_7) == 0 {
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_7) {
             $load_0 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_7).payload_0).value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
         } else {
         }
     }
@@ -1053,7 +1053,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_5) {
             $load_0 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_5).payload_0).value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
         } else {
         }
     }
@@ -1061,7 +1061,7 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_0) {
             $load_0 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_0).payload_0).value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
         } else {
         }
     }
@@ -1069,14 +1069,14 @@ fn "wasi_filesystem_rename_unlink.wado/run"() with Stdout, Stderr, Preopens {
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(src_result) {
             $load_0 = local.tee src_file(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(src_result).payload_0).value;
             src_file.value = 0;
-            "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+            "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
         } else {
         }
     }
     if ref.is_null($moved_23) == 0 {
         $load_0 = $moved_23.value;
         $moved_23.value = 0;
-        "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($load_0);
+        "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($load_0);
     }
     if ref.is_null(dirs) == 0 {
         "wasi_filesystem_rename_unlink.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs);
@@ -1100,7 +1100,7 @@ fn "wasi_filesystem_rename_unlink.wado/$drop$core:prelude/list.wado/List<[wasi:f
                     let $cm_handle_2: i32;
                     $cm_handle_2 = $load_2.value;
                     $load_2.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($cm_handle_2);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($cm_handle_2);
                 }
                 $slot_4.0 = ref.null none;
             }
@@ -1173,7 +1173,7 @@ fn "wasi_filesystem_rename_unlink.wado/$cm_binding__Preopens_get_directories"() 
                     let $cm_handle_2: i32;
                     $cm_handle_2 = $load_3.value;
                     $load_3.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"($cm_handle_2);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"($cm_handle_2);
                 }
                 $moved_3_23.0 = ref.null none;
             }
@@ -2135,7 +2135,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -3620,7 +3620,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
                 if ref.is_null(local.tee $load_3($slot_20.0)) == 0 {
                     index = $load_3.value;
                     $load_3.value = 0;
-                    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(index);
+                    "wasi/resource-drop:wasi/filesystem/types.wado#Descriptor"(index);
                 }
                 $slot_20.0 = ref.null none;
             }

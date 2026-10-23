@@ -124,7 +124,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(47)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(47)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(48)
 
@@ -144,7 +144,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -306,7 +306,7 @@ fn "try_operator.wado/test_try_op_chained"() with Stdout {
     len_23 = 0;
     b_20 = array.new_data<u8>("chained ok");
     "core:rt/write_string_to_stream$dae[add_newline]"(a_end_19, b_20, 10);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(a_end_19 = i_24; i_24 = 0; a_end_19);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(a_end_19 = i_24; i_24 = 0; a_end_19);
 }
 
 fn "try_operator.wado/test_try_op_variant_from"() with Stdout {
@@ -466,7 +466,7 @@ condition: inner.input == \"bad\"
     $mv$r2$1 = 0;
     b_28 = array.new_data<u8>("variant from ok");
     "core:rt/write_string_to_stream$dae[add_newline]"($mv$r2$0, b_28, 15);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$r2$0 = $moved_4; $moved_4 = 0; $mv$r2$0);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$r2$0 = $moved_4; $moved_4 = 0; $mv$r2$0);
 }
 
 fn "try_operator.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -565,7 +565,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
     i_73 = 0;
     b_69 = array.new_data<u8>("option ok");
     "core:rt/write_string_to_stream$dae[add_newline]"(a_end_68, b_69, 9);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(a_end_68 = $moved_4_215; $moved_4_215 = 0; a_end_68);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(a_end_68 = $moved_4_215; $moved_4_215 = 0; a_end_68);
     cold_path;
     a_end_68 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
     $moved_4_215 = builtin::i32_wrap_i64($cm_pair_7_218 >> 32_i64);
@@ -576,7 +576,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
     a_end_68 = 0;
     b_69 = array.new_data<u8>("result basic ok");
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_215, b_69, 15);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
     cold_path;
     "core:cli/println"(local.tee b_69(array.new_data<u8>("result from ok")), 14);
     $moved_4_215 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
@@ -588,7 +588,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
     $moved_4_215 = 0;
     b_69 = array.new_data<u8>("unit result ok");
     "core:rt/write_string_to_stream$dae[add_newline]"(i_73, b_69, 14);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i_73 = a_end_68; a_end_68 = 0; i_73);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_73 = a_end_68; a_end_68 = 0; i_73);
     "try_operator.wado/test_try_op_variant_from"();
     "wasi/task-return"(0);
 }
@@ -722,7 +722,7 @@ fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -830,7 +830,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }
