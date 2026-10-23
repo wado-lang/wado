@@ -180,6 +180,12 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
+            assert!(
+                [&deserialize_key, &schema_key]
+                    .into_iter()
+                    .any(|ours| ours.as_ref() == Some(&trait_key)),
+                "`requests` is filtered to the serde traits"
+            );
             SynthTrait::Deserialize
         };
         if !asked.insert((target_head.clone(), module_source.clone(), trait_ref)) {

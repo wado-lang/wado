@@ -620,11 +620,7 @@ impl From<DeserializeError> for ArgsError {
             DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
             _ => ArgsErrorKind::InvalidValue,
         };
-        let message = if e.path.is_empty() {
-            e.message
-        } else {
-            `${e.path}: ${e.message}`
-        };
+        let message = if e.path.is_empty() { e.message } else { `${e.path}: ${e.message}` };
         return ArgsError { kind, message };
     }
 }

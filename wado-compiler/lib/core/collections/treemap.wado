@@ -667,7 +667,8 @@ impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
         let on_duplicate = d.on_duplicate_field();
         let mut seq = d.begin_seq()?;
         let mut result = TreeSet::<T>::new();
-        // With the length, the index of the element being read.
+        // `result.len()` counts only distinct elements; the repeats make up the
+        // index an error names.
         let mut repeats = 0;
         loop {
             let Some(element) = match seq.next_element::<T>() {
