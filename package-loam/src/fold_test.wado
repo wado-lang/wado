@@ -118,8 +118,8 @@ test "an integer quotient truncates toward zero, and one over a symbol only wher
         ["U", ints([1], [-2])],
         ["Z", ints([1], [0])],
     ]);
-    let half = folded(node("Div", ["S", "T"], []), k);
-    assert half.elements == Elements::integers([Poly::floor_div(&Poly::symbol(&"N"), &Poly::constant(2), &"Y = Div")]);
+    let halved = folded(node("Div", ["S", "T"], []), k);
+    assert halved.elements == Elements::integers([Poly::floor_div(&Poly::symbol(&"N"), &Poly::constant(2), &"Y = Div")]);
     assert folded(node("Div", ["M", "T"], []), k) == ints([1], [-3]);
     assert folded(node("Div", ["T", "U"], []), k) == ints([1], [-1]);
     assert folded(node("Div", ["M", "U"], []), k) == ints([1], [3]);
