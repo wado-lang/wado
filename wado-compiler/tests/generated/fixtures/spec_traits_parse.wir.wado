@@ -5138,6 +5138,165 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
     };
 }
 
+<<<<<<< HEAD
+||||||| c546920ed
+fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let text: ref "core:prelude/string.wado//StrSlice";
+    text = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$s$repr, start: 0, end: $mv$s$used };
+    if @likely((if block -> bool {
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:core:prelude/primitive.wado::$const_obj_37;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, $mv_arg_2.used);
+    } -> i32 {
+        1;
+    } else {
+        $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49), used: 1 };
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, 1);
+    })) {
+        return 0, 1, ref.null none;
+    }
+    if @likely((if block -> bool {
+        $mv_arg_2 = global:core:prelude/primitive.wado::$const_obj_36;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, $mv_arg_2.used);
+    } -> i32 {
+        1;
+    } else {
+        $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, 1);
+    })) {
+        return 0, 0, ref.null none;
+    }
+    cold_path;
+    return 1, 0, struct.new "core:prelude/traits.wado//LenientParseError" { reason: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid boolean string"), used: 22 } };
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let $load_3: i32;
+    let $qm_v_1: ref "tuple//[core:prelude/string.wado/String, u32]";
+    let $qm_e_2: ref "core:prelude/traits.wado//LenientParseError";
+    let cleaned: ref "core:prelude/string.wado//String";
+    let $qm_e_6: ref "core:prelude/intparse.wado//ParseIntError";
+    let $mv$$vr_16$1: ref null "tuple//[core:prelude/string.wado/String, u32]";
+    let $mv$$vr_16$2: ref null "core:prelude/traits.wado//LenientParseError";
+    multivalue_bind [$mv$s$used, $mv$$vr_16$1, $mv$$vr_16$2] = "core:prelude/intparse.wado/core/prelude/intparse.wado/lenient_int_preprocess<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used);
+    cleaned = local.tee $qm_v_1((if $mv$s$used == 0 -> ref "tuple//[core:prelude/string.wado/String, u32]" {
+        local.tee $qm_v_1(ref.as_non_null($mv$$vr_16$1));
+    } else if @unlikely($mv$s$used == 1) -> ref "tuple//[core:prelude/string.wado/String, u32]" {
+        $qm_e_2 = ref.as_non_null($mv$$vr_16$2);
+        cold_path;
+        return 1, 0, $qm_e_2;
+    } else {
+        unreachable;
+    })).0;
+    $mv$s$used = $qm_v_1.1;
+    return 0, let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $load_3, $mv$$vr_17$2] = ($mv$s$repr = cleaned.repr; $load_3 = cleaned.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $mv$s$repr, 0, $load_3); "core:prelude/primitive.wado/i32::from_str_radix$unchecked<core:prelude/string.wado/String>$sroa[return]"($array_clone_dst_2, $load_3, if @unlikely(((2 <=u $mv$s$used) & ($mv$s$used <=u 36)) == 0) {
+        cold_path;
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$cold0$dae[s]"($mv$s$used);
+        unreachable;
+    }; $mv$s$used)); (if $mv$s$used == 0 -> i32 {
+        $load_3;
+    } else if @unlikely($mv$s$used == 1) -> i32 {
+        $qm_e_6 = ref.as_non_null($mv$$vr_17$2);
+        cold_path;
+        return 1, 0, "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/From<core:prelude/intparse.wado/ParseIntError>::from$sroa[e.kind]"($qm_e_6.kind);
+    } else {
+        unreachable;
+    }), ref.null none;
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let $qm_e: ref "core:prelude/intparse.wado//ParseIntError";
+    let $contract_arg_0: ref "core:prelude/string.wado//StrSlice";
+    return 0, builtin::i32_wrap_i64($contract_arg_0 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$s$repr, start: 0, end: $mv$s$used }; let $mv$$vr_19$1: i64; let $mv$$vr_19$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $mv$$vr_19$1, $mv$$vr_19$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$spec0$dae[min_abs]"($contract_arg_0, 10, 2147483647_i64); (if $mv$s$used == 0 -> i64 {
+        $mv$$vr_19$1;
+    } else if @unlikely($mv$s$used == 1) -> i64 {
+        $qm_e = ref.as_non_null($mv$$vr_19$2);
+        cold_path;
+        return 1, 0, $qm_e;
+    } else {
+        unreachable;
+    })), ref.null none;
+}
+
+=======
+fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let text: ref "core:prelude/string.wado//StrSlice";
+    text = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$s$repr, start: 0, end: $mv$s$used };
+    if @likely((if block -> bool {
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:core:prelude/primitive.wado::$const_obj_37;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, $mv_arg_2.used);
+    } -> i32 {
+        1;
+    } else {
+        $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49), used: 1 };
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, 1);
+    })) {
+        return 0, 1, ref.null none;
+    }
+    if @likely((if block -> bool {
+        $mv_arg_2 = global:core:prelude/primitive.wado::$const_obj_36;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, $mv_arg_2.used);
+    } -> i32 {
+        1;
+    } else {
+        $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text.repr, $mv$s$used, $mv_arg_2.repr, 1);
+    })) {
+        return 0, 0, ref.null none;
+    }
+    cold_path;
+    return 1, 0, struct.new "core:prelude/traits.wado//LenientParseError" { reason: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid boolean string"), used: 22 } };
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let $qm_v_1: ref "tuple//[core:prelude/string.wado/String, u32]";
+    let $qm_e_2: ref "core:prelude/traits.wado//LenientParseError";
+    let cleaned: ref "core:prelude/string.wado//String";
+    let $qm_e_6: ref "core:prelude/intparse.wado//ParseIntError";
+    let $mv$$vr_16$1: ref null "tuple//[core:prelude/string.wado/String, u32]";
+    let $mv$$vr_16$2: ref null "core:prelude/traits.wado//LenientParseError";
+    multivalue_bind [$mv$s$used, $mv$$vr_16$1, $mv$$vr_16$2] = "core:prelude/intparse.wado/core/prelude/intparse.wado/lenient_int_preprocess<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used);
+    cleaned = local.tee $qm_v_1((if $mv$s$used == 0 -> ref "tuple//[core:prelude/string.wado/String, u32]" {
+        local.tee $qm_v_1(ref.as_non_null($mv$$vr_16$1));
+    } else if @unlikely($mv$s$used == 1) -> ref "tuple//[core:prelude/string.wado/String, u32]" {
+        $qm_e_2 = ref.as_non_null($mv$$vr_16$2);
+        cold_path;
+        return 1, 0, $qm_e_2;
+    } else {
+        unreachable;
+    })).0;
+    $mv$s$used = $qm_v_1.1;
+    return 0, let $mv$$vr_17$1: i32; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/primitive.wado/i32::from_str_radix$unchecked<core:prelude/string.wado/String>$sroa[return]"(cleaned.repr, cleaned.used, if @unlikely(((2 <=u $mv$s$used) & ($mv$s$used <=u 36)) == 0) {
+        cold_path;
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>$cold0$dae[s]"($mv$s$used);
+        unreachable;
+    }; $mv$s$used); (if $mv$s$used == 0 -> i32 {
+        $mv$$vr_17$1;
+    } else if @unlikely($mv$s$used == 1) -> i32 {
+        $qm_e_6 = ref.as_non_null($mv$$vr_17$2);
+        cold_path;
+        return 1, 0, "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/From<core:prelude/intparse.wado/ParseIntError>::from$sroa[e.kind]"($qm_e_6.kind);
+    } else {
+        unreachable;
+    }), ref.null none;
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
+    let $qm_e: ref "core:prelude/intparse.wado//ParseIntError";
+    let $contract_arg_0: ref "core:prelude/string.wado//StrSlice";
+    return 0, builtin::i32_wrap_i64($contract_arg_0 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$s$repr, start: 0, end: $mv$s$used }; let $mv$$vr_19$1: i64; let $mv$$vr_19$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $mv$$vr_19$1, $mv$$vr_19$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$spec0$dae[min_abs]"($contract_arg_0, 10, 2147483647_i64); (if $mv$s$used == 0 -> i64 {
+        $mv$$vr_19$1;
+    } else if @unlikely($mv$s$used == 1) -> i64 {
+        $qm_e = ref.as_non_null($mv$$vr_19$2);
+        cold_path;
+        return 1, 0, $qm_e;
+    } else {
+        unreachable;
+    })), ref.null none;
+}
+
+>>>>>>> origin/main
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(self, close) {
     let self_7: ref "core:prelude/string.wado//String";
     let new_used_14: i32;

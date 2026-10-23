@@ -76,8 +76,8 @@ pub(crate) struct TestCache {
     /// `--no-cache`: store, but never answer from, the cache.
     read: bool,
     /// What each input holds now, read once per run however many entries list
-    /// it.
-    on_disk: Mutex<IndexMap<PathBuf, Option<Input>>>,
+    /// it, by its path and the prefix recorded of it.
+    on_disk: Mutex<IndexMap<(PathBuf, Option<u64>), Option<Input>>>,
 }
 
 impl TestCache {
@@ -137,8 +137,8 @@ impl TestCache {
 
     fn unchanged(&self, input: &Input) -> bool {
         lock(&self.on_disk)
-            .entry(input.path.clone())
-            .or_insert_with(|| Input::on_disk(input.path.clone()))
+            .entry((input.path.clone(), input.prefix))
+            .or_insert_with(|| Input::on_disk(input.path.clone(), input.prefix))
             .as_ref()
             == Some(input)
     }

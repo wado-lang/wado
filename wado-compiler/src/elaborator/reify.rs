@@ -115,6 +115,7 @@ use crate::{format_spec, hashmap};
 macro_rules! reify_annotation_accessors {
     ($($(#[$doc:meta])* $name:ident => $map:ident : $val:ty),+ $(,)?) => {
         $(
+            $(#[$doc])*
             fn $name(&self, id: AstId) -> Option<$val> {
                 self.ann(|facts| &facts.$map, id)
             }
@@ -2309,12 +2310,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 guard: None,
                 body: then_body,
                 span,
+                consumes: true,
             },
             TirMatchArm {
                 pattern: TirPattern::Wildcard,
                 guard: None,
                 body: else_body,
                 span: else_span,
+                consumes: false,
             },
         ];
         TirStmt::new(
@@ -3734,12 +3737,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 guard: None,
                 body: some_body,
                 span,
+                consumes: true,
             },
             TirMatchArm {
                 pattern: TirPattern::Wildcard,
                 guard: None,
                 body: break_body,
                 span,
+                consumes: true,
             },
         ];
         let match_expr = TirExpr::new(
@@ -4371,12 +4376,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         guard: None,
                         body: then_body,
                         span: *elem_span,
+                        consumes: true,
                     },
                     TirMatchArm {
                         pattern: TirPattern::Wildcard,
                         guard: None,
                         body: else_body,
                         span: else_arm_span,
+                        consumes: false,
                     },
                 ];
                 vec![TirStmt::new(
@@ -5635,6 +5642,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
             .moved(),
             span,
+            consumes: true,
         };
 
         let none_arm = TirMatchArm {
@@ -5666,6 +5674,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
             ),
             span,
+            consumes: true,
         };
 
         TirExpr::new(
@@ -5736,6 +5745,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
             .moved(),
             span,
+            consumes: true,
         };
 
         let e_expr = TirExpr::new(
@@ -5794,6 +5804,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
             ),
             span,
+            consumes: true,
         };
 
         TirExpr::new(
@@ -6714,12 +6725,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 guard: None,
                 body: arm_body,
                 span: m.span,
+                consumes: false,
             },
             TirMatchArm {
                 pattern: TirPattern::Wildcard,
                 guard: None,
                 body: bool_lit(false, m.span),
                 span: m.span,
+                consumes: false,
             },
         ];
 
@@ -6984,6 +6997,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     guard,
                     body,
                     span: arm.span,
+                    consumes: true,
                 }
             })
             .collect();

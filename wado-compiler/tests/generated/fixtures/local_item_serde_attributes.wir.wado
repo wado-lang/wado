@@ -4523,7 +4523,6 @@ fn "core:args/core:args/ArgvDeserializer::split_long$unchecked<&core:prelude/str
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<&core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {
-    let $load_3: i32;
     let $qm_v_1: ref "tuple//[core:prelude/string.wado/String, u32]";
     let $qm_e_2: ref "core:prelude/traits.wado//LenientParseError";
     let cleaned: ref "core:prelude/string.wado//String";
@@ -4541,12 +4540,12 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::fro
         unreachable;
     })).0;
     $mv$s$used = $qm_v_1.1;
-    return 0, let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $load_3, $mv$$vr_17$2] = ($mv$s$repr = cleaned.repr; $load_3 = cleaned.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $mv$s$repr, 0, $load_3); "core:prelude/primitive.wado/i32::from_str_radix$unchecked<core:prelude/string.wado/String>$sroa[return]"($array_clone_dst_2, $load_3, if @unlikely(((2 <=u $mv$s$used) & ($mv$s$used <=u 36)) == 0) {
+    return 0, let $mv$$vr_17$1: i32; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$s$used, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/primitive.wado/i32::from_str_radix$unchecked<core:prelude/string.wado/String>$sroa[return]"(cleaned.repr, cleaned.used, if @unlikely(((2 <=u $mv$s$used) & ($mv$s$used <=u 36)) == 0) {
         cold_path;
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::from_str_lenient<&core:prelude/string.wado/String>$cold0$dae[s]"($mv$s$used);
         unreachable;
-    }; $mv$s$used)); (if $mv$s$used == 0 -> i32 {
-        $load_3;
+    }; $mv$s$used); (if $mv$s$used == 0 -> i32 {
+        $mv$$vr_17$1;
     } else if @unlikely($mv$s$used == 1) -> i32 {
         $qm_e_6 = ref.as_non_null($mv$$vr_17$2);
         cold_path;

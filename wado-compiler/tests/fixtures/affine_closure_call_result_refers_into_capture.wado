@@ -1,0 +1,37 @@
+// A closure's call result refers into what the closure captured, as a
+// function's refers into its arguments: reading it after the captured value
+// moved is the same error, with an expression body or a block body.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+export fn run() {
+    let t = Tok { id: 1 };
+    let f = || &t;
+    let r = f();
+    eat(t);
+    let n = r.id;
+
+    let u = Tok { id: 2 };
+    let g = || {
+        return &u;
+    };
+    let s = g();
+    eat(u);
+    let m = s.id;
+}
+
+__DATA__
+{
+    "compile_error": ":22:13: analysis error: `r` refers into `t`, which moved at 21:9",
+    "compile_errors_contains": ["`s` refers into `u`, which moved at 29:9"]
+}

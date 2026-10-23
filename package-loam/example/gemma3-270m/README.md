@@ -36,11 +36,12 @@ ignores, and splits the model into the graph and the checkpoint:
 
 - `gemma3.onnxtext` is `onnx/model.onnx` with its weights left out, as
   `tools/onnx_split.wado` writes it.
-- `gemma3-header.safetensors` is the header of the checkpoint that tool writes.
-  The build checks the graph against it, and only running needs the weights.
+- `build/gemma3.safetensors` is the checkpoint that tool writes. The build
+  checks the graph against its header and reads none of the weights behind it.
 
-`build/tokenizer.json` is too large to commit, so `wado test` skips this
-directory. Name a test file to run it once `fetch.sh` has.
+`build/tokenizer.json` and the checkpoint are too large to commit, so
+`wado test` skips this directory. Name a test file to run it once `fetch.sh`
+has.
 
 - `tokenize.json` is the oracle for the tokenizer: the ids Hugging Face's
   tokenizer gives each of a set of texts. `tokenize.mjs` writes it with

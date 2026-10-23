@@ -4,9 +4,11 @@
 //!
 //! See WEP 2026-09-26 (Eval).
 
-use std::panic::AssertUnwindSafe;
+use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
@@ -37,7 +39,7 @@ use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
-use wado_host::sync::lock;
+use wado_host::sync::{join_in_drop, joined, lock};
 
 wasmtime::component::bindgen!({
     inline: "package wado:eval-runner; world runner { import core:eval/eval-host@0.1.0; }",
@@ -100,6 +102,24 @@ pub struct EvalHost {
     /// How many of `cpu`'s permits compiles past the limit may keep: one fewer
     /// than the budget, so compiles that never end cannot stall the run.
     strandable: Arc<Semaphore>,
+    /// The threads of compiles past the limit, joined when the host drops so
+    /// a panic on one still ends the run.
+    stranded: Mutex<Vec<CompileThread>>,
+}
+
+impl Drop for EvalHost {
+    /// A compile still running when the run ends is not waited for, but one
+    /// already panicking is.
+    fn drop(&mut self) {
+        let stranded = std::mem::take(
+            self.stranded
+                .get_mut()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        for compile in stranded.into_iter().filter(CompileThread::has_ended) {
+            join_in_drop(compile.thread);
+        }
+    }
 }
 
 impl EvalHost {
@@ -117,6 +137,7 @@ impl EvalHost {
             dependencies: Mutex::new(IndexMap::default()),
             cpu,
             strandable: Arc::new(Semaphore::new(parallelism - 1)),
+            stranded: Mutex::default(),
         }
     }
 
@@ -235,13 +256,14 @@ impl EvalHost {
         let permit = self.cpu_permit().await;
         // The AOT compile takes seconds, so it runs off the async workers, on a
         // runtime of its own as the compile does.
-        let outcome = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            let (engine, linker) = host.engine();
-            current_thread_runtime().block_on(run(engine, linker, &wasm, fuel))
-        })
-        .await
-        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
+        let outcome = joined(
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                let (engine, linker) = host.engine();
+                current_thread_runtime().block_on(run(engine, linker, &wasm, fuel))
+            })
+            .await,
+        );
         Entry { inputs, outcome }
     }
 
@@ -253,7 +275,7 @@ impl EvalHost {
     /// share one budget, as far as [`Self::abandon`] lets them.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
-    /// the host, so it carries on into the calling test, which reports it.
+    /// the host, so it ends the run.
     async fn compile(&self, source: String, deps: Arc<Dependencies>) -> (Compiled, Vec<Input>) {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
@@ -261,31 +283,31 @@ impl EvalHost {
             ..CompilerOptions::default()
         };
         let held = Arc::new(Mutex::new(vec![self.cpu_permit().await]));
-        let report = tokio::time::timeout(
-            COMPILE_TIME_LIMIT,
-            spawn_compile(source, options, deps, Arc::clone(&held)),
-        );
-        report.await.map_or_else(
-            |_elapsed| {
-                self.abandon(&held);
+        let (report, thread) = spawn_compile(source, options, deps, Arc::clone(&held));
+        match tokio::time::timeout(COMPILE_TIME_LIMIT, report).await {
+            Ok(Ok(compiled)) => compiled,
+            Ok(Err(_unsent)) => resume_unwind(
+                thread
+                    .thread
+                    .join()
+                    .expect_err("only a panic ends the compile thread unreported"),
+            ),
+            Err(_elapsed) => {
+                self.abandon(&held, thread);
                 (Compiled::TimedOut, Vec::new())
-            },
-            |report| {
-                report
-                    .expect("the compile thread reports before it exits")
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-            },
-        )
+            }
+        }
     }
 
     /// Leave `held` to a compile past the limit, with a strand permit beside its
     /// CPU permit, or with neither once [`Self::strandable`] runs out.
-    fn abandon(&self, held: &Mutex<Vec<OwnedSemaphorePermit>>) {
+    fn abandon(&self, held: &Mutex<Vec<OwnedSemaphorePermit>>, thread: CompileThread) {
         match Arc::clone(&self.strandable).try_acquire_owned() {
             Ok(strand) => lock(held).push(strand),
             Err(TryAcquireError::NoPermits) => lock(held).clear(),
             Err(TryAcquireError::Closed) => unreachable!("the strand semaphore is never closed"),
         }
+        lock(&self.stranded).push(thread);
     }
 
     fn engine(&self) -> &(Engine, Linker<Program>) {
@@ -501,21 +523,24 @@ struct Entry {
 }
 
 /// Compile `source` on a thread that holds `held` until it ends, and report
-/// the outcome and the files it read, or the panic that ended it, on the
-/// returned channel.
+/// the outcome and the files it read on the returned channel. A panic drops
+/// the sender unsent.
 fn spawn_compile(
     source: String,
     options: CompilerOptions,
     deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> oneshot::Receiver<std::thread::Result<(Compiled, Vec<Input>)>> {
+) -> (oneshot::Receiver<(Compiled, Vec<Input>)>, CompileThread) {
     let (report, compiled) = oneshot::channel();
-    std::thread::Builder::new()
-        .name("eval-compile".to_string())
-        .stack_size(COMPILER_STACK_SIZE)
-        .spawn(move || {
-            let _held = held;
-            let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+    let panicked = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&panicked);
+    let thread =
+        std::thread::Builder::new()
+            .name("eval-compile".to_string())
+            .stack_size(COMPILER_STACK_SIZE)
+            .spawn(move || {
+                let _held = held;
+                let _flag = PanicFlag(flag);
                 let host = DependencyHost::new(deps);
                 let compiled = current_thread_runtime().block_on(
                     wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
@@ -524,13 +549,35 @@ fn spawn_compile(
                     Ok(result) => Compiled::Wasm(result.wasm),
                     Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
                 };
-                (compiled, std::mem::take(&mut *lock(&host.read)))
-            }));
-            // Past the limit nobody is listening, and the outcome is dropped.
-            let _ = report.send(outcome);
-        })
-        .expect("spawning the eval compile thread");
-    compiled
+                // Past the limit nobody is listening, and the outcome is dropped.
+                let _ = report.send((compiled, std::mem::take(&mut *lock(&host.read))));
+            })
+            .expect("spawning the eval compile thread");
+    (compiled, CompileThread { thread, panicked })
+}
+
+/// A compile's thread, and whether a panic is unwinding out of it.
+struct CompileThread {
+    thread: JoinHandle<()>,
+    panicked: Arc<AtomicBool>,
+}
+
+impl CompileThread {
+    /// Whether joining it now waits at most for the end of an unwind.
+    fn has_ended(&self) -> bool {
+        self.thread.is_finished() || self.panicked.load(Ordering::Acquire)
+    }
+}
+
+/// Raised as a panic unwinds out of the thread that holds it.
+struct PanicFlag(Arc<AtomicBool>);
+
+impl Drop for PanicFlag {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.0.store(true, Ordering::Release);
+        }
+    }
 }
 
 fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {

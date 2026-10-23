@@ -15,7 +15,7 @@ use gemma from "./gemma3.onnxtext"
         generator: {
             module: "lib:loam",
             inputs: [
-                { path: "./gemma3-header.safetensors", type: "safetensors" },
+                { path: "./build/gemma3.safetensors", type: "safetensors" },
             ],
             options: {
                 dims: { batch_size: 1 },
@@ -138,7 +138,7 @@ pub struct Model<affine Bk: Backend> {
 
 impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from a safetensors checkpoint laid out
-    /// as `gemma3-header.safetensors` says.
+    /// as `build/gemma3.safetensors`, whose header the build checked.
     pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
         let weights = gemma::Prepared::load(&mut on, checkpoint)?;

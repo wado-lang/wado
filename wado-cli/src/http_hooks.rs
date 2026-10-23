@@ -17,6 +17,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use wasmtime_wasi_http::{Error as HttpError, RequestOptions, WasiBody, WasiHttpHooks};
 
+use wado_host::sync::joined;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
 macro_rules! warn_log {
@@ -275,18 +276,14 @@ where
 
 /// The hyper connection must be driven concurrently with `sender.send_request`,
 /// otherwise the request never reaches the wire. Spawn the connection on the
-/// tokio runtime now, and forward its result via a channel so the caller can
-/// still observe completion / errors.
+/// tokio runtime now, and hand back its join so the caller can still observe
+/// completion / errors.
 fn spawn_connection<C>(conn: C) -> BoxFuture<'static, Result<(), HttpError>>
 where
     C: Future<Output = hyper::Result<()>> + Send + 'static,
 {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
-        let res = conn.await.map_err(from_hyper_response_error);
-        let _ = tx.send(res);
-    });
-    Box::pin(async move { rx.await.unwrap_or(Ok(())) })
+    let connection = tokio::spawn(async move { conn.await.map_err(from_hyper_response_error) });
+    Box::pin(async move { joined(connection.await) })
 }
 
 fn from_hyper_response_error(err: hyper::Error) -> HttpError {

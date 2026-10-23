@@ -1,0 +1,33 @@
+// Moving an affine element synthesizes a call to `builtin::select`. A function
+// the program names `select` is another function, and lowering must not take
+// the builtin's extern stub for a call that disagrees with it.
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+fn select() -> i32 {
+    return 7;
+}
+
+test {
+    let mut toks: List<Tok> = [];
+    toks.push(Tok { id: 1 });
+    toks.push(Tok { id: 10 });
+    let first = toks.remove(0);
+    assert first.id == 1;
+    builtin::drop(first);
+    builtin::drop(toks);
+    assert DROPS == 11;
+    assert select() == 7;
+}
+
+__DATA__
+{"test": {}}

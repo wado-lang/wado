@@ -12,5 +12,14 @@ version = "0.0.0"
 
 [test]
 # Gemma's tokenizer and checkpoint are too large to commit; `fetch.sh` puts them
-# in its `build/`. Name its test files to run them.
-exclude = ["build/**", "gpt2-124m/build/**", "gemma3-270m/**"]
+# in its `build/`. Name its test files to run them. GPT-2's checkpoint is too
+# large as well, and the build reads its header, so the files naming the model
+# compile only once its `fetch.sh` has run; its tokenizer's test needs none.
+exclude = [
+    "build/**",
+    "gpt2-124m/build/**",
+    "gpt2-124m/gpt2.wado",
+    "gpt2-124m/model.wado",
+    "gpt2-124m/webgpu.wado",
+    "gemma3-270m/**",
+]

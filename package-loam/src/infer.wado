@@ -1,7 +1,7 @@
 //! Stage 0's pass over a graph: name every tensor's axes from the schema,
 //! then discharge each operator's extent conditions in order.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, TreeSet } from "core:collections";
 use { Extent, solved } from "./extent.wado";
 use { Axis, AxisConflict, Shape } from "./shape.wado";
 use {
@@ -292,14 +292,14 @@ impl Error for InferError {
 /// keyed by tensor name, the elements of every tensor the build folded, and
 /// what the inputs owe that the build could not prove.
 pub struct Checked {
-    pub shapes: TreeMap<String, Shape>,
-    pub primitives: TreeMap<String, String>,
-    pub known: TreeMap<String, Known>,
+    pub shapes: HashMap<String, Shape>,
+    pub primitives: HashMap<String, String>,
+    pub known: HashMap<String, Known>,
     pub owed: List<Condition>,
     /// Each `If`'s two branches, keyed by its first output, then before else:
     /// the branch's scope, the one around it included, and what it owes where
     /// it runs.
-    pub branches: TreeMap<String, [Checked, Checked]> = TreeMap::new(),
+    pub branches: HashMap<String, [Checked, Checked]> = HashMap::new(),
 }
 
 /// `owe_at` the node, which a graph wrong for every input stops at.
@@ -317,9 +317,9 @@ fn owe_equal(node: &Node, owed: &mut List<Condition>, a: &Poly, b: &Poly, condit
 /// proof, save the conditions it hands `forward` to check.
 pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     let mut scope = Checked {
-        shapes: TreeMap::new(),
-        primitives: TreeMap::new(),
-        known: TreeMap::new(),
+        shapes: HashMap::new(),
+        primitives: HashMap::new(),
+        known: HashMap::new(),
         owed: [],
     };
     checked_graph(graph, &mut scope, schema)?;
@@ -369,7 +369,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
 /// Each input axis whose `dim_param` spells arithmetic over a name no input
 /// binds (`solved`) read again as one symbol of its own, which the run reads
 /// from that axis.
-fn unspell_unbound(graph: &Graph, shapes: &mut TreeMap<String, Shape>) {
+fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
     let mut extents: List<Extent> = [];
     for let vi of &graph.inputs {
         extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
@@ -571,7 +571,7 @@ fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -
             `${attr} gives ${graph.outputs.len()} outputs, and the node names ${node.outputs.len()}`,
         ));
     }
-    let mut inner = Checked { ..*scope, owed: [], branches: TreeMap::new() };
+    let mut inner = Checked { ..*scope, owed: [], branches: HashMap::new() };
     checked_graph(&graph, &mut inner, schema)?;
     return Result::Ok([graph, inner]);
 }
@@ -580,6 +580,7 @@ fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -
 /// same, under the first node that owed it.
 fn distinct(owed: List<Condition>) -> List<Condition> {
     let mut kept: List<Condition> = [];
+    // A `Poly` has no `Hash` while its derivation is a roadmap item of WEP: HashMap.
     let mut seen = TreeSet::<Poly>::new();
     for let c of owed {
         if seen.insert(c.slack) {
@@ -627,7 +628,7 @@ fn is_layout(op: &String) -> bool {
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
 /// `Cast`'s target, and f32 for every other; `None` for an element emit refuses.
-fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
+fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
         let to = attr_read(node, node.required_int_attr("to"))?;
@@ -704,8 +705,8 @@ fn known_primitive(k: &Known) -> String {
 /// Give a folded tensor a kernel reads the axes the layout names.
 fn materialize(
     tensor: &String,
-    known: &TreeMap<String, Known>,
-    shapes: &mut TreeMap<String, Shape>,
+    known: &HashMap<String, Known>,
+    shapes: &mut HashMap<String, Shape>,
     schema: &Schema,
 ) -> Result<(), InferError> {
     if shapes.contains_key(*tensor) {
@@ -822,8 +823,8 @@ fn extent_of(dim: &Dim, axis: &String) -> Extent {
 
 fn infer_node(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
-    known: &TreeMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
+    known: &HashMap<String, Known>,
     schema: &Schema,
     opset: Option<i64>,
     owed: &mut List<Condition>,
@@ -975,8 +976,8 @@ fn infer_node(
 /// narrower than the axis is a new axis, for its output's layout to name.
 fn split(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
-    known: &TreeMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
+    known: &HashMap<String, Known>,
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<List<Shape>, InferError> {
@@ -1008,7 +1009,7 @@ fn split(
 /// parts together, is new, for the output's layout to name.
 fn joined(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
@@ -1061,7 +1062,7 @@ pub fn split_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
 /// parts sum to it.
 pub fn split_parts(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     x: &Shape,
     owed: &mut List<Condition>,
 ) -> Result<List<Poly>, InferError> {
@@ -1147,7 +1148,7 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Sche
 
 /// A `Slice` the run computes, since a bound or the data is only known then.
 /// An axis it narrows is new, for the output layout to name.
-fn sliced(node: &Node, x: &Shape, known: &TreeMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
+fn sliced(node: &Node, x: &Shape, known: &HashMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     let mut axes = x.axes;
     for let cut of slice_cuts(node, known, x)? {
@@ -1171,7 +1172,7 @@ pub struct Cut {
 /// The axes a `Slice` over `x` narrows, leaving out one it keeps whole. A bound
 /// may be symbolic, and a clamp the build cannot decide is a symbol the run
 /// derives.
-pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<Cut>, InferError> {
+pub fn slice_cuts(node: &Node, known: &HashMap<String, Known>, x: &Shape) -> Result<List<Cut>, InferError> {
     let SliceBounds { starts, ends, axes, steps } = slice_bounds(node, known).map_err(|reason| refusal(node, reason))?;
     let mut cuts: List<Cut> = [];
     let resolved = axis_indices(&axes, x.rank()).map_err(|reason| refusal(node, reason))?;
@@ -1236,7 +1237,7 @@ fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
 /// for the output layout to name.
 fn filled(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
@@ -1260,7 +1261,7 @@ fn filled(
 fn expanded(
     node: &Node,
     x: &Shape,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
@@ -1367,8 +1368,8 @@ pub fn named_present(node: &Node) -> Option<String> {
 /// be the ones its shapes say, as must the rotary caches' and bias's extents.
 fn attention(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
-    known: &TreeMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
+    known: &HashMap<String, Known>,
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<List<Shape>, InferError> {
@@ -1485,7 +1486,7 @@ fn attention(
 
 /// How many elements a `Range` the run computes yields. Its operands are one
 /// element each, and the build knows them, symbolic or not.
-fn range_count(node: &Node, known: &TreeMap<String, Known>, owed: &mut List<Condition>) -> Result<Extent, InferError> {
+fn range_count(node: &Node, known: &HashMap<String, Known>, owed: &mut List<Condition>) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
     return counted(node, stepped_count(node, &start, &limit, &delta, owed)?);
 }
@@ -1516,7 +1517,7 @@ fn stepped_count(
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.
-pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly, Poly, Poly], InferError> {
+pub fn range_bounds(node: &Node, known: &HashMap<String, Known>) -> Result<[Poly, Poly, Poly], InferError> {
     let mut bounds: List<Poly> = [];
     let operands: List<String> = ["start", "limit", "delta"];
     for let [i, operand] of operands.into_iter().enumerate() {
@@ -1585,7 +1586,7 @@ fn output_layout_axis(
 pub fn window_of(
     node: &Node,
     x: &Shape,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     owed: &mut List<Condition>,
 ) -> Result<Geometry, InferError> {
     if x.rank() < 3 {
@@ -1704,7 +1705,7 @@ fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
 
 /// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
 /// `Gemm` over two-dimensional operands only.
-fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
+fn gemm_matrix(node: &Node, shapes: &HashMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
     let shape = operand_at(node, shapes, index);
     if shape.rank() != 2 {
         return Result::Err(operand_rank(node, index, shape.rank(), 2));
@@ -1752,7 +1753,7 @@ pub fn is_reduction(op: &String) -> bool {
 
 /// The axes a reduction folds, resolved against `rank`. Naming none folds every
 /// axis, unless `noop_with_empty_axes` makes it fold none.
-pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> Result<List<i32>, InferError> {
+pub fn reduced_axes(node: &Node, known: &HashMap<String, Known>, rank: i32) -> Result<List<i32>, InferError> {
     let written = axes_of(node, known, 1, "axes").map_err(|reason| refusal(node, reason))?;
     let listed: List<i64> = written.unwrap_or([]);
     if !listed.is_empty() {
@@ -1819,7 +1820,7 @@ fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
     });
 }
 
-fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
+fn binary_operands(node: &Node, shapes: &HashMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
     return Result::Ok([
         operand_at(node, shapes, 0),
         operand_at(node, shapes, 1),
@@ -1830,8 +1831,8 @@ fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shap
 /// rules after this read an operand by position. A hand-edited file breaks this.
 fn operands_given(
     node: &Node,
-    known: &TreeMap<String, Known>,
-    shapes: &TreeMap<String, Shape>,
+    known: &HashMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
 ) -> Result<(), InferError> {
     if let Some(needed) = required_operands(&node.op) {
         let given = node.leading_operands();
@@ -1885,7 +1886,7 @@ fn is_unary_elementwise(op: &String) -> bool {
 
 /// Operand `index`'s shape. `operands_given` proved it defined, and a folded one
 /// is materialized before any rule reads it.
-fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Shape {
+fn operand_at(node: &Node, shapes: &HashMap<String, Shape>, index: i32) -> Shape {
     return shapes.get(node.inputs[index]).unwrap();
 }
 

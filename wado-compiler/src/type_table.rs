@@ -5528,6 +5528,12 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` is one of `slots` or is built over one, matched by id as a
+    /// substitution binds them.
+    pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
+        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
+    }
+
     /// The frame slots `id` (recursively) mentions, projections included.
     pub fn type_param_indices(&self, id: TypeId) -> IndexSet<u32> {
         let mut indices = IndexSet::default();

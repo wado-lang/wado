@@ -1,7 +1,7 @@
 //! What the invocation fixes before stage 0 reads a graph: extents for its
 //! symbolic dimensions, and the outputs `forward` returns.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashSet, TreeMap } from "core:collections";
 use { spelled_poly } from "./extent.wado";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 
@@ -32,7 +32,7 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), O
             return conflict("dims", `${name} is ${extent}, and an extent is not negative`);
         }
     }
-    let mut bound = TreeSet::<String>::new();
+    let mut bound = HashSet::<String>::new();
     for let vi of &mut graph.inputs {
         bind(vi, dims, &mut bound)?;
     }
@@ -47,7 +47,7 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), O
     return Result::Ok(());
 }
 
-fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<String>) -> Result<(), OptionConflict> {
+fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut HashSet<String>) -> Result<(), OptionConflict> {
     let Dims(written) = vi.rank else {
         return Result::Ok(());
     };
@@ -75,7 +75,7 @@ fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<Str
 fn spelled_extent(
     name: &String,
     dims: &TreeMap<String, i32>,
-    bound: &mut TreeSet<String>,
+    bound: &mut HashSet<String>,
 ) -> Result<Option<i32>, OptionConflict> {
     let Some(free) = spelled_poly(name, &TreeMap::<String, i32>::new()) else {
         return Result::Ok(null);
@@ -112,7 +112,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
         return Result::Ok(());
     }
     let mut outputs: List<ValueInfo> = [];
-    let mut needed = TreeSet::<String>::new();
+    let mut needed = HashSet::<String>::new();
     for let name of *names {
         let Some(at) = graph.outputs.position(|vi| vi.name == name) else {
             return conflict("outputs", `the graph declares no output ${name}`);
@@ -139,7 +139,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
     return Result::Ok(());
 }
 
-fn produces_any(node: &Node, needed: &TreeSet<String>) -> bool {
+fn produces_any(node: &Node, needed: &HashSet<String>) -> bool {
     for let output of node.outputs {
         if needed.contains(output) {
             return true;
@@ -148,7 +148,7 @@ fn produces_any(node: &Node, needed: &TreeSet<String>) -> bool {
     return false;
 }
 
-fn read_of(declared: &List<ValueInfo>, needed: &TreeSet<String>) -> List<ValueInfo> {
+fn read_of(declared: &List<ValueInfo>, needed: &HashSet<String>) -> List<ValueInfo> {
     let mut kept: List<ValueInfo> = [];
     for let vi of *declared {
         if needed.contains(vi.name) {

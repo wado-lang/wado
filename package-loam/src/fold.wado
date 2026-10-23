@@ -1,7 +1,7 @@
 //! Stage 0's evaluation of what a graph computes from what the build knows:
 //! the shape arithmetic an exporter writes, and the constants it reaches.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { AttrError, Elements, Known, Node, Stored, data_type, trailing_axes } from "./graph.wado";
 use { Condition, Poly, owe } from "./poly.wado";
@@ -19,8 +19,8 @@ use { Shape } from "./shape.wado";
 /// where the run computes it. `Err` says why the build cannot evaluate it.
 pub fn fold(
     node: &Node,
-    known: &TreeMap<String, Known>,
-    shapes: &TreeMap<String, Shape>,
+    known: &HashMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
 ) -> Result<Option<Known>, String> {
     return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k, node)));
 }
@@ -46,8 +46,8 @@ fn in_width(k: Known, node: &Node) -> Known {
 
 fn evaluated(
     node: &Node,
-    known: &TreeMap<String, Known>,
-    shapes: &TreeMap<String, Shape>,
+    known: &HashMap<String, Known>,
+    shapes: &HashMap<String, Shape>,
 ) -> Result<Option<Known>, String> {
     let op = node.op;
     if op == "Constant" {
@@ -104,7 +104,7 @@ fn evaluated(
 
 /// A known tensor regrouped, or `None` where the target leaves an extent
 /// symbolic, which the run checks the known count against.
-fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<Option<Known>, String> {
+fn regrouped(node: &Node, known: &HashMap<String, Known>, x: &Known) -> Result<Option<Known>, String> {
     let input: List<Extent> = x.extents.into_iter().map(|e| Extent::Static(e)).collect();
     let mut extents: List<i32> = [];
     // Only a symbolic target owes, and one leaves an extent symbolic below.
@@ -124,7 +124,7 @@ fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<O
 /// regrouping relies on and cannot prove.
 pub fn regrouped_extents(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     input: &List<Extent>,
     owed: &mut List<Condition>,
 ) -> Result<List<Extent>, String> {
@@ -288,7 +288,7 @@ fn constant(node: &Node) -> Result<Known, String> {
 }
 
 /// `Shape`, whose elements are symbolic where the operand's extents are.
-fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String, Shape>) -> Result<Known, String> {
+fn shape_of(node: &Node, known: &HashMap<String, Known>, shapes: &HashMap<String, Shape>) -> Result<Known, String> {
     let input = node.inputs[0];
     let extents: List<Poly> = match known.get(input) {
         Some(k) => k.extents.into_iter().map(|e| Poly::constant(e as i64)).collect(),
@@ -348,7 +348,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Option<Known>, Str
 /// unlike a `Reshape` neither leaves its axes to be told apart by extent.
 pub fn carried_axes(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     input: &List<Extent>,
 ) -> Result<List<Option<i32>>, String> {
     return match node.op.as_str_slice() {
@@ -453,7 +453,7 @@ pub struct SliceBounds {
 
 /// The operands of `Slice` `node`, with ONNX's defaults filled in: the leading
 /// axes where it lists none, and a step of 1.
-pub fn slice_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<SliceBounds, String> {
+pub fn slice_bounds(node: &Node, known: &HashMap<String, Known>) -> Result<SliceBounds, String> {
     let starts = polys_at(node, known, 1, "starts")?.ok_or("starts is absent")?;
     let ends = polys_at(node, known, 2, "ends")?.ok_or("ends is absent")?;
     let sliced = starts.len();
@@ -472,7 +472,7 @@ pub fn slice_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<Slice
 
 /// `Slice` of a known tensor, or `None` where a bound only the run knows
 /// leaves the slice to it.
-fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Option<Known>, String> {
+fn slice(x: &Known, node: &Node, known: &HashMap<String, Known>) -> Result<Option<Known>, String> {
     let rank = x.extents.len();
     let SliceBounds { starts, ends, axes, steps } = slice_bounds(node, known)?;
     let [Some(starts), Some(ends)] = [
@@ -913,7 +913,7 @@ fn numbers(values: &List<Poly>) -> Option<List<i64>> {
 /// `attr` an opset before 13 wrote them in. `None` where neither is given.
 pub fn axes_of(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     index: i32,
     attr: String,
 ) -> Result<Option<List<i64>>, String> {
@@ -928,7 +928,7 @@ pub fn axes_of(
 
 /// The integers operand `index` holds, which the operator requires and the
 /// build must know, symbolic or not.
-pub fn operand_polys(node: &Node, known: &TreeMap<String, Known>, index: i32) -> Result<List<Poly>, String> {
+pub fn operand_polys(node: &Node, known: &HashMap<String, Known>, index: i32) -> Result<List<Poly>, String> {
     return polys_of(&operand_known(node, known, index)?);
 }
 
@@ -936,7 +936,7 @@ pub fn operand_polys(node: &Node, known: &TreeMap<String, Known>, index: i32) ->
 /// `Slice` bound.
 pub fn polys_at(
     node: &Node,
-    known: &TreeMap<String, Known>,
+    known: &HashMap<String, Known>,
     index: i32,
     attr: String,
 ) -> Result<Option<List<Poly>>, String> {
@@ -948,7 +948,7 @@ pub fn polys_at(
     );
 }
 
-fn operand_known(node: &Node, known: &TreeMap<String, Known>, index: i32) -> Result<Known, String> {
+fn operand_known(node: &Node, known: &HashMap<String, Known>, index: i32) -> Result<Known, String> {
     return known.get(node.inputs[index]).ok_or(
         `operand ${node.inputs[index]} is computed at run time, and the build reads it`,
     );

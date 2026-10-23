@@ -1,0 +1,48 @@
+// `T::method(...)` checks each argument against its parameter once the method's
+// own type arguments are bound: the receiver, a parameter the turbofish
+// instantiates, and one spelled `Self` all name the caller's `T`, which is
+// settled in this body. Unchecked, each reached codegen as an invalid module.
+
+trait Conv with () {
+    fn conv<U>(&self, u: U) -> U;
+    fn get(&self) -> i32;
+    fn merge(&self, other: Self) -> i32;
+}
+
+struct Unit {
+    n: i32,
+}
+
+impl Conv for Unit {
+    fn conv<U>(&self, u: U) -> U {
+        return u;
+    }
+
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+
+    fn merge(&self, other: Self) -> i32 {
+        return self.n + other.n;
+    }
+}
+
+fn receiver<T: Conv>(t: &T) -> i32 {
+    return T::get(&"not a T");
+}
+
+fn turbofish<T: Conv>(t: &T) -> u8 {
+    return T::conv::<u8>(t, "not a u8");
+}
+
+fn self_param<T: Conv>(t: &T) -> i32 {
+    return T::merge(t, "not a T");
+}
+
+test "every argument is checked against its settled parameter" {
+    let u = Unit { n: 1 };
+    assert receiver(&u) + turbofish(&u) as i32 + self_param(&u) == 0;
+}
+
+__DATA__
+{"compile_error": ":31:19: analysis error: type mismatch: expected '&T', found '&String'; 35:29: type mismatch: expected 'u8', found 'String'; 39:24: type mismatch: expected 'T', found 'String'", "compile_error_codes": ["TYPE_MISMATCH"]}

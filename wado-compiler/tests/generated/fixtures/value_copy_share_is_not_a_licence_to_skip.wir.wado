@@ -208,49 +208,44 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_3_a_share_plus_a_repoin
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_4_a_release_does_not_travel_to_a_chain_whose_root_is_read_again"() {
     let v_18: ref "core:prelude//List<i32>";
-    let $sroa_h_xs_32: ref "core:prelude//List<i32>";
-    v_18 = local.tee $sroa_h_xs_32(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
+    v_18 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = v_18.repr;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2);
-    $sroa_h_xs_32 = struct.new "core:prelude//List<i32>" { repr: local.tee $array_clone_src_1(array.new_fixed<i32>()), used: 0 };
-    $sroa_h_xs_32 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2); $array_clone_src_1, used: 2 };
-    if @unlikely(2 >= builtin::array_len($sroa_h_xs_32.repr)) {
+    v_18 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2); $array_clone_src_1, used: 2 };
+    drop(local.tee $array_clone_src_1(array.new_fixed<i32>()));
+    if @unlikely(2 >= builtin::array_len(v_18.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_h_xs_32);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_18);
     }
-    builtin::array_set<i32>($sroa_h_xs_32.repr, 2, 3);
-    $sroa_h_xs_32.used = 3;
+    builtin::array_set<i32>(v_18.repr, 2, 3);
+    v_18.used = 3;
     block {
     };
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"() {
     let b: ref "core:prelude//List<i32>";
-    let c: ref "core:prelude//List<i32>";
+    let s: ref "core:prelude//List<i32>";
     let $v0_5: i32;
     b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = b.repr;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2);
-    $array_clone_src_1 = array.new_fixed<i32>();
-    b.repr = $array_clone_src_1;
+    s = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = b.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2); $array_clone_dst_2, used: 2 };
+    $array_clone_dst_2 = array.new_fixed<i32>();
+    b.repr = $array_clone_dst_2;
     b.used = 0;
-    c = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2); $array_clone_src_1, used: 2 };
-    if @unlikely(2 >= builtin::array_len(c.repr)) {
+    if @unlikely(2 >= builtin::array_len(s.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(c);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(s);
     }
-    builtin::array_set<i32>(c.repr, 2, 3);
-    c.used = 2 + 1;
+    builtin::array_set<i32>(s.repr, 2, 3);
+    s.used = 2 + 1;
     if @unlikely((local.tee $v0_5(b.used) == 0) == 0) {
         cold_path;
         "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold1"($v0_5);
         unreachable;
     }
-    if @unlikely(local.tee $v0_5(c.used) != 3) {
+    if @unlikely(local.tee $v0_5(s.used) != 3) {
         cold_path;
         "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold0"($v0_5);
         unreachable;
@@ -258,21 +253,17 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outl
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local"() {
-    let c: ref "core:prelude//List<i32>";
-    let $sroa_b_repr_34: ref Array<i32>;
-    $sroa_b_repr_34 = array.new_fixed<i32>(1, 2);
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = $sroa_b_repr_34;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2);
-    $sroa_b_repr_34 = local.tee $array_clone_src_1(array.new_fixed<i32>());
-    c = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $sroa_b_repr_34(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2); $sroa_b_repr_34, used: 2 };
-    if @unlikely(2 >= builtin::array_len(c.repr)) {
+    let s: ref "core:prelude//List<i32>";
+    let $sroa_b_repr_33: ref Array<i32>;
+    $sroa_b_repr_33 = array.new_fixed<i32>(1, 2);
+    s = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_b_repr_33; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2); $array_clone_dst_2, used: 2 };
+    $sroa_b_repr_33 = local.tee $array_clone_dst_2(array.new_fixed<i32>());
+    if @unlikely(2 >= builtin::array_len(s.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(c);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(s);
     }
-    builtin::array_set<i32>(c.repr, 2, 3);
-    c.used = 3;
+    builtin::array_set<i32>(s.repr, 2, 3);
+    s.used = 3;
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_0_a_let_out_of_a_place_copies"() {

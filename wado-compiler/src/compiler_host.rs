@@ -9,6 +9,7 @@
 //! See WEP: `CompilerHost` Abstraction for Compiler I/O
 
 use std::future::Future;
+use std::sync::Arc;
 
 use crate::ast::AstIdSpace;
 use crate::hashmap;
@@ -224,6 +225,9 @@ pub enum Code {
     KilnStaleCache,
     /// A Kiln generator package imports an interface the sandbox forbids.
     KilnGeneratorForbiddenImport,
+    /// A generator's `probe` takes a parameter no host supplies, or answers
+    /// something other than an extent.
+    KilnProbeSignature,
     /// A program for a world other than the test world reaches `core:eval`,
     /// which only `wado test` supplies.
     EvalOutsideTestWorld,
@@ -356,6 +360,7 @@ impl std::fmt::Display for Code {
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
+            Code::KilnProbeSignature => "KILN_PROBE_SIGNATURE",
             Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
@@ -460,7 +465,7 @@ pub enum SourceError {
 impl std::fmt::Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceError::NotFound { path } => write!(f, "module not found: {path}"),
+            SourceError::NotFound { path } => write!(f, "file not found: '{path}'"),
             SourceError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
             }
@@ -510,6 +515,40 @@ pub trait CompilerHost: Send + Sync {
         async move { self.load_source(path).await.is_ok() }
     }
 
+    /// `path` opened to be read a range at a time, for a reader that learns how
+    /// far to read only by reading, as a Kiln probe does. What is read through
+    /// it is no dependency of the compile: the part one depends on is read again
+    /// through [`Self::load_source_prefix`].
+    ///
+    /// The default loads the file whole; a filesystem host overrides it, so a
+    /// probe of a checkpoint reads the header rather than the payloads.
+    fn open_source(
+        &self,
+        path: &str,
+    ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
+        async move {
+            let bytes = self.load_source(path).await?;
+            Ok(Arc::new(bytes) as Arc<dyn SourceReader>)
+        }
+    }
+
+    /// The first `extent` bytes of `path`, or all of it at `None`: the part of
+    /// a Kiln input its output depends on. The default loads the file whole and
+    /// cuts it; a filesystem host overrides it to read the prefix alone.
+    fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move {
+            let mut bytes = self.load_source(path).await?;
+            if let Some(n) = extent {
+                bytes.truncate(usize::try_from(n).unwrap_or(usize::MAX));
+            }
+            Ok(bytes)
+        }
+    }
+
     /// Emit a diagnostic (error, warning, etc.)
     ///
     /// This method is called synchronously by the compiler whenever a diagnostic
@@ -540,13 +579,15 @@ pub trait CompilerHost: Send + Sync {
     }
 
     /// Ask a generator how many leading bytes of each input determine its
-    /// output, one answer per file in declaration order. `None` in a slot —
-    /// and the default empty answer — means the whole file, which is what a
-    /// generator exporting no `probe` gets. Protocol: WEP 2026-04-12.
+    /// output, one answer per file in declaration order: an extent shorter than
+    /// the file, or `None` for the whole file. A generator exporting no `probe`
+    /// answers empty, as the default does, which is every file whole. A host
+    /// opens the files with [`Self::open_source`] only once it knows the
+    /// generator probes them. Protocol: WEP 2026-04-12.
     fn probe_generator(
         &self,
         _component_wasm: &[u8],
-        _request: &GeneratorRequest,
+        _request: &ProbeRequest,
     ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
         async move { Ok(Vec::new()) }
     }
@@ -663,17 +704,45 @@ pub struct GeneratorRequest {
     pub options: CanonicalOptions,
 }
 
-impl GeneratorRequest {
-    /// Every input file, primary first. This is the order a probe answers in
-    /// and the order extents are recorded in, so it lives here rather than
-    /// being re-spelled at each site that walks them.
-    pub fn files(&self) -> impl Iterator<Item = &GeneratorInputFile> {
-        std::iter::once(&self.primary).chain(self.inputs.iter())
+/// What a Kiln generator's `probe` is asked about: every input file, primary
+/// first. The host serves each a range at a time, from
+/// [`CompilerHost::open_source`], as the probe pulls it.
+pub struct ProbeRequest {
+    pub files: Vec<ProbeInput>,
+    /// The invocation's options, as [`GeneratorRequest::options`].
+    pub options: CanonicalOptions,
+}
+
+/// One file a probe reads.
+pub struct ProbeInput {
+    pub path: String,
+    /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
+    /// file depends on what kind of file it is.
+    pub use_type: Option<String>,
+}
+
+/// A file read a range at a time. See [`CompilerHost::open_source`].
+pub trait SourceReader: Send + Sync {
+    /// The file's length in bytes when it was opened.
+    fn byte_len(&self) -> u64;
+
+    /// Fill `buf` from `start`, answering how many bytes were read: fewer than
+    /// `buf` holds only where the file ends first, which is its end now rather
+    /// than [`Self::byte_len`]'s.
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError>;
+}
+
+/// A file already held whole.
+impl SourceReader for Vec<u8> {
+    fn byte_len(&self) -> u64 {
+        self.len() as u64
     }
 
-    /// [`Self::files`], for a caller that rewrites what it walks.
-    pub fn files_mut(&mut self) -> impl Iterator<Item = &mut GeneratorInputFile> {
-        std::iter::once(&mut self.primary).chain(self.inputs.iter_mut())
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+        let start = usize::try_from(start).unwrap_or(usize::MAX).min(self.len());
+        let n = buf.len().min(self.len() - start);
+        buf[..n].copy_from_slice(&self[start..start + n]);
+        Ok(n)
     }
 }
 
@@ -739,6 +808,8 @@ pub enum GeneratorRunnerError {
     Generator(GeneratorError),
     /// The host failed (instantiation, import linking, fuel, timeout, …).
     Host(String),
+    /// An input file the generator is handed could not be read.
+    LoadInput { path: String, source: SourceError },
 }
 
 impl std::fmt::Display for GeneratorRunnerError {
@@ -749,6 +820,9 @@ impl std::fmt::Display for GeneratorRunnerError {
             }
             GeneratorRunnerError::Generator(e) => write!(f, "generator error: {e}"),
             GeneratorRunnerError::Host(msg) => write!(f, "generator host error: {msg}"),
+            GeneratorRunnerError::LoadInput { path, source } => {
+                write!(f, "failed to load input {path:?}: {source}")
+            }
         }
     }
 }

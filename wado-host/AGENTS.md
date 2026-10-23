@@ -33,8 +33,9 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
 - `random.rs` — the fixed-seed `wasi:random/insecure` and `insecure-seed` that
   a Kiln generator and a `core:eval` program get, so each stays a function of
   its input.
-- `sync.rs` — how production code locks a mutex: recover a poisoned guard. Test
-  mocks may still `unwrap`.
+- `sync.rs` — how production code locks a mutex and joins a task or thread. A
+  poisoned guard is recovered, and test mocks may still `unwrap`. A panic in a
+  joined task continues in the caller.
 - `atomic_write.rs` — write a file through a staged sibling and a rename.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine

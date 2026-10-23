@@ -126,7 +126,8 @@ pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
     GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
     GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ProbeInput, ProbeRequest, Severity,
+    SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{
@@ -1607,15 +1608,19 @@ fn compile_after_load<H: CompilerHost>(
     };
 
     let kiln_options_descriptor = if is_kiln_generator {
-        match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
-            Ok(d) => Some(d),
-            Err(diags) => {
-                for d in diags {
-                    logger.host().emit_diagnostic(d);
-                }
-                return Err(Bail);
+        let (descriptor, mut diags) =
+            match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
+                Ok(d) => (Some(d), Vec::new()),
+                Err(diags) => (None, diags),
+            };
+        diags.extend(kiln::check_probe(&sem, &sem.entry_module_source));
+        if !diags.is_empty() {
+            for d in diags {
+                logger.host().emit_diagnostic(d);
             }
+            return Err(Bail);
         }
+        descriptor
     } else {
         None
     };
@@ -1865,7 +1870,6 @@ fn compile_after_load<H: CompilerHost>(
         state,
         tir_modules,
         interner,
-        liveness,
         coverage,
         ..
     } = sem;
@@ -1953,8 +1957,6 @@ fn compile_after_load<H: CompilerHost>(
     // Apply options to package (must be before synthesis)
     let mut package = package;
     package.export_mappings = export_mappings;
-    // Last-use spans (WEP 2026-05-21) drive value-copy elision downstream.
-    package.moved_local_spans = liveness.moved_spans;
     if let Some(world) = options.target_world {
         package.target_world = world;
     }
@@ -2462,7 +2464,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
-    let moved_local_spans = sem.liveness.moved_spans.clone();
     // The resolved modules are kept as-is for the `--tir-resolved` view; the
     // pipeline below runs on its own snapshot, so these stay frozen here.
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
@@ -2511,7 +2512,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
             // Apply target world override (must be before synthesis)
             let mut package = package;
-            package.moved_local_spans = moved_local_spans;
             package.export_mappings = export_mappings;
             if let Some(world) = target_world {
                 package.target_world = world.to_string();

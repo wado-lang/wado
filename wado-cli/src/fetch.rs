@@ -21,6 +21,7 @@ use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 use wado_host::atomic_write::write_atomic;
+use wado_host::sync::joined;
 
 #[derive(Debug)]
 pub struct FetchOptions {}
@@ -90,10 +91,10 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
                 .to_string();
             let (version, sha) = (package.version.clone(), sha.clone());
             let url_for_msg = url.clone();
-            let worktree = tokio::task::spawn_blocking(move || materialize(&url, &version, &sha))
-                .await
-                .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
-                .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
+            let worktree = joined(
+                tokio::task::spawn_blocking(move || materialize(&url, &version, &sha)).await,
+            )
+            .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
             eprintln!(
                 "Fetched {url_for_msg}@{} → {}",
                 package.version,

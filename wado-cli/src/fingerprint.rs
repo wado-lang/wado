@@ -2,11 +2,11 @@
 //! files it read. Shared by the `core:eval` outcome cache and the `wado test`
 //! result cache.
 
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
+use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::kiln_provider::hex32;
 
@@ -82,36 +82,42 @@ pub(crate) fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Input {
     pub(crate) path: PathBuf,
+    /// How many leading bytes the compile depended on, as a Kiln input cut to
+    /// its probe's extent; `None` is the whole file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) prefix: Option<u64>,
     /// `None` where the file was absent.
     sha256: Option<String>,
 }
 
 impl Input {
     pub(crate) fn of(path: PathBuf, bytes: Option<&[u8]>) -> Self {
-        Self::hashed(path, bytes.map(|bytes| Sha256::digest(bytes).into()))
+        Self::hashed(path, None, bytes.map(|bytes| Sha256::digest(bytes).into()))
     }
 
     /// An input whose bytes the caller has already hashed.
-    pub(crate) fn hashed(path: PathBuf, sha256: Option<[u8; 32]>) -> Self {
+    pub(crate) fn hashed(path: PathBuf, prefix: Option<u64>, sha256: Option<[u8; 32]>) -> Self {
         Self {
             path,
+            prefix,
             sha256: sha256.map(|hash| hex32(&hash)),
         }
     }
 
     pub(crate) fn unchanged(&self) -> bool {
-        Self::on_disk(self.path.clone()).as_ref() == Some(self)
+        Self::on_disk(self.path.clone(), self.prefix).as_ref() == Some(self)
     }
 
-    /// What `path` holds now; `None` where it cannot be read, which matches no
-    /// recorded input. A path through a file, such as `wado.toml` under a path
-    /// dependency naming a file, is as absent as a missing one.
-    pub(crate) fn on_disk(path: PathBuf) -> Option<Self> {
-        match std::fs::read(&path) {
-            Ok(bytes) => Some(Self::of(path, Some(&bytes))),
-            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
-                Some(Self::of(path, None))
-            }
+    /// What `path` holds now, its first `prefix` bytes where that is given;
+    /// `None` where it cannot be read, which matches no recorded input.
+    pub(crate) fn on_disk(path: PathBuf, prefix: Option<u64>) -> Option<Self> {
+        match read_prefix(&path, prefix) {
+            Ok(bytes) => Some(Self::hashed(
+                path,
+                prefix,
+                Some(Sha256::digest(bytes).into()),
+            )),
+            Err(e) if is_absent(&e) => Some(Self::hashed(path, prefix, None)),
             Err(_) => None,
         }
     }

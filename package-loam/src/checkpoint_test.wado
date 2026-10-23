@@ -1,8 +1,16 @@
 //! A safetensors checkpoint as the loader reads it, and every way one can
 //! disagree with the graph a module was compiled for.
 
+use { HashMap } from "core:collections";
 use { push_element } from "./graph.wado";
-use { Expected, LoadError, declared_header_end, header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use {
+    Expected,
+    LoadError,
+    declared_header_end,
+    header_end,
+    read_checkpoint,
+    read_shards,
+} from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 
 fn is_error<E: Error>() {
@@ -170,4 +178,61 @@ test "the header's metadata is not a tensor" {
     let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
     let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
     assert `${e}` == "__metadata__: the checkpoint has no such tensor";
+}
+
+/// `two_tensors` split across two shards, `w` in the first and `b` in the second.
+fn two_shards() -> HashMap<String, ByteList> {
+    let mut shards = HashMap::<String, ByteList>::new();
+    shards["m-00001-of-00002.safetensors"] = write_safetensors(&[
+        StoredTensor {
+            name: "w",
+            dtype: "F32",
+            shape: [2, 3],
+            data: floats([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+        },
+    ]);
+    shards["m-00002-of-00002.safetensors"] = write_safetensors(&[
+        StoredTensor {
+            name: "b",
+            dtype: "F32",
+            shape: [3],
+            data: floats([-1.0, 0.5, 0.25]),
+        },
+    ]);
+    return shards;
+}
+
+test "a shard's payload comes back from the shard the index places it in" {
+    let given = two_shards();
+    let shards = read_shards(&given).unwrap();
+    let bias = shards.payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap();
+    assert List::<f32>::from_le_bytes(bias) == [-1.0, 0.5, 0.25] as List<f32>;
+}
+
+test "a tensor whose shard is not given names the shard" {
+    let mut given = two_shards();
+    given.remove("m-00002-of-00002.safetensors");
+    let e = read_shards(&given).unwrap().payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
+    assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
+}
+
+test "a tensor its shard lacks names itself and the shard" {
+    let given = two_shards();
+    let e = read_shards(&given).unwrap().payload(&given, "m-00001-of-00002.safetensors", &b()).unwrap_err();
+    assert `${e}` == "m-00001-of-00002.safetensors: b: the checkpoint has no such tensor";
+}
+
+test "a shard read but then left out of the payloads names the shard" {
+    let mut given = two_shards();
+    let shards = read_shards(&given).unwrap();
+    given.remove("m-00002-of-00002.safetensors");
+    let e = shards.payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
+    assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
+}
+
+test "a shard that is no safetensors file is named" {
+    let mut given = two_shards();
+    given["m-00002-of-00002.safetensors"] = with_header("{x}");
+    let e = read_shards(&given).unwrap_err();
+    assert `${e}`.starts_with("m-00002-of-00002.safetensors: the header is not JSON");
 }
