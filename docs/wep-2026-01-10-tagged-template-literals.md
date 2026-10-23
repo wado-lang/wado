@@ -207,7 +207,7 @@ evaluates them, and the literal is built after the last of them. So a hole is
 read in situ only while nothing after it can write that storage. A hole that
 names storage and is followed by one that does not is bound at its own position
 too, and the tag then sees the value the storage held there. That is what holds
-`` format`${a} ${bump(&mut a)}` `` to what `` `${a} ${bump(&mut a)}` `` renders.
+`` String::format`${a} ${bump(&mut a)}` `` to what `` `${a} ${bump(&mut a)}` `` renders.
 
 The struct literal is the only place the synthesized type is built. Passing it
 by value copies scalars and handles, never the storage a handle points at.
@@ -273,7 +273,7 @@ an error naming the binding it needs.
 A hole's specifier is part of the template, not of the tag, so every hole's
 type implements the trait its specifier selects (`Display` when it names none)
 under any tag, whether or not the tag renders it. A tag counting its holes
-rejects `${pt}` over a `Pt` with no `Display`, as `format` does. A template
+rejects `${pt}` over a `Pt` with no `Display`, as `String::format` does. A template
 then means one thing to its type checker whichever tag reads it. The cost falls
 on a tag that reads only `get`, such as `sql`: a hole whose type has no
 `Display` is written `${pt:?}` there.
@@ -287,19 +287,23 @@ that cannot name the bound passes its tag a concrete value instead.
 
 ### The untagged template is a tag
 
-An untagged template is sugar for a call of the prelude's `format` tag, which a
-program may also call by name. It names the prelude's `format` wherever it
-stands, even where another `format` is in scope or the module has no prelude:
+An untagged template is sugar for a call of the `String::format` tag, which a
+program may also call by name. It names the prelude's `String` wherever it
+stands, even where another `String` is in scope or the module has no prelude.
+The tag is a static method rather than a prelude function, as `String::raw` is,
+so it leaves the name `format` free for a program's own items:
 
 ```wado
-fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    let mut out = "";
-    for let h of ReflectTemplate::<T>::members() {
-        out.push_str(h.lit(&t));
-        h.fmt(&t, &mut Formatter::new(&mut out));
+impl String {
+    pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+        let mut out = "";
+        for let h of ReflectTemplate::<T>::members() {
+            out.push_str(h.lit(&t));
+            h.fmt(&t, &mut Formatter::new(&mut out));
+        }
+        out.push_str(ReflectTemplate::<T>::tail(&t));
+        return out;
     }
-    out.push_str(ReflectTemplate::<T>::tail(&t));
-    return out;
 }
 ```
 
@@ -404,7 +408,7 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
 ## Consequences
 
 - A tagged template costs what an untagged one costs: constant appends and
-  typed operations, no runtime segment table, no value copies. `format` does
+  typed operations, no runtime segment table, no value copies. `String::format` does
   not hold to this yet; the [roadmap](#roadmap) carries it.
 - Tag authors write one generic function, in Wado, against traits the language
   already has. SQL, HTML with contextual escaping, structured logging, URL
@@ -470,8 +474,8 @@ introduces a mechanism; each item names the existing one it extends.
   re-exports it with the other member handles.
 - `compiler_item.rs` gains `ReflectTemplate`, `ReflectTemplateHole` and the
   three method items, in `ALL`, `attr_name`, `expected_kind`, `is_required`.
-- `format` in `core:prelude` and `String::raw` in the string module, written as
-  the tags above.
+- `String::format` and `String::raw` in the string module, written as the tags
+  above.
 
 ### Parser and AST
 
@@ -614,7 +618,7 @@ things the optimizer gains here.
   type as the tag.
 - `tagged_template_tag_default_arg.wado`: a tag whose trailing parameter has a
   default, filled at the site.
-- `tagged_template_format_equiv.wado`: `format` against the untagged form over
+- `tagged_template_format_equiv.wado`: `String::format` against the untagged form over
   the specifier matrix.
 - `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
 - `tagged_template_type_name.wado`: the reader's name, specifiers and the cut
@@ -640,7 +644,7 @@ synthesis and the fold; then the prelude tags and fixtures.
 
 ## Roadmap
 
-An untagged template is sugar for `format`, but the compiler still lowers it on
+An untagged template is sugar for `String::format`, but the compiler still lowers it on
 a path of its own that renders each hole before it evaluates the next. The items
 below close that, in this order.
 
@@ -715,17 +719,17 @@ below close that, in this order.
   Done: `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
   including one a substitution reaches twice and one a literal also writes
   (`tagged_template_generic_hole.wado`). A tag's pack bound is checked against
-  the declared bounds, and `` format`${x}` `` reports the missing bound
+  the declared bounds, and `` String::format`${x}` `` reports the missing bound
   `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
-- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, a
-  `format` site cost more than the direct lowering in the places below. Each
+- [x] `String::format` at the direct lowering's cost. Read off `wado dump -O2`, a
+  `String::format` site cost more than the direct lowering in the places below. Each
   is closed where it arose:
-  - The direct lowering sizes the buffer from the segment lengths. `format`
+  - The direct lowering sizes the buffer from the segment lengths. `String::format`
     sums `tail(&t).len()` and, per hole, `lit(&t).len()` plus a guess of 16 for
-    the rendered hole. That folds to a constant, and `format` starts from
+    the rendered hole. That folds to a constant, and `String::format` starts from
     `String::with_capacity` of it.
-  - A `String` hole with no specifier is a plain append. `format` reaches it
+  - A `String` hole with no specifier is a plain append. `String::format` reaches it
     through `Display::fmt` and `Formatter::pad`, which fold to the same append
     once `param_spec` specializes `pad` on the `Formatter`'s constant fields.
     `$hole_fmt` hands the formatter on as `&mut Formatter { … }`, so
@@ -736,27 +740,28 @@ below close that, in this order.
     not only one at a statement, so the chain reaches `u64::fmt_base` while it
     still fits.
   - `optimize::tmpl_hoist` lifts the direct lowering's buffer out of a loop.
-    A `format` call at a loop site stays a call, so there is nothing to lift,
+    A `String::format` call at a loop site stays a call, so there is nothing to lift,
     and the benchmark below runs the same with the pass skipped
     (`WADO_SKIP_PASS=nir/tmpl_hoist`).
-  - A `format` call stays a call, since its body allocates. It runs once per
+  - A `String::format` call stays a call, since its body allocates. It runs once per
     iteration of the loop holding its site, so `inline` starts a function only
     loops reach at a loop site, and its callees splice as they would in the
-    loop. A one-hole template's struct reaches `format` as the hole itself:
+    loop. A one-hole template's struct reaches `String::format` as the hole itself:
     `sroa_param` reads a parameter's uses off the body rather than the
     address-taken mark lowering left, which outlives the `&t` it recorded.
 
-  Done: `tagged_template_format_direct_cost.wado` holds a `format` site to a
+  Done: `tagged_template_format_direct_cost.wado` holds a `String::format` site to a
   constant-sized buffer, no `Formatter`, no `fmt_base` or `pad` call, and the
   radix prefix a constant. `tagged_template_format_loop_site.wado` holds one in
   a loop to no template struct and no call to the radix helpers. A
-  single-hole site still pays its call into `format`, which the measurement
+  single-hole site still pays its call into `String::format`, which the measurement
   below shows as up to 1.11.
 
-- [ ] One path. An untagged template reifies as the `format` call, and the
-  direct lowering (`synthesis::template::build_template_block`) is deleted.
+- [ ] One path. An untagged template reifies as the `String::format` call, and
+  the direct lowering (`synthesis::template::build_template_block`) is deleted.
   Done when no code path builds a `$tmpl` block, and
-  `` `${r} ${bump(&mut a)}` `` over `r = &a` renders what `format` renders.
+  `` `${r} ${bump(&mut a)}` `` over `r = &a` renders what `String::format`
+  renders.
 
 The cost gap is measured inside the guest by this program, so the runner's
 start-up stays out of it. Run it with `wado run -O2 bench.wado`; each phase
@@ -790,7 +795,7 @@ export fn run() with (Stdout, MonotonicClock) {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
-            total += format`i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
+            total += String::format`i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
         }
         return total;
     });
@@ -801,7 +806,7 @@ export fn run() with (Stdout, MonotonicClock) {
     });
     bench.run("format i05", || {
         let mut total = 0;
-        for let i of 0..<100000 { total += format`i=${i:05} end`.len(); }
+        for let i of 0..<100000 { total += String::format`i=${i:05} end`.len(); }
         return total;
     });
     bench.run("untagged f.2", || {
@@ -811,7 +816,7 @@ export fn run() with (Stdout, MonotonicClock) {
     });
     bench.run("format f.2", || {
         let mut total = 0;
-        for let i of 0..<100000 { total += format`f=${(i as f64) / 3.0:.2} end`.len(); }
+        for let i of 0..<100000 { total += String::format`f=${(i as f64) / 3.0:.2} end`.len(); }
         return total;
     });
     bench.run("untagged #x", || {
@@ -821,7 +826,7 @@ export fn run() with (Stdout, MonotonicClock) {
     });
     bench.run("format #x", || {
         let mut total = 0;
-        for let i of 0..<100000 { total += format`h=${i:#x} end`.len(); }
+        for let i of 0..<100000 { total += String::format`h=${i:#x} end`.len(); }
         return total;
     });
     bench.run("untagged p?", || {
@@ -836,7 +841,7 @@ export fn run() with (Stdout, MonotonicClock) {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
-            total += format`p=${p:?} end`.len();
+            total += String::format`p=${p:?} end`.len();
         }
         return total;
     });
@@ -846,8 +851,8 @@ export fn run() with (Stdout, MonotonicClock) {
 The first phase a program runs is slower and varies between runs, so a
 warm-up phase takes that cost. Three runs:
 
-| Template        | `format` time per iteration, untagged = 1 |
-| --------------- | ----------------------------------------- |
+| Template        | `String::format` time per iteration, untagged = 1 |
+| --------------- | ------------------------------------------------- |
 | the four holes  | 0.80 to 0.82                              |
 | `${i:05}` alone | 1.03 to 1.04                              |
 | `${f:.2}` alone | 1.03 to 1.06                              |

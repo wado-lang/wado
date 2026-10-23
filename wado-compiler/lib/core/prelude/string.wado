@@ -489,14 +489,36 @@ impl Iterator for StrLinesIter {
     }
 }
 
+global HOLE_CAPACITY_GUESS: i32 = 16;
+
 impl String {
     /// Create a new empty string.
     pub fn new() -> String {
         return String::with_capacity(0);
     }
 
+    /// The tag an untagged template is sugar for: every hole rendered through
+    /// its specifier into one buffer. `` `x=${x}` `` is
+    /// `` String::format`x=${x}` ``. See WEP 2026-01-10.
+    pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+        // Where the template is a literal, the segments are constants, so this
+        // folds to one: the buffer is sized once, and only a hole rendering
+        // past its guess grows it.
+        let mut capacity = ReflectTemplate::<T>::tail(&t).len();
+        for let h of ReflectTemplate::<T>::members() {
+            capacity += h.lit(&t).len() + HOLE_CAPACITY_GUESS;
+        }
+        let mut out = String::with_capacity(capacity);
+        for let h of ReflectTemplate::<T>::members() {
+            out.push_str(&h.lit(&t));
+            h.fmt(&t, &mut Formatter::new(&mut out));
+        }
+        out.push_str(&ReflectTemplate::<T>::tail(&t));
+        return out;
+    }
+
     /// The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-    /// is `"a\\nb"`, its holes rendered as `format` renders them. See
+    /// is `"a\\nb"`, its holes rendered as `String::format` renders them. See
     /// WEP 2026-01-10.
     pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
         let mut out = "";
