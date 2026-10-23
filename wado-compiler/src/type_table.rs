@@ -1749,6 +1749,9 @@ impl TypeTable {
             if let Some(wrapper) = self.slot_box(id) {
                 components.push(wrapper);
             }
+            if let Some(&settled) = self.settled_spellings.get(id) {
+                components.push(settled);
+            }
             if let Some(ty) = self.types.get(id) {
                 match ty {
                     ResolvedType::Struct {
@@ -1844,6 +1847,8 @@ impl TypeTable {
         });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
+        self.settled_spellings.retain(|id, _| effective_keep.contains(&id));
+        self.unindexed.retain(|id| effective_keep.contains(id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1860,32 +1865,16 @@ impl TypeTable {
             if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
-            if let Some(def) = Self::nominal_key(ty) {
-                let key = (self.def_name(def).to_string(), self.def_module(def).clone());
-                self.decl_name_index.insert(key, id);
-            }
         }
-        // Structs index under the spelling they render to, the way `intern`
-        // enters them — `Box` for the declaration, `Box<i32>` for that
-        // instantiation. Keying the rebuild on `decl_name` alone would put
-        // every instantiation of `Box` on one entry, and whichever survived
-        // last would answer for the declaration and for its siblings.
-        // Rendered up front because deriving one reads the arguments' types.
-        let rendered: Vec<((String, ModuleSource), TypeId)> = self
+        let indexed: Vec<(TypeId, ResolvedType)> = self
             .types
             .iter()
-            .filter_map(|(id, ty)| match ty {
-                ResolvedType::Struct { def, type_args } => Some((
-                    (
-                        self.struct_rendered_name(*def, type_args),
-                        self.struct_head_module(*def).clone(),
-                    ),
-                    id,
-                )),
-                _ => None,
-            })
+            .filter(|(id, _)| !self.unindexed.contains(id))
+            .map(|(id, ty)| (id, ty.clone()))
             .collect();
-        self.struct_name_index.extend(rendered);
+        for (id, ty) in indexed {
+            self.index_type(id, &ty);
+        }
     }
 
     /// The declaration a non-struct nominal type interns under.
