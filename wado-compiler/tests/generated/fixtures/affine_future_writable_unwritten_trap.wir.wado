@@ -182,14 +182,14 @@ fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$t
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
         b = global:affine_future_writable_unwritten_trap.wado::$const_obj_3;
         i = 0;
-        b11: block {
-            l12: loop {
-                break_if b11 i >= 1;
+        b12: block {
+            l13: loop {
+                break_if b12 i >= 1;
                 if builtin::array_get_value<u8>($mv$text$repr, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
-                continue l12;
+                continue l13;
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
@@ -258,39 +258,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-<<<<<<< HEAD
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b18: block {
-        l19: loop {
-            break_if b18 i >= $mv$data$end;
-||||||| 315ee9d4f
     ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b19: block {
         l20: loop {
             break_if b19 i >= $mv$data$end;
-=======
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b20: block {
-        l21: loop {
-            break_if b20 i >= $mv$data$end;
->>>>>>> origin/main
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-<<<<<<< HEAD
-            continue l19;
-||||||| 315ee9d4f
             continue l20;
-=======
-            continue l21;
->>>>>>> origin/main
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-<<<<<<< HEAD
-        l21: loop {
-||||||| 315ee9d4f
         l22: loop {
-=======
-        l23: loop {
->>>>>>> origin/main
             ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
             count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
@@ -322,13 +300,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_24;
             }
-<<<<<<< HEAD
-            continue l21;
-||||||| 315ee9d4f
             continue l22;
-=======
-            continue l23;
->>>>>>> origin/main
         };
     };
 }

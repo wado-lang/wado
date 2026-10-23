@@ -105,15 +105,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
-||||||| 315ee9d4f
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(42)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(42)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(43)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(44)
 
@@ -706,31 +700,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 break $inline_core_prelude_string_wado_String__internal_push_view_45;
             };
         }
-<<<<<<< HEAD
         self_20 = self.buf;
         $load_2 = 0;
         start_26 = self_20.used;
-        b66: block {
-            l67: loop {
-                break_if b66 $load_2 >= sign_len;
+        b67: block {
+            l68: loop {
+                break_if b67 $load_2 >= sign_len;
                 if @unlikely(local.tee new_used_25(start_26 + 1) > builtin::array_len(self_20.repr)) {
-||||||| 315ee9d4f
-        self_21 = self.buf;
-        new_used_26 = 0;
-        $load_2 = self_21.used;
-        b68: block {
-            l69: loop {
-                break_if b68 new_used_26 >= sign_len;
-                if @unlikely(local.tee start_27($load_2 + 1) > builtin::array_len(self_21.repr)) {
-=======
-        self_21 = self.buf;
-        new_used_26 = 0;
-        $load_2 = self_21.used;
-        b69: block {
-            l70: loop {
-                break_if b69 new_used_26 >= sign_len;
-                if @unlikely(local.tee start_27($load_2 + 1) > builtin::array_len(self_21.repr)) {
->>>>>>> origin/main
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, new_used_25);
                 } else {
@@ -743,22 +719,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_449, new_used_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
                     unreachable;
                 }
-<<<<<<< HEAD
                 builtin::array_set_u8(self_20.repr, start_449, 48);
                 $load_2 = $load_2 + 1;
                 self_20.used = start_26;
-                continue l67;
-||||||| 315ee9d4f
-                builtin::array_set_u8(self_21.repr, start_450, 48);
-                new_used_26 = new_used_26 + 1;
-                self_21.used = $load_2;
-                continue l69;
-=======
-                builtin::array_set_u8(self_21.repr, start_450, 48);
-                new_used_26 = new_used_26 + 1;
-                self_21.used = $load_2;
-                continue l70;
->>>>>>> origin/main
+                continue l68;
             };
         };
         if @unlikely(local.tee start_26(local.tee self_20(self.buf).used + digit_count) > builtin::array_len(self_20.repr)) {
@@ -808,18 +772,17 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, start_449);
         }
-<<<<<<< HEAD
         $load_0 = self_20.used;
         self_20.used = start_449;
         self_20 = self.buf;
         start_449 = self.fill;
         start_26 = 0;
-        b80: block {
-            l81: loop {
-                break_if b80 start_26 >= sign_len;
+        b81: block {
+            l82: loop {
+                break_if b81 start_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
                 start_26 = start_26 + 1;
-                continue l81;
+                continue l82;
             };
         };
         return $load_0;
@@ -829,73 +792,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         start_449 = self.fill;
         start_26 = 0;
-        b83: block {
-            l84: loop {
-                break_if b83 start_26 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
-                start_26 = start_26 + 1;
-                continue l84;
-||||||| 315ee9d4f
-        start_450 = self_21.used;
-        self_21.used = $load_0;
-        self_21 = self.buf;
-        $load_0 = self.fill;
-        new_used_26 = 0;
-        b83: block {
-            l84: loop {
-                break_if b83 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
-                new_used_26 = new_used_26 + 1;
-                continue l84;
-=======
-        start_450 = self_21.used;
-        self_21.used = $load_0;
-        self_21 = self.buf;
-        $load_0 = self.fill;
-        new_used_26 = 0;
         b84: block {
             l85: loop {
-                break_if b84 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
-                new_used_26 = new_used_26 + 1;
+                break_if b84 start_26 >= $load_2;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
+                start_26 = start_26 + 1;
                 continue l85;
->>>>>>> origin/main
             };
         };
-<<<<<<< HEAD
-||||||| 315ee9d4f
-        return start_450;
-    } else if $load_2 == 1 {
-        $load_2 = sign_len / 2;
-        start_450 = sign_len - $load_2;
-        self_21 = self.buf;
-        new_used_26 = self.fill;
-        $load_0 = 0;
-        b86: block {
-            l87: loop {
-                break_if b86 $load_0 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
-                continue l87;
-            };
-        };
-=======
-        return start_450;
-    } else if $load_2 == 1 {
-        $load_2 = sign_len / 2;
-        start_450 = sign_len - $load_2;
-        self_21 = self.buf;
-        new_used_26 = self.fill;
-        $load_0 = 0;
-        b87: block {
-            l88: loop {
-                break_if b87 $load_0 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
-                continue l88;
-            };
-        };
->>>>>>> origin/main
         if is_negative {
             if @unlikely(local.tee start_449(local.tee self_20(self.buf).used + 1) > builtin::array_len(self_20.repr)) {
                 cold_path;
@@ -934,78 +838,30 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, start_449);
         }
-<<<<<<< HEAD
         start_26 = self_20.used;
         self_20.used = start_449;
         self_20 = self.buf;
         start_449 = self.fill;
         $load_2 = 0;
-        b93: block {
-            l94: loop {
-                break_if b93 $load_2 >= $load_0;
+        b94: block {
+            l95: loop {
+                break_if b94 $load_2 >= $load_0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
                 $load_2 = $load_2 + 1;
-                continue l94;
-||||||| 315ee9d4f
-        new_used_26 = self_21.used;
-        self_21.used = $load_2;
-        self_21 = self.buf;
-        $load_2 = self.fill;
-        $load_0 = 0;
-        b97: block {
-            l98: loop {
-                break_if b97 $load_0 >= start_450;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
-                $load_0 = $load_0 + 1;
-                continue l98;
-=======
-        new_used_26 = self_21.used;
-        self_21.used = $load_2;
-        self_21 = self.buf;
-        $load_2 = self.fill;
-        $load_0 = 0;
-        b98: block {
-            l99: loop {
-                break_if b98 $load_0 >= start_450;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
-                $load_0 = $load_0 + 1;
-                continue l99;
->>>>>>> origin/main
+                continue l95;
             };
         };
         return start_26;
     } else {
-<<<<<<< HEAD
         self_20 = self.buf;
         start_26 = self.fill;
         start_449 = 0;
-        b95: block {
-            l96: loop {
-                break_if b95 start_449 >= sign_len;
+        b96: block {
+            l97: loop {
+                break_if b96 start_449 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_26);
                 start_449 = start_449 + 1;
-                continue l96;
-||||||| 315ee9d4f
-        self_21 = self.buf;
-        new_used_26 = self.fill;
-        start_450 = 0;
-        b99: block {
-            l100: loop {
-                break_if b99 start_450 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                start_450 = start_450 + 1;
-                continue l100;
-=======
-        self_21 = self.buf;
-        new_used_26 = self.fill;
-        start_450 = 0;
-        b100: block {
-            l101: loop {
-                break_if b100 start_450 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                start_450 = start_450 + 1;
-                continue l101;
->>>>>>> origin/main
+                continue l97;
             };
         };
         if is_negative {

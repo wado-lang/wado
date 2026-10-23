@@ -412,12 +412,12 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     i_6 = 0;
     $licm_arith_80 = limit >= 0;
     $hfs_used_516 = local.tee self_7(f.buf).used;
-    b37: block {
-        l38: loop {
-            break_if b37 i_6 >= end;
+    b38: block {
+        l39: loop {
+            break_if b38 i_6 >= end;
             if select i32($licm_arith_80, start_85 >= limit, 0) {
                 new_used_84 = 1;
-                break b37;
+                break b38;
             }
             if start_85 > 0 {
                 if @unlikely(local.tee new_used_21($hfs_used_516 + 2) > builtin::array_len(self_7.repr)) {
@@ -515,16 +515,16 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
             $hfs_used_516 = is_negative_30;
             arr = self_7.repr;
             digit_count_32 = start_210 + digit_count_32;
-            b64: block {
-                l65: loop {
-                    break_if b64 (digit_count_32 - start_210) < 2;
+            b65: block {
+                l66: loop {
+                    break_if b65 (digit_count_32 - start_210) < 2;
                     q = x /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, digit_count_32 - 1, ((48 + pair) - (tens * 10)) & 255);
                     builtin::array_set_u8(arr, digit_count_32 - 2, (48 + tens) & 255);
                     digit_count_32 = digit_count_32 - 2;
                     x = q;
-                    continue l65;
+                    continue l66;
                 };
             };
             if digit_count_32 > start_210 {
@@ -533,7 +533,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
             start_85 = start_85 + 1;
             i_6 = i_6 + 1;
             self_7.used = $hfs_used_516;
-            continue l38;
+            continue l39;
         };
     };
     if new_used_84 {
@@ -625,19 +625,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     buf = builtin::array_new<i32>(n);
     width = 1;
     $licm_repr_16 = self.repr;
-    b76: block {
-        l77: loop {
+    b77: block {
+        l78: loop {
             start = 0;
-            b78: block {
-                l79: loop {
-                    break_if b78 width >= (n - start);
+            b79: block {
+                l80: loop {
+                    break_if b79 width >= (n - start);
                     end = local.tee mid(start + width) + b_15 = n - mid; select i32(width < b_15, width, b_15);
                     i = start;
                     j = mid;
                     k = start;
-                    b80: block {
-                        l81: loop {
-                            break_if b80 k >= end;
+                    b81: block {
+                        l82: loop {
+                            break_if b81 k >= end;
                             if i < mid {
                                 if j < end {
                                     a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, i) };
@@ -663,17 +663,17 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                 j = j + 1;
                             }
                             k = k + 1;
-                            continue l81;
+                            continue l82;
                         };
                     };
                     builtin::array_copy<i32>($licm_repr_16, start, buf, start, end - start);
                     start = end;
-                    continue l79;
+                    continue l80;
                 };
             };
-            break_if b76 width >= (n - width);
+            break_if b77 width >= (n - width);
             width = width * 2;
-            continue l77;
+            continue l78;
         };
     };
 }
@@ -775,16 +775,16 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     $local_2.used = new_used_14;
     $load_2 = $local_2.repr;
     x = start_15 + x;
-    b109: block {
-        l110: loop {
-            break_if b109 (x - start_15) < 2;
+    b110: block {
+        l111: loop {
+            break_if b110 (x - start_15) < 2;
             q = x_28 /u 100_i64;
             tens = local.tee new_used_14(builtin::i32_wrap_i64(x_28 - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_2, x - 1, ((48 + new_used_14) - (tens * 10)) & 255);
             builtin::array_set_u8($load_2, x - 2, (48 + tens) & 255);
             x = x - 2;
             x_28 = q;
-            continue l110;
+            continue l111;
         };
     };
     if x > start_15 {
@@ -812,19 +812,9 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;
     $sroa_$pattern_temp_0_0_13 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
     $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_38;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-||||||| 315ee9d4f
-    $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_46;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-=======
-    $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_46;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
->>>>>>> origin/main
     return $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
         $sroa_$pattern_temp_0_1_14 = a.value;
         $moved_4 = b.value;
@@ -851,19 +841,9 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;
     $sroa_$pattern_temp_0_0_13 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
     $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_39;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-||||||| 315ee9d4f
-    $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_47;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-=======
-    $mv_arg_2 = global:effect_param_eager_closure_methods.wado::$const_obj_47;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
->>>>>>> origin/main
     return x + 1;
 }
 

@@ -63,15 +63,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
-||||||| 315ee9d4f
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(26)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -130,7 +124,6 @@ fn "affine_eq_borrows_operands.wado/slots"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, new_used_18);
     }
-<<<<<<< HEAD
     start_19 = $local_3_3.used;
     $local_3_3.used = new_used_18;
     builtin::array_copy<u8>($local_3_3.repr, start_19, global:affine_eq_borrows_operands.wado::$const_obj_0, 0, 7);
@@ -145,40 +138,7 @@ fn "affine_eq_borrows_operands.wado/slots"() with Stdout {
     start_19 = new_used_18;
     new_used_18 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_18 = start_19; start_19 = 0; new_used_18, $local_3_3.repr, $local_3_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_18 = $moved_4; $moved_4 = 0; new_used_18);
-||||||| 315ee9d4f
-    new_used_18 = $local_3.used;
-    $local_3.used = start_19;
-    builtin::array_copy<u8>($local_3.repr, new_used_18, global:affine_eq_borrows_operands.wado::$const_obj_0, 0, 7);
-    $sroa_$f_buf_82 = $local_3;
-    start_19 = local.tee new_used_18(global:affine_eq_borrows_operands.wado::DROPS) < 0;
-    new_used_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(new_used_18); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_82, start_19, new_used_18);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_82.repr, start_19, x, new_used_18);
-    new_used_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "affine_eq_borrows_operands.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_18; new_used_18 = 0; $moved_4);
-    new_used_18 = start_19;
-    start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = new_used_18; new_used_18 = 0; start_19, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_19 = $moved_4; $moved_4 = 0; start_19);
-=======
-    new_used_18 = $local_3.used;
-    $local_3.used = start_19;
-    builtin::array_copy<u8>($local_3.repr, new_used_18, global:affine_eq_borrows_operands.wado::$const_obj_0, 0, 7);
-    $sroa_$f_buf_82 = $local_3;
-    start_19 = local.tee new_used_18(global:affine_eq_borrows_operands.wado::DROPS) < 0;
-    new_used_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(new_used_18); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_82, start_19, new_used_18);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_82.repr, start_19, x, new_used_18);
-    new_used_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "affine_eq_borrows_operands.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_18; new_used_18 = 0; $moved_4);
-    new_used_18 = start_19;
-    start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = new_used_18; new_used_18 = 0; start_19, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_19 = $moved_4; $moved_4 = 0; start_19);
->>>>>>> origin/main
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_18 = $moved_4; $moved_4 = 0; new_used_18);
     global:affine_eq_borrows_operands.wado::DROPS = global:affine_eq_borrows_operands.wado::DROPS + 100;
     global:affine_eq_borrows_operands.wado::DROPS = global:affine_eq_borrows_operands.wado::DROPS + 100;
 }
@@ -241,16 +201,8 @@ fn "affine_eq_borrows_operands.wado/held"() with Stdout {
     start_33 = "affine_eq_borrows_operands.wado/$cm_binding__Stdout_write_via_stream"(start_33 = new_used_32; new_used_32 = 0; start_33);
     new_used_32 = differ;
     differ = 0;
-<<<<<<< HEAD
     "core:rt/write_string_to_stream$dae[add_newline]"(differ = new_used_32; new_used_32 = 0; differ, $local_3_3.repr, $local_3_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(differ = start_33; start_33 = 0; differ);
-||||||| 315ee9d4f
-    "core:rt/write_string_to_stream$dae[add_newline]"(differ = start_33; start_33 = 0; differ, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(differ = new_used_32; new_used_32 = 0; differ);
-=======
-    "core:rt/write_string_to_stream$dae[add_newline]"(differ = start_33; start_33 = 0; differ, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(differ = new_used_32; new_used_32 = 0; differ);
->>>>>>> origin/main
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(differ = start_33; start_33 = 0; differ);
     if ref.is_null(a) == 0 {
         $drop_v_6 = ref.as_non_null(ref.cast "affine_eq_borrows_operands.wado//Held::One"(a).payload_0);
         global:affine_eq_borrows_operands.wado::DROPS = global:affine_eq_borrows_operands.wado::DROPS + $drop_v_6.id;

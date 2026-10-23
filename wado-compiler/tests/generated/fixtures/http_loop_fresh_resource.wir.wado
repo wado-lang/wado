@@ -312,35 +312,13 @@ type "functype//wasi/future-write:val-result<option<own<wasi/http/types.wado#Fie
 
 type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn(i32);  // TypeId(64)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(65)
+type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(65)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(66)
+type "functype//http_loop_fresh_resource.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(66)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(67)
+type "functype//http_loop_fresh_resource.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(67)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(68)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(69)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(70)
-
-type "functype//http_loop_fresh_resource.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(71)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(72)
-||||||| 315ee9d4f
-type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(68)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(69)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(70)
-
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(71)
-
-type "functype//http_loop_fresh_resource.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(72)
-=======
-type "functype//http_loop_fresh_resource.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(68)
->>>>>>> origin/main
+type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(68)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -839,12 +817,12 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"(self, name, 
     bytes_17 = name.repr;
     ptr_18 = "mem/realloc"(0, 0, 1, 1);
     i_25 = 0;
-    b94: block {
-        l95: loop {
-            break_if b94 i_25 >= 1;
+    b95: block {
+        l96: loop {
+            break_if b95 i_25 >= 1;
             builtin::store_u8(ptr_18 + i_25, builtin::array_get_value_u8(bytes_17, i_25));
             i_25 = i_25 + 1;
-            continue l95;
+            continue l96;
         };
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_18) | 4294967296_i64;
@@ -852,12 +830,12 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"(self, name, 
     i_25 = "mem/realloc"(0, 0, 1, ptr_18);
     i_40 = 0;
     bytes_17 = value.repr;
-    b96: block {
-        l97: loop {
-            break_if b96 i_40 >= ptr_18;
+    b97: block {
+        l98: loop {
+            break_if b97 i_40 >= ptr_18;
             builtin::store_u8(i_25 + i_40, builtin::array_get_value_u8(bytes_17, i_40));
             i_40 = i_40 + 1;
-            continue l97;
+            continue l98;
         };
     };
     $value_packed = builtin::i64_extend_i32_u(i_25) | (builtin::i64_extend_i32_s(ptr_18) << 32_i64);
@@ -880,12 +858,12 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"(self, name, 
             self = builtin::load_i32(((ptr_18 + 4) + 4) + 4);
             bytes_17 = builtin::array_new<u8>(local.tee i_25(builtin::load_i32((((ptr_18 + 4) + 4) + 4) + 4)));
             i_40 = 0;
-            b104: block {
-                l105: loop {
-                    break_if b104 i_40 >= i_25;
+            b105: block {
+                l106: loop {
+                    break_if b105 i_40 >= i_25;
                     builtin::array_set_u8(bytes_17, i_40, builtin::load_u8(self + i_40));
                     i_40 = i_40 + 1;
-                    continue l105;
+                    continue l106;
                 };
             };
             name = struct.new "core:prelude/string.wado//String" { repr: bytes_17, used: i_25 };
