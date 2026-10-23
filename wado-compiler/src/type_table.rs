@@ -100,6 +100,9 @@ pub struct TypeTable {
     /// Whether monomorphization is done, so a type interned from here on is
     /// settled as it arrives.
     instances_settled: bool,
+    /// The settled spellings minted as keys that nothing has interned as a
+    /// type yet, which the name indexes leave out until something does.
+    unindexed: IndexSet<TypeId>,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
     /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
@@ -299,6 +302,7 @@ impl TypeTable {
             redirects: TypeMap::default(),
             settled_spellings: TypeMap::default(),
             instances_settled: false,
+            unindexed: IndexSet::default(),
             box_payload_types: TypeMap::default(),
             slot_boxes: IndexMap::default(),
             struct_name_index: IndexMap::default(),
@@ -337,26 +341,13 @@ impl TypeTable {
 
     pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&ty) {
+            if self.unindexed.swap_remove(&id) {
+                self.index_type(id, &ty);
+            }
             return id;
         }
         let id = self.types.next_id();
-        // Update struct name index for O(1) lookups by (name, module_source).
-        // Keyed on the *rendered* spelling: every instantiation of a generic
-        // struct is a distinct type, and keying on the declaration would
-        // collapse them all onto one entry.
-        if let ResolvedType::Struct {
-            ref def,
-            ref type_args,
-        } = ty
-        {
-            let rendered = self.struct_rendered_name(*def, type_args);
-            let module_source = self.struct_head_module(*def).clone();
-            self.struct_name_index.insert((rendered, module_source), id);
-        }
-        if let Some(def) = Self::nominal_key(&ty) {
-            let key = (self.def_name(def).to_string(), self.def_module(def).clone());
-            self.decl_name_index.insert(key, id);
-        }
+        self.index_type(id, &ty);
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
         if self.instances_settled {
@@ -365,9 +356,24 @@ impl TypeTable {
         id
     }
 
-    /// The spelling of `id` with each instance named as the `Struct`
-    /// monomorphization made of it, recorded in `settled_spellings` where it
-    /// differs from `id`'s own.
+    fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
+        // Update struct name index for O(1) lookups by (name, module_source).
+        // Keyed on the *rendered* spelling: every instantiation of a generic
+        // struct is a distinct type, and keying on the declaration would
+        // collapse them all onto one entry.
+        if let ResolvedType::Struct { def, type_args } = ty {
+            let rendered = self.struct_rendered_name(*def, type_args);
+            let module_source = self.struct_head_module(*def).clone();
+            self.struct_name_index.insert((rendered, module_source), id);
+        }
+        if let Some(def) = Self::nominal_key(ty) {
+            let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+            self.decl_name_index.insert(key, id);
+        }
+    }
+
+    /// The spelling of `id` with each instance of a struct named as the
+    /// `Struct` monomorphization makes of it, whether or not it has yet.
     fn settle_spelling(&mut self, id: TypeId) -> TypeId {
         if let Some(&settled) = self.settled_spellings.get(id) {
             return settled;
@@ -375,12 +381,12 @@ impl TypeTable {
         let spelling = self.types.get(id).expect("an interned type").clone();
         let rebuilt = match &spelling {
             ResolvedType::GenericInstance { def, type_args }
-                if !self.is_tuple_def(*def)
-                    && let Some(instance) = self.monomorphized_struct_of(*def, type_args) =>
+                if self.defs.kind(*def) == DefKind::Struct && !self.is_tuple_def(*def) =>
             {
-                let settled = self.settle_spelling(instance);
-                self.settled_spellings.set_growing(id, settled);
-                return settled;
+                ResolvedType::Struct {
+                    def: StructDef::Decl(*def),
+                    type_args: self.settle_struct_args(type_args),
+                }
             }
             ResolvedType::GenericInstance { def, type_args } => ResolvedType::GenericInstance {
                 def: *def,
@@ -388,7 +394,7 @@ impl TypeTable {
             },
             ResolvedType::Struct { def, type_args } => ResolvedType::Struct {
                 def: *def,
-                type_args: self.settle_spellings(type_args),
+                type_args: self.settle_struct_args(type_args),
             },
             ResolvedType::GenericResource { def, type_args } => ResolvedType::GenericResource {
                 def: *def,
@@ -426,20 +432,20 @@ impl TypeTable {
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
-            | ResolvedType::Error => return id,
+            | ResolvedType::Error => spelling.clone(),
         };
-        if rebuilt == spelling {
-            return id;
-        }
-        let settled = self.intern_settled(rebuilt);
+        let settled = if rebuilt == spelling {
+            id
+        } else {
+            self.intern_settled(rebuilt)
+        };
         self.settled_spellings.set_growing(id, settled);
         settled
     }
 
     /// The id `spelling` interns to, minted where no type spells it yet. A
-    /// minted one stands only for the instances its parts settled to, so it
-    /// enters none of the name indexes: the type they name is already there
-    /// under its own spelling.
+    /// minted one enters the name indexes only once something interns it as a
+    /// type: until then the type it settles is there under its own spelling.
     fn intern_settled(&mut self, spelling: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&spelling) {
             return id;
@@ -447,11 +453,24 @@ impl TypeTable {
         let id = self.types.next_id();
         self.types.push(spelling.clone());
         self.intern_map.insert(spelling, id);
+        self.unindexed.insert(id);
+        self.settled_spellings.set_growing(id, id);
         id
     }
 
     fn settle_spellings(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
         ids.iter().map(|&id| self.settle_spelling(id)).collect()
+    }
+
+    /// A struct instance's arguments as monomorphization keys it: settled, and
+    /// rowless as [`Self::make_monomorphized_struct_from_args`] makes them.
+    fn settle_struct_args(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
+        ids.iter()
+            .map(|&id| {
+                let rowless = self.without_rows(id);
+                self.settle_spelling(rowless)
+            })
+            .collect()
     }
 
     /// The slot holding `id`'s value: itself, or what a redirect points it at.
@@ -4833,15 +4852,15 @@ impl TypeTable {
     }
 
     /// Settle every spelling, and each one interned from here on, now that
-    /// monomorphization has made each instance's `Struct`. A site it never
-    /// reached still spells the instance, and a type argument holding that
+    /// monomorphization is done. A site it never reached still spells an
+    /// instance as its `GenericInstance`, and a type argument holding that
     /// spelling would otherwise key apart from the same type holding the struct.
     fn settle_instance_spellings(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        self.instances_settled = true;
         for id in ids {
             self.settle_spelling(id);
         }
-        self.instances_settled = true;
     }
 
     /// Redirect each type holding an effect variable to the type with each

@@ -293,7 +293,7 @@ struct ParamSeed {
     /// The struct the parameter referenced when the clone was minted,
     /// re-checked before the constants are believed — `sroa_param` reshapes
     /// parameters.
-    pointee: TypeId,
+    pointee: TypeKey,
     consts: FieldConsts,
 }
 
@@ -348,7 +348,7 @@ struct Signatures {
     /// The struct type each parameter's reference points at, when it is one.
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
-    param_struct: Vec<Vec<Option<TypeId>>>,
+    param_struct: Vec<Vec<Option<TypeKey>>>,
     /// Whether the function has a body the summary can walk.
     has_body: Vec<bool>,
     /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
@@ -440,7 +440,7 @@ fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.
 /// `None` for a non-reference type or a reference to a non-struct.
-fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
+fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let inner = *inner;
@@ -453,7 +453,7 @@ fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
 /// The struct a parameter holds, by value or through one reference, looking
 /// through newtypes. A by-value one is the callee's own copy, so only a slot
 /// the body never rebinds holds the caller's fields throughout.
-fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
+fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => reference_struct(type_id, types),
         _ => struct_base(type_id, types),
@@ -461,11 +461,11 @@ fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
 }
 
 /// The struct type behind a type, looking through references and newtypes.
-fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
+fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_base(*inner, types),
         ResolvedType::Newtype { base_type, .. } => struct_base(*base_type, types),
-        ResolvedType::Struct { .. } => Some(type_id),
+        ResolvedType::Struct { .. } => Some(types.type_key(type_id)),
         _ => None,
     }
 }
@@ -773,7 +773,7 @@ fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
     value: Operand,
-    expected: Option<TypeId>,
+    expected: Option<TypeKey>,
 ) -> Option<FieldConsts> {
     let mut expr = body.strip_casts(value.as_expr()?);
     if let ExprKind::Unary {
@@ -791,7 +791,7 @@ fn struct_literal_consts(
     else {
         return None;
     };
-    if struct_base(*struct_type, types) != expected.and_then(|ty| struct_base(ty, types)) {
+    if struct_base(*struct_type, types) != expected {
         return None;
     }
     Some(
@@ -833,7 +833,9 @@ fn collect_roots(
     let mut defined: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut invalid: IndexSet<u32> = IndexSet::default();
     let mut note_def = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
-        let expected = locals.get(local as usize).map(|l| l.type_id);
+        let expected = locals
+            .get(local as usize)
+            .and_then(|l| struct_base(l.type_id, types));
         let Some(consts) = struct_literal_consts(body, types, value, expected) else {
             invalid.insert(local);
             return;
@@ -928,7 +930,9 @@ fn collect_roots(
             {
                 continue;
             }
-            let expected = locals.get(*local as usize).map(|l| l.type_id);
+            let expected = locals
+                .get(*local as usize)
+                .and_then(|l| struct_base(l.type_id, types));
             let Some(assigned) = struct_literal_consts(body, types, *rebind, expected) else {
                 consts.clear();
                 break;
@@ -1198,7 +1202,7 @@ struct SelectField<'a> {
 /// each field the callee reads and never writes.
 fn select_field_bindings(
     caller: SelectField,
-    (callee, param_local, pointee): (FuncId, u32, TypeId),
+    (callee, param_local, pointee): (FuncId, u32, TypeKey),
     arg: Operand,
     bindings: &mut Vec<Binding>,
 ) {

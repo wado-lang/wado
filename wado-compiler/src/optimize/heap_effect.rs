@@ -795,9 +795,7 @@ impl HeapEffects<'_> {
 
     /// The type of field `field` of the struct `ty` names, where it is known.
     fn pattern_field_type(&self, ty: Option<TypeId>, field: usize) -> Option<TypeId> {
-        let ty = self
-            .type_table
-            .monomorphized_or_self(self.type_table.strip_handles(ty?));
+        let ty = self.type_table.strip_handles(ty?);
         self.struct_field_types(ty)?.get(field).copied()
     }
 
