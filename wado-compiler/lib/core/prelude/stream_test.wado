@@ -1,3 +1,5 @@
+use { CopyBuffer } from "core:prelude/types.wado";
+
 // One Component Model copy moves at most 2^28 - 1 elements, and a longer one traps.
 test "a read offering more room than one copy moves does not trap" {
     let [rx, tx] = Stream::<u8>::new();
@@ -130,6 +132,44 @@ test "write_all stops where the reader drops" {
     assert tx.write_all([]) == CopyResult::Completed;
     assert tx.write_all([1, 2]) == CopyResult::Dropped;
     tx.drop();
+}
+
+global mut COUNTED_DROPS: i32 = 0;
+
+affine struct Counted {
+    id: i32,
+}
+
+impl Drop for Counted {
+    fn drop(self) {
+        COUNTED_DROPS += self.id;
+    }
+}
+
+/// A write copy the host settled having delivered `delivered` of `data`.
+fn delivered_write(delivered: i32, data: List<Counted>) -> StartedWrite<Counted> {
+    return StartedWrite {
+        buffer: CopyBuffer { handle: 0, packed: delivered << 4, ptr: 0, size: 0, align: 1 },
+        data,
+    };
+}
+
+test "what a write copy delivered is the reader's, and never drops here" {
+    COUNTED_DROPS = 0;
+    let written = delivered_write(1, [
+        Counted { id: 1 },
+        Counted { id: 10 },
+    ]).settle();
+    assert COUNTED_DROPS == 0;
+    builtin::drop(written);
+    assert COUNTED_DROPS == 10;
+
+    COUNTED_DROPS = 0;
+    builtin::drop(delivered_write(1, [
+        Counted { id: 1 },
+        Counted { id: 10 },
+    ]));
+    assert COUNTED_DROPS == 10;
 }
 
 test "a copy a handler settled reports what the handler said" {

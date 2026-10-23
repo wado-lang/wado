@@ -522,12 +522,29 @@ impl<affine T> StartedWrite<T> {
     /// this returns.
     internal fn settle(self) -> StreamWrite<T> {
         let mut started = self;
-        let packed = started.buffer.settle();
-        return StreamWrite {
-            rest: started.data.split_off(cm_packed_upper(packed)),
-            result: copy_result(packed),
-        };
+        return take_written(&mut started.buffer, &mut started.data);
     }
+}
+
+impl<affine T> Drop for StartedWrite<T> {
+    /// What the copy did not deliver is still the writer's, so it drops here.
+    fn drop(self) {
+        let mut StartedWrite { buffer, data } = self;
+        let _ = take_written(&mut buffer, &mut data);
+    }
+}
+
+/// What the copy `buffer` holds left of `data`, once it has settled. What it
+/// delivered is the reader's, so it is forgotten rather than dropped, and the
+/// copy then counts none: taking it again finds nothing left.
+fn take_written<affine T>(buffer: &mut CopyBuffer, data: &mut List<T>) -> StreamWrite<T> {
+    let packed = buffer.settle();
+    let mut delivered = builtin::replace(data, []);
+    let rest = delivered.split_off(cm_packed_upper(packed));
+    builtin::forget(delivered);
+    let result = copy_result(packed);
+    buffer.packed = copy_status(result);
+    return StreamWrite { rest, result };
 }
 
 /// One copy started on a writable end, holding the end until it is finished.

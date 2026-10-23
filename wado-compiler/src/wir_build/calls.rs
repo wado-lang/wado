@@ -1239,7 +1239,7 @@ impl FunctionTranslator<'_, '_> {
             "is_moved" => unary!(self, args, WirInstr::RefIsNull),
             // What holds a resource is dropped by synthesis; a copyable value
             // reaches here and is only evaluated.
-            "drop" => unary!(self, args, WirInstr::Drop),
+            "drop" | "forget" => unary!(self, args, WirInstr::Drop),
             "i32_and" => binary!(self, args, WirInstr::I32And),
             "i32_eqz" => unary!(self, args, WirInstr::I32Eqz),
             "i32_clz" => unary!(self, args, WirInstr::I32Clz),

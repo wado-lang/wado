@@ -492,6 +492,12 @@ internal fn is_moved<affine T>(value: T) -> bool;
 #[side_effect(none)]
 pub fn drop<affine T>(value: T);
 
+/// End `value` without its drop, for what the host has taken over: the
+/// elements a stream write delivered belong to the reader.
+#[storage(none)]
+#[side_effect(none)]
+internal fn forget<affine T>(value: T);
+
 /// Store `value` where `r` points and return what was there, the one way
 /// `core` moves a value out through a reference (WEP: Affine Types). Resource
 /// drop synthesis expands the call, and the move check trusts it.
