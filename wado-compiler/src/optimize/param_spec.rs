@@ -1846,7 +1846,7 @@ fn redirect_const_reads(
     types: &TypeTable,
     reads: Vec<(ExprId, FieldConst)>,
 ) -> bool {
-    let mut built: IndexMap<*const ConstLiteral, (u32, TypeId)> = IndexMap::default();
+    let mut built: IndexMap<*const ConstLiteral, u32> = IndexMap::default();
     let mut lets = Vec::new();
     let mut rewritten = false;
     for (read, value) in reads {
@@ -1857,9 +1857,12 @@ fn redirect_const_reads(
         let (type_id, span) = (node.type_id, node.span);
         let operand = match &value {
             FieldConst::Literal(literal) => {
+                if !literal.ty().admits(types, type_id) {
+                    continue;
+                }
                 let key = Arc::as_ptr(literal);
-                let (local, local_type) = match built.get(&key) {
-                    Some(&held) => held,
+                let local = match built.get(&key) {
+                    Some(&local) => local,
                     None => {
                         let Some(init) = literal.build(engine, types, type_id, span) else {
                             continue;
@@ -1876,13 +1879,10 @@ fn redirect_const_reads(
                             },
                             span,
                         ));
-                        built.insert(key, (local, type_id));
-                        (local, type_id)
+                        built.insert(key, local);
+                        local
                     }
                 };
-                if types.type_key(local_type) != types.type_key(type_id) {
-                    continue;
-                }
                 let name = engine.local_name(local);
                 Operand::Expr(engine.alloc_expr(
                     ExprKind::Local { index: local, name },
@@ -1893,12 +1893,10 @@ fn redirect_const_reads(
             FieldConst::Int(..)
             | FieldConst::Float(..)
             | FieldConst::Bool(_)
-            | FieldConst::Char(_) => {
-                let Some(operand) = value.operand_at(engine, types, type_id, span) else {
-                    continue;
-                };
-                operand
-            }
+            | FieldConst::Char(_) => match value.operand_at(engine, types, type_id, span) {
+                Some(operand) => operand,
+                None => continue,
+            },
         };
         engine.redirect_expr(read, operand);
         rewritten = true;
