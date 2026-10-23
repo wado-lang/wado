@@ -760,7 +760,7 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 ### `pub affine trait Waitable with ()`
 
 What a `WaitableSet` waits on: a value the host reports events for by its
-handle. It is sealed, so a set joins only what it can account for: the
+handle. It is sealed, so a set holds only what it can account for: the
 standard library implements it on the calls, and a variant whose cases each
 hold one derives it with `impl Waitable for V;`. A bare stream or future end
 is none, since no copy on it is in flight: a copy started on a stream end,
@@ -4433,7 +4433,7 @@ _Fields are private._
 #### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>]`
 
 The end and what the copy moved. Waits for a copy that has not settled,
-so a copy that never joined a set finishes as well.
+so a copy never inserted into a set finishes as well.
 
 #### `impl Drop for ReadCopy<T>`
 
@@ -4472,7 +4472,7 @@ _Fields are private._
 #### `pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>]`
 
 The end and what the copy left of its data. Waits for a copy that has
-not settled, so a copy that never joined a set finishes as well.
+not settled, so a copy never inserted into a set finishes as well.
 
 #### `impl Drop for WriteCopy<T>`
 
@@ -4497,9 +4497,9 @@ _Fields are private._
 
 `#[benign(RawWaitableSet)]`
 
-#### `pub fn join(&mut self, member: W)`
+#### `pub fn insert(&mut self, member: W)`
 
-Moves `member` into the set. A member joins one set at a time, so
+Moves `member` into the set. A member is in one set at a time, so
 whether the host has an event left for it is settled here.
 
 #### `pub fn wait(&mut self) -> Ready<W>`
