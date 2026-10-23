@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792737584580,
+  "lastUpdate": 1792745148500,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69753,6 +69753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eec1dcb6fc439950419a343641f89245e4cd3c4e"
         },
         "date": 1792737584159,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "315ee9d4f091a1bd7ee33baf1999b9d5caffb510",
+          "message": "Merge pull request #2428 from wado-lang/loam-sharded\n\nfeat(loam): build and load a sharded Hugging Face checkpoint",
+          "timestamp": "2026-10-23T17:25:39+09:00",
+          "tree_id": "b9d6fed1ac2075e2579dfb79a41a7c49031a55a9",
+          "url": "https://github.com/wado-lang/wado/commit/315ee9d4f091a1bd7ee33baf1999b9d5caffb510"
+        },
+        "date": 1792745147593,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
