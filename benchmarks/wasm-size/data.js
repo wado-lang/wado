@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792769694809,
+  "lastUpdate": 1792787822991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69885,6 +69885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/502070f25ca9d3738d8913ced0c943689d35990c"
         },
         "date": 1792769693931,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7383,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19756,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294133,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed92649a89152469b8eb47ab755e43f80fca18c4",
+          "message": "Merge pull request #2431 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): mark a type parameter by its binder, so shadowing and renaming cannot copy a move-only value",
+          "timestamp": "2026-10-24T05:16:43+09:00",
+          "tree_id": "49ca4af1184dd6473183cb96a80eef476aa20028",
+          "url": "https://github.com/wado-lang/wado/commit/ed92649a89152469b8eb47ab755e43f80fca18c4"
+        },
+        "date": 1792787822334,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
