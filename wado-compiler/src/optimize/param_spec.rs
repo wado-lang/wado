@@ -1504,6 +1504,9 @@ fn plan_clones<'s>(
     let mut retarget: Vec<Retarget> = Vec::new();
     let mut planned: Vec<Planned<'s>> = Vec::new();
     let mut next_id = project.next_func_id().index();
+    // A clone minted here is not in the store yet; it presents its source's
+    // signature, which a key reached through a callee of another arity lacks.
+    let mut minted_from: IndexMap<FuncId, FuncId> = IndexMap::default();
     let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
         per_caller.iter().flat_map(move |(caller, sites)| {
             sites
@@ -1516,7 +1519,11 @@ fn plan_clones<'s>(
         let key = spec_key(project, state, site);
         let cached = state.clones.get(&key).copied();
         if let Some(existing) = cached
-            && signatures_match(project, site.callee, existing)
+            && signatures_match(
+                project,
+                site.callee,
+                minted_from.get(&existing).copied().unwrap_or(existing),
+            )
         {
             retarget.push((*caller, site.call, existing));
             continue;
@@ -1542,6 +1549,7 @@ fn plan_clones<'s>(
             state.clones.insert(key.clone(), id);
         }
         state.specs.insert(id, key);
+        minted_from.insert(id, site.callee);
         state.per_callee.insert(site.callee, ordinal + 1);
         retarget.push((*caller, site.call, id));
         planned.push((site, id, ordinal));
@@ -1778,11 +1786,6 @@ fn body_exprs(project: &NirPackage, func: FuncId) -> usize {
 /// Whether `clone` still presents the same signature as `original`, so a call
 /// written against the original can be retargeted to it unchanged.
 fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bool {
-    // A clone minted earlier in this same invocation is not in the store yet;
-    // nothing has had a chance to reshape it, so it matches by construction.
-    if clone.index() >= project.functions.len() {
-        return true;
-    }
     let original = project.functions[original.index()].borrow();
     let clone = project.functions[clone.index()].borrow();
     !clone.is_dead
