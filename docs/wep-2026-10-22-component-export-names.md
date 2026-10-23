@@ -114,7 +114,8 @@ interface Geo {
 }
 ```
 
-`Geo::Point` is the type's only name. No form names it `Point`: not a `use`
+Outside the interface, `Geo::Point` is the type's only name. No form names it
+`Point`: not a `use`
 of the interface's types, not a re-export, and not a type alias. Each of those
 was weighed, as `pub use { Geo::{Point} };`, `pub Point = Geo::Point;` and
 `pub Geo::Point as Point;`, and each adds language surface that a path already
