@@ -1275,19 +1275,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tag: &str,
         cases: &[tir::TirVariantCase],
     ) {
+        let unit = self.tysys.type_table.borrow().type_key(TypeTable::UNIT);
         for (case, reified) in variant_decl.cases.iter().zip(cases) {
-            if reified.payload == TypeTable::UNIT {
+            if self.tysys.type_table.borrow().type_key(reified.payload) == unit {
                 continue;
             }
             let case_path = format!("{}::{}", variant_decl.name, case.name);
-            let Some(payload) = self.struct_decl_of(reified.payload) else {
+            let Some(payload) = self.derived_struct_decl_of(reified.payload) else {
                 let payload = self.tysys.type_table.borrow().type_name(reified.payload);
                 self.error_at(
                     Code::AttrMisuse,
                     case.span,
                     format!(
                         "`{case_path}` carries `{payload}`, but a case of a variant with \
-                         `#[wire(tag)]` carries a struct or nothing"
+                         `#[wire(tag)]` carries nothing or a struct its derivation writes"
                     ),
                 );
                 continue;
@@ -1312,6 +1313,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
         }
+    }
+
+    /// The struct declaration `ty` instantiates, through any newtype over it,
+    /// where the derivation reads and writes it as a struct: no link of `ty`
+    /// has a hand-written `Serialize` or `Deserialize`, whose shape nothing
+    /// here can see. `String` and `List` are declared as structs and are such.
+    fn derived_struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
+        let written = [CompilerItem::Serialize, CompilerItem::Deserialize]
+            .into_iter()
+            .filter_map(|item| self.tysys.compiler_trait_def(item))
+            .any(|trait_| self.tysys.impl_link(ty, trait_).is_some());
+        if written {
+            return None;
+        }
+        self.struct_decl_of(ty)
     }
 
     /// The struct declaration `ty` instantiates, through any newtype over it,

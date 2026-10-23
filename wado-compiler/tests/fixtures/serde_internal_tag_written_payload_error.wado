@@ -1,0 +1,18 @@
+// `String` and `List` are declared as structs, but their hand-written
+// `Serialize` writes a string and a sequence, which have no object to hold
+// the tag.
+use json from "core:json";
+
+#[wire(tag = "type")]
+variant Label {
+    Name(String),
+    Items(List<i32>),
+    Empty,
+}
+
+export fn run() {
+    json::to_string(&Label::Empty);
+}
+
+__DATA__
+{"compile_error": ":8:5: analysis error: `Label::Name` carries `String`, but a case of a variant with `#[wire(tag)]` carries nothing or a struct its derivation writes; 9:5: `Label::Items` carries `List<i32>`, but a case of a variant with `#[wire(tag)]` carries nothing or a struct its derivation writes", "compile_error_codes": ["ATTR_MISUSE", "ATTR_MISUSE"]}
