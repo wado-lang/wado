@@ -38,10 +38,10 @@ impl Cursor {
 }
 
 export fn run() {
-    let mut ok = Cursor { data: "ab;cd", pos: 0 };
+    let mut ok = Cursor { data: builtin::black_box("ab;cd"), pos: 0 };
     assert ok.scan() matches { Ok(n) && n == 3 };
 
-    let mut bad = Cursor { data: "abcd", pos: 0 };
+    let mut bad = Cursor { data: builtin::black_box("abcd"), pos: 0 };
     assert bad.scan() matches { Err(f) && f.at == 4 };
 }
 

@@ -1776,11 +1776,17 @@ fn substitute_locals(
 
 /// Point each read at its constant, leaving a place read — a read that names
 /// storage rather than a value — alone. Returns whether anything moved.
+///
+/// A literal is built once, by a `let` opening the body, and its reads name
+/// that local: the caller handed over one object, and a copy per read would
+/// allocate where the original only loaded, a loop's every iteration included.
 fn redirect_const_reads(
     engine: &mut Engine,
     types: &TypeTable,
     reads: Vec<(ExprId, FieldConst)>,
 ) -> bool {
+    let mut built: IndexMap<*const ConstLiteral, (u32, TypeId)> = IndexMap::default();
+    let mut lets = Vec::new();
     let mut rewritten = false;
     for (read, value) in reads {
         if is_place_read(engine, read) && !reads_fresh_literal(engine, read, &value) {
@@ -1788,11 +1794,51 @@ fn redirect_const_reads(
         }
         let node = &engine.body.exprs[read];
         let (type_id, span) = (node.type_id, node.span);
-        let Some(operand) = value.operand_at(engine, types, type_id, span) else {
-            continue;
+        let operand = match &value {
+            FieldConst::Literal(literal) => {
+                let key = Arc::as_ptr(literal);
+                let (local, local_type) = match built.get(&key) {
+                    Some(&held) => held,
+                    None => {
+                        let Some(init) = literal.build(engine, types, type_id, span) else {
+                            continue;
+                        };
+                        let local = engine.alloc_minted_local("bound", type_id, false);
+                        lets.push(engine.alloc_stmt(
+                            StmtKind::Let {
+                                name: engine.local_name(local),
+                                local_index: local,
+                                is_mut: false,
+                                type_id,
+                                value: Operand::Expr(init),
+                                skip_value_copy: true,
+                            },
+                            span,
+                        ));
+                        built.insert(key, (local, type_id));
+                        (local, type_id)
+                    }
+                };
+                if types.type_key(local_type) != types.type_key(type_id) {
+                    continue;
+                }
+                let name = engine.local_name(local);
+                Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span))
+            }
+            FieldConst::Int(..) | FieldConst::Float(..) | FieldConst::Bool(_) | FieldConst::Char(_) => {
+                let Some(operand) = value.operand_at(engine, types, type_id, span) else {
+                    continue;
+                };
+                operand
+            }
         };
         engine.redirect_expr(read, operand);
         rewritten = true;
+    }
+    if !lets.is_empty() {
+        let root = engine.body.root();
+        lets.extend(engine.body.blocks[root].stmts.iter().copied());
+        engine.set_block_stmts(root, lets);
     }
     rewritten
 }
