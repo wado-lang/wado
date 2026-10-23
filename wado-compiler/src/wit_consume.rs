@@ -258,7 +258,8 @@ impl Builder {
             if let Item::Interface(decl) = item
                 && (interfaces[&decl.name] > 1 || taken.contains(&decl.name))
             {
-                let cm = cm_import_of(&decl.attrs).expect("a synthesized interface carries `#[cm]`");
+                let cm =
+                    cm_import_of(&decl.attrs).expect("a synthesized interface carries `#[cm]`");
                 decl.name = unnamed_interface_name(cm);
             }
         }
@@ -310,7 +311,8 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
-        let iface_name = interface_basename(&CmImport::parse(fq).expect("interface FQ is well-formed"));
+        let iface_name =
+            interface_basename(&CmImport::parse(fq).expect("interface FQ is well-formed"));
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {

@@ -425,23 +425,28 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
 /// What a `CmRawCall` invokes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmCallTarget {
-    /// A lowered WASI import, by its local alias name
-    /// (`"wasi:cli/stdout@0.3.0/write-via-stream"`).
-    WasiAlias(String),
+    /// A lowered import: the function `operation` of the interface declared as
+    /// `interface`, by its local alias name
+    /// (`"wasi:cli/Stdout::write_via_stream"`).
+    WasiAlias {
+        alias: String,
+        interface: String,
+        operation: String,
+    },
     Canonical(CanonicalIntrinsic),
 }
 
 impl CmCallTarget {
     pub fn import_name(&self) -> Cow<'_, str> {
         match self {
-            Self::WasiAlias(name) => Cow::Borrowed(name),
+            Self::WasiAlias { alias, .. } => Cow::Borrowed(alias),
             Self::Canonical(intrinsic) => Cow::Owned(intrinsic.import_name()),
         }
     }
 
     pub fn canonical(&self) -> Option<&CanonicalIntrinsic> {
         match self {
-            Self::WasiAlias(_) => None,
+            Self::WasiAlias { .. } => None,
             Self::Canonical(intrinsic) => Some(intrinsic),
         }
     }

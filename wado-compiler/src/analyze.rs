@@ -1271,7 +1271,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 && let Some(cm) = cm_import_of(&decl.attrs)
             {
                 let basename = interface_basename(cm);
-                if decl.name != basename && !self.symbols.is_defined_in_module(module_source, &basename) {
+                if decl.name != basename
+                    && !self.symbols.is_defined_in_module(module_source, &basename)
+                {
                     sharing
                         .entry(basename)
                         .or_default()
@@ -1433,7 +1435,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 name: format!("\"{name}\""),
                 candidates: several
                     .iter()
-                    .filter_map(|(_, symbol)| Some(format!("\"{}\"", symbol.cm_import()?.interface_path())))
+                    .filter_map(|(_, symbol)| {
+                        Some(format!("\"{}\"", symbol.cm_import()?.interface_path()))
+                    })
                     .collect(),
                 span,
             },

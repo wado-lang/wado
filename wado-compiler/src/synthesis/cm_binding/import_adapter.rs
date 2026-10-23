@@ -535,7 +535,7 @@ pub(super) fn synthesize_adapter(
 
     let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
     let mut raw_call = cm_raw_call(
-        &func_info.local_alias_name(),
+        func_info,
         std::mem::take(&mut builder.flat_args),
         raw_call_return_type,
     );

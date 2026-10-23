@@ -1236,18 +1236,17 @@ impl<'a> DceWalker<'a> {
     fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
         // Only a WASI import is tracked here; a canonical built-in has no
         // interface to attribute it to.
-        let CmCallTarget::WasiAlias(local_name) = target else {
+        let CmCallTarget::WasiAlias {
+            interface,
+            operation,
+            ..
+        } = target
+        else {
             return;
         };
-        // Parse the alias (e.g., "wasi:cli/Stdout::write_via_stream")
-        // to extract the interface_name and op_name for WASI import tracking.
-        if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
-            // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-            let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-            (effect.to_string(), op.to_string())
-        }) {
-            self.analysis.effect_calls.insert((interface_name, op_name));
-        }
+        self.analysis
+            .effect_calls
+            .insert((interface.clone(), operation.clone()));
     }
 
     fn record_closure_to_canonical(

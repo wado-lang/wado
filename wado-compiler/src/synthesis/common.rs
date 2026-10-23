@@ -8,7 +8,7 @@
 use crate::call_args::CallArgs;
 use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::component_model::peel_newtypes;
+use crate::component_model::{CmFunctionInfo, peel_newtypes};
 use crate::hashmap::IndexSet;
 
 use crate::ast::Visibility;
@@ -352,13 +352,14 @@ pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
     )
 }
 
-/// Create a `CmRawCall` expression targeting a lowered WASI import.
-pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
-    cm_target_call(
-        CmCallTarget::WasiAlias(local_name.to_string()),
-        args,
-        return_type,
-    )
+/// Create a `CmRawCall` expression targeting the lowered import `func`.
+pub fn cm_raw_call(func: &CmFunctionInfo, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    let target = CmCallTarget::WasiAlias {
+        alias: func.local_alias_name(),
+        interface: func.interface_name.clone(),
+        operation: func.method_name.clone(),
+    };
+    cm_target_call(target, args, return_type)
 }
 
 /// Create a `CmRawCall` expression targeting a Component Model canonical
