@@ -102,27 +102,29 @@ fn "match_or_pattern_nested_body_once.wado/by_const"(x, y) {
 }
 
 fn "match_or_pattern_nested_body_once.wado/by_str"(x, y) {
-    let other_13: ref "core:prelude/string.wado//String";
-    let a_26: ref Array<u8>;
-    let a_end_28: i32;
-    let b_29: ref Array<u8>;
-    let b_end_31: i32;
-    if (if select i32(other_13 = global:match_or_pattern_nested_body_once.wado::S; $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
-        a_26 = x.repr;
-        a_end_28 = x.used;
-        b_29 = other_13.repr;
-        b_end_31 = other_13.used;
-        if local.tee a_end_28(a_end_28 - 0) != b_end_31 {
+    let $load_1: i32;
+    let b_end_33: i32;
+    let len_34: i32;
+    let len_58: i32;
+    let $array_clone_src_4: ref Array<u8>;
+    $array_clone_src_4 = x.repr;
+    $load_1 = x.used;
+    let $array_clone_dst_5: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_1)), 0, $array_clone_src_4, 0, $load_1);
+    if (if select i32(x = global:match_or_pattern_nested_body_once.wado::S; $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        $array_clone_src_4 = x.repr;
+        b_end_33 = x.used;
+        if local.tee len_34($load_1 - 0) != b_end_33 {
             break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
         }
-        b_end_31 = 0;
+        b_end_33 = 0;
         b5: block {
             l6: loop {
-                break_if b5 b_end_31 >= a_end_28;
-                if builtin::array_get_value<u8>(a_26, 0 + b_end_31) != builtin::array_get_value<u8>(b_29, 0 + b_end_31) {
+                break_if b5 b_end_33 >= len_34;
+                if builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                 }
-                b_end_31 = b_end_31 + 1;
+                b_end_33 = b_end_33 + 1;
                 continue l6;
             };
         };
@@ -130,21 +132,19 @@ fn "match_or_pattern_nested_body_once.wado/by_str"(x, y) {
     }, 1, 0) -> i32 {
         1;
     } else if select i32($inline_core_prelude_array_wado_seq_eq_u8__spec0_1: block -> bool {
-        b_29 = x.repr;
-        b_end_31 = x.used;
         global:match_or_pattern_nested_body_once.wado::$const_obj_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }.repr;
-        a_26 = global:match_or_pattern_nested_body_once.wado::$const_obj_6;
-        if local.tee b_end_31(b_end_31 - 0) != 1 {
+        $array_clone_src_4 = global:match_or_pattern_nested_body_once.wado::$const_obj_6;
+        if local.tee len_34($load_1 - 0) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__spec0_1: 0;
         }
-        a_end_28 = 0;
+        b_end_33 = 0;
         b10: block {
             l11: loop {
-                break_if b10 a_end_28 >= b_end_31;
-                if builtin::array_get_value<u8>(b_29, 0 + a_end_28) != builtin::array_get_value<u8>(a_26, 0 + a_end_28) {
+                break_if b10 b_end_33 >= len_34;
+                if builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec0_1: 0;
                 }
-                a_end_28 = a_end_28 + 1;
+                b_end_33 = b_end_33 + 1;
                 continue l11;
             };
         };
@@ -153,43 +153,41 @@ fn "match_or_pattern_nested_body_once.wado/by_str"(x, y) {
         1;
     } else {
         select i32(select i32($inline_core_prelude_array_wado_seq_eq_u8__spec0_2: block -> bool {
-            b_29 = x.repr;
-            b_end_31 = x.used;
             global:match_or_pattern_nested_body_once.wado::$const_obj_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }.repr;
-            a_26 = global:match_or_pattern_nested_body_once.wado::$const_obj_5;
-            if local.tee b_end_31(b_end_31 - 0) != 1 {
+            $array_clone_src_4 = global:match_or_pattern_nested_body_once.wado::$const_obj_5;
+            if local.tee len_34($load_1 - 0) != 1 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: 0;
             }
-            a_end_28 = 0;
+            b_end_33 = 0;
             b14: block {
                 l15: loop {
-                    break_if b14 a_end_28 >= b_end_31;
-                    if builtin::array_get_value<u8>(b_29, 0 + a_end_28) != builtin::array_get_value<u8>(a_26, 0 + a_end_28) {
+                    break_if b14 b_end_33 >= len_34;
+                    if builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: 0;
                     }
-                    a_end_28 = a_end_28 + 1;
+                    b_end_33 = b_end_33 + 1;
                     continue l15;
                 };
             };
             break $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: 1;
         }, 1, 0), 1, 0);
     }) {
-        if (if select i32(other_13 = global:match_or_pattern_nested_body_once.wado::S; $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-            b_29 = y.repr;
-            b_end_31 = y.used;
-            a_26 = other_13.repr;
-            a_end_28 = other_13.used;
-            if local.tee b_end_31(b_end_31 - 0) != a_end_28 {
+        $array_clone_dst_5 = y.repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_4(builtin::array_new<u8>(local.tee len_34(y.used))), 0, $array_clone_dst_5, 0, len_34);
+        if (if select i32(y = global:match_or_pattern_nested_body_once.wado::S; $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+            $array_clone_dst_5 = y.repr;
+            b_end_33 = y.used;
+            if local.tee len_58(len_34 - 0) != b_end_33 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
-            a_end_28 = 0;
+            b_end_33 = 0;
             b20: block {
                 l21: loop {
-                    break_if b20 a_end_28 >= b_end_31;
-                    if builtin::array_get_value<u8>(b_29, 0 + a_end_28) != builtin::array_get_value<u8>(a_26, 0 + a_end_28) {
+                    break_if b20 b_end_33 >= len_58;
+                    if builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
-                    a_end_28 = a_end_28 + 1;
+                    b_end_33 = b_end_33 + 1;
                     continue l21;
                 };
             };
@@ -197,21 +195,19 @@ fn "match_or_pattern_nested_body_once.wado/by_str"(x, y) {
         }, 1, 0) -> i32 {
             1;
         } else if select i32($inline_core_prelude_array_wado_seq_eq_u8__spec0_4: block -> bool {
-            b_29 = y.repr;
-            b_end_31 = y.used;
             global:match_or_pattern_nested_body_once.wado::$const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }.repr;
-            a_26 = global:match_or_pattern_nested_body_once.wado::$const_obj_4;
-            if local.tee b_end_31(b_end_31 - 0) != 1 {
+            $array_clone_dst_5 = global:match_or_pattern_nested_body_once.wado::$const_obj_4;
+            if local.tee len_58(len_34 - 0) != 1 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_4: 0;
             }
-            a_end_28 = 0;
+            b_end_33 = 0;
             b25: block {
                 l26: loop {
-                    break_if b25 a_end_28 >= b_end_31;
-                    if builtin::array_get_value<u8>(b_29, 0 + a_end_28) != builtin::array_get_value<u8>(a_26, 0 + a_end_28) {
+                    break_if b25 b_end_33 >= len_58;
+                    if builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_4: 0;
                     }
-                    a_end_28 = a_end_28 + 1;
+                    b_end_33 = b_end_33 + 1;
                     continue l26;
                 };
             };
@@ -220,28 +216,26 @@ fn "match_or_pattern_nested_body_once.wado/by_str"(x, y) {
             1;
         } else {
             select i32(select i32($inline_core_prelude_array_wado_seq_eq_u8__spec0_5: block -> bool {
-                b_29 = y.repr;
-                b_end_31 = y.used;
                 global:match_or_pattern_nested_body_once.wado::$const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }.repr;
-                a_26 = global:match_or_pattern_nested_body_once.wado::$const_obj_3;
-                if local.tee b_end_31(b_end_31 - 0) != 1 {
+                $array_clone_dst_5 = global:match_or_pattern_nested_body_once.wado::$const_obj_3;
+                if local.tee len_58(len_34 - 0) != 1 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec0_5: 0;
                 }
-                a_end_28 = 0;
+                b_end_33 = 0;
                 b29: block {
                     l30: loop {
-                        break_if b29 a_end_28 >= b_end_31;
-                        if builtin::array_get_value<u8>(b_29, 0 + a_end_28) != builtin::array_get_value<u8>(a_26, 0 + a_end_28) {
+                        break_if b29 b_end_33 >= len_58;
+                        if builtin::array_get_value<u8>($array_clone_src_4, 0 + b_end_33) != builtin::array_get_value<u8>($array_clone_dst_5, 0 + b_end_33) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__spec0_5: 0;
                         }
-                        a_end_28 = a_end_28 + 1;
+                        b_end_33 = b_end_33 + 1;
                         continue l30;
                     };
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_5: 1;
             }, 1, 0), 1, 0);
         }) {
-            return "match_or_pattern_nested_body_once.wado/hit_str"(x.used + y.used);
+            return "match_or_pattern_nested_body_once.wado/hit_str"($load_1 + len_34);
         } else {
         }
     } else {

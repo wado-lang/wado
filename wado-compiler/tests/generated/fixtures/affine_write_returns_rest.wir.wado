@@ -354,12 +354,11 @@ fn "affine_write_returns_rest.wado/$cm_future_write_core:prelude/string.wado/Str
     }
     $rest = ref.null none;
     if (self_11 & 15) == 1 {
-        handle = value.used;
-        $rest = struct.new "core:prelude/string.wado//String" { repr: bytes = value.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(handle)), 0, bytes, 0, handle); $array_clone_dst_2, used: handle };
+        $rest = value;
     }
-    return struct.new "core:prelude/types.wado//FutureWrite<core:prelude/string.wado/String>" { rest: $rest, result: $inline_cm_future_write_result_6: block -> "core:prelude/types.wado//enum:FutureWriteResult" {
+    return struct.new "core:prelude/types.wado//FutureWrite<core:prelude/string.wado/String>" { rest: $rest, result: $inline_cm_future_write_result_5: block -> "core:prelude/types.wado//enum:FutureWriteResult" {
         if self_11 == -1 {
-            break $inline_cm_future_write_result_6: 2;
+            break $inline_cm_future_write_result_5: 2;
         }
         if local.tee self_11((if local.tee self_11(self_11 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
             0;
@@ -376,7 +375,7 @@ fn "affine_write_returns_rest.wado/$cm_future_write_core:prelude/string.wado/Str
             "core:rt/unreachable"();
             unreachable;
         }
-        break $inline_cm_future_write_result_6;
+        break $inline_cm_future_write_result_5;
     } };
 }
 

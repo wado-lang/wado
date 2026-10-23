@@ -385,13 +385,9 @@ fn "mut_ref_write_back_variant_field.wado/hoists_a_by_value_arg"(xs, b) {
     let $load_4: ref null "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>";
     let $write_back_before_4: ref null "core:prelude/string.wado//String";
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = xs.repr;
-    $load_1 = xs.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    xs = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = xs.repr; $load_1 = xs.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
     $write_back_before_4 = local.tee $write_back_3(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>" { value: b.item }).value;
-    "mut_ref_write_back_variant_field.wado/takes_by_value"(struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $array_clone_src_1(builtin::array_new<i32>($load_1)), 0, $array_clone_dst_2, 0, $load_1); $array_clone_src_1, used: $load_1 }, $write_back_3);
+    "mut_ref_write_back_variant_field.wado/takes_by_value"(xs, $write_back_3);
     if ref.eq(local.tee $load_4($write_back_3.value), $write_back_before_4) == 0 {
         b.item = $load_4;
     }
