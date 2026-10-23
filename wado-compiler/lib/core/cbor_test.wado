@@ -1194,3 +1194,8 @@ test "decode: a malformed map fails the look-ahead for its tag" {
         assert from_bytes::<InternallyTagged>(input) matches { Err(_) };
     }
 }
+
+test "decode: an error reading the tag names it, and one before it does not" {
+    assert from_bytes::<InternallyTagged>(b"\xa1\x64type\x01") matches { Err(e) && e.path == "type" };
+    assert from_bytes::<InternallyTagged>(b"\xa2\x61a") matches { Err(e) && e.path == "" };
+}

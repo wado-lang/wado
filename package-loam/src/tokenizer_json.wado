@@ -91,6 +91,24 @@ struct Model {
     byte_fallback: bool = false,
 }
 
+/// A file's model type alone, read where the whole file does not read.
+struct TypeOfModel {
+    model: ModelType,
+}
+
+struct ModelType {
+    #[wire(name = "type")]
+    kind: String = "BPE",
+}
+
+/// That `kind`, a model's type, is the one Loam generates.
+fn bpe(kind: &String) -> Result<(), TokenizerError> {
+    if *kind != "BPE" {
+        return refused(`model: ${*kind} is not supported`);
+    }
+    return Result::Ok(());
+}
+
 /// The two tokens a merge joins.
 struct Merge {
     left: String,
@@ -163,6 +181,11 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     let file = match from_string::<TokenizerFile>(text) {
         Ok(file) => file,
         Err(e) => {
+            // A model of another type lays its fields out its own way, so its
+            // type is the reason, not the first field that reads otherwise.
+            if let Ok(TypeOfModel { model }) = from_string::<TypeOfModel>(text) {
+                bpe(&model.kind)?;
+            }
             return refused(`${e}`);
         },
     };
@@ -174,9 +197,7 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     }
     let spelling = spelling_of(&file)?;
     let model = file.model;
-    if model.kind != "BPE" {
-        return refused(`model: ${model.kind} is not supported`);
-    }
+    bpe(&model.kind)?;
     if let Some(dropout) = model.dropout {
         return unsupported("model", "dropout", `${dropout}`);
     }

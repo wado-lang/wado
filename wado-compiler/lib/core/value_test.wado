@@ -17,7 +17,7 @@ use {
     IgnoredAny,
     Visitor,
 } from "core:serde";
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
     let mut m: TreeMap<String, Value> = TreeMap::new();
@@ -1158,6 +1158,13 @@ test "a HashMap read under a last-wins policy keeps the last repeated key" {
     assert r matches { Ok(m) && m.value.len() == 2 && m.value["a"] == 3 };
 }
 
+test "a set read under a last-wins policy names a bad element by its place in the input" {
+    let tree: Result<ReadLastWins<TreeSet<i32>>, DeserializeError> = from_string(`[1,1,"x"]`);
+    assert tree matches { Err(e) && e.path == "[2]" };
+    let hashed: Result<ReadLastWins<HashSet<i32>>, DeserializeError> = from_string(`[1,1,"x"]`);
+    assert hashed matches { Err(e) && e.path == "[2]" };
+}
+
 test "a Value read under a last-wins policy keeps the last repeated key" {
     let r: Result<ReadLastWins<Value>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     let expected: Value = { a: 3.0, b: 2.0 };
@@ -1211,4 +1218,8 @@ test "an internal tag is looked up among the object's entries" {
     assert fails_with::<InternallyTagged>(&Value::Object(obj([
         ["pattern", Value::String("x")],
     ])), MissingField);
+    let untyped = Value::Object(obj([
+        ["type", Value::Bool(true)],
+    ]));
+    assert from_value::<InternallyTagged>(&untyped) matches { Err(e) && e.path == "type" };
 }

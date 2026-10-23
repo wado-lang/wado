@@ -107,6 +107,8 @@ test "a stage Loam does not generate names itself" {
     assert refusal("pre_tokenizer", "{\"type\": \"Metaspace\"}") == "pre_tokenizer.type: unknown variant: Metaspace";
     assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder.type: unknown variant: WordPiece";
     assert refusal("model", "{\"type\": \"Unigram\"}") == "model: Unigram is not supported";
+    let unigram = "{\"type\": \"Unigram\", \"vocab\": [[\"<unk>\", 0.0]], \"unk_id\": 0}";
+    assert refusal("model", unigram) == "model: Unigram is not supported";
     assert refusal("post_processor", "{\"type\": \"TemplateProcessing\"}") == "post_processor: TemplateProcessing is not supported";
     assert refusal("normalizer", "{\"type\": \"Replace\", \"pattern\": {\"String\": \" \"}, \"content\": \"_\"}") == "normalizer: Replace is not supported";
 }

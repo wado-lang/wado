@@ -613,18 +613,21 @@ impl<T: Hash + Deserialize + Inspect> Deserialize for HashSet<T> {
         let on_duplicate = d.on_duplicate_field();
         let mut seq = d.begin_seq()?;
         let mut result = HashSet::<T>::new();
+        // With the length, the index of the element being read.
+        let mut repeats = 0;
         loop {
             let Some(element) = match seq.next_element::<T>() {
                 Ok(next) => next,
                 Err(e) => {
                     builtin::cold_path();
-                    return Result::Err(e.within_item(&result.len()));
+                    return Result::Err(e.within_item(&(result.len() + repeats)));
                 },
             } else {
                 break;
             };
             if !result.insert(element) {
                 report_duplicate_field(on_duplicate, &element)?;
+                repeats += 1;
             }
         }
         seq.end()?;

@@ -2407,7 +2407,12 @@ impl DeserializeStruct for JsonStructAccess {
         while de.entry_head(b'}')? {
             let b = de.peek_after_whitespace();
             if de.entry_key(b)? == wanted.as_bytes() {
-                let value = de.deserialize_string()?;
+                let value = match de.deserialize_string() {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return Result::Err(e.within_field(wanted));
+                    },
+                };
                 if !leads {
                     de.pos = start;
                     de.first_entry = first_entry;
