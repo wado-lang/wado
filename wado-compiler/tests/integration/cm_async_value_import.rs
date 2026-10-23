@@ -129,8 +129,8 @@ fn a_generic_body_binds_its_stream_read_per_instance() {
 use { double_stream } from "./dep.wasm" with { type: "wasm" };
 use { println, Stdout } from "core:cli";
 
-fn read_once<T>(s: &Stream<T>) -> StreamChunk<T> {
-    return s.read(16);
+fn read_once<T>(s: Stream<T>) -> [Stream<T>, StreamChunk<T>] {
+    return s.start_read(16).finish();
 }
 
 export fn run() with Stdout {
@@ -139,8 +139,9 @@ export fn run() with Stdout {
     tx.write_all([4, 5]);
     tx.drop();
     let out = call.wait();
-    let got = read_once::<u32>(&out).items;
+    let [out, chunk] = read_once::<u32>(out);
     out.drop();
+    let got = chunk.items;
     println(`${got:?}`);
 }
 "#,

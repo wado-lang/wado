@@ -97,7 +97,7 @@ type "functype//serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSer
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
@@ -116,7 +116,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -159,7 +159,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     n_29 = start_34;
     start_34 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = n_29; n_29 = 0; start_34, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_34 = new_used_33; new_used_33 = 0; start_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = new_used_33; new_used_33 = 0; start_34);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     drop("serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^serde_serialize_array.wado/Serialize::serialize<serde_serialize_array.wado/JsonSerializer>"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 }, ser));
     local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }).used = 14;
@@ -181,7 +181,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     start_34 = n_29;
     n_29 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(n_29 = start_34; start_34 = 0; n_29, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_29 = new_used_33; new_used_33 = 0; n_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_29 = new_used_33; new_used_33 = 0; n_29);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     drop("serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_array.wado/Serialize::serialize<serde_serialize_array.wado/JsonSerializer>"(global:serde_serialize_array.wado::$const_obj_8, ser));
     local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }).used = 7;
@@ -203,7 +203,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     n_29 = start_34;
     start_34 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = n_29; n_29 = 0; start_34, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_34 = new_used_33; new_used_33 = 0; start_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = new_used_33; new_used_33 = 0; start_34);
 }
 
 fn "serde_serialize_array.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -274,8 +274,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -328,13 +330,13 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
         start_25 = self.used;
         $sroa_$iter_0_repr_56 = self.repr;
         new_used_24 = 0;
-        b17: block {
-            l18: loop {
-                break_if b17 new_used_24 >= start_25;
+        b18: block {
+            l19: loop {
+                break_if b18 new_used_24 >= start_25;
                 out_17 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_56, new_used_24);
                 new_used_24 = new_used_24 + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<core:prelude/string.wado/String>"($local_6, out_17));
-                continue l18;
+                continue l19;
             };
         };
         return if @unlikely(local.tee start_25(local.tee out_17(local.tee s($local_6.ser).buf).used + 1) > builtin::array_len(out_17.repr)) {
@@ -370,13 +372,13 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
         start_25 = self.used;
         $sroa_$iter_0_repr_56 = self.repr;
         new_used_24 = 0;
-        b23: block {
-            l24: loop {
-                break_if b23 new_used_24 >= start_25;
+        b24: block {
+            l25: loop {
+                break_if b24 new_used_24 >= start_25;
                 ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_56, new_used_24);
                 new_used_24 = new_used_24 + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<i32>$sroa[value.value]"($local_6, ref_val));
-                continue l24;
+                continue l25;
             };
         };
         return if @unlikely(local.tee start_25(local.tee out_17(local.tee s($local_6.ser).buf).used + 1) > builtin::array_len(out_17.repr)) {
@@ -538,16 +540,16 @@ fn "serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serd
     $local_2.used = new_used_14;
     arr = $local_2.repr;
     value = start_15 + value;
-    b54: block {
-        l55: loop {
-            break_if b54 (value - start_15) < 2;
+    b55: block {
+        l56: loop {
+            break_if b55 (value - start_15) < 2;
             q = x /u 100_i64;
             tens = local.tee new_used_14(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, value - 1, ((48 + new_used_14) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
             value = value - 2;
             x = q;
-            continue l55;
+            continue l56;
         };
     };
     if value > start_15 {

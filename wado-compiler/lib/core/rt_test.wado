@@ -6,13 +6,13 @@ use { MonotonicClock } from "wasi:clocks";
 #[expect_trap]
 test "a read with negative room is a defect" {
     let [rx, tx] = Stream::<u8>::new();
-    rx.read(builtin::black_box(-1));
+    rx.start_read(builtin::black_box(-1));
 }
 
 test "a write to a stream whose reader is gone reports the drop" {
     let [rx, tx] = Stream::<u8>::new();
     rx.drop();
-    let written = tx.write([1, 2]);
+    let [tx, written] = tx.start_write([1, 2]).finish();
     assert written.rest == [1, 2];
     assert written.result == CopyResult::Dropped;
     assert tx.write_raw_all(([] as List<u8>).as_slice()) == CopyResult::Completed;

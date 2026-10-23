@@ -1,0 +1,30 @@
+// A handler impl answers its effect's operations and nothing else. A method
+// the effect does not declare can never be dispatched to, so it is an error
+// rather than a helper: a misspelled or renamed operation would otherwise
+// leave the real one to its default, or to `..trap`, without a word.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct C { v: i32 }
+
+impl Counter for C {
+    fn next(&mut self) -> i32 {
+        self.v += 1;
+        resume self.v
+    }
+    fn nxet(&mut self) -> i32 {
+        resume 0
+    }
+}
+
+export fn run() {
+    let mut c = C { v: 0 };
+    with Counter => &mut c do {
+        Counter::next();
+    }
+}
+
+__DATA__
+{"compile_error": ":17:8: analysis error: `nxet` is not an operation of `Counter`, so a handler for it cannot answer it"}

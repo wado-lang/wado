@@ -73,7 +73,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
 
 type "functype//effect_handler_install_held.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(30)
 
@@ -91,7 +91,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
 global mut global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log: ref null "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log" = ref.null none;
 global global:effect_handler_install_held.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(91, 108, 111, 103, 93, 32);
@@ -164,7 +164,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }
@@ -215,8 +215,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -270,7 +272,7 @@ fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0
     n_24 = start_29;
     start_29 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_29 = n_24; n_24 = 0; start_29, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_29 = new_used_28; new_used_28 = 0; start_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_29 = new_used_28; new_used_28 = 0; start_29);
 }
 
 fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]"(message) {
@@ -297,7 +299,7 @@ fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1
     n_24 = start_29;
     start_29 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_29 = n_24; n_24 = 0; start_29, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_29 = new_used_28; new_used_28 = 0; start_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_29 = new_used_28; new_used_28 = 0; start_29);
 }
 
 fn "closure/effect_handler_install_held.wado/$closure_wrapper_0"($env, $p0) {

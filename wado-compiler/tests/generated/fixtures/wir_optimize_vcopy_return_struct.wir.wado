@@ -63,7 +63,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(26)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
@@ -82,7 +82,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -138,7 +138,7 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         is_negative_16 = start_39;
         start_39 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(start_39 = is_negative_16; is_negative_16 = 0; start_39, $local_4.repr, $local_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_39 = $mv$r$0; $mv$r$0 = 0; start_39);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_39 = $mv$r$0; $mv$r$0 = 0; start_39);
     } else {
     }
     multivalue_bind [start_39, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
@@ -150,7 +150,7 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         start_39 = $mv$r$0;
         $mv$r$0 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"($mv$r$0 = start_39; start_39 = 0; $mv$r$0, $local_4.repr, $local_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$r$0 = is_negative_16; is_negative_16 = 0; $mv$r$0);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$r$0 = is_negative_16; is_negative_16 = 0; $mv$r$0);
     } else {
     }
 }
@@ -336,8 +336,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

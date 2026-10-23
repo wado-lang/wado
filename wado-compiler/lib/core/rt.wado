@@ -22,13 +22,17 @@ use {
     FutureWritable,
     FutureWriteResult,
     Stream,
-    StreamChunk,
-    StreamWrite,
     StreamWritable,
     ReadyEvent,
+    CopyBuffer,
+    StartedRead,
+    StartedWrite,
     WaitEvent,
+    CM_BLOCKED,
     call_state,
+    cm_await_copy,
     cm_packed_upper,
+    copy_result,
     write_copy_is_final,
 } from "core:prelude/types.wado";
 
@@ -295,50 +299,15 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// What a stream or future copy answers when it must wait for the other end.
-global CM_BLOCKED: i32 = -1;
-
-/// The packed result of the stream or future copy on `handle` that answered
-/// `packed`, awaiting it first if BLOCKED. Either way it is in the
-/// `(count << 4) | status` packing the canonical returns directly.
-///
-/// Whether a given copy blocks is the host's scheduling, so the test lives here,
-/// where every copy reaches it, rather than at each call. It stays small enough
-/// to inline, so a copy that did not block pays no call.
+/// The packed result of a copy that answered `packed`, awaited first if it
+/// answered BLOCKED. Every caller starts the copy and waits on it at once, so no
+/// set can have reported it: `SETTLED_COPIES` never holds it.
 #[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
     if packed != CM_BLOCKED {
         return packed;
     }
     return cm_await_copy(handle);
-}
-
-/// The packed result of the BLOCKED copy on `handle`, once the host reports it.
-///
-/// The handle must be unjoined before the set is dropped; a set still holding a
-/// waitable cannot be deleted.
-fn cm_await_copy(handle: i32) -> i32 {
-    let ws = builtin::waitable_set_new();
-    builtin::waitable_join(handle, ws);
-    let evt_ptr = builtin::realloc(0, 0, 4, 8);
-    let code = builtin::waitable_set_wait(ws, evt_ptr);
-    let status = builtin::i32_load(evt_ptr + 4);
-    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
-    builtin::waitable_join(handle, 0);
-    builtin::waitable_set_drop(ws);
-    return status;
-}
-
-/// The `CopyResult` a packed CM copy reports (`CanonicalABI.md`): the low
-/// nibble of `(count << 4) | status`. Cancellation is unreachable: no binding
-/// cancels a copy.
-#[compiler_item("cm_copy_result")]
-internal fn cm_copy_result(packed: i32) -> CopyResult {
-    return match packed & 0xf {
-        0 => CopyResult::Completed,
-        1 => CopyResult::Dropped,
-        _ => unreachable(),
-    };
 }
 
 /// How a future write whose packed result is `packed` ended, a BLOCKED one
@@ -348,7 +317,7 @@ internal fn cm_future_write_result(packed: i32) -> FutureWriteResult {
     if packed == CM_BLOCKED {
         return FutureWriteResult::Pending;
     }
-    return match cm_copy_result(packed) {
+    return match copy_result(packed) {
         Completed => FutureWriteResult::Completed,
         Dropped => FutureWriteResult::Dropped,
         Cancelled => unreachable(),
@@ -377,39 +346,34 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
     return count * elem_size;
 }
 
-/// The element count of a packed CM copy result.
-#[compiler_item("cm_packed_count")]
-internal fn cm_packed_count(packed: i32) -> i32 {
-    return cm_packed_upper(packed);
-}
-
-/// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
+/// CM adapter for stream.read(max) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_read_u8")]
-internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
+internal fn cm_stream_read_u8(handle: i32, max: i32) -> StartedRead<u8> {
     let room = cm_buffer_bytes(cm_copy_count(max), 1);
     let ptr = builtin::realloc(0, 0, 1, room);
-    let result = cm_await_blocked(handle, builtin::stream_read(handle, ptr, room));
-    let count = cm_packed_count(result);
-    let arr = memory_to_gc_array(ptr, count);
-    let freed = builtin::realloc(ptr, room, 1, 0);
-    return StreamChunk {
-        items: List::internal_from_raw(arr, count),
-        result: cm_copy_result(result),
+    let packed = builtin::stream_read(handle, ptr, room);
+    return StartedRead {
+        buffer: CopyBuffer { handle, packed, ptr, size: room, align: 1 },
+        items: [],
     };
 }
 
-/// CM adapter for stream.write(data) on Stream<u8>: one copy, reporting what
-/// the reader took. `StreamWritable::write_all` is the loop over it.
+/// CM adapter for lifting the `count` bytes a read on Stream<u8> copied to
+/// `ptr`.
+#[compiler_item("cm_stream_lift_u8")]
+internal fn cm_stream_lift_u8(handle: i32, ptr: i32, count: i32) -> List<u8> {
+    return List::internal_from_raw(memory_to_gc_array(ptr, count), count);
+}
+
+/// CM adapter for stream.write(data) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_write_u8")]
-internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite<u8> {
-    let bytes = data.internal_raw_data_ref();
+internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StartedWrite<u8> {
     let len = data.len();
-    let ptr = cm_lower_list_u8(bytes, 0, len) as i32;
-    let written = cm_stream_write_once(handle, ptr, len);
-    let freed = builtin::realloc(ptr, len, 1, 0);
-    return StreamWrite {
-        rest: Slice::internal_new(bytes, cm_packed_count(written), len).to_list(),
-        result: cm_copy_result(written),
+    let ptr = cm_lower_list_u8(data.internal_raw_data_ref(), 0, len) as i32;
+    let packed = builtin::stream_write(handle, ptr, cm_copy_count(len));
+    return StartedWrite {
+        buffer: CopyBuffer { handle, packed, ptr, size: len, align: 1 },
+        data,
     };
 }
 
@@ -431,8 +395,8 @@ internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResu
     let mut taken = 0;
     loop {
         let written = cm_stream_write_once(handle, ptr + taken, len - taken);
-        let delivered = cm_packed_count(written);
-        let result = cm_copy_result(written);
+        let delivered = cm_packed_upper(written);
+        let result = copy_result(written);
         taken += delivered;
         if write_copy_is_final(result, delivered) || taken >= len {
             let freed = builtin::realloc(ptr, len, 1, 0);
@@ -487,16 +451,19 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 }
 
 /// The event of `code` whose handle and payload the host wrote at `out_ptr`,
-/// which this frees.
-///
-/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
-/// cannot arrive either.
+/// which this frees. A set holds subtasks and stream ends only, so no future
+/// event arrives, and `waitable-set.wait` is lowered with `cancellable = 0`, so
+/// no `TASK_CANCELLED` does.
 fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
-    assert code == 1, "only a subtask joins a set";
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { handle, event: ReadyEvent::Call(call_state(payload as u32)) };
+    let event = match code {
+        1 => ReadyEvent::Call(call_state(payload as u32)),
+        2 | 3 => ReadyEvent::Copied(copy_result(payload)),
+        _ => unreachable(),
+    };
+    return WaitEvent { handle, event, payload };
 }
 
 // `as` with a half on either side. No instruction converts a half, so a half

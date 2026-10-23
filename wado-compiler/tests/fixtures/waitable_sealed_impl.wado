@@ -6,8 +6,8 @@ struct Fake {
 }
 
 impl Waitable for Fake {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return null;
+    fn wait_on(&self) -> WaitOn {
+        return WaitOn::Settled(ReadyEvent::Unreported);
     }
 }
 

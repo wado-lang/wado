@@ -1,0 +1,24 @@
+// A future may carry a type a bundled interface declares, here the
+// `ErrorCode` of `wasi:cli/types`, an interface that declares types and no
+// function. The program imports no `wasi:cli` function, so no import aliases the
+// type in, and the component defines it itself.
+//
+// Reaching wasmtime's refusal of an intra-component future with a non-numeric
+// payload is what pins this: the component validated and ran up to the read.
+
+use { println, Stdout } from "core:cli";
+use { ErrorCode } from "wasi:cli/types.wado";
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<Result<i32, ErrorCode>>::new();
+    tx.write(Result::Ok(3));
+    println("built");
+    println(`${rx.read():?}`);
+}
+
+__DATA__
+{
+  "stdout": "built\n",
+  "stderr_contains": ["non-numeric payload"],
+  "trapped": true
+}

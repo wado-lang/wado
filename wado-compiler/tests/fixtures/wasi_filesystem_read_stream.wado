@@ -31,7 +31,7 @@ export fn run() with (Stdout, Stderr, Preopens) {
     if let Ok(file) = open_result {
         // read_via_stream returns [Stream<u8>, Future<Result<(), ErrorCode>>]
         // The stream starts at byte offset 0 (beginning of file)
-        let [file_rx, read_future] = file.read_via_stream(0 as Filesize);
+        let [mut file_rx, read_future] = file.read_via_stream(0 as Filesize);
 
         // Set up stdout output stream (consumer-first ordering)
         let [out_rx, out_tx] = Stream::<u8>::new();
@@ -39,7 +39,8 @@ export fn run() with (Stdout, Stderr, Preopens) {
 
         // Read from file stream, write to stdout stream
         loop {
-            let chunk = file_rx.read(4096);
+            let [end, chunk] = file_rx.start_read(4096).finish();
+            file_rx = end;
             out_tx.write_all(chunk.items);
             if chunk.result != CopyResult::Completed {
                 break;

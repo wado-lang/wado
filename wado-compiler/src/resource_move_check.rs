@@ -60,6 +60,8 @@ enum MoveError {
     DropOnCopyable { type_name: String },
     /// A field moved out of a value whose type implements `Drop`.
     DropPartialMove { type_name: String },
+    /// The `self` of a `Drop::drop` body moved as a whole.
+    DropSelfMove { type_name: String },
     /// `..base` over a type that implements `Drop`.
     DropSpread { type_name: String },
     /// A value read after a local it refers into moved, dropped, or went to a
@@ -139,6 +141,12 @@ impl From<ResourceMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 format!(
                     "`{type_name}` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with"
+                ),
+            ),
+            MoveError::DropSelfMove { type_name } => (
+                Code::TypeMismatch,
+                format!(
+                    "the `drop` of `{type_name}` cannot move `self` as a whole: wherever it went, it would drop and run `drop` again"
                 ),
             ),
             MoveError::DropSpread { type_name } => (
@@ -560,6 +568,8 @@ struct MoveWalker<'a, 'c> {
     affine_params: Vec<String>,
     /// The `self` of a `Drop::drop` body, which may move its fields out.
     drop_self: Option<AstId>,
+    /// The scrutinees a pattern takes apart, so no binding holds them whole.
+    decomposed: IndexSet<AstId>,
     flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
@@ -627,6 +637,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             modes,
             affine_params,
             drop_self,
+            decomposed: IndexSet::default(),
             flow: Flow::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -898,6 +909,11 @@ impl MoveWalker<'_, '_> {
         }
         if let Some(moved_at) = self.moved_overlap(def, &place.fields) {
             self.report(MoveError::UseAfterMove { name, moved_at }, place.root.span);
+            return;
+        }
+        if self.is_drop_self(expr) && !self.decomposed.contains(&expr.id()) {
+            let type_name = self.type_name_of(expr);
+            self.report(MoveError::DropSelfMove { type_name }, place.root.span);
             return;
         }
         self.refuse_move_out_of_drop(expr);
@@ -1696,6 +1712,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
                 if let Some(value) = &l.value {
+                    self.note_decomposed(value, [&l.pattern]);
                     self.visit_at(value);
                 }
                 // A `let ... else` whose pattern fails consumes nothing; its
@@ -1926,7 +1943,19 @@ impl MoveWalker<'_, '_> {
         then_div && else_div
     }
 
+    /// Note `value` as decomposed where none of `patterns` keeps it whole.
+    fn note_decomposed<'p>(
+        &mut self,
+        value: &Expr,
+        patterns: impl IntoIterator<Item = &'p Pattern>,
+    ) {
+        if !patterns.into_iter().any(keeps_whole) {
+            self.decomposed.insert(value.id());
+        }
+    }
+
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
+        self.note_decomposed(scrutinee, arms.iter().map(|arm| &arm.pattern));
         self.visit_at(scrutinee);
         let owners = self.owners_of(scrutinee);
         let base = std::mem::take(&mut self.flow);
@@ -1977,6 +2006,7 @@ impl MoveWalker<'_, '_> {
                 for element in elements {
                     match element {
                         ConditionElement::Let { pattern, expr, .. } => {
+                            self.note_decomposed(expr, [&**pattern]);
                             self.visit_at(expr);
                             self.bind_to(pattern, expr);
                         }
@@ -2007,6 +2037,22 @@ impl MoveWalker<'_, '_> {
                 }
             }
         }
+    }
+}
+
+/// Whether a value `pattern` matches stays whole: bound to one name, or dropped
+/// at once by `_`. A destructuring pattern takes it apart field by field.
+fn keeps_whole(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard => true,
+        Pattern::Typed { pattern, .. } => keeps_whole(pattern),
+        Pattern::Or(alternatives) => alternatives.iter().any(keeps_whole),
+        Pattern::Tuple(..)
+        | Pattern::Variant { .. }
+        | Pattern::Struct { .. }
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
+        | Pattern::Error(_) => false,
     }
 }
 

@@ -33,7 +33,7 @@ export fn run() with (Stdout, Greeting) {
 
     let [rx, tx] = Stream::<u8>::new();
     let done = write_via_stream(rx);
-    tx.write(b"streamed\n");
+    tx.write_all(b"streamed\n");
     tx.drop();
     done.read();
 }

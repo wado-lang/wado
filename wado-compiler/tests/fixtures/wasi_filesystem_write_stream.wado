@@ -49,11 +49,12 @@ export fn run() with (Stdout, Stderr, Preopens) {
         sub1.drop();
 
         // Read back via stream and pipe to stdout to verify round-trip
-        let [file_rx, read_done] = file.read_via_stream(0 as Filesize);
+        let [mut file_rx, read_done] = file.read_via_stream(0 as Filesize);
         let [out_rx, out_tx] = Stream::<u8>::new();
         let sub2 = Stdout::write_via_stream(out_rx);
         loop {
-            let chunk = file_rx.read(4096);
+            let [end, chunk] = file_rx.start_read(4096).finish();
+            file_rx = end;
             out_tx.write_all(chunk.items);
             if chunk.result != CopyResult::Completed {
                 break;

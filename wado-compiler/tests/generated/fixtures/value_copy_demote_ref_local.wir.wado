@@ -68,7 +68,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
@@ -88,7 +88,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -249,7 +249,7 @@ fn "value_copy_demote_ref_local.wado/run"() with Stdout {
     used_35 = m;
     m = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(m = used_35; used_35 = 0; m, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(m = is_negative_49; is_negative_49 = 0; m);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(m = is_negative_49; is_negative_49 = 0; m);
 }
 
 fn "value_copy_demote_ref_local.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -376,7 +376,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }
@@ -427,8 +427,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -547,19 +549,19 @@ fn "value_copy_demote_ref_local.wado/core:prelude/list.wado/List<core:prelude/st
     buf = builtin::array_new<ref "core:prelude/string.wado//String">(n);
     width = 1;
     $licm_repr_20 = self.repr;
-    b55: block {
-        l56: loop {
+    b56: block {
+        l57: loop {
             start = 0;
-            b57: block {
-                l58: loop {
-                    break_if b57 width >= (n - start);
+            b58: block {
+                l59: loop {
+                    break_if b58 width >= (n - start);
                     end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
                     i_7 = start;
                     j = mid;
                     k = start;
-                    b59: block {
-                        l60: loop {
-                            break_if b59 k >= end;
+                    b60: block {
+                        l61: loop {
+                            break_if b60 k >= end;
                             if i_7 < mid {
                                 if j < end {
                                     a_10 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_20, i_7);
@@ -571,9 +573,9 @@ fn "value_copy_demote_ref_local.wado/core:prelude/list.wado/List<core:prelude/st
                                         b_end = b_11.used;
                                         min_len = select i32(a_end < b_end, a_end, b_end);
                                         i_30 = 0;
-                                        b64: block {
-                                            l65: loop {
-                                                break_if b64 i_30 >= min_len;
+                                        b65: block {
+                                            l66: loop {
+                                                break_if b65 i_30 >= min_len;
                                                 x = builtin::array_get_value<u8>(a_21, i_30);
                                                 y = builtin::array_get_value<u8>(b_24, i_30);
                                                 if x <u y {
@@ -583,7 +585,7 @@ fn "value_copy_demote_ref_local.wado/core:prelude/list.wado/List<core:prelude/st
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
                                                 i_30 = i_30 + 1;
-                                                continue l65;
+                                                continue l66;
                                             };
                                         };
                                         if a_end < b_end {
@@ -609,17 +611,17 @@ fn "value_copy_demote_ref_local.wado/core:prelude/list.wado/List<core:prelude/st
                                 j = j + 1;
                             }
                             k = k + 1;
-                            continue l60;
+                            continue l61;
                         };
                     };
                     builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_20, start, buf, start, end - start);
                     start = end;
-                    continue l58;
+                    continue l59;
                 };
             };
-            break_if b55 width >= (n - width);
+            break_if b56 width >= (n - width);
             width = width * 2;
-            continue l56;
+            continue l57;
         };
     };
 }

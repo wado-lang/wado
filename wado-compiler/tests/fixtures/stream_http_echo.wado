@@ -9,8 +9,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Read entire request body into chunks
     let mut chunks: List<List<u8>> = [];
+    let mut body_stream = body_stream;
     loop {
-        let chunk = body_stream.read(4096);
+        let [end, chunk] = body_stream.start_read(4096).finish();
+        body_stream = end;
         chunks.push(chunk.items);
         if chunk.result != CopyResult::Completed {
             break;

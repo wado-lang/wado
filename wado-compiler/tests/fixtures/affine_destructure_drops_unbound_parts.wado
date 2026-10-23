@@ -1,0 +1,87 @@
+// A destructuring moves its scrutinee whole, so a part the pattern leaves
+// unnamed, under `..` or `_`, is dropped at the end of the pattern's scope
+// rather than lost with the moved scrutinee.
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Part {
+    weight: i32,
+}
+
+impl Drop for Part {
+    fn drop(self) {
+        DROPS += self.weight;
+    }
+}
+
+affine struct Pair {
+    left: Part,
+    right: Part,
+}
+
+affine struct Holder {
+    pair: Pair,
+}
+
+impl Drop for Holder {
+    fn drop(self) {
+        let Pair { right, .. } = self.pair;
+        builtin::drop(right);
+    }
+}
+
+fn part(weight: i32) -> Part {
+    return Part { weight };
+}
+
+fn pair(left: i32, right: i32) -> Pair {
+    return Pair { left: part(left), right: part(right) };
+}
+
+fn struct_rest() {
+    let Pair { left, .. } = pair(1, 10);
+    builtin::drop(left);
+}
+
+fn tuple_rest() {
+    let [first, ..] = [part(1), part(10), part(100)];
+    builtin::drop(first);
+}
+
+fn tuple_wildcard() {
+    let [_, second] = [part(1), part(10)];
+    builtin::drop(second);
+}
+
+fn match_arm() {
+    let maybe: Option<Pair> = Option::Some(pair(1, 10));
+    match maybe {
+        Some(Pair { left, .. }) => builtin::drop(left),
+        None => {},
+    }
+}
+
+fn drop_body() {
+    builtin::drop(Holder { pair: pair(1, 10) });
+}
+
+fn drops_of(step: i32) -> i32 {
+    DROPS = 0;
+    match step {
+        0 => struct_rest(),
+        1 => tuple_rest(),
+        2 => tuple_wildcard(),
+        3 => match_arm(),
+        _ => drop_body(),
+    }
+    return DROPS;
+}
+
+export fn run() with Stdout {
+    println(`${drops_of(0)} ${drops_of(1)} ${drops_of(2)} ${drops_of(3)} ${drops_of(4)}`);
+}
+
+__DATA__
+{"stdout": "11 111 11 11 11\n"}

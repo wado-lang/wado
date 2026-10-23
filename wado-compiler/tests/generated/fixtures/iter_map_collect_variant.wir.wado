@@ -69,7 +69,7 @@ type "functype//iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Clo
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(27)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(27)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
@@ -88,7 +88,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -143,7 +143,7 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     used_29 = $sroa_self_index_58;
     $sroa_self_index_58 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_self_index_58 = used_29; used_29 = 0; $sroa_self_index_58, item_18.repr, item_18.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_self_index_58 = $moved_4; $moved_4 = 0; $sroa_self_index_58);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_self_index_58 = $moved_4; $moved_4 = 0; $sroa_self_index_58);
 }
 
 fn "iter_map_collect_variant.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -214,8 +214,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -263,9 +265,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     $licm_repr_56 = self.repr;
     $licm_used_69 = $mv$separator$used;
     $licm_repr_70 = $mv$separator$repr;
-    b16: block {
-        l17: loop {
-            break_if b16 i_4 >= $load_0;
+    b17: block {
+        l18: loop {
+            break_if b17 i_4 >= $load_0;
             if i_4 > 0 {
                 $inline_core_prelude_string_wado_String__internal_push_string_6: block {
                     break_if $inline_core_prelude_string_wado_String__internal_push_string_6 $licm_used_69 == 0;
@@ -298,7 +300,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                 break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__11;
             };
             i_4 = i_4 + 1;
-            continue l17;
+            continue l18;
         };
     };
     return buf_2;

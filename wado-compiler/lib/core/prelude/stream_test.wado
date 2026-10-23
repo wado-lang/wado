@@ -1,8 +1,185 @@
+use { CopyBuffer } from "core:prelude/types.wado";
+
 // One Component Model copy moves at most 2^28 - 1 elements, and a longer one traps.
 test "a read offering more room than one copy moves does not trap" {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
-    let chunk = rx.read(1 << 28);
+    let [rx, chunk] = rx.start_read(1 << 28).finish();
+    rx.drop();
     assert chunk.items.is_empty();
     assert chunk.result == CopyResult::Dropped;
+}
+
+test "a read copy dropped in flight cancels, and the writer sees the end go" {
+    let [rx, tx] = Stream::<u8>::new();
+    let reading = rx.start_read(4);
+    assert reading.wait_on() matches { Host(_) };
+    builtin::drop(reading);
+    let [tx, written] = tx.start_write([1]).finish();
+    tx.drop();
+    assert written.result == CopyResult::Dropped;
+}
+
+test "a write copy dropped in flight cancels, and the reader sees the end go" {
+    let [rx, tx] = Stream::<u8>::new();
+    let writing = tx.start_write([1, 2]);
+    assert writing.wait_on() matches { Host(_) };
+    builtin::drop(writing);
+    let [rx, chunk] = rx.start_read(4).finish();
+    rx.drop();
+    assert chunk.result == CopyResult::Dropped;
+}
+
+test "a copy a set reported finishes on what the set took" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let writing = writer.start_write([7, 8]);
+    let ready = set.wait();
+    assert ready.event matches { Copied(Completed) };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [7, 8];
+}
+
+test "a copy a set reported drops without a cancel" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let writing = writer.start_write([9]);
+    builtin::drop(set.wait().member);
+    let [tx, written] = writing.finish();
+    tx.drop();
+    assert written.rest.is_empty();
+}
+
+test "a write copy a set reported drops without a cancel" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut set = WaitableSet::<WriteCopy<u8>>::new();
+    set.join(writer.start_write([5]));
+    let [rx, chunk] = reader.start_read(4).finish();
+    rx.drop();
+    builtin::drop(set.wait().member);
+    assert chunk.items == [5];
+}
+
+test "a copy that settled as it started joins ready with its result" {
+    let [reader, writer] = Stream::<u8>::new();
+    let writing = writer.start_write([6]);
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader.start_read(4));
+    let ready = set.wait();
+    assert ready.event matches { Copied(Completed) };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [6];
+}
+
+test "a copy one set reported joins another ready" {
+    let [reader, writer] = Stream::<u8>::new();
+    let mut first = WaitableSet::<ReadCopy<u8>>::new();
+    first.join(reader.start_read(4));
+    let writing = writer.start_write([7]);
+    let mut second = WaitableSet::<ReadCopy<u8>>::new();
+    second.join(first.wait().member);
+    let ready = second.wait();
+    assert ready.event matches { Copied(Completed) };
+    let [rx, chunk] = ready.member.finish();
+    rx.drop();
+    let [tx, _] = writing.finish();
+    tx.drop();
+    assert chunk.items == [7];
+}
+
+test "copies a set reported finish in any order" {
+    let [reader_a, writer_a] = Stream::<u8>::new();
+    let [reader_b, writer_b] = Stream::<u8>::new();
+    let mut set = WaitableSet::<ReadCopy<u8>>::new();
+    set.join(reader_a.start_read(4));
+    set.join(reader_b.start_read(4));
+    let writing_a = writer_a.start_write([1]);
+    let writing_b = writer_b.start_write([2]);
+    let first = set.wait().member;
+    let second = set.wait().member;
+    let [rx2, chunk2] = second.finish();
+    let [rx1, chunk1] = first.finish();
+    rx1.drop();
+    rx2.drop();
+    let [tx_a, _] = writing_a.finish();
+    tx_a.drop();
+    let [tx_b, _] = writing_b.finish();
+    tx_b.drop();
+    assert chunk1.items.len() + chunk2.items.len() == 2;
+}
+
+test "write_all ends once a waiting reader takes everything" {
+    let [reader, writer] = Stream::<u8>::new();
+    let reading = reader.start_read(4);
+    assert writer.write_all([1, 2]) == CopyResult::Completed;
+    writer.drop();
+    let [rx, chunk] = reading.finish();
+    rx.drop();
+    assert chunk.items == [1, 2];
+}
+
+test "write_all stops where the reader drops" {
+    let [rx, tx] = Stream::<u8>::new();
+    rx.drop();
+    assert tx.write_all([]) == CopyResult::Completed;
+    assert tx.write_all([1, 2]) == CopyResult::Dropped;
+    tx.drop();
+}
+
+global mut COUNTED_DROPS: i32 = 0;
+
+affine struct Counted {
+    id: i32,
+}
+
+impl Drop for Counted {
+    fn drop(self) {
+        COUNTED_DROPS += self.id;
+    }
+}
+
+/// A write copy the host settled having delivered `delivered` of `data`.
+fn delivered_write(delivered: i32, data: List<Counted>) -> StartedWrite<Counted> {
+    return StartedWrite {
+        buffer: CopyBuffer { handle: 0, packed: delivered << 4, ptr: 0, size: 0, align: 1 },
+        data,
+    };
+}
+
+test "what a write copy delivered is the reader's, and never drops here" {
+    COUNTED_DROPS = 0;
+    let written = delivered_write(1, [
+        Counted { id: 1 },
+        Counted { id: 10 },
+    ]).settle();
+    assert COUNTED_DROPS == 0;
+    builtin::drop(written);
+    assert COUNTED_DROPS == 10;
+
+    COUNTED_DROPS = 0;
+    builtin::drop(delivered_write(1, [
+        Counted { id: 1 },
+        Counted { id: 10 },
+    ]));
+    assert COUNTED_DROPS == 10;
+}
+
+test "a copy a handler settled reports what the handler said" {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let chunk = StartedRead::<u8>::settled(StreamChunk { items: [], result: CopyResult::Cancelled }).settle(&rx);
+    rx.drop();
+    assert chunk.result == CopyResult::Cancelled;
+    assert StartedWrite::<u8>::settled(StreamWrite {
+        rest: [3],
+        result: CopyResult::Dropped,
+    }).settle().rest == [3];
 }

@@ -1,4 +1,4 @@
-// Regression: a non-u8 (record) `Stream<T>.read()` nested inside a container
+// Regression: a non-u8 (record) `Stream<T>.start_read()` nested inside a container
 // expression (here an `if`-expression branch) must still synthesize its
 // `$cm_stream_read_<T>` binding function.
 //
@@ -11,7 +11,7 @@
 // stream) from inside an `if`-expression so the read is never in a plain `let`.
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
-use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, DirectoryEntry } from "wasi:filesystem";
+use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Preopens) {
     let mut dirs = Preopens::get_directories();
@@ -26,11 +26,12 @@ export fn run() with (Stdout, Stderr, Preopens) {
 
     // The record stream read is nested inside an `if`-expression branch — a
     // position the discovery walker historically did not visit.
-    let entries = if count > 0 {
-        dir_stream.read(100).items
+    let [dir_stream, chunk] = if count > 0 {
+        dir_stream.start_read(100).finish()
     } else {
-        dir_stream.read(0).items
+        dir_stream.start_read(0).finish()
     };
+    let entries = chunk.items;
 
     let mut found_hello = false;
     for let entry of entries {

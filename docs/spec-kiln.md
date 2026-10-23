@@ -461,10 +461,11 @@ Loam reads a checkpoint only as far as its header ends:
 <!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
-pub fn read_header(content: Stream<u8>) -> ByteList {
+pub fn read_header(mut content: Stream<u8>) -> ByteList {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
-        let chunk = content.read(HEADER_CHUNK);
+        let [end, chunk] = content.start_read(HEADER_CHUNK).finish();
+        content = end;
         prefix.extend(&(chunk.items as ByteList));
         if chunk.result != CopyResult::Completed || holds_header(&prefix) {
             break;
@@ -657,10 +658,11 @@ This probe says the first line decides everything:
 <!-- {"source": "wado-cli/tests/integration/kiln_probe.rs"} -->
 
 ```wado
-export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
     let mut n: u64 = 0;
     loop {
-        let chunk = content.read(1);
+        let [end, chunk] = content.start_read(1).finish();
+        content = end;
         if chunk.items.len() > 0 {
             n += 1;
             if chunk.items[0] == b'\n' {

@@ -483,6 +483,18 @@ pub fn cm_stream_read_func_name(element: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_stream_read_{element}")
 }
 
+/// The function lifting what a read copied from a stream of the element mangled
+/// as `element`.
+pub fn cm_stream_lift_value_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_lift_val_{element}")
+}
+
+/// The function lifting what a read copied from a stream of the WASI record
+/// `element`.
+pub fn cm_stream_lift_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_lift_{element}")
+}
+
 /// The `wado:callback/callback` function the host calls a closure back through,
 /// given a word per argument: its Wado primitive, or `handle` (`call-handle`).
 pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {

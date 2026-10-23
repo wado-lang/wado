@@ -1,0 +1,17 @@
+// `FutureWritable::cancel_write(&self)` states no result where the canonical
+// answers a `u32`, as `cancel_read` does, so the call drops it and the module
+// validates. Cancelling with no write in progress traps, which is what reaching
+// the trap pins.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<u8>::new();
+    println(`built`);
+    tx.cancel_write();
+    rx.drop();
+    tx.write(1);
+}
+
+__DATA__
+{"stdout": "built\n", "trapped": true}
