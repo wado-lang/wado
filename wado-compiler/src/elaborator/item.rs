@@ -405,6 +405,9 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
 /// cannot disagree about slot numbering.
 pub(super) struct MethodFrame {
     pub(super) impl_type_params: Vec<TirTypeParam>,
+    /// The impl's binders, by name, taken before a method parameter of the
+    /// same name shadows one.
+    pub(super) declaring_type_params: Vec<(String, TypeId)>,
     /// The method's own slots, in index order, starting after the impl's.
     pub(super) method_type_params: Vec<(String, TypeId)>,
 }
@@ -431,8 +434,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         };
         self.annotate_ctx
             .trait_ctx
-            .type_params
-            .insert(name.to_string(), BinderInScope::of(index, type_id, decl));
+            .bind(name, BinderInScope::of(index, type_id, decl));
         TirTypeParam {
             name: name.to_string(),
             is_effect: false,
@@ -965,6 +967,16 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         );
 
         self.reject_second_effect_param(&func.type_params);
+        let declaring_type_params = impl_type_params
+            .iter()
+            .filter_map(|tp| {
+                self.annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .get(&tp.name)
+                    .map(|b| (tp.name.clone(), b.type_id))
+            })
+            .collect();
 
         let offset = method_param_offset(&impl_type_params) as usize;
         let mut next_idx = offset as u32;
@@ -1008,6 +1020,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         MethodFrame {
             impl_type_params,
+            declaring_type_params,
             method_type_params: type_param_list,
         }
     }
@@ -1421,18 +1434,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
             frame_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
-            let mut type_params: Vec<(String, TypeId)> = frame
-                .impl_type_params
-                .iter()
-                .filter_map(|tp| {
-                    frame_scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .get(&tp.name)
-                        .map(|b| (tp.name.clone(), b.type_id))
-                })
-                .collect();
+            let mut type_params = frame.declaring_type_params.clone();
             let declaring_slot_count = type_params.len() as u32;
             let method_slot_base = method_param_offset(&frame.impl_type_params);
             type_params.extend(frame.method_type_params.iter().cloned());
