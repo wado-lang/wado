@@ -613,156 +613,6 @@ fn "spec_worlds_http_request.wado/$cm_binding__Request_get_headers"(self) with R
     return "wasi/wasi:http/Request::get_headers"(self);
 }
 
-<<<<<<< HEAD
-||||||| c546920ed
-fn "spec_worlds_http_request.wado/$cm_binding__Fields_get"(self, name) with Fields {
-    let $load_7: i32;
-    let $name_packed: i64;
-    let $result_6: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
-    let $elem_addr_8: i32;
-    let $base_9: i32;
-    let $count_10: i32;
-    let $result_11: ref "core:prelude//List<u8>";
-    let $i_12: i32;
-    let bytes: ref Array<u8>;
-    let ptr_17: i32;
-    let self_18: i32;
-    let i: i32;
-    let value_30: u8;
-    let used_31: i32;
-    self_18 = name.used;
-    bytes = name.repr;
-    ptr_17 = "mem/realloc"(0, 0, 1, self_18);
-    i = 0;
-    b16: block {
-        l17: loop {
-            break_if b16 i >= self_18;
-            builtin::store_u8(ptr_17 + i, builtin::array_get_value_u8(bytes, i));
-            i = i + 1;
-            continue l17;
-        };
-    };
-    $name_packed = builtin::i64_extend_i32_u(ptr_17) | (builtin::i64_extend_i32_s(self_18) << 32_i64);
-    self_18 = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Fields::get"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), self_18);
-    self = builtin::load_i32(self_18);
-    $result_6 = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(local.tee ptr_17(builtin::load_i32(self_18 + 4))), used: 0 };
-    i = 0;
-    b18: block {
-        l19: loop {
-            break_if b18 i >= ptr_17;
-            $base_9 = builtin::load_i32(local.tee $elem_addr_8(self + (i * 8)));
-            $result_11 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count_10(builtin::load_i32($elem_addr_8 + 4))), used: 0 };
-            $i_12 = 0;
-            b20: block {
-                l21: loop {
-                    break_if b20 $i_12 >= $count_10;
-                    value_30 = builtin::load_u8($base_9 + $i_12);
-                    if @unlikely(local.tee used_31($result_11.used) >= builtin::array_len($result_11.repr)) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($result_11);
-                    }
-                    builtin::array_set_u8($result_11.repr, used_31, value_30);
-                    $result_11.used = used_31 + 1;
-                    $i_12 = $i_12 + 1;
-                    continue l21;
-                };
-            };
-            if $count_10 > 0 {
-                drop("mem/realloc"($base_9, $count_10, 1, 0));
-            }
-            $result_11 = struct.new "core:prelude//List<u8>" { repr: bytes = $result_11.repr; $load_7 = $result_11.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_7)), 0, bytes, 0, $load_7); $array_clone_dst_2, used: $load_7 };
-            if @unlikely(local.tee $base_9($result_6.used) >= builtin::array_len($result_6.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_6);
-            }
-            builtin::array_set<ref "core:prelude//List<u8>">($result_6.repr, $base_9, $result_11);
-            $result_6.used = $base_9 + 1;
-            i = i + 1;
-            continue l19;
-        };
-    };
-    if ptr_17 > 0 {
-        drop("mem/realloc"(self, ptr_17 * 8, 4, 0));
-    }
-    drop("mem/realloc"(self_18, 8, 4, 0));
-    return $result_6;
-}
-
-=======
-fn "spec_worlds_http_request.wado/$cm_binding__Fields_get"(self, name) with Fields {
-    let $name_packed: i64;
-    let $result_6: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
-    let $elem_addr_8: i32;
-    let $base_9: i32;
-    let $count_10: i32;
-    let $result_11: ref "core:prelude//List<u8>";
-    let $i_12: i32;
-    let bytes: ref Array<u8>;
-    let ptr_17: i32;
-    let self_18: i32;
-    let i: i32;
-    let value_30: u8;
-    let used_31: i32;
-    self_18 = name.used;
-    bytes = name.repr;
-    ptr_17 = "mem/realloc"(0, 0, 1, self_18);
-    i = 0;
-    b16: block {
-        l17: loop {
-            break_if b16 i >= self_18;
-            builtin::store_u8(ptr_17 + i, builtin::array_get_value_u8(bytes, i));
-            i = i + 1;
-            continue l17;
-        };
-    };
-    $name_packed = builtin::i64_extend_i32_u(ptr_17) | (builtin::i64_extend_i32_s(self_18) << 32_i64);
-    self_18 = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Fields::get"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), self_18);
-    self = builtin::load_i32(self_18);
-    $result_6 = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(local.tee ptr_17(builtin::load_i32(self_18 + 4))), used: 0 };
-    i = 0;
-    b18: block {
-        l19: loop {
-            break_if b18 i >= ptr_17;
-            $base_9 = builtin::load_i32(local.tee $elem_addr_8(self + (i * 8)));
-            $result_11 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count_10(builtin::load_i32($elem_addr_8 + 4))), used: 0 };
-            $i_12 = 0;
-            b20: block {
-                l21: loop {
-                    break_if b20 $i_12 >= $count_10;
-                    value_30 = builtin::load_u8($base_9 + $i_12);
-                    if @unlikely(local.tee used_31($result_11.used) >= builtin::array_len($result_11.repr)) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($result_11);
-                    }
-                    builtin::array_set_u8($result_11.repr, used_31, value_30);
-                    $result_11.used = used_31 + 1;
-                    $i_12 = $i_12 + 1;
-                    continue l21;
-                };
-            };
-            if $count_10 > 0 {
-                drop("mem/realloc"($base_9, $count_10, 1, 0));
-            }
-            if @unlikely(local.tee $base_9($result_6.used) >= builtin::array_len($result_6.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_6);
-            }
-            builtin::array_set<ref "core:prelude//List<u8>">($result_6.repr, $base_9, $result_11);
-            $result_6.used = $base_9 + 1;
-            i = i + 1;
-            continue l19;
-        };
-    };
-    if ptr_17 > 0 {
-        drop("mem/realloc"(self, ptr_17 * 8, 4, 0));
-    }
-    drop("mem/realloc"(self_18, 8, 4, 0));
-    return $result_6;
-}
-
->>>>>>> origin/main
 fn "spec_worlds_http_request.wado/$cm_binding__Request_consume_body"(this, res) with Request {
     let $outptr: i32;
     let $lifted_result_3: ref null "core:prelude//$Resource";
@@ -1911,7 +1761,6 @@ fn "spec_worlds_http_request.wado/$cm_future_write_core:prelude/types.wado/Resul
 }
 
 fn "spec_worlds_http_request.wado/$cm_binding__Fields_get$spec0"(self, name) with Fields {
-    let $load_6: i32;
     let $name_packed: i64;
     let $result_6: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let $i_7: i32;
@@ -1965,7 +1814,6 @@ fn "spec_worlds_http_request.wado/$cm_binding__Fields_get$spec0"(self, name) wit
             if $count_10 > 0 {
                 drop("mem/realloc"($base_9, $count_10, 1, 0));
             }
-            $result_11 = struct.new "core:prelude//List<u8>" { repr: bytes = $result_11.repr; $load_6 = $result_11.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_6)), 0, bytes, 0, $load_6); $array_clone_dst_2, used: $load_6 };
             if @unlikely(local.tee $base_9($result_6.used) >= builtin::array_len($result_6.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_6);
