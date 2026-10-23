@@ -10,5 +10,3 @@ if command -v sha256sum > /dev/null; then sha256=(sha256sum); else sha256=(shasu
 echo "e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f  model.onnx" | "${sha256[@]}" -c -
 
 "${WADO:-wado}" run ../../tools/onnx_split.wado -- model.onnx gpt2
-# The build reads only the checkpoint's header: its length, then the JSON.
-head -c "$((8 + $(od -An -t u8 -N 8 gpt2.safetensors)))" gpt2.safetensors > gpt2-header.safetensors

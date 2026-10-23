@@ -1,0 +1,13 @@
+// Only an `export fn probe` is the generator's probe, so a private helper of
+// that name takes whatever parameters it likes.
+
+use { answer } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/private_probe_generator.wado",
+        },
+    };
+
+test {
+    assert answer() == 42;
+}

@@ -231,7 +231,7 @@ impl CliGeneratorProvider {
     /// is reported even though the run keeps the build it pinned.
     fn observe(&self, abs: &Path, bytes: &[u8]) {
         if let Some(run) = &self.run {
-            run.observe(abs, bytes);
+            run.observe(abs, None, bytes);
         }
     }
 

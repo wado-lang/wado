@@ -4,12 +4,35 @@
 // fetch.sh that runs no Wado:
 //
 //   curl -fL -o hf.safetensors https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/model.safetensors
-//   node --max-old-space-size=4096 hf2loam.mjs hf.safetensors gpt2-header.safetensors gpt2.safetensors
+//   node --max-old-space-size=4096 hf2loam.mjs hf.safetensors gpt2.onnxtext gpt2.safetensors
 //
 // `convert` touches no Node API, so a browser page can import it too.
 
 const ITEM_BYTES = { F32: 4 };
+const DTYPES = { float: "F32" };
 const LM_HEAD = "onnx::MatMul_3718";
+
+/**
+ * The tensors the checkpoint beside `graph` holds, in its order: each
+ * initializer the graph declares without values, as tools/onnx_split.wado
+ * writes it. They follow the line declaring the graph's inputs and outputs.
+ */
+export function layoutOf(graph) {
+  const lines = graph.split("\n");
+  const list = lines[lines.findIndex((line) => line.includes(") => (")) + 1] ?? "";
+  if (!list.startsWith("<")) throw new Error("the graph declares no initializer list");
+  const layout = {};
+  for (const [, type, dims, quoted, bare, values] of list.matchAll(
+    /(\w+)\[([^\]]*)\] (?:"([^"]+)"|([^\s,>"]+))( = \{[^}]*\})?/g,
+  )) {
+    if (values) continue;
+    const name = quoted ?? bare;
+    const dtype = DTYPES[type];
+    if (!dtype) throw new Error(`${name}: element type ${type} is not supported`);
+    layout[name] = { dtype, shape: dims === "" ? [] : dims.split(",").map(Number) };
+  }
+  return layout;
+}
 
 // The same two checks as `header_end` in src/runtime/checkpoint.wado.
 function readHeader(bytes) {
@@ -26,14 +49,13 @@ function expect(name, what, got, want) {
 }
 
 /**
- * Converts Hugging Face's `model.safetensors` (`hf`) into the checkpoint the
- * graph's header (`header`, gpt2-header.safetensors) describes. Both arguments
- * and the result are `Uint8Array`s.
+ * Converts Hugging Face's `model.safetensors` (`hf`, a `Uint8Array`) into the
+ * checkpoint the graph (`graph`, the text of gpt2.onnxtext) reads, as a
+ * `Uint8Array`.
  */
-export function convert(hf, header) {
+export function convert(hf, graph) {
   const { n: hfN, json: hfH } = readHeader(hf);
-  const want = readHeader(header).json;
-  delete want.__metadata__;
+  const want = layoutOf(graph);
   const dataBytes = hf.length - 8 - hfN;
 
   function hfTensor(name) {
@@ -67,7 +89,8 @@ export function convert(hf, header) {
   }
 
   // Padded with spaces to a multiple of 8, as `write_safetensors` pads it, so each
-  // tensor starts 8-byte aligned and the header is gpt2-header.safetensors itself.
+  // tensor starts 8-byte aligned and the header is the one fetch.sh's checkpoint
+  // carries.
   let json = JSON.stringify(outHeader);
   json += " ".repeat((8 - (json.length % 8)) % 8);
   const h = new TextEncoder().encode(json);
@@ -93,8 +116,8 @@ export function convert(hf, header) {
 
 if (globalThis.process?.argv?.[1]?.endsWith("hf2loam.mjs")) {
   const { readFileSync, writeFileSync } = await import("node:fs");
-  const [hfPath, headerPath, outPath] = process.argv.slice(2);
-  const out = convert(readFileSync(hfPath), readFileSync(headerPath));
+  const [hfPath, graphPath, outPath] = process.argv.slice(2);
+  const out = convert(readFileSync(hfPath), readFileSync(graphPath, "utf8"));
   writeFileSync(outPath, out);
   console.log(`wrote ${outPath}: ${out.length} bytes`);
 }

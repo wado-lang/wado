@@ -1,0 +1,12 @@
+// A Kiln generator whose probe takes `content` whole rather than as the stream
+// a host supplies.
+
+use { Request, Response, Error } from "core:kiln";
+
+export fn probe(content: ByteList) -> Result<u64, Error> {
+    return Result::Ok(content.len() as u64);
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response { files: [] });
+}
