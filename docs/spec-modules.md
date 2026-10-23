@@ -391,10 +391,10 @@ test "a .txt file under generator is a generator's input" {
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file | Exposes as                                                   | Call style                                    |
-| ------------- | ------------------------------------------------------------ | --------------------------------------------- |
-| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                  |
-| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default |
+| Imported file | Exposes as                                                   | Call style                                                                                    |
+| ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                                                                  |
+| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default; an import is handled with `with Iface => h do` |
 
 <!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
 
@@ -455,18 +455,19 @@ or side-car `.wit` is involved.
   short name: its last label in `PascalCase` (`Trip`).
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
-  and a type alias a newtype. Each is named only through its interface
-  (`Geo::Point`), except the default interface's (below).
+  and a type alias a newtype. Each belongs to its interface, as a type an
+  `interface` declares does ([Effect Definition](./spec-effects.md#effect-definition)),
+  except the default interface's (below).
 - Short names, plain-named exports and the default interface's functions and
-  types share the module's one namespace. A name two
-  of them share is an error to import that names what it could mean, and only a
-  path through a full name reaches either.
-  A `wasi:*` module is Wado source, so its module-level names are the ones its
-  own `pub use` list gives.
+  types share the module's one namespace. Importing a name two of them share is
+  an error, and the error names each item the name could mean. Only a path
+  through a full name reaches either. A `wasi:*` module is Wado source, so its
+  module-level names are the ones its own `pub use` list gives.
 - A non-WASI interface the component imports is an item of its module too,
   named by the same rules as an export. An interface name has one declaration
   in the whole program, so two components importing it name one Wado
-  interface, and their shapes of it must agree.
+  interface, and their shapes of it must agree. Naming an interface the
+  component both imports and exports is an error.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).

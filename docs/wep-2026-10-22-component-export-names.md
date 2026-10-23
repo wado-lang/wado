@@ -102,10 +102,10 @@ that rejected two same-named interfaces declaring one operation.
 
 ### An interface's types are named through it
 
-A type an interface declares is named through that interface, as the ES module
-integration exports a type inside its instance: `Geo::Point`. Two interfaces of
-one component may then each declare a `Point`. Since each WIT scope is one Wado
-scope, a Wado `interface` declares types as WIT's does:
+A WIT type is declared inside its interface, so it is named through that
+interface: `Geo::Point`. Two interfaces of one component may then each declare
+a `Point`. Since each WIT scope is one Wado scope, a Wado `interface` declares
+types as WIT's does:
 
 ```wado
 interface Geo {
@@ -186,26 +186,37 @@ disagreement is an error naming both files.
 A component may import an interface and export the same one, as a filter that
 wraps whatever provides `x:y/filter` does. Its module would then offer one
 interface name for two declarations: the import its consumer handles and the
-export its consumer calls. Naming that interface in a `use`, by either name, is
-an error. What it admits is a component no Wado program can call through that
-interface.
+export its consumer calls, so naming that interface in a `use` is an error.
+What it admits is a component no Wado program can call through that interface.
 
 Across two components the same name meets the one-declaration rule: one
 component exports `x:y/log` and another imports it. Whether `Log::emit()` calls
 the first or dispatches to a handler for the second, and which module declares
-the one `Log`, is not decided.
+the one `Log`, is not decided. What it admits is a program whose call through
+`Log` has no defined meaning.
+
+## Known gap: when two imports of one interface agree
+
+Two components that import `x:y/log` must agree on its shape, but agreement is
+not defined. A component's imported instance type lists only the functions it
+uses, so one may import `emit` alone and another `emit` and `flush`. Nor is it
+decided whether `x:y/log@1.0.0` and `x:y/log@1.1.0` are one interface name or
+two. What it admits is an ordinary pair of components the compiler may reject,
+or accept as one interface when they are two.
 
 ## Known gap: the visibility of an interface's types
 
 Whether a type declared in an interface carries a visibility of its own, and
-whether its fields must be `pub` as a WIT record's are, is not decided.
+whether its fields must be `pub` as a WIT record's are, is not decided. What it
+admits is a Wado interface whose types another module may or may not reach or
+construct, with no rule saying which.
 
 ## Known gap: a newtype in an interface
 
 An interface writes its members as a trait does, so `type Meters = f64;` inside
 one reads as an associated type. A WIT type alias in a component's interface
 is synthesized as a newtype named through it, but no Wado spelling declares
-one.
+one. What it admits is a WIT interface that Wado source cannot write.
 
 ## Known gap: a component's world name is not observed
 

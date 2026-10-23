@@ -60,7 +60,8 @@ test {
 ```
 
 An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
-`resource`). Such a type is named only through its interface, as `Geo::Point`.
+`resource`). Inside the interface a type is named by its own name; outside, only
+through the interface, as `Geo::Point`.
 
 > Not yet implemented: a type declared in an interface
 > ([WEP](./wep-2026-10-22-component-export-names.md)).
