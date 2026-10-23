@@ -860,15 +860,6 @@ warm-up phase takes that cost. Three runs:
   `for let v of t` over `t: [..T]`, is rejected
   (`tagged_template_pack_element_hole_error.wado`). Substituting the pack into
   the shape spreads the whole pack into the hole's one field.
-
-- A tag that carries a state across holes by scanning the literal segments
-  folds to the per-hole decision only while that scan fits the inliner's
-  budget. That is the `html` example's shape, and the one a code generator
-  needs. Writing the
-  per-character transition as its own function gets it back under the budget at
-  any state count, so the tag author has a shape to know. The gap is the
-  optimizer's, and [the optimizer guide](./optimizer.md#not-yet-implemented)
-  carries it.
 - A shape is interned per module, as struct literals are, so two modules
   writing one template instantiate the tag twice. Cross-module sharing is a
   size optimization the interner's key can take later.
