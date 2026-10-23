@@ -1434,7 +1434,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
             frame_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
-            let mut type_params = frame.declaring_type_params.clone();
+            let mut type_params = frame.declaring_type_params;
             let declaring_slot_count = type_params.len() as u32;
             let method_slot_base = method_param_offset(&frame.impl_type_params);
             type_params.extend(frame.method_type_params.iter().cloned());
