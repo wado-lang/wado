@@ -1951,8 +1951,8 @@ impl Parser {
     /// `"ns:pkg/iface@ver" as Name`: an interface imported by its full name.
     fn parse_use_interface_name(&mut self, name_span: Span) -> ParseResult<UseItem> {
         let name = self.consume_string()?.value;
-        let interface = CmImport::parse(&name)
-            .filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
+        let interface =
+            CmImport::parse(&name).filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
         let Some(interface) = interface else {
             return Err(ParseError {
                 message: format!(

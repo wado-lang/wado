@@ -6,9 +6,9 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes,
-    InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
-    cm_import_of, for_each_function, walk_generic_params, walk_item,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, InterfaceDecl, Item,
+    Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport, cm_import_of,
+    for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -1203,9 +1203,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         } => {
                             // `validate_imports` reports a full name that names no one interface.
                             let Some(name) =
-                                &self
-                                    .symbols
-                                    .use_item_member(&source_module, name, spelling)
+                                &self.symbols.use_item_member(&source_module, name, spelling)
                             else {
                                 continue;
                             };
