@@ -448,8 +448,8 @@ or side-car `.wit` is involved.
   reads one. Its items are its exports, under the names the component gives
   them. An exported interface is named by its interface name as a string, which
   takes `as`: `use { "a:x/trip" as Trip } from "./dup.wasm"`. A module generated
-  from WIT, such as `wasi:cli`, offers each of its interfaces and worlds by full
-  name the same way.
+  from WIT, such as `wasi:cli`, offers each of its interfaces by full name the
+  same way.
 - An exported interface becomes a Wado `interface`, also offered under its
   short name: its last label in `PascalCase` (`Trip`). Where two exports share
   a short name, importing it is an error that names their full names, and only

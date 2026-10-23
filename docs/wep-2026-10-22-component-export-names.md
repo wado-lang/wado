@@ -69,16 +69,17 @@ made general.
 
 ### A module generated from WIT takes full names too
 
-The `wasi:*` modules keep their shape. Each interface and each world one of
-them offers can also be imported by its full name:
+The `wasi:*` modules keep their shape. Each interface one of them offers can
+also be imported by its full name:
 
 ```wado
-use { "wasi:cli/stdout" as Stdout, "wasi:cli/command" as Command } from "wasi:cli";
+use { "wasi:cli/stdout" as Stdout } from "wasi:cli";
 ```
 
-A world has no name in a component binary: a component decodes to a world its
-decoder names. So a `.wasm` offers no world by name, and its plain-named
-exports are the world's own.
+A world is not imported by its full name. A `.wasm` cannot offer one, since its
+world's name is not observed (see the known gap below), and a world one module
+could name and another could not would make the rule depend on where the
+module came from.
 
 ### Each WIT scope is one Wado scope
 
@@ -122,6 +123,15 @@ resolved as a module specifier.
 A component spells an interface name with its version (`wasi:cli/stdout@0.3.0`).
 Whether a full-name import must write the version, or may leave it out where
 one version is offered, is not decided.
+
+## Known gap: a component's world name is not observed
+
+A component built from `world root` in package `a:x` decodes, through
+`wit_component::decode`, to a world `root` in a package `root:component` the
+decoder names. The name `a:x/root` is gone. What it admits is a world no
+`.wasm` import can name, and a component whose plain-named exports cannot be
+told apart by the world that declared them. The name is lost before decoding:
+`wasm-tools component new` writes no world name into the component.
 
 ## References
 
