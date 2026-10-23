@@ -45,8 +45,8 @@ fn read_model(source: &String) -> Graph with (Stderr, Exit, Preopens) {
 
 global USAGE: String = "usage: onnx_split [--max-shard-bytes <n>] <model.onnx> <stem>
 writes <stem>.onnxtext and <stem>.safetensors, or with --max-shard-bytes the
-shards <stem>-00001-of-0000N.safetensors and on, at most n payload bytes each
-but where one tensor is larger, beside <stem>.safetensors.index.json";
+shards <stem>-00001-of-0000N.safetensors onward, each of at most n payload
+bytes unless one tensor is larger, beside <stem>.safetensors.index.json";
 
 fn usage() -> ! with (Stderr, Exit) {
     eprintln(USAGE);
@@ -76,17 +76,17 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
         return;
     };
-    let count = stored.len();
-    let tensors = shard_tensors(stored, max);
-    let total = tensors.len();
+    let weights = stored.len();
+    let filled = shard_tensors(stored, max);
+    let count = filled.len();
     let base = fs::file_name(&stem).unwrap().to_string();
     let dir = fs::parent(&stem).map(|p| p.to_string()).unwrap_or("");
     let mut shards: List<[String, List<StoredTensor>]> = [];
-    for let [i, shard] of tensors.into_iter().enumerate() {
-        let name = shard_name(&base, i, total);
+    for let [i, shard] of filled.into_iter().enumerate() {
+        let name = shard_name(&base, i, count);
         or_exit(fs::write(fs::join(&dir, &name), &write_safetensors(&shard)), "");
         shards.push([name, shard]);
     }
     or_exit(fs::write(`${stem}.safetensors.index.json`, &write_index(&shards)), "");
-    println(`${stem}.onnxtext and ${shards.len()} shards beside ${stem}.safetensors.index.json: ${count} weights`);
+    println(`${stem}.onnxtext and ${count} shards beside ${stem}.safetensors.index.json: ${weights} weights`);
 }

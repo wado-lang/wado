@@ -74,8 +74,8 @@ use { Prepared, forward } from "./model.onnxtext" with {
 ```
 
 The index decides where each tensor is, so a tensor is looked up in its own
-shard alone. Its probe extent is the whole file, as for a graph, and each
-shard's is its header. A build refuses:
+shard alone. The index's probe extent is the whole file, as a graph's is, and
+each shard's is its header. A build refuses:
 
 - two indexes, or several checkpoints with no index;
 - a tensor the graph leaves to the checkpoint that the index places in no

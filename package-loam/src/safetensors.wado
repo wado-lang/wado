@@ -92,10 +92,9 @@ pub fn read_index(text: &String) -> Result<TreeMap<String, String>, String> {
     };
 }
 
-/// `tensors` in shards of at most `max_bytes` of payload each, as Hugging
-/// Face's `max_shard_size` splits a checkpoint: in order, a shard closing
-/// before the tensor that would take it past the size, and a tensor larger than
-/// a shard alone in one of its own.
+/// `tensors` in order, in shards of at most `max_bytes` of payload each: a
+/// shard closes before the tensor that would take it past the size, and a
+/// tensor larger than a shard has one of its own.
 pub fn shard_tensors(tensors: List<StoredTensor>, max_bytes: i64) -> List<List<StoredTensor>> {
     let mut shards: List<List<StoredTensor>> = [];
     let mut open: List<StoredTensor> = [];

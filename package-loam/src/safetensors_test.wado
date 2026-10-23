@@ -1,7 +1,8 @@
 //! The build's check of a checkpoint's header against the graph it supplies.
 
 use { TreeMap } from "core:collections";
-use { infer } from "./infer.wado";
+use { Graph } from "./graph.wado";
+use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { read_checkpoint, read_shards } from "./runtime/checkpoint.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -27,7 +28,7 @@ g (float[N, 2] X) => (float[N, 3] Y)
 }
 `;
 
-fn check(stored: List<StoredTensor>) -> Result<(), String> {
+fn checked_graph() -> [Graph, Checked] {
     let graph = read(&GRAPH).unwrap();
     let layout: List<LayoutRule> = [
         LayoutRule {
@@ -44,6 +45,11 @@ fn check(stored: List<StoredTensor>) -> Result<(), String> {
         },
     ];
     let checked = infer(&graph, &Schema { layout }).unwrap();
+    return [graph, checked];
+}
+
+fn check(stored: List<StoredTensor>) -> Result<(), String> {
+    let [graph, checked] = checked_graph();
     let bytes = write_safetensors(&stored);
     return check_checkpoint(&graph, &checked.shapes, &read_checkpoint(&bytes).unwrap()).map_err(|e| `${e}`);
 }
@@ -96,24 +102,13 @@ test "a weight named as the format's metadata stays in the graph, which can name
 /// The check of `GRAPH` against the shards in `given`, which `index` places its
 /// weights in.
 fn check_sharded(index: String, given: List<[String, List<StoredTensor>]>) -> Result<(), String> {
-    let graph = read(&GRAPH).unwrap();
-    let checked = infer(&graph, &Schema {
-        layout: [
-            rule("X", ["Batch", "In"]),
-            rule("W", ["In", "Out"]),
-            rule("B", ["Out"]),
-        ],
-    }).unwrap();
+    let [graph, checked] = checked_graph();
     let mut shards = TreeMap::<String, ByteList>::new();
     for let [name, stored] of given {
         shards[name] = write_safetensors(&stored);
     }
     let placed = placement(&graph, &read_index(&index)?).map_err(|e| `${e}`)?;
     return check_shards(&graph, &checked.shapes, &placed, &read_shards(&shards).unwrap()).map_err(|e| `${e}`);
-}
-
-fn rule(pattern: String, axes: List<String>) -> LayoutRule {
-    return LayoutRule { pattern, axes };
 }
 
 global INDEX: String = `{"metadata": {"total_size": 24}, "weight_map": {"W": "m-00002-of-00002.safetensors"}}`;
