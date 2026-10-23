@@ -429,6 +429,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -587,6 +588,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
@@ -984,6 +986,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Newtype { .. }
@@ -1790,6 +1793,7 @@ impl TypeTable {
                     ResolvedType::TypePack { mapped_elem, .. } => {
                         components.extend(mapped_elem.iter().copied());
                     }
+                    ResolvedType::PackElement { pack } => components.push(*pack),
                     ResolvedType::AssocTypeProjection {
                         param_id,
                         args,
@@ -2779,6 +2783,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -3288,6 +3293,36 @@ impl TypeTable {
             index,
             mapped_elem: None,
         })
+    }
+
+    /// What `for let v of iterable` binds `v` to, `iterable` being a tuple
+    /// that carries a pack, and whether it reads through a reference
+    /// (`for v of &[..T]` binds `&T_k`). A mapped pack binds its mapped
+    /// element. A `.zip()` binds its one element, the pair `[..A, ..B]`, whose
+    /// packs sit a level down. `None` where `iterable` is no tuple.
+    pub fn pack_walk_binding(&mut self, iterable: TypeId) -> Option<(TypeId, bool)> {
+        let (elems, by_ref) = self.as_tuple_through_ref(iterable)?;
+        let element = match elems.iter().find(|&&e| self.is_type_pack(e)) {
+            Some(&pack) => match self.get(pack) {
+                ResolvedType::TypePack {
+                    mapped_elem: Some(elem),
+                    ..
+                } => *elem,
+                _ => self.make_pack_element(pack),
+            },
+            None => elems[0],
+        };
+        let bound = if by_ref {
+            self.make_ref(element)
+        } else {
+            element
+        };
+        Some((bound, by_ref))
+    }
+
+    pub fn make_pack_element(&mut self, pack: TypeId) -> TypeId {
+        assert!(self.is_type_pack(pack), "a pack element names a type pack");
+        self.intern(ResolvedType::PackElement { pack })
     }
 
     /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
@@ -4525,6 +4560,18 @@ impl TypeTable {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 leaves.params.get(&index).copied().unwrap_or(type_id)
             }
+            // Inside an unrolled body the pack's index maps to the element;
+            // a renaming into another pack keeps it an element of that pack.
+            ResolvedType::PackElement { pack } => {
+                let substituted = self.subst_rec(pack, leaves);
+                if substituted == pack {
+                    type_id
+                } else if self.is_type_pack(substituted) {
+                    self.make_pack_element(substituted)
+                } else {
+                    substituted
+                }
+            }
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,
@@ -5421,6 +5468,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner) => f(*inner),
+            ResolvedType::PackElement { pack } => f(*pack),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -5456,6 +5504,7 @@ impl TypeTable {
             self.get(id),
             ResolvedType::TypeParam { .. }
                 | ResolvedType::TypePack { .. }
+                | ResolvedType::PackElement { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         )
     }
@@ -5779,7 +5828,16 @@ impl TypeTable {
             }
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
             ResolvedType::TypePack { name, .. } => type_pack_name(name),
+            ResolvedType::PackElement { pack } => self.pack_name(*pack).to_string(),
         }
+    }
+
+    /// The name a pack was declared under, without the `..` a spread spells.
+    fn pack_name(&self, pack: TypeId) -> &str {
+        let ResolvedType::TypePack { name, .. } = self.get(pack) else {
+            panic!("a pack element names a type pack");
+        };
+        name
     }
 
     /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
@@ -6329,6 +6387,11 @@ impl TypeTable {
                 }
             }
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(type_pack_name(name)),
+            // One parameter list cannot name a pack and a parameter alike, so
+            // the bare name is unique to the element.
+            ResolvedType::PackElement { pack } => {
+                TypeNameInfo::Named(self.pack_name(*pack).to_string())
+            }
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
@@ -6583,6 +6646,7 @@ impl TypeTable {
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Newtype { .. }

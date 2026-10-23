@@ -726,6 +726,7 @@ impl HeapEffects<'_> {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => {

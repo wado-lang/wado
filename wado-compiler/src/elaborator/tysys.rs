@@ -254,6 +254,7 @@ impl TypeSystem {
                 ResolvedType::TypeParam { .. }
                     | ResolvedType::AssocParam { .. }
                     | ResolvedType::TypePack { .. }
+                    | ResolvedType::PackElement { .. }
                     | ResolvedType::AssocTypeProjection { .. }
             )
         };
@@ -290,6 +291,7 @@ impl TypeSystem {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return params,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -364,6 +366,7 @@ impl TypeSystem {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
@@ -747,7 +750,7 @@ impl TypeSystem {
     /// The name the type parameter or pack in this slot carries, `None` for a
     /// slot holding anything else.
     pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
-        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
+        bound_param_name(&self.type_table.borrow(), type_id).cloned()
     }
 
     /// [`TypeTable::type_name`], the one diagnostic spelling of a type.

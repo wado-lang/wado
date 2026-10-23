@@ -661,6 +661,15 @@ pub enum ResolvedType {
         index: u32,
         mapped_elem: Option<TypeId>,
     },
+    /// One element of an identity pack: what `for let v of t` over `t: [..T]`
+    /// binds `v` to. Apart from the pack because a tuple splices a pack it
+    /// holds: `[v, 7]` is `[T_k, i32]`, where the pack would make it
+    /// `[..T, i32]`. It carries the pack's bounds, and unrolling substitutes
+    /// each element for it.
+    PackElement {
+        /// The identity [`ResolvedType::TypePack`] this is an element of.
+        pack: TypeId,
+    },
     /// A generic associated type's own parameter (`E` in `type Buf<E> =
     /// List<E>;`), standing in a binding for the argument a projection supplies.
     ///

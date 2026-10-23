@@ -856,10 +856,6 @@ warm-up phase takes that cost. Three runs:
 
 ## Known gaps
 
-- A hole whose type mentions a type pack, such as the binding of a
-  `for let v of t` over `t: [..T]`, is rejected
-  (`tagged_template_pack_element_hole_error.wado`). Substituting the pack into
-  the shape spreads the whole pack into the hole's one field.
 - A shape is interned per module, as struct literals are, so two modules
   writing one template instantiate the tag twice. Cross-module sharing is a
   size optimization the interner's key can take later.

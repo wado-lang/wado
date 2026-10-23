@@ -1,0 +1,27 @@
+// A hole typed by a pack's element takes one shape per element, and a hole
+// typed by the whole pack holds the tuple.
+use { println, Stdout } from "core:cli";
+
+trait Shown {
+    fn shown(&self) -> String;
+}
+
+impl<..T: Display> Shown for [..T] {
+    fn shown(&self) -> String {
+        let mut out = "";
+        for let v of *self {
+            out.push_str(&format`(${v})`);
+        }
+        out.push_str(&format`${*self:?}`);
+        return out;
+    }
+}
+
+export fn run() with Stdout {
+    println([1, "a"].shown());
+}
+
+__DATA__
+{
+    "stdout": "(1)(a)[1, \"a\"]\n"
+}

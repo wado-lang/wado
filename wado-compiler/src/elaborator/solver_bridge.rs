@@ -733,6 +733,7 @@ impl Lowering {
                 mapped_elem: Some(mapped),
                 ..
             } => self.type_id(table, *mapped, param),
+            ResolvedType::PackElement { pack } => self.type_id(table, *pack, param),
             ResolvedType::Function {
                 is_mut,
                 params,

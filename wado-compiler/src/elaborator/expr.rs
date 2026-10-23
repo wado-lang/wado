@@ -2010,6 +2010,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -4975,7 +4976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             *answer = TypeTable::ERROR;
             let tt = self.tysys.type_table.borrow();
-            let name = util::bound_param_name(tt.get(decl_param))
+            let name = util::bound_param_name(&tt, decl_param)
                 .expect("a struct slot is a type parameter");
             names.push(name.clone());
         }

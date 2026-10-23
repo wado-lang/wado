@@ -1259,7 +1259,9 @@ impl TypeSystem {
                 self.walk_structural_derive_members(scope, nominal, tr, &mut |_, member| {
                     matches!(
                         self.type_table.borrow().get(member),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                        ResolvedType::TypeParam { .. }
+                            | ResolvedType::TypePack { .. }
+                            | ResolvedType::PackElement { .. }
                     ) || self.type_implements_trait(ctx, scope, member, &trait_)
                 }) == Some(true)
             }
@@ -1332,6 +1334,7 @@ impl TypeSystem {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
         }

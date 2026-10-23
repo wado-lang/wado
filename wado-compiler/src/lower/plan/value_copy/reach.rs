@@ -277,6 +277,7 @@ impl<'a> StorageReach<'a> {
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => Members::Unknown,

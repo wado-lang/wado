@@ -1059,6 +1059,7 @@ impl RefCarrying<'_> {
             // What the pack stands for is not known here, as a type parameter
             // is not; an inference variable is the same question unanswered.
             ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => (true, false),
