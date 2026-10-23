@@ -1237,8 +1237,8 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::RefIsNull(Box::new(a))
             }
             "is_moved" => unary!(self, args, WirInstr::RefIsNull),
-            // What holds a resource is dropped by synthesis; a copyable value
-            // reaches here and is only evaluated.
+            // Synthesis expands a `drop` of what holds a resource, and a
+            // `forget` never runs one: what reaches here is only evaluated.
             "drop" | "forget" => unary!(self, args, WirInstr::Drop),
             "i32_and" => binary!(self, args, WirInstr::I32And),
             "i32_eqz" => unary!(self, args, WirInstr::I32Eqz),
