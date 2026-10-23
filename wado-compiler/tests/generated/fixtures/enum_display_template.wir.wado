@@ -39,21 +39,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(17)
+type "functype//enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]" = fn("enum_display_template.wado//enum:Fruit", ref "core:prelude/string.wado//String");  // TypeId(17)
 
-type "functype//enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]" = fn("enum_display_template.wado//enum:Fruit", ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//enum_display_template.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//enum_display_template.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -68,9 +66,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:enum_display_template.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 105, 115, 32, 115, 109, 97, 108, 108), used: 9 };
-global global:enum_display_template.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 105, 115, 32, 121, 101, 108, 108, 111, 119), used: 10 };
-global global:enum_display_template.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 32, 108, 105, 107, 101, 32), used: 7 };
+global global:enum_display_template.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32, 105, 115, 32, 115, 109, 97, 108, 108);
+global global:enum_display_template.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(32, 105, 115, 32, 121, 101, 108, 108, 111, 119);
+global global:enum_display_template.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(73, 32, 108, 105, 107, 101, 32);
 global global:enum_display_template.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(102, 114, 117, 105, 116, 58, 32);
 global global:enum_display_template.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(67, 104, 101, 114, 114, 121);
 global global:enum_display_template.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(66, 97, 110, 97, 110, 97);
@@ -78,60 +76,74 @@ global global:enum_display_template.wado::$const_obj_12: ref Array<u8> = array.n
 
 fn "enum_display_template.wado/run"() with Stdout {
     let $local_1_1: ref "core:prelude/string.wado//String";
-    let new_used: i32;
+    let new_used_14: i32;
     let start_15: i32;
-    let $moved_4_43: i32;
-    let $cm_pair_7_46: i64;
+    let $moved_4_178: i32;
+    let $cm_pair_7_181: i64;
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    if @unlikely(local.tee new_used(0 + 7) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee new_used_14(0 + 7) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used_14);
     }
     start_15 = $local_1_1.used;
-    $local_1_1.used = new_used;
+    $local_1_1.used = new_used_14;
     builtin::array_copy<u8>($local_1_1.repr, start_15, global:enum_display_template.wado::$const_obj_6, 0, 7);
     "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(0, $local_1_1);
-    start_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
-    $moved_4_43 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"($moved_4_43 = start_15; start_15 = 0; $moved_4_43);
-    start_15 = new_used;
-    new_used = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used = start_15; start_15 = 0; new_used, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used = $moved_4_43; $moved_4_43 = 0; new_used);
+    start_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7_181("wasi/stream-new"()));
+    new_used_14 = builtin::i32_wrap_i64($cm_pair_7_181 >> 32_i64);
+    $moved_4_178 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"($moved_4_178 = start_15; start_15 = 0; $moved_4_178);
+    start_15 = new_used_14;
+    new_used_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_14 = start_15; start_15 = 0; new_used_14, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_14 = $moved_4_178; $moved_4_178 = 0; new_used_14);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:enum_display_template.wado::$const_obj_5;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_1, $mv_arg_2.repr, $mv_arg_2.used);
+    if @unlikely(local.tee new_used_14(0 + 7) > builtin::array_len($local_1_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used_14);
+    }
+    $moved_4_178 = $local_1_1.used;
+    $local_1_1.used = new_used_14;
+    builtin::array_copy<u8>($local_1_1.repr, $moved_4_178, global:enum_display_template.wado::$const_obj_5, 0, 7);
     "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(0, $local_1_1);
-    new_used = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
-    $moved_4_43 = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
-    start_15 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(start_15 = new_used; new_used = 0; start_15);
-    new_used = $moved_4_43;
-    $moved_4_43 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_43 = new_used; new_used = 0; $moved_4_43, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_43 = start_15; start_15 = 0; $moved_4_43);
+    $moved_4_178 = builtin::i32_wrap_i64(local.tee $cm_pair_7_181("wasi/stream-new"()));
+    new_used_14 = builtin::i32_wrap_i64($cm_pair_7_181 >> 32_i64);
+    start_15 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(start_15 = $moved_4_178; $moved_4_178 = 0; start_15);
+    $moved_4_178 = new_used_14;
+    new_used_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_14 = $moved_4_178; $moved_4_178 = 0; new_used_14, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_14 = start_15; start_15 = 0; new_used_14);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
     "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(1, $local_1_1);
-    $mv_arg_2 = global:enum_display_template.wado::$const_obj_4;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_1, $mv_arg_2.repr, $mv_arg_2.used);
-    $moved_4_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
-    start_15 = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
-    new_used = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(new_used = $moved_4_43; $moved_4_43 = 0; new_used);
-    $moved_4_43 = start_15;
-    start_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_15 = $moved_4_43; $moved_4_43 = 0; start_15, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_15 = new_used; new_used = 0; start_15);
+    if @unlikely(local.tee new_used_14($local_1_1.used + 10) > builtin::array_len($local_1_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used_14);
+    }
+    start_15 = $local_1_1.used;
+    $local_1_1.used = new_used_14;
+    builtin::array_copy<u8>($local_1_1.repr, start_15, global:enum_display_template.wado::$const_obj_4, 0, 10);
+    start_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7_181("wasi/stream-new"()));
+    new_used_14 = builtin::i32_wrap_i64($cm_pair_7_181 >> 32_i64);
+    $moved_4_178 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"($moved_4_178 = start_15; start_15 = 0; $moved_4_178);
+    start_15 = new_used_14;
+    new_used_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_14 = start_15; start_15 = 0; new_used_14, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_14 = $moved_4_178; $moved_4_178 = 0; new_used_14);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
     "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(2, $local_1_1);
-    $mv_arg_2 = global:enum_display_template.wado::$const_obj_3;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_1, $mv_arg_2.repr, $mv_arg_2.used);
-    start_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
-    $moved_4_43 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"($moved_4_43 = start_15; start_15 = 0; $moved_4_43);
-    start_15 = new_used;
-    new_used = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used = start_15; start_15 = 0; new_used, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used = $moved_4_43; $moved_4_43 = 0; new_used);
+    if @unlikely(local.tee new_used_14($local_1_1.used + 9) > builtin::array_len($local_1_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used_14);
+    }
+    $moved_4_178 = $local_1_1.used;
+    $local_1_1.used = new_used_14;
+    builtin::array_copy<u8>($local_1_1.repr, $moved_4_178, global:enum_display_template.wado::$const_obj_3, 0, 9);
+    $moved_4_178 = builtin::i32_wrap_i64(local.tee $cm_pair_7_181("wasi/stream-new"()));
+    new_used_14 = builtin::i32_wrap_i64($cm_pair_7_181 >> 32_i64);
+    start_15 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(start_15 = $moved_4_178; $moved_4_178 = 0; start_15);
+    $moved_4_178 = new_used_14;
+    new_used_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_14 = $moved_4_178; $moved_4_178 = 0; new_used_14, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_14 = start_15; start_15 = 0; new_used_14);
 }
 
 fn "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -163,32 +175,32 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let ptr_15: i32;
-    let ptr_17: i32;
-    let count_18: i32;
+    let ptr_13: i32;
     let i: i32;
+    let ptr_24: i32;
+    let count_25: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b3: block {
-        l4: loop {
-            break_if b3 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b6: block {
+        l7: loop {
+            break_if b6 i >= $mv$data$end;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l4;
+            continue l7;
         };
-    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l6: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+        l9: loop {
+            ptr_24 = ptr_13 + i;
+            count_25 = $mv$data$end - i;
+            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_7: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -198,22 +210,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_6: status;
+                break $inline_cm_await_blocked_7: status;
             }) >>u 4;
-            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_18;
-            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return ptr_17;
+            i = i + count_25;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return ptr_24;
             }
-            continue l6;
+            continue l9;
         };
     };
 }
@@ -231,21 +243,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(self, $mv$other$repr, $mv$other$used) {
-    let new_used: i32;
-    let start_11: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_1: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_1 $mv$other$used == 0;
-        if @unlikely(local.tee new_used(self.used + $mv$other$used) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-        }
-        start_11 = self.used;
-        self.used = new_used;
-        builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
-    };
 }
 
 fn "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$sroa[self.value,f.buf]"(self, f) {

@@ -1677,7 +1677,7 @@ fn generate_template_reflect_impls(
 }
 
 /// Build `Shape^ReflectTemplate::members()` as one `TemplateHole` literal per hole —
-/// `{ index, lit, raw, source, has_spec }` in the handle's declaration order.
+/// `{ index, lit, raw, has_spec }` in the handle's declaration order.
 fn generate_template_members_fn(
     shape: &TemplateShape,
     member_types: &[TypeId],
@@ -1706,11 +1706,10 @@ fn generate_template_members_fn(
                 reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 string_field("lit", &unescape_template_segment(raw), 1),
                 string_field("raw", raw, 2),
-                string_field("source", &hole.source, 3),
                 TirStructField {
                     name: "has_spec".to_string(),
                     value: bool_lit(hole.spec.is_some(), span),
-                    field_index: 4,
+                    field_index: 3,
                 },
             ]
         })

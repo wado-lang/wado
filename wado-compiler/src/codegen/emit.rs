@@ -399,20 +399,24 @@ impl<'a> WirEmitter<'a> {
         // Resolve the optional supertype to its already-emitted Wasm type
         // index. Pre-pass `pre_assign_type_indices` ensures every WirTypeId
         // is mapped before any struct uses it as a supertype.
-        let supertype_idx = s.supertype.as_ref().map(|st_id| {
-            *self.type_index_map.get(&st_id.index()).unwrap_or_else(|| {
-                panic!(
-                    "supertype WIR type id {} ({}) not pre-assigned in type_index_map",
-                    st_id.index(),
-                    st_id.fq()
-                )
+        let supertype_idxs = s
+            .supertype
+            .iter()
+            .map(|st_id| {
+                *self.type_index_map.get(&st_id.index()).unwrap_or_else(|| {
+                    panic!(
+                        "supertype WIR type id {} ({}) not pre-assigned in type_index_map",
+                        st_id.index(),
+                        st_id.fq()
+                    )
+                })
             })
-        });
+            .collect();
 
         // Use is_final: false so (ref (exact $T)) from struct.new is a subtype of (ref null $T)
         subtypes.push(SubType {
             is_final: false,
-            supertype_idx,
+            supertype_idxs,
             composite_type: CompositeType {
                 inner: CompositeInnerType::Struct(StructType {
                     fields: fields.into_boxed_slice(),
@@ -446,7 +450,7 @@ impl<'a> WirEmitter<'a> {
         // Base struct type (non-final, no supertype)
         subtypes.push(SubType {
             is_final: false,
-            supertype_idx: None,
+            supertype_idxs: Vec::new(),
             composite_type: CompositeType {
                 inner: CompositeInnerType::Struct(StructType {
                     fields: Box::new([FieldType {
@@ -475,7 +479,7 @@ impl<'a> WirEmitter<'a> {
 
             subtypes.push(SubType {
                 is_final: true,
-                supertype_idx: Some(base_type_idx),
+                supertype_idxs: vec![base_type_idx],
                 composite_type: CompositeType {
                     inner: CompositeInnerType::Struct(StructType {
                         fields: fields.into_boxed_slice(),
@@ -512,7 +516,7 @@ impl<'a> WirEmitter<'a> {
         let storage_type = self.wir_type_to_storage_type(&a.element_type.clone().as_nullable());
         subtypes.push(SubType {
             is_final: true,
-            supertype_idx: None,
+            supertype_idxs: Vec::new(),
             composite_type: CompositeType {
                 inner: CompositeInnerType::Array(wasm_encoder::ArrayType(FieldType {
                     element_type: storage_type,
@@ -540,7 +544,7 @@ impl<'a> WirEmitter<'a> {
             .collect();
         subtypes.push(SubType {
             is_final: true,
-            supertype_idx: None,
+            supertype_idxs: Vec::new(),
             composite_type: CompositeType {
                 inner: CompositeInnerType::Func(wasm_encoder::FuncType::new(params, results)),
                 shared: false,

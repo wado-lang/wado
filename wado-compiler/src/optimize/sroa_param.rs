@@ -191,9 +191,9 @@ fn collect_and_validate(
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
         for (pi, param) in func.params.iter().enumerate() {
-            if func.address_taken_locals.contains(&param.local_index) {
-                continue;
-            }
+            // Taking the parameter's address needs no guard of its own: `&p`
+            // reads `p` whole, which `param_field_use` rejects, and a boxed
+            // parameter is read through its shadow local.
             if func.stores_aliased_locals.contains(&param.local_index) {
                 continue;
             }

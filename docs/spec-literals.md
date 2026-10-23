@@ -791,47 +791,86 @@ element rather than the whole list.
 ### The Formatter
 
 Every format trait writes into a `Formatter`, which carries the parsed spec and
-the string being built. Both types are in the prelude:
+the string being built. It is in the prelude:
 
-<!-- {"fixture":"spec_literals_formatter_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/format.wado"} -->
 
 ```wado
-pub enum Alignment { Left, Center, Right }
-
 pub struct Formatter {
-    pub fill: char,          // ' ' when the spec sets none
-    pub align: Alignment,    // Right when the spec sets none
-    pub sign_plus: bool,     // `+`
-    pub alternate: bool,     // `#`
-    pub zero_pad: bool,      // `0`
-    pub width: i32,          // Formatter::NO_WIDTH (-1) when the spec sets none
-    pub precision: i32,      // Formatter::PRECISION_DEFAULT (-2) when the spec sets none
-    pub indent: i32,         // nesting depth of the alternate Inspect
-    pub buf: &mut String,    // the output, which the Formatter does not own
-}
-
-pub trait Display with ()  { fn fmt(&self, f: &mut Formatter); }
-pub trait Inspect with ()  { fn inspect(&self, f: &mut Formatter); }
-pub trait Binary with ()   { fn fmt_binary(&self, f: &mut Formatter); }
-pub trait Octal with ()    { fn fmt_octal(&self, f: &mut Formatter); }
-pub trait LowerHex with () { fn fmt_lower_hex(&self, f: &mut Formatter); }
-pub trait UpperHex with () { fn fmt_upper_hex(&self, f: &mut Formatter); }
-pub trait LowerExp with () { fn fmt_lower_exp(&self, f: &mut Formatter); }
-pub trait UpperExp with () { fn fmt_upper_exp(&self, f: &mut Formatter); }
-
-test {
-    let mut out = "";
-    let mut f = Formatter {
-        fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
-        zero_pad: false, width: -1, precision: -2, indent: 0, buf: &mut out,
-    };
-    Celsius { degrees: 21 }.fmt(&mut f);
-    assert out == "21°C";
+    /// Fill character for padding (default: ' ')
+    pub fill: char,
+    /// Text alignment mode
+    pub align: Alignment,
+    /// Whether to always show `+` sign for positive numbers
+    pub sign_plus: bool,
+    /// Whether the spec asked for the alternate form (`#` flag): a radix
+    /// prefix, or the indented multi-line `Inspect`.
+    pub alternate: bool,
+    /// Whether to use zero-padding (`0` flag)
+    pub zero_pad: bool,
+    /// Minimum field width in characters; `NO_WIDTH` for none
+    pub width: i32,
+    /// Decimal places for floats; max rendered length for sequences (chars /
+    /// elements). Negative values are the sentinels below.
+    pub precision: i32,
+    /// Current indentation level for the alternate (`#`) `Inspect`
+    pub indent: i32,
+    /// Reference to the output buffer
+    pub buf: &mut String,
 }
 ```
 
-Each method is named after its trait, so a type implementing several declares
-no overloads. Every format trait is `with ()`, so rendering a value performs no
+The sentinels are associated constants:
+
+<!-- {"source": "wado-compiler/lib/core/prelude/format.wado"} -->
+
+```wado
+/// No width given: every padding path is a no-op.
+pub const NO_WIDTH: i32 = -1;
+/// No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
+pub const PRECISION_DEFAULT: i32 = -2;
+/// Render uncapped: sequence Inspect skips truncation.
+pub const PRECISION_INFINITE: i32 = -1;
+/// Default sequence Inspect cap: chars for `String`, elements for `List`.
+pub const DEFAULT_SEQ_LIMIT: i32 = 256;
+```
+
+A spec that sets nothing gives what `Formatter::new` gives:
+
+<!-- {"source": "wado-compiler/lib/core/prelude/format.wado"} -->
+
+```wado
+pub fn new(buf: &mut String) -> Formatter {
+    return Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: Formatter::NO_WIDTH,
+        precision: Formatter::PRECISION_DEFAULT,
+        indent: 0,
+        buf,
+    };
+}
+```
+
+The format traits are `Display` (`${x}`), `Inspect` (`${x:?}`), `Binary`
+(`b`), `Octal` (`o`), `LowerHex` (`x`), `UpperHex` (`X`), `LowerExp` (`e`)
+and `UpperExp` (`E`). Each declares one method in this shape:
+
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+
+```wado
+pub affine trait Display with () {
+    /// Formats the value and writes to the given formatter.
+    fn fmt(&self, f: &mut Formatter);
+}
+```
+
+Each method is named after its trait (`inspect`, `fmt_binary`, `fmt_octal`,
+`fmt_lower_hex`, `fmt_upper_hex`, `fmt_lower_exp`, `fmt_upper_exp`), so a type
+implementing several declares no overloads. Every format trait is `with ()`, so rendering a value performs no
 effect.
 
 An interpolation builds one `Formatter` from its spec and calls the one method
@@ -1027,10 +1066,9 @@ parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
 Each template shape has an anonymous type of its own, holding one field per
-hole. The shape is the template's segments, specifiers, hole types and hole
-source texts. So
-`` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
-even where `a` and `b` share a type. The type is unnameable and reached only
+hole. The shape is the template's segments, specifiers and hole types, so
+`` tag`${a}` `` and `` tag`${b}` `` are one type where `a` and `b` share one,
+and one instantiation of the tag. The type is unnameable and reached only
 through the bound; a diagnostic and `Reflect::type_name()` show it as its text
 with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
 at 50 characters with `...`.
@@ -1064,7 +1102,7 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit()` / `raw()` (the preceding segment, escapes processed or preserved),
-`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`get(&t)` (the value, `V`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states).
 `ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
@@ -1325,17 +1363,11 @@ slot's type has no `From` for the element's type.
 A key-value literal may carry `..base` members, which merge through
 `LiteralSpread`:
 
-<!-- {"fixture":"spec_literals_spread_decl.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
 pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
-}
-
-test {
-    let mut t = Tally { n: 1 };
-    t.spread_literal(Tally { n: 2 });
-    assert t.n == 3;
 }
 ```
 

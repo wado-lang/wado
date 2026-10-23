@@ -11,7 +11,9 @@ use crate::name::{
     FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
     unalias_namespace_member,
 };
-use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId};
+use crate::tir::{
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
+};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -1408,10 +1410,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Abstract `T::method(...)` takes its own dispatch path. Args
-        // are resolved without coercion hints (the trait-bound dispatch
-        // walks them on its own; threading hints through here is a
-        // separate concern from the synthetic-AST removal).
+        // Abstract `T::method(...)` takes its own dispatch path, which resolves
+        // the arguments once the bound has named the method they fill.
         if let CalleeIdentKind::AbstractTypeParam {
             prefix,
             suffix,
@@ -1419,19 +1419,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = &callee_kind
         {
-            let args: Vec<TypeId> = match &given_args {
-                Some(args) => args.clone(),
-                None => call
-                    .args
-                    .iter()
-                    .map(|a| self.resolve_expr(a, ctx, None))
-                    .collect(),
-            };
             return self.resolve_type_param_static_call(
                 prefix,
                 suffix,
                 *type_param_type_id,
-                &args,
+                given_args.as_deref(),
                 call,
                 ctx,
             );
@@ -4911,16 +4903,18 @@ fn simd_lane_immediates(builtin: &str) -> Option<SimdLaneShape> {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a static call through a type parameter: `T::method(args)`
-    /// where T is bound by a trait (e.g., `T: Constructable`).
+    /// where T is bound by a trait (e.g., `T: Constructable`). `given_args`
+    /// are the argument types a tagged template has already resolved.
     fn resolve_type_param_static_call(
         &mut self,
         type_param_name: &str,
         method_name: &str,
         type_param_type_id: TypeId,
-        args: &[TypeId],
+        given_args: Option<&[TypeId]>,
         call: &ast::CallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let arg_count = given_args.map_or(call.args.len(), <[TypeId]>::len);
         let bounds = self
             .annotate_ctx
             .trait_ctx
@@ -4945,27 +4939,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(def) = method_info_result.method_def
                 && self.report_unavailable(def, call.span)
             {
-                return TypeTable::ERROR;
+                return self.resolve_args_without_callee(&call.args, ctx);
             }
             let receiver = usize::from(method_info_result.self_kind != ast::SelfKind::None);
             let expected = receiver + method_info_result.param_types.len();
-            let omitted_have_defaults = args
-                .len()
+            let omitted_have_defaults = arg_count
                 .checked_sub(receiver)
                 .and_then(|given| method_info_result.param_defaults.get(given..))
                 .is_some_and(|omitted| omitted.iter().all(Option::is_some));
-            if args.len() > expected || !omitted_have_defaults {
+            if arg_count > expected || !omitted_have_defaults {
                 let _ = self.emit(TypeError::ArgumentCountMismatch {
                     expected,
-                    found: args.len(),
+                    found: arg_count,
                     span: call.span,
                 });
-                return TypeTable::ERROR;
+                return self.resolve_args_without_callee(&call.args, ctx);
             }
-            let return_type = method_info_result.return_type;
+            // The arguments spell the receiver, so the parameters lead with it.
+            let receiver_param = match method_info_result.self_kind {
+                ast::SelfKind::None => None,
+                ast::SelfKind::Value => Some(type_param_type_id),
+                ast::SelfKind::Ref => Some(
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_ref(type_param_type_id),
+                ),
+                ast::SelfKind::MutRef => Some(
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mut_ref(type_param_type_id),
+                ),
+            };
+            let param_types: Vec<TypeId> = receiver_param
+                .into_iter()
+                .chain(method_info_result.param_types.iter().copied())
+                .collect();
+            let method_slots = method_info_result.method_type_param_ids.clone();
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
             let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
+            let args = if let Some(args) = given_args {
+                args.to_vec()
+            } else {
+                let spelled = self.bind_slots(&param_types, &method_slots, &method_type_args);
+                self.resolve_args_against_settled_params(&call.args, &spelled, ctx)
+            };
+            // The method's parameters exclude the receiver, so each pairs with
+            // the argument after it.
+            let params_args = &args[receiver..];
+            let params_arg_exprs = call.args.get(receiver..).unwrap_or_default();
 
             // If no explicit type args, infer method-level type params from argument
             // types via the shared `InferCtx` solver. `find_method_in_trait_bounds`
@@ -4985,10 +5009,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_type, arg)) in method_info_result
                     .param_types
                     .iter()
-                    .zip(args.iter())
+                    .zip(params_args)
                     .enumerate()
                 {
-                    if answers_last(call.args.get(i)) {
+                    if answers_last(params_arg_exprs.get(i)) {
                         infer.add_deferred(*param_type, *arg);
                     } else {
                         infer.add(*param_type, *arg);
@@ -5004,11 +5028,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Don't substitute method-level type params in the return type here.
-            // The return type contains function-level TypeParams (e.g., Self -> TypeParam{T})
-            // which will be substituted during monomorphization. Method-level type params
-            // (e.g., D in deserialize<D>) are handled by the monomorphizer.
-            let final_return_type = return_type;
+            // Only the method's own type params are bound here. `Self`, the
+            // receiver's param, is settled in this body, and monomorphization
+            // substitutes it.
+            let settled = self.bind_slots(&param_types, &method_slots, &method_type_args);
+            let unbound: &[TypeId] = if method_type_args.is_empty() {
+                &method_slots
+            } else {
+                &[]
+            };
+            for (i, (&arg, &param)) in args.iter().zip(&settled).enumerate() {
+                if !self.tysys.type_table.borrow().mentions_any(param, unbound) {
+                    self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
+                }
+            }
+            let final_return_type = self.bind_slots(
+                &[method_info_result.return_type],
+                &method_slots,
+                &method_type_args,
+            )[0];
 
             // Build method_info with is_type_param_receiver = true
             let method_type_arg_names: Vec<FqTypeName> = method_type_args
@@ -5063,12 +5101,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // is collision-free. Args here carry no `is_mut` (the
             // production builder below uses all-false `CallArg`s). Carry the
             // trait-declared parameter defaults so reify pads omitted trailing
-            // arguments.
-            let param_defaults: Vec<(String, Option<ast::Expr>)> = method_info_result
-                .param_names
-                .iter()
-                .cloned()
-                .zip(method_info_result.param_defaults.iter().cloned())
+            // arguments. The lists lead with the receiver, as every dispatch
+            // with `self_in_args` does.
+            let param_defaults: Vec<(String, Option<ast::Expr>)> = receiver_param
+                .map(|_| ("self".to_string(), None))
+                .into_iter()
+                .chain(
+                    method_info_result
+                        .param_names
+                        .iter()
+                        .cloned()
+                        .zip(method_info_result.param_defaults.iter().cloned()),
+                )
                 .collect();
             let defaults_module = trait_module.unwrap_or_else(|| func_ref.module_source.clone());
             // The method's own slots, as the turbofish spelled them or the
@@ -5081,8 +5125,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             self.record_default_walk(
                 call.id,
-                args,
-                &method_info_result.param_types,
+                &args,
+                &param_types,
                 &param_defaults,
                 defaults_module.clone(),
                 &type_bindings,
@@ -5098,8 +5142,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                     param_defaults,
-                    param_types: method_info_result.param_types,
-                    self_in_args: false,
+                    param_types,
+                    self_in_args: receiver_param.is_some(),
                 },
             );
 
@@ -5112,6 +5156,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: format!("{type_param_name}::{method_name}"),
             span: call.span,
         });
-        TypeTable::ERROR
+        self.resolve_args_without_callee(&call.args, ctx)
+    }
+
+    /// Resolve `args`, each against the parameter it fills. A parameter still
+    /// carrying a type param is the instantiation's to settle, so it hints
+    /// nothing.
+    fn resolve_args_against_settled_params(
+        &mut self,
+        args: &[ast::Expr],
+        param_types: &[TypeId],
+        ctx: &mut FunctionContext,
+    ) -> Vec<TypeId> {
+        args.iter()
+            .zip(param_types)
+            .map(|(arg, &param)| {
+                let expected =
+                    Some(param).filter(|&p| !self.tysys.type_table.borrow().contains_type_param(p));
+                self.resolve_expr(arg, ctx, expected)
+            })
+            .collect()
+    }
+
+    /// `types` with each of `slots` replaced by the argument in its place.
+    fn bind_slots(&self, types: &[TypeId], slots: &[TypeId], args: &[TypeId]) -> Vec<TypeId> {
+        let substitution = SubstitutionContext::new().bind(slots, args);
+        let mut table = self.tysys.type_table.borrow_mut();
+        types
+            .iter()
+            .map(|&t| substitution.substitute(t, &mut table))
+            .collect()
     }
 }

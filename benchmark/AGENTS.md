@@ -43,6 +43,7 @@ mise run gale-gen           # Gale generator vs ANTLR4 over the same .g4
 
 # application server
 mise run http-routing       # HTTP routing (wado serve vs Hono vs Axum)
+mise run http-routing-wado  # wado serve alone, one worker, GET /user: a server A/B
 
 mise run clean              # remove build artifacts
 ```

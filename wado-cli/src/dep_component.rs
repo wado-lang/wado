@@ -27,6 +27,7 @@ use crate::git::{fetch_manifest, materialize_entry, resolve_ref};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 use wado_host::atomic_write::write_atomic;
+use wado_host::sync::joined;
 
 /// How far a subcommand may go to acquire a dependency that the cache does not
 /// already hold.
@@ -205,11 +206,12 @@ pub async fn resolve_inline_git_dependencies(
             ));
             continue;
         }
-        let entry = tokio::task::spawn_blocking(move || {
-            resolve_inline_git(&url, &git_ref, directory.as_deref())
-        })
-        .await
-        .map_err(|e| format!("dependency {name:?}: {e}"))??;
+        let entry = joined(
+            tokio::task::spawn_blocking(move || {
+                resolve_inline_git(&url, &git_ref, directory.as_deref())
+            })
+            .await,
+        )?;
         out.resolved.push((name, entry));
     }
     Ok(out)

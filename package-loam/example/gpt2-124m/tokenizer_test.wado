@@ -2,7 +2,12 @@
 //! Face's tokenizer gives it, recorded in `tokenize.json`, and decodes back.
 
 use { from_string } from "core:json";
-use { Tokenizer } from "./model.wado";
+// Not through `model.wado`, which needs the checkpoint `fetch.sh` downloads.
+use { Tokenizer } from "./tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
 
 struct Tokenized {
     text: String,

@@ -73,18 +73,17 @@ type it takes, since the template's own type is one no source spells.
 
 Each template literal that carries a tag denotes a value of a compiler-synthesized
 struct type, unique to that template's static shape, holding one field per
-hole. The shape is the tuple of (raw segments, specifiers, hole source texts,
-hole types): two templates with the same shape denote the same type and share
-every instantiation of the tag. The source texts are part of the shape because
-`TemplateHole::source()` is a constant, so `` tag`${a}` `` and `` tag`${b}` `` are two
-types even where `a` and `b` share one. The type is anonymous — nothing in the
-source can name it — and is reached only through the bound the tag declares.
+hole. The shape is the tuple of (raw segments, specifiers, hole types): two
+templates with the same shape denote the same type and share every
+instantiation of the tag, so `` tag`${a}` `` and `` tag`${b}` `` are one type
+where `a` and `b` share one. The type is anonymous — nothing in the source can
+name it — and is reached only through the bound the tag declares.
 
 The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
 is the template's text with each hole spelled as its type and specifier, cut to
 50 characters with `...`: `` sql`id = ${id:04}` `` is named
-`` `id = ${i32:04}` ``. The name describes the shape; it is not its identity,
-which also holds the source texts.
+`` `id = ${i32:04}` ``. The name describes the shape but does not identify it:
+past the cut, two shapes can read alike.
 
 A hole's field carries its value without copying it and without boxing it. A
 type whose reference is a bare GC handle — `struct`, `List`, `String`, `i128`
@@ -146,9 +145,6 @@ impl<T, V> TemplateHole<T, V> {
     /// `StructField::get` does; only a mutation copies.
     pub fn get(&self, t: &T) -> V;
 
-    /// The hole's expression as written: `"user.name"`.
-    pub fn source(&self) -> String;
-
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
@@ -207,8 +203,8 @@ Referencing a local of a handle type marks nothing on that local: only a
 box-target type's local is retagged by a reference, and those holes are held by
 value.
 
-The synthesized `impl ReflectTemplate` carries the segments, specifiers and
-sources as literals in its `members()` and `tail()` bodies, and `TemplateHole::get`
+The synthesized `impl ReflectTemplate` carries the segments and specifiers as
+literals in its `members()` and `tail()` bodies, and `TemplateHole::get`
 projects the field at the hole's index, dereferencing a handle field.
 
 ### Writing a tag
@@ -246,22 +242,6 @@ fn html<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> Html {
     }
     out.push_str(ReflectTemplate::<T>::tail());
     return Html { out };
-}
-```
-
-`source()` gives a structured sink its field names for free:
-
-```wado
-fn info<T: ReflectTemplate<Holes = [..V]>, ..V: Serialize>(t: T) with Log {
-    let mut msg = "";
-    let mut fields = FieldMap::new();
-    for let h of ReflectTemplate::<T>::members() {
-        msg.push_str(h.lit());
-        h.fmt(&t, &mut Formatter::new(&mut msg));
-        fields.insert(h.source(), h.get(&t));   // "user.id" => 42
-    }
-    msg.push_str(ReflectTemplate::<T>::tail());
-    emit(msg, fields);
 }
 ```
 
@@ -325,7 +305,7 @@ What the tag body compiles to, once monomorphized, inlined and folded:
 
 - `for let h of members()` is unrolled — one straight-line block per hole.
 - `members()` is a closed constant expression: globalization hoists it, and
-  every `lit()` / `raw()` / `source()` / `has_spec()` is a field projected out
+  every `lit()` / `raw()` / `has_spec()` is a field projected out
   of that global, which `niri` folds to the literal. `push_str(h.lit())` is
   the same instruction sequence as `push_str("SELECT …")`.
 - `get()` is a projection of the template struct's field at a constant index,
@@ -344,8 +324,7 @@ the optimizer's gap to close, not a reason to move the segments into a runtime
 value.
 
 Each distinct template shape instantiates the tag once, as inlining a builder at
-each site would. Two sites with the same shape share one instantiation; two
-that differ only in how a hole is spelled do not.
+each site would. Two sites with the same shape share one instantiation.
 
 ### Compile-time evaluation
 
@@ -375,6 +354,9 @@ path already guarantees.
   it, and it would make a tag a type rather than a function.
 - No literal index into `Members` or `Holes`: a pack is walked, never indexed
   (WEP 2026-03-14).
+- No hole source text. A tag reading it would make the spelling of a hole part
+  of the shape, so `` tag`${a}` `` and `` tag`${b}` `` would instantiate the tag
+  twice over one layout.
 
 ## Alternatives considered
 
@@ -427,7 +409,7 @@ introduces a mechanism; each item names the existing one it extends.
 
 - `AnonShape::Template(TemplateShape)` beside `Fields` and `Synthetic`.
   `TemplateShape { segments: Vec<String>, holes: Vec<TemplateHole> }`, the
-  segments raw, each hole `{ ty, spec: Option<String>, source }`. The shape is
+  segments raw, each hole `{ ty, spec: Option<String> }`. The shape is
   the interning key, so two sites of one shape reach one `AnonStructId` through
   `intern_shape`, as struct literals do.
 - The struct's fields are derived from the shape: `h{k}` typed
@@ -452,7 +434,7 @@ introduces a mechanism; each item names the existing one it extends.
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail()`, `raw_tail()`, each method
   carrying its own `compiler_item`.
-- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, source, has_spec }` with the constant accessors reading fields, and two bridged ones:
+- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, has_spec }` with the constant accessors reading fields, and two bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`. Both builtins are bodyless
   markers beside `struct_field_get`. `core:prelude` re-exports it with the
@@ -683,20 +665,40 @@ below close that, in this order.
   the declared bounds, and `` format`${x}` `` reports the missing bound
   `` `${x}` `` reports (`tagged_template_generic_hole_bound_error.wado`).
 
-- [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
-  direct lowering does four things a `format` site does not:
-  - It sizes the buffer from the segment lengths (`String::with_capacity`).
-    `format` starts from `""` and grows.
-  - It appends a `String` hole with no specifier directly. `format` goes
-    through `Display::fmt` and `Formatter::pad`.
-  - It inlines a radix renderer (`${i:#x}`) at the site. `format` calls
-    `u64::fmt_base`, building the radix prefix as a `String` on each call.
-  - `optimize::tmpl_hoist` reuses its buffer across loop iterations, and
-    recognizes only the direct lowering's `$tmpl` block.
+- [x] `format` at the direct lowering's cost. Read off `wado dump -O2`, a
+  `format` site cost more than the direct lowering in the places below. Each
+  is closed where it arose:
+  - The direct lowering sizes the buffer from the segment lengths. `format`
+    sums `tail().len()` and, per hole, `lit().len()` plus a guess of 16 for
+    the rendered hole. That folds to a constant, and `format` starts from
+    `String::with_capacity` of it.
+  - A `String` hole with no specifier is a plain append. `format` reaches it
+    through `Display::fmt` and `Formatter::pad`, which fold to the same append
+    once `param_spec` specializes `pad` on the `Formatter`'s constant fields.
+    `$hole_fmt` hands the formatter on as `&mut Formatter { … }`, so
+    `param_spec` roots a reference local bound to a struct literal as it roots
+    a struct local.
+  - The radix renderer (`${i:#x}`) is spliced into the site. Its call sits in
+    a `break` value in `$hole_fmt`, and `inline` rescans every splice it makes,
+    not only one at a statement, so the chain reaches `u64::fmt_base` while it
+    still fits.
+  - `optimize::tmpl_hoist` lifts the direct lowering's buffer out of a loop.
+    A `format` call at a loop site stays a call, so there is nothing to lift,
+    and the benchmark below runs the same with the pass skipped
+    (`WADO_SKIP_PASS=nir/tmpl_hoist`).
+  - A `format` call stays a call, since its body allocates. It runs once per
+    iteration of the loop holding its site, so `inline` starts a function only
+    loops reach at a loop site, and its callees splice as they would in the
+    loop. A one-hole template's struct reaches `format` as the hole itself:
+    `sroa_param` reads a parameter's uses off the body rather than the
+    address-taken mark lowering left, which outlives the `&t` it recorded.
 
-  Done when a `wir_expect` fixture holds a `format` site to what the direct
-  lowering emits for the same template, and the measurement below shows no
-  gap.
+  Done: `tagged_template_format_direct_cost.wado` holds a `format` site to a
+  constant-sized buffer, no `Formatter`, no `fmt_base` or `pad` call, and the
+  radix prefix a constant. `tagged_template_format_loop_site.wado` holds one in
+  a loop to no template struct and no call to the radix helpers. A
+  single-hole site still pays its call into `format`, which the measurement
+  below shows as up to 1.11.
 
 - [ ] One path. An untagged template reifies as the `format` call, and the
   direct lowering (`synthesis::template::build_template_block`) is deleted.
@@ -718,7 +720,12 @@ export fn run() with (Stdout, MonotonicClock) {
     let mut bench = Benchmark { name: "template" };
     bench.work_per_iter = Option::Some(100000.0);
     bench.unit = "templates";
-    bench.run("untagged", || {
+    bench.run("warm-up", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `i=${i}`.len(); }
+        return total;
+    });
+    bench.run("untagged all", || {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
@@ -726,7 +733,7 @@ export fn run() with (Stdout, MonotonicClock) {
         }
         return total;
     });
-    bench.run("format", || {
+    bench.run("format all", || {
         let mut total = 0;
         for let i of 0..<100000 {
             let p = Pt { x: i, y: i * 2 };
@@ -734,15 +741,65 @@ export fn run() with (Stdout, MonotonicClock) {
         }
         return total;
     });
+    bench.run("untagged i05", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `i=${i:05} end`.len(); }
+        return total;
+    });
+    bench.run("format i05", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`i=${i:05} end`.len(); }
+        return total;
+    });
+    bench.run("untagged f.2", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `f=${(i as f64) / 3.0:.2} end`.len(); }
+        return total;
+    });
+    bench.run("format f.2", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`f=${(i as f64) / 3.0:.2} end`.len(); }
+        return total;
+    });
+    bench.run("untagged #x", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += `h=${i:#x} end`.len(); }
+        return total;
+    });
+    bench.run("format #x", || {
+        let mut total = 0;
+        for let i of 0..<100000 { total += format`h=${i:#x} end`.len(); }
+        return total;
+    });
+    bench.run("untagged p?", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += `p=${p:?} end`.len();
+        }
+        return total;
+    });
+    bench.run("format p?", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += format`p=${p:?} end`.len();
+        }
+        return total;
+    });
 }
 ```
 
-Three runs:
+The first phase a program runs is slower and varies between runs, so a
+warm-up phase takes that cost. Three runs:
 
-| Phase           | Time per iteration, untagged = 1 |
-| --------------- | -------------------------------- |
-| untagged        | 1                                |
-| `` format`…` `` | 1.2 to 1.3                       |
+| Template        | `format` time per iteration, untagged = 1 |
+| --------------- | ----------------------------------------- |
+| the four holes  | 0.80 to 0.82                              |
+| `${i:05}` alone | 1.03 to 1.04                              |
+| `${f:.2}` alone | 1.03 to 1.06                              |
+| `${i:#x}` alone | 1.06 to 1.11                              |
+| `${p:?}` alone  | 0.99 to 1.04                              |
 
 ## Known gaps
 
@@ -771,10 +828,6 @@ Three runs:
 - A tag that is not a function or a static method — a variant case, a
   closure-typed binding — is a diagnostic. Reify rebuilds a tag call only from
   a static dispatch, and neither records one.
-- A tag on a type parameter (`` T::tag`…` ``) works, but a mismatch between the
-  template and the method's parameter is not reported: that path checks no
-  argument, whatever the call's spelling. Pinned as
-  `type_param_static_call_arg_check_todo.wado`.
 - Whether `match type` gains a `template` arm for the `Template` case
   [Total Reflection](./wep-2026-09-05-total-reflection.md) gives the type.
 - A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by
@@ -782,9 +835,6 @@ Three runs:
   same static method fails the same way when spelled as a call, and both are
   pinned as `#[TODO]` — `reflect_pack_static_namespace_import_todo.wado` and
   `reflect_pack_blanket_static_todo.wado`.
-- Two shapes that differ only in their holes' source texts
-  (`` tag`${a}` `` and `` tag`${b}` ``, `a` and `b` of one type) are two types
-  with one name. A diagnostic relating them names the same type on both sides.
 - The type has no `Inspect`, though every other type does. An `assert` that
   captures a template's value fails to compile
   (``assert id`n=${n}` == id`n=${n}`;``), and the error names the type by its

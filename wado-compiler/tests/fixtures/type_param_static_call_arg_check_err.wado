@@ -1,0 +1,24 @@
+// `T::method(...)` on a type parameter checks its arguments against the trait
+// method's parameters, as every other call kind does. Unchecked, the mismatch
+// reached codegen as an invalid core Wasm module rather than a diagnostic.
+
+trait Tag with () {
+    fn tag(n: i32) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(n: i32) -> i32 {
+        return n;
+    }
+}
+
+fn through_bound<T: Tag>() -> i32 {
+    return T::tag("oops");
+}
+
+test "an argument of the wrong type is reported, not lowered" {
+    assert through_bound::<i32>() == 0;
+}
+
+__DATA__
+{"compile_error": ":16:19: analysis error: type mismatch: expected 'i32', found 'String'", "compile_error_codes": ["TYPE_MISMATCH"]}

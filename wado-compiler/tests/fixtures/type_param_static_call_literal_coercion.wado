@@ -1,0 +1,38 @@
+// A literal argument to `T::method(...)` coerces to the parameter's type, as
+// it does in every other call: checking the argument must not pin the literal
+// to its default type first.
+
+trait Make with () {
+    fn make(n: i64, f: f32, b: u8) -> Self;
+    fn get(&self, i: u8) -> i64;
+}
+
+struct Box3 {
+    n: i64,
+    f: f32,
+    b: u8,
+}
+
+impl Make for Box3 {
+    fn make(n: i64, f: f32, b: u8) -> Self {
+        return Box3 { n, f, b };
+    }
+
+    fn get(&self, i: u8) -> i64 {
+        return self.n + (self.b + i) as i64;
+    }
+}
+
+fn build<T: Make>() -> T {
+    return T::make(5, 1.5, 7);
+}
+
+fn read<T: Make>(t: &T) -> i64 {
+    return T::get(t, 3);
+}
+
+test "literal arguments coerce to the trait method's parameters" {
+    let b = build::<Box3>();
+    assert b.f == 1.5;
+    assert read(&b) == 15;
+}

@@ -767,6 +767,21 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.source_exists(path).await
     }
 
+    async fn open_source(
+        &self,
+        path: &str,
+    ) -> Result<std::sync::Arc<dyn wado_compiler::SourceReader>, wado_compiler::SourceError> {
+        self.inner.open_source(path).await
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, wado_compiler::SourceError> {
+        self.inner.load_source_prefix(path, extent).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.
@@ -817,6 +832,16 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         Output = Result<wado_compiler::GeneratorResponse, wado_compiler::GeneratorRunnerError>,
     > + Send {
         self.inner.run_generator(component_wasm, request)
+    }
+
+    fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &wado_compiler::ProbeRequest,
+    ) -> impl std::future::Future<
+        Output = Result<Vec<Option<u64>>, wado_compiler::GeneratorRunnerError>,
+    > + Send {
+        self.inner.probe_generator(component_wasm, request)
     }
 }
 

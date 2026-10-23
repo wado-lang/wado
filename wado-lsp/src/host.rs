@@ -7,11 +7,14 @@
 //! this host's [`CompilerHost::dependency_index`] reports.
 
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::{
     CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
+    SourceReader,
 };
 
 pub mod discovery;
@@ -128,13 +131,105 @@ impl FilesystemCompilerHost {
     }
 }
 
+/// A file on disk, read a range at a time.
+struct FileReader {
+    file: Mutex<File>,
+    len: u64,
+    path: PathBuf,
+}
+
+impl FileReader {
+    fn open(path: PathBuf) -> Result<Self, SourceError> {
+        let file = File::open(&path).map_err(|e| io_error(&path, &e))?;
+        let len = file.metadata().map_err(|e| io_error(&path, &e))?.len();
+        Ok(Self {
+            file: Mutex::new(file),
+            len,
+            path,
+        })
+    }
+}
+
+impl SourceReader for FileReader {
+    fn byte_len(&self) -> u64 {
+        self.len
+    }
+
+    fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+        let mut file = self
+            .file
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        file.seek(SeekFrom::Start(start))
+            .and_then(|_| fill(&mut *file, buf))
+            .map_err(|e| io_error(&self.path, &e))
+    }
+}
+
+/// Read into `buf` until it is full or `from` ends, answering how much was read.
+fn fill(from: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut read = 0;
+    while read < buf.len() {
+        match from.read(&mut buf[read..]) {
+            Ok(0) => break,
+            Ok(n) => read += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(read)
+}
+
+/// The first `prefix` bytes of the file at `path`, or all of it at `None`. A
+/// file shorter than `prefix` answers what it holds.
+///
+/// # Errors
+///
+/// What opening or reading the file fails with.
+pub fn read_prefix(path: &Path, prefix: Option<u64>) -> std::io::Result<Vec<u8>> {
+    let Some(n) = prefix else {
+        return std::fs::read(path);
+    };
+    let mut bytes = Vec::new();
+    File::open(path)?.take(n).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+/// Whether `e` says the file is not there. A path through a file, such as
+/// `wado.toml` under a path dependency naming a file, is as absent as a
+/// missing one.
+#[must_use]
+pub fn is_absent(e: &std::io::Error) -> bool {
+    matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
+}
+
+fn io_error(path: &Path, e: &std::io::Error) -> SourceError {
+    let path = path.display().to_string();
+    if is_absent(e) {
+        return SourceError::NotFound { path };
+    }
+    SourceError::IoError {
+        path,
+        message: e.to_string(),
+    }
+}
+
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+        self.load_source_prefix(path, None).await
+    }
+
+    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+        Ok(Arc::new(FileReader::open(self.base_path.join(path))?))
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, SourceError> {
         let full_path = self.base_path.join(path);
-        std::fs::read(&full_path).map_err(|e| SourceError::IoError {
-            path: full_path.display().to_string(),
-            message: e.to_string(),
-        })
+        read_prefix(&full_path, extent).map_err(|e| io_error(&full_path, &e))
     }
 
     async fn source_exists(&self, path: &str) -> bool {

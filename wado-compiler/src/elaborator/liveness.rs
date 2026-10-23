@@ -535,3 +535,317 @@ impl CompilerNamed {
             .is_some_and(|names| names.contains(name))
     }
 }
+<<<<<<< HEAD
+||||||| abe826435
+
+#[cfg(test)]
+mod last_use_tests {
+    use crate::compiler_host::InMemoryCompilerHost;
+    use crate::semantics::semantics;
+
+    fn block_on<F: std::future::Future>(future: F) -> F::Output {
+        use std::future::Future;
+        use std::pin::Pin;
+        use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+        fn raw() -> RawWaker {
+            fn no_op(_: *const ()) {}
+            fn clone(_: *const ()) -> RawWaker {
+                raw()
+            }
+            RawWaker::new(
+                std::ptr::null(),
+                &RawWakerVTable::new(clone, no_op, no_op, no_op),
+            )
+        }
+        let waker = unsafe { Waker::from_raw(raw()) };
+        let mut cx = Context::from_waker(&waker);
+        let mut fut = Box::pin(future);
+        loop {
+            if let Poll::Ready(v) = Pin::new(&mut fut).as_mut().poll(&mut cx) {
+                return v;
+            }
+        }
+    }
+
+    /// Return a sorted list of the identifier texts that the analysis marked as
+    /// final uses, one entry per marked use.
+    fn last_use_names(source: &str) -> Vec<String> {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(source, &host, Some("entry.wado")));
+        let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+        let mut names: Vec<String> = sem
+            .liveness
+            .last_uses
+            .iter()
+            .filter(|id| sem.module_of_id(**id) == Some(&entry))
+            .filter_map(|id| sem.span_of_id(*id))
+            .filter(|span| span.end <= source.len() && source.is_char_boundary(span.start))
+            .map(|span| source[span.start..span.end].to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    fn count(source: &str, name: &str) -> usize {
+        last_use_names(source)
+            .iter()
+            .filter(|n| n.as_str() == name)
+            .count()
+    }
+
+    #[test]
+    fn single_use_param_is_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> List<i32> { return a; }";
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn earlier_of_two_uses_is_not_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let x = a.len(); let y = a.len(); return x + y; }";
+        // Only the second `a` is a final use; the first is live afterward.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_referenced_local_keeps_its_final_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let n = (&a).len(); let b = a; return n + b.len(); }";
+        // The reference ends before `let b = a`, which is `a`'s final read.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_match_binding_is_not_move_eligible() {
+        let src = "variant P { A(List<i32>), B } \
+                   export fn f(p: P) -> i32 { \
+                     match p { \
+                       P::A(xs) => { let ys = xs; return ys.len(); } \
+                       P::B => { return 0; } \
+                     } \
+                   }";
+        // `xs` names the payload `p` still holds; the scrutinee itself is a
+        // by-value parameter read for the last time here.
+        assert_eq!(count(src, "xs"), 0);
+        assert_eq!(count(src, "p"), 1);
+    }
+
+    #[test]
+    fn a_break_to_a_labeled_block_resumes_where_it_ends() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = pick: { if c { break pick: 1; } 2 }; \
+                   return a.len() + n; }";
+        // `break pick:` leaves the labeled block, where only `a` is still read.
+        // Taking every local live there instead cost `a` its final use.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn accumulator_element_is_moved_across_the_loop() {
+        let src = "export fn f(n: i32) -> List<i32> { \
+                   let mut items: List<i32> = []; \
+                   let mut i = 0; \
+                   while i < n { let v = i * 2; items.push(v); i = i + 1; } \
+                   return items; }";
+        // `v` is bound and consumed within one iteration → its push is a last use.
+        assert_eq!(count(src, "v"), 1);
+    }
+
+    #[test]
+    fn a_destructured_binding_is_left_to_the_planner() {
+        // Mirrors `impl Deserialize for List<T>` in lib/core/serde.wado: the
+        // accumulator loop pushes each `item` bound from `if let Some(item) =
+        // next_opt`, with the only loop exit a `return` in the else branch.
+        // `item` names storage `next_opt` owns, so whether the push may take it
+        // is an ownership question; the accumulator owns its own and is still
+        // answered here.
+        let src = "\
+            fn src(x: i32) -> Option<List<i32>> { if x > 0 { return Option::Some([x]); } return Option::None; } \
+            export fn f() -> List<List<i32>> { \
+              let mut items: List<List<i32>> = List::with_capacity(2); \
+              let mut i = 0; \
+              loop { \
+                let next_opt = src(i); \
+                if let Some(item) = next_opt { \
+                  items.push(item); \
+                } else { \
+                  return items; \
+                } \
+                i = i + 1; \
+              } \
+            }";
+        assert_eq!(count(src, "item"), 0);
+        assert_eq!(count(src, "items"), 1);
+    }
+
+    #[test]
+    fn an_iflet_scrutinee_in_a_loop_is_moved() {
+        let src = "export fn f(n: i32) -> List<List<i32>> { \
+                   let mut items: List<List<i32>> = []; \
+                   let mut i = 0; \
+                   loop { \
+                     let next_opt = if i < n { Option::Some([i, i]) } else { Option::None }; \
+                     if let Some(item) = next_opt { items.push(item); } else { break; } \
+                     i = i + 1; \
+                   } \
+                   return items; }";
+        // The scrutinee is read once per iteration and dead afterward, so the
+        // loop fixpoint still reaches its final use.
+        assert_eq!(count(src, "next_opt"), 1);
+    }
+
+    #[test]
+    fn value_live_after_branch_is_not_moved() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = if c { a.len() } else { a.len() }; return n; }";
+        // `a` is read on both branches but never after; each branch use is a
+        // per-path last use.
+        assert_eq!(count(src, "a"), 2);
+    }
+}
+=======
+
+#[cfg(test)]
+mod last_use_tests {
+    use futures::executor::block_on;
+
+    use crate::compiler_host::InMemoryCompilerHost;
+    use crate::semantics::semantics;
+
+    /// Return a sorted list of the identifier texts that the analysis marked as
+    /// final uses, one entry per marked use.
+    fn last_use_names(source: &str) -> Vec<String> {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(source, &host, Some("entry.wado")));
+        let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+        let mut names: Vec<String> = sem
+            .liveness
+            .last_uses
+            .iter()
+            .filter(|id| sem.module_of_id(**id) == Some(&entry))
+            .filter_map(|id| sem.span_of_id(*id))
+            .filter(|span| span.end <= source.len() && source.is_char_boundary(span.start))
+            .map(|span| source[span.start..span.end].to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    fn count(source: &str, name: &str) -> usize {
+        last_use_names(source)
+            .iter()
+            .filter(|n| n.as_str() == name)
+            .count()
+    }
+
+    #[test]
+    fn single_use_param_is_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> List<i32> { return a; }";
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn earlier_of_two_uses_is_not_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let x = a.len(); let y = a.len(); return x + y; }";
+        // Only the second `a` is a final use; the first is live afterward.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_referenced_local_keeps_its_final_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let n = (&a).len(); let b = a; return n + b.len(); }";
+        // The reference ends before `let b = a`, which is `a`'s final read.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_match_binding_is_not_move_eligible() {
+        let src = "variant P { A(List<i32>), B } \
+                   export fn f(p: P) -> i32 { \
+                     match p { \
+                       P::A(xs) => { let ys = xs; return ys.len(); } \
+                       P::B => { return 0; } \
+                     } \
+                   }";
+        // `xs` names the payload `p` still holds; the scrutinee itself is a
+        // by-value parameter read for the last time here.
+        assert_eq!(count(src, "xs"), 0);
+        assert_eq!(count(src, "p"), 1);
+    }
+
+    #[test]
+    fn a_break_to_a_labeled_block_resumes_where_it_ends() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = pick: { if c { break pick: 1; } 2 }; \
+                   return a.len() + n; }";
+        // `break pick:` leaves the labeled block, where only `a` is still read.
+        // Taking every local live there instead cost `a` its final use.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn accumulator_element_is_moved_across_the_loop() {
+        let src = "export fn f(n: i32) -> List<i32> { \
+                   let mut items: List<i32> = []; \
+                   let mut i = 0; \
+                   while i < n { let v = i * 2; items.push(v); i = i + 1; } \
+                   return items; }";
+        // `v` is bound and consumed within one iteration → its push is a last use.
+        assert_eq!(count(src, "v"), 1);
+    }
+
+    #[test]
+    fn a_destructured_binding_is_left_to_the_planner() {
+        // Mirrors `impl Deserialize for List<T>` in lib/core/serde.wado: the
+        // accumulator loop pushes each `item` bound from `if let Some(item) =
+        // next_opt`, with the only loop exit a `return` in the else branch.
+        // `item` names storage `next_opt` owns, so whether the push may take it
+        // is an ownership question; the accumulator owns its own and is still
+        // answered here.
+        let src = "\
+            fn src(x: i32) -> Option<List<i32>> { if x > 0 { return Option::Some([x]); } return Option::None; } \
+            export fn f() -> List<List<i32>> { \
+              let mut items: List<List<i32>> = List::with_capacity(2); \
+              let mut i = 0; \
+              loop { \
+                let next_opt = src(i); \
+                if let Some(item) = next_opt { \
+                  items.push(item); \
+                } else { \
+                  return items; \
+                } \
+                i = i + 1; \
+              } \
+            }";
+        assert_eq!(count(src, "item"), 0);
+        assert_eq!(count(src, "items"), 1);
+    }
+
+    #[test]
+    fn an_iflet_scrutinee_in_a_loop_is_moved() {
+        let src = "export fn f(n: i32) -> List<List<i32>> { \
+                   let mut items: List<List<i32>> = []; \
+                   let mut i = 0; \
+                   loop { \
+                     let next_opt = if i < n { Option::Some([i, i]) } else { Option::None }; \
+                     if let Some(item) = next_opt { items.push(item); } else { break; } \
+                     i = i + 1; \
+                   } \
+                   return items; }";
+        // The scrutinee is read once per iteration and dead afterward, so the
+        // loop fixpoint still reaches its final use.
+        assert_eq!(count(src, "next_opt"), 1);
+    }
+
+    #[test]
+    fn value_live_after_branch_is_not_moved() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = if c { a.len() } else { a.len() }; return n; }";
+        // `a` is read on both branches but never after; each branch use is a
+        // per-path last use.
+        assert_eq!(count(src, "a"), 2);
+    }
+}
+>>>>>>> origin/main

@@ -23,10 +23,10 @@ use hyper::{Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
-use tokio::net::TcpListener;
-use tokio::sync::{Notify, mpsc, oneshot, watch};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinSet;
-use wasmtime::component::{Accessor, AccessorTask, Component};
+use wasmtime::component::{Accessor, Component};
 use wasmtime::{AsContextMut, Engine, GuestProfiler, UpdateDeadline};
 use wasmtime_wasi_http::Error as HttpError;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
@@ -38,7 +38,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
-use wado_host::sync::lock;
+use wado_host::sync::{joined, lock, next_joined};
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -375,7 +375,7 @@ struct HandlerTask {
     idle_timeout: Duration,
 }
 
-impl AccessorTask<WasiState> for HandlerTask {
+impl HandlerTask {
     async fn run(self, accessor: &Accessor<WasiState>) -> wasmtime::Result<()> {
         let HandlerTask {
             service,
@@ -745,6 +745,12 @@ enum Step {
     Turn,
 }
 
+/// What the accept loop turns on.
+enum ServerEvent {
+    Accepted(std::io::Result<(TcpStream, SocketAddr)>),
+    Shutdown { is_fatal: bool },
+}
+
 /// Wait for an in-flight request to finish or for the next server tick,
 /// whichever comes first. Every wait a busy worker makes goes through here,
 /// so its loop keeps turning even when nothing finishes.
@@ -771,7 +777,6 @@ async fn worker_loop(
     mut tick_rx: watch::Receiver<()>,
     recycle_requests: u64,
     timeout_secs: u64,
-    fatal: Arc<Notify>,
     profiler: Option<GuestProfilerHandle>,
 ) {
     // Grace over the client-facing timeout and the 1s tick granularity, so
@@ -813,10 +818,10 @@ async fn worker_loop(
             Err(e) => {
                 // `Component::new` and `instantiate_pre` already succeeded at
                 // startup, so this fault would hit every worker identically:
-                // the server cannot serve. Shut down rather than leave a dead
-                // worker whose channel still accepts jobs.
+                // the server cannot serve. Ending the worker shuts the server
+                // down rather than leave a dead one whose channel still
+                // accepts jobs.
                 eprintln!("Worker instantiation failed: {e:?}");
-                fatal.notify_one();
                 return;
             }
         };
@@ -889,11 +894,15 @@ async fn worker_loop(
                                 // The `JoinHandle` is kept in `inflight` so a
                                 // recycle can wait for the request to finish;
                                 // the task itself is driven by `run_concurrent`.
-                                inflight.push(accessor.spawn(HandlerTask {
+                                let task = HandlerTask {
                                     service: Arc::clone(&service),
                                     job,
                                     idle_timeout: request_timeout,
-                                })?);
+                                };
+                                inflight.push(
+                                    accessor
+                                        .spawn(async move |accessor| task.run(accessor).await)?,
+                                );
                                 handled += 1;
                                 if recycle_requests != 0 && handled >= recycle_requests {
                                     stopping = Some(WorkerStop::Recycle);
@@ -1004,7 +1013,10 @@ async fn run_http_server(
     // the 504, not the runaway-guest trap, so it may share their scheduling.
     let (tick_tx, tick_rx) = watch::channel(());
     let first_byte_tick = (timeout / 8).clamp(Duration::from_millis(100), Duration::from_secs(1));
-    tokio::spawn(async move {
+    // The ticker and the workers run until shutdown. One that ends sooner, a
+    // worker that cannot instantiate or a panic, ends the server.
+    let mut background: JoinSet<()> = JoinSet::new();
+    background.spawn(async move {
         let mut interval = tokio::time::interval(first_byte_tick);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
@@ -1016,15 +1028,11 @@ async fn run_http_server(
             }
         }
     });
-    // Notified by a worker that fails to instantiate; the accept loop
-    // treats it as a fatal shutdown (see `worker_loop`).
-    let fatal = Arc::new(Notify::new());
     let mut txs = Vec::with_capacity(workers);
-    let mut engine_tasks = Vec::with_capacity(workers);
     for _ in 0..workers {
         let (tx, rx) = mpsc::channel::<RequestJob>(per_worker_inflight);
         txs.push(tx);
-        engine_tasks.push(tokio::spawn(worker_loop(
+        background.spawn(worker_loop(
             engine.clone(),
             Arc::clone(&service_pre),
             Arc::clone(&preopens),
@@ -1034,9 +1042,8 @@ async fn run_http_server(
             tick_rx.clone(),
             recycle_requests,
             timeout.as_secs().max(1),
-            Arc::clone(&fatal),
             profiler_handle.clone(),
-        )));
+        ));
     }
     let dispatch = Arc::new(Dispatch {
         txs,
@@ -1080,12 +1087,15 @@ async fn run_http_server(
     eprintln!("Send Ctrl+C to shut down");
 
     let mut connections: JoinSet<()> = JoinSet::new();
-    // Resolves to `true` when shutdown was triggered by a fatal worker
-    // failure, `false` for a normal OS signal.
-    let mut shutdown = pin!(async {
+    // Resolves to `true` when a background task ended the server, `false`
+    // for a normal OS signal. Boxed so dropping it releases `background`.
+    let mut shutdown = Box::pin(async {
         let sig = pin!(shutdown_signal());
-        let fat = pin!(fatal.notified());
-        matches!(select(sig, fat).await, Either::Right(((), _)))
+        let ended = pin!(async {
+            let task = background.join_next().await;
+            joined(task.expect("the ticker runs until the dispatcher drops"));
+        });
+        matches!(select(sig, ended).await, Either::Right(((), _)))
     });
     let fatal_shutdown;
 
@@ -1093,9 +1103,18 @@ async fn run_http_server(
     // wait for in-flight connections to drain (with a hard cap so we don't
     // hang forever on misbehaving clients).
     loop {
-        let accept = pin!(listener.accept());
-        match select(accept, shutdown.as_mut()).await {
-            Either::Right((is_fatal, _accept)) => {
+        let event = {
+            let accept = pin!(listener.accept());
+            // A connection is joined as it ends, so its panic ends the server.
+            let ended = pin!(next_joined(&mut connections));
+            match select(select(accept, ended), shutdown.as_mut()).await {
+                Either::Left((Either::Left((accepted, _)), _)) => ServerEvent::Accepted(accepted),
+                Either::Left((Either::Right(((), _)), _)) => continue,
+                Either::Right((is_fatal, _)) => ServerEvent::Shutdown { is_fatal },
+            }
+        };
+        match event {
+            ServerEvent::Shutdown { is_fatal } => {
                 fatal_shutdown = is_fatal;
                 if is_fatal {
                     eprintln!(
@@ -1110,14 +1129,14 @@ async fn run_http_server(
                 }
                 break;
             }
-            Either::Left((Err(e), _shutdown)) => {
+            ServerEvent::Accepted(Err(e)) => {
                 // A persistent failure (fd exhaustion, listener gone) would
                 // otherwise turn the loop into a hot CPU/log spammer. A short
                 // sleep is a cheap circuit-breaker.
                 eprintln!("accept error: {e}");
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
+            ServerEvent::Accepted(Ok((stream, remote_addr))) => {
                 // Disable Nagle's algorithm. Responses are written head-first
                 // and body-second (the body streams in asynchronously from the
                 // guest), so with Nagle on the body write can stall waiting for
@@ -1142,20 +1161,17 @@ async fn run_http_server(
                         eprintln!("Error serving {remote_addr}: {e}");
                     }
                 });
-
-                while let Some(res) = connections.try_join_next() {
-                    log_connection_join_error(res);
-                }
             }
         }
     }
+    drop(shutdown);
 
     // Drain in-flight connections first — they still need the worker engine
     // tasks alive to receive their responses.
     let drain_deadline = timeout + Duration::from_secs(5);
     let drain = async {
-        while let Some(res) = connections.join_next().await {
-            log_connection_join_error(res);
+        while let Some(connection) = connections.join_next().await {
+            joined(connection);
         }
     };
     if tokio::time::timeout(drain_deadline, drain).await.is_err() {
@@ -1168,10 +1184,22 @@ async fn run_http_server(
 
     // No connection can submit more work now: dropping the dispatcher
     // closes every worker channel, ending each engine task's dispatch
-    // loop. Wait for them to wind down.
+    // loop, and with the workers' tick receivers gone the ticker ends too.
+    // Wait for them to wind down.
     drop(dispatch);
-    for engine_task in engine_tasks {
-        let _ = tokio::time::timeout(drain_deadline, engine_task).await;
+    let wind_down = async {
+        while let Some(task) = background.join_next().await {
+            joined(task);
+        }
+    };
+    if tokio::time::timeout(drain_deadline, wind_down)
+        .await
+        .is_err()
+    {
+        eprintln!(
+            "Workers did not stop within {}s; leaving them behind",
+            drain_deadline.as_secs()
+        );
     }
     drop(epoch_ticker);
 
@@ -1196,16 +1224,6 @@ async fn run_http_server(
         anyhow::bail!("a worker failed to instantiate the component");
     }
     Ok(())
-}
-
-/// Log connection task panics; ignore cancellation (which is the normal
-/// outcome when shutdown aborts in-flight tasks at the drain deadline).
-fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
-    if let Err(e) = res
-        && !e.is_cancelled()
-    {
-        eprintln!("connection task panicked: {e}");
-    }
 }
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {

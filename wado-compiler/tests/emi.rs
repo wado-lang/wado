@@ -973,7 +973,10 @@ fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
     }));
     match result {
         Ok(evaluation) => evaluation,
-        Err(payload) => Evaluation::Crashed(format!("panic: {}", panic_message(payload.as_ref()))),
+        Err(payload) => Evaluation::Crashed(format!(
+            "panic: {}",
+            common::panic_message(payload.as_ref())
+        )),
     }
 }
 
@@ -1019,15 +1022,6 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
         }),
         Err(e) => Evaluation::Crashed(format!("runtime error: {e}")),
     }
-}
-
-fn panic_message(payload: &dyn std::any::Any) -> String {
-    payload
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| payload.downcast_ref::<&str>().copied())
-        .unwrap_or("(non-string panic payload)")
-        .to_string()
 }
 
 // ---------------------------------------------------------------------------

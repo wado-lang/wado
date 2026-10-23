@@ -58,7 +58,7 @@ pub fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize
 }
 
 /// A partition of the nodes `0..n` into sets that only ever merge.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct DisjointSets {
     parent: Vec<u32>,
 }

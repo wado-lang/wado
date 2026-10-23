@@ -758,8 +758,14 @@ fn is_async_func(func: &wit_parser::Function) -> bool {
         | FunctionKind::AsyncMethod(_)
         | FunctionKind::AsyncStatic(_) => true,
         FunctionKind::Freestanding
+        | FunctionKind::Getter
+        | FunctionKind::Setter
         | FunctionKind::Method(_)
+        | FunctionKind::MethodGetter(_)
+        | FunctionKind::MethodSetter(_)
         | FunctionKind::Static(_)
+        | FunctionKind::StaticGetter(_)
+        | FunctionKind::StaticSetter(_)
         | FunctionKind::Constructor(_) => false,
     }
 }

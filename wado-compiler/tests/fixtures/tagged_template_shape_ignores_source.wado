@@ -1,0 +1,22 @@
+// A template's shape is its segments and its holes' types and specifiers, so
+// two templates that differ only in how a hole is spelled are one type.
+use { println, Stdout } from "core:cli";
+
+fn holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> T {
+    return t;
+}
+
+fn pick<T>(first: bool, a: T, b: T) -> T {
+    if first { return a; }
+    return b;
+}
+
+export fn run() with Stdout {
+    let a = builtin::black_box(1);
+    let b = builtin::black_box(2);
+    let t = pick(builtin::black_box(false), holes`x=${a}`, holes`x=${b}`);
+    println(format(t));
+}
+
+__DATA__
+{"stdout": "x=2\n"}

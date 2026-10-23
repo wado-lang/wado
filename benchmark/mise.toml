@@ -347,6 +347,11 @@ wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP gale_gen/gale_gen.wado
 description = "Run HTTP routing benchmark (wado serve vs Hono on Node.js and Bun vs Axum)"
 run = "./http_routing/bench.sh"
 
+[tasks.http-routing-wado]
+description = "Run HTTP routing benchmark on wado serve alone: one worker, one endpoint"
+env = { SERVERS = "wado", SHAPES = "1", REQUEST = "GET /user" }
+run = "./http_routing/bench.sh"
+
 [tasks.all]
 description = "Run all benchmarks serially"
 run = """

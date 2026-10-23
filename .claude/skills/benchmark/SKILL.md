@@ -78,6 +78,9 @@ to ~1s, so there is no total to report. The unit is the benchmark's own
 (numbers/s, px/s, conversions/s, MB/s, req/s); `vs best` = fastest rate / this
 rate.
 
+Report a change between two measurements with improvement as positive: `+9%`
+means faster, `-13%` slower. This is the sign `ab.ts` prints.
+
 Each benchmark prints the implementations it compared, so read them off the run
 rather than from a list here. Two are conditional: the ANTLR4 rows for
 `sqlite-parse` and `gale-gen` are skipped when `java` is absent, and the run

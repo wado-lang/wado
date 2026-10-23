@@ -1,0 +1,16 @@
+// A probe's parameter has the type a host supplies it as, which is the type
+// `generate` is handed it as; any other is refused when the generator compiles.
+
+use { head } from "./sub/kiln/header_and_payload.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/mistyped_probe_generator.wado",
+        },
+    };
+
+test {
+    assert head() == 7;
+}
+
+__DATA__
+{"compile_error": "mistyped_probe_generator.wado:6:17: error: kiln: `probe` takes `content` as `ByteList`, but a host supplies it as `Stream<u8>`"}

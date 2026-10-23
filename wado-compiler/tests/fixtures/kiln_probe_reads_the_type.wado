@@ -1,0 +1,20 @@
+// A probe is handed each file's `type`, which decides how far the generator
+// reads it: the primary is a `header`, cut after its first line, and the same
+// bytes given no type reach `generate` whole.
+
+use { head, lengths } from "./sub/kiln/header_and_payload.schema"
+    with {
+        type: "header",
+        generator: {
+            module: "./sub/kiln/typed_probe_generator.wado",
+            inputs: [
+                { path: "./sub/kiln/header_and_payload.schema" },
+                { path: "./sub/kiln/header_and_payload.schema", type: "header" },
+            ],
+        },
+    };
+
+test {
+    assert head() == 7;
+    assert lengths() == [44, 2];
+}

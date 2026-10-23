@@ -17,8 +17,9 @@ the tokens onnxruntime picks:
     wado run-webgpu webgpu.wado
 
 `hf2loam.mjs` writes the checkpoint from Hugging Face's `model.safetensors`
-without running Wado. Its `convert` function takes and returns byte arrays, so a
-browser page can run it too.
+without running Wado, laid out as `gpt2.onnxtext` declares its weights. Its
+`convert` function takes and returns byte arrays, so a browser page can run it
+too.
 
 ## What the build reads
 
@@ -26,8 +27,7 @@ The model is
 [`openai-community/gpt2`](https://huggingface.co/openai-community/gpt2) on
 Hugging Face at commit `607a30d783dfa663caf39e06633721c8d4cfcd7e`, licensed
 under the MIT License as its model card states. The files here are all derived
-from that commit, so the build needs no download, and `wado test` compiles the
-example:
+from that commit:
 
 - `tokenizer.json` is the tokenizer, as the repository ships it (SHA-256
   `8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6`). Loam
@@ -39,11 +39,15 @@ example:
 - `gpt2.onnxtext` is `onnx/decoder_model.onnx` (SHA-256
   `e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f`) with its
   weights left out, as `tools/onnx_split.wado` writes it.
-- `gpt2-header.safetensors` is the header of the checkpoint that tool writes.
-  The build checks the graph against it, and only running needs the weights.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
   greedily after a prompt, and its time per token on the CPU. `generate.mjs`
   writes it, running `onnx/decoder_model.onnx` with `onnxruntime-node`.
 
-`fetch.sh` downloads the model, writes the checkpoint beside them, and rewrites
-the graph and the header from it. Git ignores the model and the checkpoint.
+`fetch.sh` downloads the model, writes the checkpoint `gpt2.safetensors` beside
+them, and rewrites the graph from it. Git ignores the model and the checkpoint.
+
+`model.wado` names the checkpoint, and the build checks the graph against its
+header. The build reads the header and none of the weights behind it, but the
+file must be there, so the files naming the model compile only once `fetch.sh`
+has run, and `wado test` leaves them out. `tokenizer_test.wado` needs no
+download and runs.
