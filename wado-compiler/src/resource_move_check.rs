@@ -566,18 +566,10 @@ struct MoveWalker<'a, 'c> {
     /// The body's modes, which a closure inside it shares.
     modes: Rc<Modes>,
     affine_params: Vec<String>,
-<<<<<<< HEAD
-    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
-    drop_body: bool,
-    /// The scrutinees a pattern takes apart, so no binding holds them whole.
-    decomposed: IndexSet<AstId>,
-||||||| 863c217a0
-    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
-    drop_body: bool,
-=======
     /// The `self` of a `Drop::drop` body, which may move its fields out.
     drop_self: Option<AstId>,
->>>>>>> origin/main
+    /// The scrutinees a pattern takes apart, so no binding holds them whole.
+    decomposed: IndexSet<AstId>,
     flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
@@ -644,14 +636,8 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             checker,
             modes,
             affine_params,
-<<<<<<< HEAD
-            drop_body,
-            decomposed: IndexSet::default(),
-||||||| 863c217a0
-            drop_body,
-=======
             drop_self,
->>>>>>> origin/main
+            decomposed: IndexSet::default(),
             flow: Flow::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -956,10 +942,6 @@ impl MoveWalker<'_, '_> {
             }
             expr = holder;
         }
-    }
-
-    fn is_drop_self(&self, expr: &Expr) -> bool {
-        self.drop_body && matches!(expr, Expr::Ident(id) if id.name == "self")
     }
 
     fn implements_drop(&self, expr: &Expr) -> bool {

@@ -32,7 +32,7 @@ use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructPatternField, TirTemplatePart, TirUnaryOp, TypeId,
+    TirTemplatePart, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -1423,16 +1423,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             Flow::Normal
         }
 
-<<<<<<< HEAD
-        TirStmtKind::LetDestructure { mut pattern, value } => {
-            let value = elab_value_expr(value, cx);
-            bind_unbound_parts(&mut pattern, value.type_id, cx);
-            for live in cx.resources.pattern_bindings(&pattern) {
-||||||| 863c217a0
-        TirStmtKind::LetDestructure { pattern, value } => {
-            let value = elab_value_expr(value, cx);
-            for live in cx.resources.pattern_bindings(&pattern) {
-=======
         // The pattern consumes its value as an arm's does: the parts no
         // binding takes drop once the bindings hold theirs.
         TirStmtKind::LetDestructure { pattern, mut value } => {
@@ -1441,7 +1431,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
             for live in bindings {
->>>>>>> origin/main
                 cx.declare(live);
             }
             out.push(TirStmt {
@@ -2507,16 +2496,7 @@ fn wrap_in_block(expr: &mut TirExpr, build: impl FnOnce(TirExpr) -> Vec<TirStmt>
 /// before the body runs. A temporary is spilled first, so an arm that does not
 /// consume leaves it for its statement to drop.
 fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
-<<<<<<< HEAD
-    for arm in arms.iter_mut() {
-        if !cx.resources.pattern_bindings(&arm.pattern).is_empty() {
-            bind_unbound_parts(&mut arm.pattern, scrutinee.type_id, cx);
-        }
-    }
-||||||| 863c217a0
-=======
     // An arm that does not consume the scrutinee owns nothing it binds.
->>>>>>> origin/main
     let bindings: Vec<Vec<Live>> = arms
         .iter()
         .map(|arm| {
@@ -2559,100 +2539,6 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
     }
 }
 
-<<<<<<< HEAD
-/// Bind each resource-carrying part a destructuring `pattern` of a `type_id`
-/// leaves unnamed, under `_` or `..`, to a local of its own. The destructuring
-/// moves its scrutinee whole, so a part nothing binds would never drop; bound,
-/// it drops with the pattern's scope.
-fn bind_unbound_parts(pattern: &mut TirPattern, type_id: TypeId, cx: &mut Cx) {
-    if !cx.carries_resource(type_id) {
-        return;
-    }
-    match pattern {
-        TirPattern::Tuple(elements, has_rest) => {
-            let Layout::Holder {
-                parts: Parts::Fields(parts),
-                ..
-            } = cx.resources.layout(type_id)
-            else {
-                unreachable!("a tuple pattern matches a tuple");
-            };
-            for (index, _, part_type) in parts {
-                match elements.get_mut(index as usize) {
-                    Some(element) => bind_unbound_part(element, part_type, cx),
-                    None => {
-                        let mut rest = TirPattern::Wildcard;
-                        bind_unbound_part(&mut rest, part_type, cx);
-                        elements.push(rest);
-                    }
-                }
-            }
-            *has_rest = false;
-        }
-        TirPattern::Struct {
-            fields, has_rest, ..
-        } => {
-            let Layout::Holder {
-                parts: Parts::Fields(parts),
-                ..
-            } = cx.resources.layout(type_id)
-            else {
-                unreachable!("a struct pattern matches a struct");
-            };
-            for (index, name, part_type) in parts {
-                match fields.iter_mut().find(|field| field.field_index == index) {
-                    Some(field) => bind_unbound_part(&mut field.pattern, part_type, cx),
-                    None if *has_rest && cx.carries_resource(part_type) => {
-                        let mut rest = TirPattern::Wildcard;
-                        bind_unbound_part(&mut rest, part_type, cx);
-                        fields.push(TirStructPatternField {
-                            field_name: name,
-                            field_index: index,
-                            pattern: rest,
-                        });
-                    }
-                    None => {}
-                }
-            }
-        }
-        TirPattern::Variant {
-            bindings,
-            payload_type,
-            ..
-        } => {
-            let payload_type = *payload_type;
-            for binding in bindings {
-                bind_unbound_part(binding, payload_type, cx);
-            }
-        }
-        // Each alternative binds the first one's locals, so a part one leaves
-        // unnamed has no local the others share.
-        TirPattern::Or(_)
-        | TirPattern::Wildcard
-        | TirPattern::Binding { .. }
-        | TirPattern::Narrow { .. }
-        | TirPattern::Literal(_)
-        | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. }
-        | TirPattern::PerInstance { .. } => {}
-    }
-}
-
-/// [`bind_unbound_parts`] for a part, which `_` leaves whole and unbound.
-fn bind_unbound_part(pattern: &mut TirPattern, type_id: TypeId, cx: &mut Cx) {
-    if matches!(pattern, TirPattern::Wildcard) && cx.carries_resource(type_id) {
-        let (local_index, name) = cx.alloc_local(type_id, "unbound");
-        *pattern = TirPattern::Binding {
-            name,
-            local_index,
-            type_id,
-        };
-        return;
-    }
-    bind_unbound_parts(pattern, type_id, cx);
-||||||| 863c217a0
-=======
 /// Elaborate the scrutinee of `patterns`, each paired with whether it
 /// consumes, answering the place a consuming pattern empties: the place a move
 /// names, or the local a value no place holds spills into. A place read without
@@ -2864,7 +2750,6 @@ impl TirMutVisitor for BindNothing {
         }
         self.walk_pattern(pattern);
     }
->>>>>>> origin/main
 }
 
 /// `body`, an arm's or a closure's, as a block, leaving a unit in its place.
