@@ -2451,7 +2451,8 @@ pub fn inline_functions(
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
     let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
-        if held.contains(&fid) {
+        // A dead caller's sites were priced as never running, so none is taken.
+        if !live[fid.index()] || held.contains(&fid) {
             return None;
         }
         let candidates = Candidates {
