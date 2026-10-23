@@ -108,7 +108,8 @@ as a struct whose first field is `key`, holding the case's wire name, followed
 by the fields of its payload. A reader finds the tag wherever it stands among
 the entries. A case carries no payload, or a struct the derivation writes, or a
 newtype over one. A struct with a hand-written `Serialize` or `Deserialize`,
-such as `String` or `List<T>`, is not one. A payload field whose wire name is
+such as `String` or `List<T>`, is not one, and neither is a type parameter. A
+payload field whose wire name is
 `key` is a compile error. Reading, a tag that names no case is
 `UnknownVariant`, a missing tag is `MissingField`, and a repeated one meets
 the duplicate policy as a repeated field does.

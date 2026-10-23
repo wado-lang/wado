@@ -1,0 +1,14 @@
+// A type parameter payload is refused: the declaration cannot tell whether
+// each instantiation is a struct the derivation writes, nor whether one of its
+// fields is written under the tag's key.
+
+#[wire(tag = "type")]
+variant Envelope<T> {
+    Data(T),
+    Empty,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":7:5: analysis error: `Envelope::Data` carries `T`, but a case of a variant with `#[wire(tag)]` carries nothing or a struct its derivation writes", "compile_error_codes": ["ATTR_MISUSE"]}
