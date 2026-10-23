@@ -130,6 +130,11 @@ pub fn emit(
     placement: Placement = Placement::File,
 ) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
+    if let Shards(placed) = &placement {
+        for let vi of &graph.initializers {
+            assert vi.data matches { Some(_) } || placed.contains_key(vi.name), "a sharded placement must place every weight the graph leaves to the checkpoint";
+        }
+    }
     if graph.outputs.is_empty() {
         builtin::cold_path();
         return Result::Err(EmitError::NoOutput);

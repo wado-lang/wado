@@ -1,16 +1,15 @@
 //! The build's check of a checkpoint's header against the graph it supplies.
 
-use { HashSet } from "core:collections";
 use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { read_checkpoint } from "./runtime/checkpoint.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 use {
+    CheckpointFile,
     StoredTensor,
     check_checkpoint,
-    check_shard,
-    check_shards_given,
+    check_shards,
     placement,
     read_index,
     shard_name,
@@ -100,36 +99,40 @@ test "a weight named as the format's metadata stays in the graph, which can name
     assert stored.is_empty();
 }
 
-/// The check of `GRAPH` against the shards in `given`, which `index` places its
-/// weights in, a failure in a shard after the shard's name.
+/// The check of `GRAPH` against the shards in `given`, each a path and the
+/// tensors it holds, which `index` at `index.json` places its weights in. A
+/// failure follows the path it blames.
 fn check_sharded(index: String, given: List<[String, List<StoredTensor>]>) -> Result<(), String> {
     let [graph, checked] = checked_graph();
-    let placed = placement(&graph, &read_index(&index)?).map_err(|e| `${e}`)?;
-    let mut shards = HashSet::<String>::new();
-    for let [name, stored] of given {
-        let checkpoint = read_checkpoint(&write_safetensors(&stored)).unwrap();
-        check_shard(&graph, &checked.shapes, &placed, &name, &checkpoint).map_err(|e| `${name}: ${e}`)?;
-        shards.insert(name);
+    let index = read_index(&index)?;
+    let placed = placement(&graph, &index).map_err(|e| `${e}`)?;
+    let mut shards: List<CheckpointFile> = [];
+    for let [path, stored] of given {
+        shards.push(CheckpointFile { path, header: write_safetensors(&stored) });
     }
-    return check_shards_given(&placed, &shards).map_err(|e| `${e}`);
+    return check_shards(&graph, &checked.shapes, &"index.json", &index, &placed, shards).map_err(
+        |r| `${r.path}: ${r.reason}`,
+    );
 }
 
-global INDEX: String = `{"metadata": {"total_size": 24}, "weight_map": {"W": "m-00002-of-00002.safetensors"}}`;
+/// `W` in the second shard, the first holding only a tensor the graph does not
+/// read.
+global INDEX: String = `{"metadata": {"total_size": 28}, "weight_map": {"V": "m-00001-of-00002.safetensors", "W": "m-00002-of-00002.safetensors"}}`;
 
 test "a sharded checkpoint checks each weight in the shard its index places it in" {
     assert check_sharded(INDEX, [
         [
-            "m-00002-of-00002.safetensors",
+            "dir/m-00002-of-00002.safetensors",
             [weight([2, 3])],
         ],
     ]) == Result::<(), String>::Ok(());
 }
 
-test "a weight in a shard not given names the shard" {
+test "a weight in a shard not given is blamed on the index, naming the shard" {
     let refused = check_sharded(INDEX, [
-        ["m-00001-of-00002.safetensors", []],
+        ["dir/m-00001-of-00002.safetensors", []],
     ]).unwrap_err();
-    assert refused == "W: the index places it in m-00002-of-00002.safetensors, which is not given";
+    assert refused == "index.json: W: the index places it in m-00002-of-00002.safetensors, which is not given";
 }
 
 test "a weight the index places in no shard names itself" {
@@ -137,19 +140,38 @@ test "a weight the index places in no shard names itself" {
     assert refused == "W: the index places it in no shard";
 }
 
-test "a weight is looked for in its own shard alone" {
+test "a weight is looked for in its own shard alone, which is blamed" {
     let refused = check_sharded(INDEX, [
         [
-            "m-00001-of-00002.safetensors",
+            "dir/m-00001-of-00002.safetensors",
             [weight([2, 3])],
         ],
-        ["m-00002-of-00002.safetensors", []],
+        ["dir/m-00002-of-00002.safetensors", []],
     ]).unwrap_err();
-    assert refused == "m-00002-of-00002.safetensors: W: the checkpoint has no such tensor";
+    assert refused == "dir/m-00002-of-00002.safetensors: W: the checkpoint has no such tensor";
+}
+
+test "a shard the index does not name is refused" {
+    let refused = check_sharded(INDEX, [
+        ["dir/other.safetensors", []],
+    ]).unwrap_err();
+    assert refused == "dir/other.safetensors: the index names no shard of this file name";
+}
+
+test "two shards of one file name are refused" {
+    let refused = check_sharded(INDEX, [
+        ["a/m-00001-of-00002.safetensors", []],
+        ["b/m-00001-of-00002.safetensors", []],
+    ]).unwrap_err();
+    assert refused == "b/m-00001-of-00002.safetensors: another shard has this file name";
 }
 
 test "an index that is not one is refused" {
     assert read_index(&"{\"weight_map\": []}").unwrap_err().starts_with("not a safetensors index: ");
+}
+
+test "an index placing a tensor in a path rather than a file name is refused" {
+    assert read_index(&"{\"weight_map\": {\"W\": \"shards/m.safetensors\"}}").unwrap_err() == "W: the index places it in shards/m.safetensors, which is not a file name";
 }
 
 fn sized(name: String, bytes: i32) -> StoredTensor {

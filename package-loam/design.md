@@ -78,15 +78,19 @@ shard alone. The index's probe extent is the whole file, as a graph's is, and
 each shard's is its header. A build refuses:
 
 - two indexes, or several checkpoints with no index;
+- an index that places a tensor in a path rather than a file name, since a
+  shard sits beside its index;
 - a tensor the graph leaves to the checkpoint that the index places in no
   shard;
 - a shard whose file name the index never names, or two shards of one name;
 - a tensor whose shard is not given, naming the shard.
 
 Each tensor is then checked against its shard's header as against a single
-file's, and a disagreement names the shard. The WEP's The Graph Is the Schema, the Checkpoint Is Data gives the
-loader one `ByteList`. A sharded module's loader takes the shards keyed by the
-file names the index uses instead:
+file's, and a disagreement names the shard.
+
+[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
+gives the loader one `ByteList`. A sharded module's loader takes the shards
+instead, keyed by the file names the index uses:
 
 ```wado
 Prepared::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError>

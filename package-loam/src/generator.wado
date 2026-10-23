@@ -13,8 +13,8 @@ use {
     package_of,
     read_all,
 } from "core:kiln";
+use { CheckpointFile } from "./safetensors.wado";
 use {
-    Header,
     Spelling,
     check,
     generate_model,
@@ -104,12 +104,12 @@ fn generate_graph(
         return refused(req, KilnError::Unsupported(reason));
     }
     let mut indexes: List<[String, ByteList]> = [];
-    let mut files: List<Header> = [];
+    let mut files: List<CheckpointFile> = [];
     for let input of req.inputs {
         if input.type matches { Some("safetensors-index") } {
             indexes.push([input.path, read_all(input.content)]);
         } else {
-            files.push(Header { path: input.path, header: read_header(input.content) });
+            files.push(CheckpointFile { path: input.path, header: read_header(input.content) });
         }
     }
     let path = req.primary.path;

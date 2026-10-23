@@ -8,8 +8,8 @@ use { from_string } from "core:json";
 use fs from "core:fs";
 use { FsError, FsErrorKind, Preopens } from "core:fs";
 use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
+use { CheckpointFile } from "./safetensors.wado";
 use {
-    Header,
     Model,
     Options,
     check,
@@ -104,9 +104,9 @@ fn cmd_gen(g: GenArgs) -> Result<String, String> with Preopens {
         if let Some(index) = g.index {
             indexes.push([index, read_file(&index)?]);
         }
-        let mut files: List<Header> = [];
+        let mut files: List<CheckpointFile> = [];
         for let checkpoint of g.checkpoint {
-            files.push(Header { path: checkpoint, header: read_file_header(&checkpoint)? });
+            files.push(CheckpointFile { path: checkpoint, header: read_file_header(&checkpoint)? });
         }
         generate_model(&model, &path, weights_of(indexes, files)?, &g.runtime)?;
     };
