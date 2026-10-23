@@ -4814,7 +4814,7 @@ impl TypeTable {
     /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
     ///
     /// Must be called after monomorphize, whose dispatch reads the identities
-    /// this replaces.
+    /// this replaces, and settles the instance spellings it leaves.
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
