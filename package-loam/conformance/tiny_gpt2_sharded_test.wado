@@ -3,7 +3,7 @@
 //! computes from the single file.
 
 use { Cpu, Tensor } from "lib:loam";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
@@ -134,8 +134,8 @@ use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnx
     };
 
 /// The shards, keyed by the file names the index places tensors in.
-fn every_shard() -> TreeMap<String, ByteList> {
-    let mut shards = TreeMap::<String, ByteList>::new();
+fn every_shard() -> HashMap<String, ByteList> {
+    let mut shards = HashMap::<String, ByteList>::new();
     shards["model-00001-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00001-of-00003.safetensors");
     shards["model-00002-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00002-of-00003.safetensors");
     shards["model-00003-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00003-of-00003.safetensors");

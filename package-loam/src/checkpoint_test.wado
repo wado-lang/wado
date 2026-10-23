@@ -1,7 +1,7 @@
 //! A safetensors checkpoint as the loader reads it, and every way one can
 //! disagree with the graph a module was compiled for.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { push_element } from "./graph.wado";
 use {
     Expected,
@@ -181,8 +181,8 @@ test "the header's metadata is not a tensor" {
 }
 
 /// `two_tensors` split across two shards, `w` in the first and `b` in the second.
-fn two_shards() -> TreeMap<String, ByteList> {
-    let mut shards = TreeMap::<String, ByteList>::new();
+fn two_shards() -> HashMap<String, ByteList> {
+    let mut shards = HashMap::<String, ByteList>::new();
     shards["m-00001-of-00002.safetensors"] = write_safetensors(&[
         StoredTensor {
             name: "w",

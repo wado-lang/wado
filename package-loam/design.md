@@ -89,7 +89,7 @@ loader one `ByteList`. A sharded module's loader takes the shards keyed by the
 file names the index uses instead:
 
 ```wado
-Prepared::load(backend: &mut Bk, shards: &TreeMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError>
+Prepared::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError>
 ```
 
 The generated module carries the placement, so the loader reads no index. A

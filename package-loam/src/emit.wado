@@ -1,7 +1,7 @@
 //! The Wado a checked graph becomes: one marker type per axis, the kernels
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Poly } from "./poly.wado";
@@ -116,7 +116,7 @@ impl Error for EmitError {
 /// index places it.
 pub variant Placement {
     File,
-    Shards(TreeMap<String, String>),
+    Shards(HashMap<String, String>),
 }
 
 /// The generated module's source, importing the runtime from the package spec
@@ -394,7 +394,7 @@ global KEPT: String = "Kept";
 global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
 
 /// The map a sharded `load` takes the shards in, keyed by file name.
-global MAP: String = "TreeMap";
+global MAP: String = "HashMap";
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.

@@ -2,7 +2,7 @@
 //! element type, shape and byte range, then the payloads back to back.
 
 use { from_string, to_string, to_string_pretty } from "core:json";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
 use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, shard_not_given } from "./runtime/checkpoint.wado";
@@ -36,8 +36,8 @@ pub fn check_checkpoint(
 }
 
 /// The shard `index` places each initializer the graph carries no data for in.
-pub fn placement(graph: &Graph, index: &TreeMap<String, String>) -> Result<TreeMap<String, String>, LoadError> {
-    let mut placed = TreeMap::<String, String>::new();
+pub fn placement(graph: &Graph, index: &HashMap<String, String>) -> Result<HashMap<String, String>, LoadError> {
+    let mut placed = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
         if vi.data matches { Some(_) } {
             continue;
@@ -56,7 +56,7 @@ pub fn placement(graph: &Graph, index: &TreeMap<String, String>) -> Result<TreeM
 pub fn check_shard(
     graph: &Graph,
     shapes: &TreeMap<String, Shape>,
-    placed: &TreeMap<String, String>,
+    placed: &HashMap<String, String>,
     shard: &String,
     checkpoint: &Checkpoint,
 ) -> Result<(), LoadError> {
@@ -64,7 +64,7 @@ pub fn check_shard(
 }
 
 /// Whether every shard `placed` puts a tensor in is among `given`.
-pub fn check_shards_given(placed: &TreeMap<String, String>, given: &TreeSet<String>) -> Result<(), LoadError> {
+pub fn check_shards_given(placed: &HashMap<String, String>, given: &HashSet<String>) -> Result<(), LoadError> {
     for let [tensor, shard] of placed.entries() {
         if !given.contains(*shard) {
             return Result::Err(shard_not_given(tensor, shard));
@@ -92,13 +92,13 @@ fn check_held(
 /// A sharded checkpoint's index, `model.safetensors.index.json` as Hugging Face
 /// writes it: the file name of the shard holding each tensor.
 struct Index {
-    weight_map: TreeMap<String, String>,
+    weight_map: HashMap<String, String>,
 }
 
 impl Deserialize for Index;
 
 /// The shard holding each tensor, by name, as the index `text` places it.
-pub fn read_index(text: &String) -> Result<TreeMap<String, String>, String> {
+pub fn read_index(text: &String) -> Result<HashMap<String, String>, String> {
     return match from_string::<Index>(text) {
         Ok(index) => Result::Ok(index.weight_map),
         Err(e) => Result::Err(`not a safetensors index: ${e}`),
@@ -138,7 +138,7 @@ pub fn shard_name(stem: &String, i: i32, count: i32) -> String {
 /// The index Hugging Face writes beside a sharded checkpoint.
 struct WrittenIndex {
     metadata: IndexMetadata,
-    weight_map: TreeMap<String, String>,
+    weight_map: HashMap<String, String>,
 }
 
 struct IndexMetadata {
@@ -150,7 +150,7 @@ struct IndexMetadata {
 pub fn write_index(shards: &List<[String, List<StoredTensor>]>) -> String {
     let mut index = WrittenIndex {
         metadata: IndexMetadata { total_size: 0 },
-        weight_map: TreeMap::new(),
+        weight_map: HashMap::new(),
     };
     for let [name, tensors] of *shards {
         for let t of tensors {

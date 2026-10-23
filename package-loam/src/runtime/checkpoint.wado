@@ -1,5 +1,5 @@
 use json from "core:json";
-use { TreeMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
 
 /// A checkpoint that disagrees with the graph, or is not a safetensors file.
@@ -163,13 +163,13 @@ impl Checkpoint {
 /// A checkpoint published in shards, each shard's header read, keyed by the
 /// file name the index gives the shard.
 pub struct Shards {
-    headers: TreeMap<String, Checkpoint>,
+    headers: HashMap<String, Checkpoint>,
 }
 
 /// The header of each shard in `shards`, keyed as `shards` is. A shard's
 /// payloads may be absent.
-pub fn read_shards(shards: &TreeMap<String, ByteList>) -> Result<Shards, LoadError> {
-    let mut headers = TreeMap::<String, Checkpoint>::new();
+pub fn read_shards(shards: &HashMap<String, ByteList>) -> Result<Shards, LoadError> {
+    let mut headers = HashMap::<String, Checkpoint>::new();
     for let [name, bytes] of shards.entries() {
         let header = read_checkpoint(bytes).map_err(|e| LoadError { reason: `${name}: ${e}` })?;
         headers[*name] = header;
@@ -182,7 +182,7 @@ impl Shards {
     /// headers were read from.
     pub fn payload(
         &self,
-        shards: &TreeMap<String, ByteList>,
+        shards: &HashMap<String, ByteList>,
         shard: String,
         e: &Expected,
     ) -> Result<ByteSlice, LoadError> {

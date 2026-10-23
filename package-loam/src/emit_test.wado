@@ -1,4 +1,4 @@
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { EmitError, NameCollision, Placement, UnmappedDtype, emit, expr_source } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
@@ -338,7 +338,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
 
 test "a sharded checkpoint's weights are read each from the shard the index places it in" {
     let graph = read(&MLP).unwrap();
-    let mut placed = TreeMap::<String, String>::new();
+    let mut placed = HashMap::<String, String>::new();
     for let [i, name] of ["W1", "B1", "W2", "B2"].enumerate() {
         placed[name] = if i < 2 { "m-00001-of-00002.safetensors" } else { "m-00002-of-00002.safetensors" };
     }
@@ -346,9 +346,9 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
         placed,
     )).unwrap();
 
-    assert out.contains("use { TreeMap } from \"core:collections\";\n");
+    assert out.contains("use { HashMap } from \"core:collections\";\n");
     assert out.contains(
-        "pub fn load(backend: &mut Bk, shards: &TreeMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError> with _ {",
+        "pub fn load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError> with _ {",
     );
     assert out.contains("let header = read_shards(shards)?;");
     assert out.contains(
@@ -1102,15 +1102,15 @@ g (float[N, 2] map) => (float[N, 2] Y)
 
 test "a tensor named as the map a sharded load takes keeps its name where the module imports none" {
     let source = `
-g (float[N, 2] TreeMap) => (float[N, 2] Y)
+g (float[N, 2] HashMap) => (float[N, 2] Y)
 <>
 {
-    Y = Relu(TreeMap)
+    Y = Relu(HashMap)
 }
 `;
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains("backend.read(TreeMap)");
+    assert out.contains("backend.read(HashMap)");
 }
 
 test "a sharded checkpoint that supplies no weight imports no map" {
@@ -1128,7 +1128,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
             rule("B", ["In"]),
         ],
     }).unwrap();
-    let out = emit(&graph, &checked, &RUNTIME, true, Placement::Shards(TreeMap::new())).unwrap();
+    let out = emit(&graph, &checked, &RUNTIME, true, Placement::Shards(HashMap::new())).unwrap();
 
     assert !out.contains("core:collections");
     assert out.contains("pub fn embedded(");
