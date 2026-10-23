@@ -17,9 +17,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
-    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
-    option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
+    cm_raw_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const, if_stmt, internal_call,
+    is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
+    return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};

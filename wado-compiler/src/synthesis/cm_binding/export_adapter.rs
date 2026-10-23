@@ -25,8 +25,8 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_canonical_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
-    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
+    cm_canonical_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     param_local, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
@@ -36,9 +36,9 @@ use super::cm_free::{
 use super::import_adapter::make_binding_function;
 use super::lift::{lift_string_and_free, materialize_if_needed, synthesize_lift_into};
 use super::lower::buffer_bytes;
-use super::lower::{list_element, list_len};
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
+use super::lower::{list_element, list_len};
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_from_type_id,
     cm_val_type_to_type_id, cm_zero, coerce_flat_lift, coerce_flat_lower,

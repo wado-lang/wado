@@ -1282,9 +1282,7 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a reference's referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
-    /// Those reads no path reads the local again after, with the local. A final
-    /// read elsewhere — a reference's referent, a projection base — takes no
-    /// value, so it moves nothing.
+    /// Those reads no path reads the local again after, with the local.
     final_reads: Vec<(&'a TirExpr, u32)>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation<'a>>,
@@ -1436,7 +1434,12 @@ impl<'a> Analyzer<'a> {
 
     /// A `&place` / `&mut place`. The referent stays live, but a reference takes no
     /// value, so it never ends the local's final use. Returns the referent.
-    fn ref_read(&mut self, place: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) -> Option<u32> {
+    fn ref_read(
+        &mut self,
+        place: &'a TirExpr,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) -> Option<u32> {
         match &place.kind {
             TirExprKind::Local { index, .. } => {
                 live.insert(*index);
@@ -2778,7 +2781,7 @@ impl<'a> Analyzer<'a> {
                             .or_default()
                             .push((**value).clone());
                         // A whole-local assignment repoints the binding unless
-                        // `in_place_assigns` finds a holder of its storage.
+                        // `mark_in_place_assigns` finds a holder of its storage.
                         let start = self.mutations.len();
                         self.mark_local_mutated(*index, true, live);
                         self.note_assign_site(expr, target, start, live);
