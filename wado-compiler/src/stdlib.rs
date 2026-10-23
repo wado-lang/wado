@@ -170,16 +170,13 @@ stdlib_table! {
     "core:eval" => "core/eval.wado",
     "core:eval/eval_host.wado" => "core/eval/eval_host.wado",
     "core:coverage/coverage_host.wado" => "core/coverage/coverage_host.wado",
-    "core:process" => "core/process.wado",
-    "core:process/process.wado" => "core/process/process.wado",
-    "core:process/types.wado" => "core/process/types.wado",
 }
 
 /// The `core:*` packages whose submodules are generated from WIT, so their
 /// declarations carry `#[cm]` bindings the CM registry owns. Each facade
 /// (`core:<package>`) is hand-written; its submodules live under
 /// `core:<package>/`.
-pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage", "process"];
+pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage"];
 
 /// Whether `name` (a `ModuleSource::Core` name such as `"kiln/types.wado"`)
 /// is a [`WIT_CORE_PACKAGES`] facade or one of its submodules.
