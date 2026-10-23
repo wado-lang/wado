@@ -60,7 +60,7 @@ test {
 ```
 
 An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
-newtypes), named through it as `Geo::Point`. A
+`resource`), named through it as `Geo::Point`. A
 [`use` without `from`](./spec-modules.md#re-exports-pub-use) brings one to
 module level.
 

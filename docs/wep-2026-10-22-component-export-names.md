@@ -57,10 +57,12 @@ A string is not an identifier, so a string-named import takes `as`.
 ### A short name collides into an error
 
 Each interface is also offered under its short name, its last label in
-`PascalCase`, as it is today. Where the short names of two interfaces
-coincide, the short name is an error at the `use` that names their full names.
-Only the renamed import reaches either. A short name never answers with the
-first interface, nor with an unspecified one.
+`PascalCase`, as it is today, and each type an interface declares, a resource
+included, under its own name. These names and the plain-named exports share
+the module's one namespace. Where two of them coincide, whether two interfaces,
+two types, or a type and an interface, the name is an error at the `use` that
+names what it could mean. Only a path through a full name reaches either. A
+short name never answers with the first item, nor with an unspecified one.
 
 This is the rule a package's default interfaces already follow for their
 functions
@@ -75,6 +77,11 @@ also be imported by its full name:
 ```wado
 use { "wasi:cli/stdout" as Stdout } from "wasi:cli";
 ```
+
+The short-name rule does not reach them. A `wasi:*` module is Wado source, and
+its module-level names are the ones its `pub use` list chooses: `wasi:sockets`
+offers the `ErrorCode` of `wasi:sockets/types`, though
+`wasi:sockets/ip-name-lookup` declares one too.
 
 A world is not imported by its full name. A `.wasm` cannot offer one, since its
 world's name is not observed (see the known gap below), and a world one module
@@ -108,11 +115,13 @@ interface Geo {
 }
 ```
 
-A type is also offered under its own name at module level, as the `wasi:*`
-modules offer theirs: the module behaves as if it held
-`pub use { Geo::{Point} };` for each interface type. A name two interfaces'
-types share is left out by the short-name rule: importing it is an error, and
-only the path through an interface reaches either.
+A component's module also offers the type under its own name, as if it held
+`pub use { Geo::{Point} };`, within the short-name rule above.
+
+A module that declares types in an interface makes that module their declaring
+module, as
+[§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
+requires of every module declaring a `#[cm]` type.
 
 ### A `use` without `from` names this module's items
 
@@ -124,8 +133,11 @@ interface declares reaches module level:
 ```wado
 pub use { Geo::{Point} };          // Point, the same type as Geo::Point
 internal use { Geo::{Point as P} };
-export use { Geo::{Point} };       // also published in the package's interface
 ```
+
+Its interface publishes such a type, so `export use` never names one, as it
+never names a `#[cm]` type
+([Published Types](./spec-components.md#published-types)).
 
 The ES module integration draws the same line: `export { x } from "m"`
 re-exports another module's binding and `export { x as y }` this one's, as
@@ -165,31 +177,31 @@ with RenderHook => &mut hook do {
 Its full name is `"wado-lang:marl/render-hook" as RenderHook`.
 
 An interface name has one declaration in the whole program, as
-[§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md) asks of
-every WIT name. Two components that import `x:y/log` name one Wado interface,
-so one handler serves both. Their shapes of it must agree, and a disagreement
-is an error naming both files.
+[§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
+asks of every WIT name. Two components that import `x:y/log` name one Wado
+interface, so one handler serves both. Their shapes of it must agree, and a
+disagreement is an error naming both files.
 
 ## Roadmap
 
 - [ ] A string-named import parses, and reaches an interface of a `.wasm` or a
   WIT-generated module by its full name, with or without its version.
-- [ ] A short name two interfaces share is an error naming their full names. The
-  fixture from issue #2421 imports both `trip` interfaces by full name.
+- [ ] A module-level name two items of a component share is an error naming
+  what it could mean. The fixture from issue #2421 imports both `trip`
+  interfaces by full name.
 - [ ] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.
 - [ ] A Wado `interface` declares types, named through it, and
   `use { Iface::{T} };` without `from` brings one to module level at any
   visibility.
-- [ ] A component's and a `wasi:*` module's interface types are named through
-  their interface, and a type name two interfaces share is an error at module
-  level.
+- [ ] A component's interface types are named through their interface, and
+  offered at module level under the short-name rule.
 - [ ] A component's imported interface is named as an export is, and two
   components importing one interface name one declaration, whose shapes must
   agree.
 
-## Known gap: a component that imports and exports one interface
+## Known gap: one interface imported and exported
 
 A component may import an interface and export the same one, as a filter that
 wraps whatever provides `x:y/filter` does. Its module would then offer one
@@ -197,6 +209,23 @@ interface name for two declarations: the import its consumer handles and the
 export its consumer calls. Naming that interface in a `use`, by either name, is
 an error. What it admits is a component no Wado program can call through that
 interface.
+
+Across two components the same name meets the one-declaration rule: one
+component exports `x:y/log` and another imports it. Whether `Log::emit()` calls
+the first or dispatches to a handler for the second, and which module declares
+the one `Log`, is not decided.
+
+## Known gap: the visibility of an interface's types
+
+Whether a type declared in an interface carries a visibility of its own, and
+whether its fields must be `pub` as a WIT record's are, is not decided.
+
+## Known gap: a newtype in an interface
+
+An interface writes its members as a trait does, so `type Meters = f64;` inside
+one reads as an associated type. A WIT type alias in a component's interface
+is synthesized as a newtype named through it, but no Wado spelling declares
+one.
 
 ## Known gap: a component's world name is not observed
 

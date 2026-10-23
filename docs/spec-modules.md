@@ -391,10 +391,10 @@ test "a .txt file under generator is a generator's input" {
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file | Exposes as                                                                            | Call style                                    |
-| ------------- | ------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Core module   | One free `pub fn` per function export                                                 | `helper(x)` — plain function                  |
-| CM component  | One Wado `interface` per exported CM interface; the default one's functions also free | `Iface::method(x)`, or `method(x)` if default |
+| Imported file | Exposes as                                                   | Call style                                    |
+| ------------- | ------------------------------------------------------------ | --------------------------------------------- |
+| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                  |
+| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default |
 
 <!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
 
@@ -452,15 +452,17 @@ or side-car `.wit` is involved.
   same way. A full name may leave out its version where the module offers that
   interface at one version; where it offers two, the version is required.
 - An exported interface becomes a Wado `interface`, also offered under its
-  short name: its last label in `PascalCase` (`Trip`). Where two interfaces
-  share a short name, importing it is an error that names their full names, and
-  only a full-name import reaches either.
+  short name: its last label in `PascalCase` (`Trip`).
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
   and a type alias a newtype. Each is named through its interface
   (`Geo::Point`), and also by its own name at module level, as if the module
-  held `pub use { Geo::{Point} };`. A name two interfaces' types share is an
-  error to import.
+  held `pub use { Geo::{Point} };`.
+- Short names, module-level type names and plain-named exports share the
+  module's one namespace. A name two of them share is an error to import that
+  names what it could mean, and only a path through a full name reaches either.
+  A `wasi:*` module is Wado source, so its module-level names are the ones its
+  own `pub use` list gives.
 - A non-WASI interface the component imports is an item of its module too,
   named by the same rules as an export. An interface name has one declaration
   in the whole program, so two components importing it name one Wado

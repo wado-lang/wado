@@ -474,7 +474,9 @@ where a module declares into `wasi:*` or `core:*`, which the standard library
 already owns. It also requires that a module's types for one interface stay in
 that module. Splitting them across files is rejected, because
 the second file is a second declaring module. The `interface` whose operations
-name those types is free to sit elsewhere, since it declares no type of its own.
+name those types is free to sit elsewhere while it declares none of them; one
+that declares a type makes its own module the declaring module
+([WEP: A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)).
 
 A name is never a map key, never an equality operand, and never a parameter that
 decides which declaration is meant.
