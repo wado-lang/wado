@@ -1517,9 +1517,9 @@ test "a control byte outside JSON's four is not whitespace" {
 }
 
 test "a container reports a bad separator or a missing end where it stops" {
-    assert de_err::<List<i32>>("[1 2]") == DeserializeError::malformed("expected ',' or ']'", 3);
-    assert de_err::<List<i32>>("[1") == DeserializeError::eof(2);
-    assert de_err::<List<i32>>("[") == DeserializeError::eof(1);
+    assert de_err::<List<i32>>("[1 2]") == DeserializeError::malformed("expected ',' or ']'", 3).within_item(&1);
+    assert de_err::<List<i32>>("[1") == DeserializeError::eof(2).within_item(&1);
+    assert de_err::<List<i32>>("[") == DeserializeError::eof(1).within_item(&0);
     assert de_err::<List<i32>>("{}") == DeserializeError::malformed("expected '[', found '{'", 0);
 
     assert de_err::<TreeMap<String, i32>>(`{"a":1 "b":2}`) == DeserializeError::malformed("expected ',' or '}'", 7);
@@ -1824,8 +1824,8 @@ test "a point or an exponent needs a digit after it" {
     assert de_err::<f64>("1e") == DeserializeError::eof(2);
     assert de_err::<f64>("1e+") == DeserializeError::eof(3);
 
-    let point = DeserializeError::malformed("expected digit after '.'", 3);
-    let exponent = DeserializeError::malformed("expected digit in exponent", 3);
+    let point = DeserializeError::malformed("expected digit after '.'", 3).within_item(&0);
+    let exponent = DeserializeError::malformed("expected digit in exponent", 3).within_item(&0);
     assert de_err::<List<f64>>("[1.e5]") == point;
     assert de_err::<List<i32>>("[1.]") == point;
     assert de_err::<List<i64>>("[1.]") == point;
@@ -1833,7 +1833,7 @@ test "a point or an exponent needs a digit after it" {
     assert de_err::<List<i128>>("[1.]") == point;
     assert de_err::<List<i64>>("[1e]") == exponent;
     assert de_err::<List<u32>>("[2E]") == exponent;
-    assert de_err::<List<f64>>("[1E-]") == DeserializeError::malformed("expected digit in exponent", 4);
+    assert de_err::<List<f64>>("[1E-]") == DeserializeError::malformed("expected digit in exponent", 4).within_item(&0);
 }
 
 test "a string rejects an unescaped control character" {
@@ -1941,4 +1941,30 @@ test "an internal tag must be present, name a case, and stand under a key" {
     assert from_string::<Tagged>(`{"type":"Join"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
     assert from_string::<Tagged>(`{type:"Empty"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
     assert from_bytes::<Tagged>(b"{\"\xff\":1}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+struct PathLeaf {
+    n: i32,
+}
+
+struct PathRoot {
+    items: List<PathLeaf> = [],
+    by: TreeMap<String, PathLeaf> = TreeMap::new(),
+    stage: Option<Tagged> = null,
+    either: Result<PathLeaf, i32> = Result::Err(0),
+}
+
+fn path_of(json: String) -> String {
+    return from_string::<PathRoot>(json).unwrap_err().path;
+}
+
+test "an error names the fields and elements it was reached through" {
+    assert path_of(`{"items":[{"n":1},{"n":"x"}]}`) == "items[1].n";
+    assert path_of(`{"by":{"k":{"n":true}}}`) == `by["k"].n`;
+    assert path_of(`{"stage":{"type":"Join"}}`) == "stage.type";
+    assert path_of(`{"stage":{"type":"Split","pattern":1}}`) == "stage.pattern";
+    assert path_of(`{"either":{"Ok":{"n":null}}}`) == "either.Ok.n";
+    assert path_of(`{"items":7}`) == "items";
+    let e = from_string::<PathRoot>(`{"items":[{"n":"x"}]}`).unwrap_err();
+    assert `${e}` == `items[0].n: ${e.message} at offset ${e.offset}`;
 }

@@ -151,10 +151,44 @@ pub struct DeserializeError {
     /// Byte offset into the input, or `-1` where the failure has no position —
     /// a whole-value rejection, or a format that counts nothing.
     pub offset: i64,
+    /// Where in the value the failure is, as the fields and elements it was
+    /// reached through: `model.vocab`, `added_tokens[2].id`. Empty at the root.
+    pub path: String = "",
+}
+
+/// Called where a read already failed, so a read that succeeds pays nothing
+/// for its path.
+impl DeserializeError {
+    /// This error, reached through the field `name`.
+    pub fn within_field<S: AsStrSlice>(&self, name: S) -> DeserializeError {
+        let mut e = *self;
+        e.path = if e.path.is_empty() || e.path.starts_with("[") {
+            `${name}${e.path}`
+        } else {
+            `${name}.${e.path}`
+        };
+        return e;
+    }
+
+    /// This error, reached through the element or entry `key`: a list's index,
+    /// a map's key, written as `Inspect` writes it.
+    pub fn within_item<K: Inspect>(&self, key: &K) -> DeserializeError {
+        let mut e = *self;
+        e.path = if e.path.is_empty() || e.path.starts_with("[") {
+            `[${key:?}]${e.path}`
+        } else {
+            `[${key:?}].${e.path}`
+        };
+        return e;
+    }
 }
 
 impl Display for DeserializeError {
     fn fmt(&self, f: &mut Formatter) {
+        if !self.path.is_empty() {
+            f.write_str(&self.path);
+            f.write_str(": ");
+        }
         f.write_str(&self.message);
         if self.offset >= 0 {
             f.write_str(` at offset ${self.offset}`);
@@ -1316,12 +1350,24 @@ impl<T: Deserialize> Deserialize for List<T> {
         let mut seq = d.begin_seq()?;
         // Peek at the first element before allocating backing storage, so an
         // empty array allocates none at all.
-        let first_opt = seq.next_element()?;
+        let first_opt = match seq.next_element() {
+            Ok(first) => first,
+            Err(e) => {
+                builtin::cold_path();
+                return Result::Err(e.within_item(&0));
+            },
+        };
         if let Some(first_elem) = first_opt {
             let mut items: List<T> = List::with_capacity(2);
             items.push(first_elem);
             loop {
-                let next_opt = seq.next_element()?;
+                let next_opt = match seq.next_element() {
+                    Ok(next) => next,
+                    Err(e) => {
+                        builtin::cold_path();
+                        return Result::Err(e.within_item(&items.len()));
+                    },
+                };
                 if let Some(item) = next_opt {
                     items.push(item);
                 } else {
@@ -1359,11 +1405,23 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         let mut va = d.begin_variant("Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
-            let val = va.payload()?;
+            let val = match va.payload() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_field("Ok"));
+                },
+            };
             va.end()?;
             return Result::Ok(Result::Ok(val));
         } else if name == "Err" {
-            let val = va.payload()?;
+            let val = match va.payload() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_field("Err"));
+                },
+            };
             va.end()?;
             return Result::Ok(Result::Err(val));
         }
@@ -1764,7 +1822,13 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                             &wire_name(&members[i], policy),
                         )?;
                     }
-                    let value: F = sd.value()?;
+                    let value: F = match sd.value() {
+                        Ok(value) => value,
+                        Err(e) => {
+                            builtin::cold_path();
+                            return Result::Err(e.within_field(wire_name(&members[i], policy)));
+                        },
+                    };
                     slots[i] = Option::Some(value);
                     taken = true;
                 }
@@ -1799,7 +1863,13 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
         if let Some(tag) = ReflectVariant::<V>::wire_tag() {
             let on_duplicate = d.on_duplicate_field();
             let mut sd = d.begin_struct(&Reflect::<V>::type_name(), members.len())?;
-            let name = sd.tag(&tag)?;
+            let name = match sd.tag(&tag) {
+                Ok(name) => name,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_field(&tag));
+                },
+            };
             for let case of members {
                 if wire_name(&case, policy) == name {
                     if case.is_unit() {
@@ -1821,6 +1891,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
                 kind: DeserializeErrorKind::UnknownVariant,
                 message: `unknown variant: ${name}`,
                 offset: -1,
+                path: tag,
             });
         }
         let mut va = d.begin_variant(&Reflect::<V>::type_name(), members.len())?;
@@ -1838,7 +1909,13 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
                     va.end()?;
                     return Result::Ok(case.make());
                 }
-                let payload: P = va.payload()?;
+                let payload: P = match va.payload() {
+                    Ok(payload) => payload,
+                    Err(e) => {
+                        builtin::cold_path();
+                        return Result::Err(e.within_field(wire_name(&case, policy)));
+                    },
+                };
                 va.end()?;
                 return Result::Ok(case.construct(payload));
             }

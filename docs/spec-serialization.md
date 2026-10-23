@@ -51,6 +51,16 @@ message, and the byte offset into the input, or `-1` where the failure has no
 position. Nesting deeper than a format's `max_depth` is a `DepthLimitExceeded`
 error, not a trap.
 
+A `DeserializeError` also carries its `path`, the fields and elements the
+failed read was reached through. A struct field is written by its wire name,
+and so is the payload of a case and an internal tag. An element of a list or a
+set is written as `[i]`, and a map value as its key, as `Inspect` writes the key
+(`by["k"]`). Displayed, the error leads with its path: `items[1].n: <message>`.
+Each step is added where the read has already failed, so a read that succeeds
+pays nothing for it.
+
+> Not yet implemented: an element of a tuple adds no step to the path.
+
 A format is self-describing (SD) when the input names what it holds, such as
 `core:json` writing a struct as an object keyed by field name. A
 self-describing format resolves each key to a field by its wire name. A
