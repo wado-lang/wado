@@ -469,7 +469,7 @@ impl Deserialize for EvenOpt;
 test "a field type's own failure reports InvalidValue" {
     assert parse::<EvenOpt>(["--even", "4"]) matches { Ok(o) && o.even.n == 4 };
     assert parse::<EvenOpt>(["--even", "3"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
-        && e.message == "odd" };
+        && e.message == "even: odd" };
     assert parse::<EvenOpt>(["--even", "x"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
@@ -480,7 +480,7 @@ impl Deserialize for MapOpt;
 
 test "a map option is unsupported" {
     let r = parse::<MapOpt>(["--pairs", "a"]);
-    assert r matches { Err(e) && e.message == "core:args does not support map yet" };
+    assert r matches { Err(e) && e.message == "pairs: core:args does not support map yet" };
 }
 
 test "a repeatable option missing its value reports MissingValue" {
