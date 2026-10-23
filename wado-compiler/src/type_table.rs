@@ -1847,7 +1847,8 @@ impl TypeTable {
         });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
-        self.settled_spellings.retain(|id, _| effective_keep.contains(&id));
+        self.settled_spellings
+            .retain(|id, _| effective_keep.contains(&id));
         self.unindexed.retain(|id| effective_keep.contains(id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
