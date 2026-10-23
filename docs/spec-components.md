@@ -206,15 +206,17 @@ with Fetch => &Canned {} do {
 A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
 `Ready<W>` beside the event. `poll` asks without blocking. The event is a
-`ReadyEvent`: `Call` with the `CallState` a call moved to, or `Unreported` for a
-member with no handle for the host to report. A set that drops drops its
-remaining members first.
+`ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
+`CopyResult` a started stream copy ended on, or `Unreported` for a member with
+no handle for the host to report. A set that drops drops its remaining members
+first.
 
 A member is any type implementing `Waitable`. The trait is sealed: the standard
-library implements it on the calls, since a hand-written `waitable_id` could
-name a handle its value does not own. A stream or future end is no member: each
-copy on one waits inside the binding, so the host never has an event left to
-report for it. A set waiting on two kinds takes a variant over them, which
+library implements it on the calls and on the started stream copies
+(`ReadCopy`, `WriteCopy`), since a hand-written `waitable_id` could name a
+handle its value does not own. A bare stream or future end is no member: no
+copy on it is in flight, so the host has no event to report for it. A set
+waiting on two kinds takes a variant over them, which
 derives the trait with the marker `impl Waitable for V;`. Each case holds one member, or none for one that is
 ready without the host:
 

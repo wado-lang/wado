@@ -112,7 +112,9 @@ buffer the host writes into cannot be released under a copy in flight. The
 cancel leaves the set first: the Component Model traps on a synchronous cancel
 against an end in a waitable set. A copy whose event a set already delivered is
 not cancelled, since the Component Model traps on cancelling an end that is no
-longer copying. Either way the end drops with it.
+longer copying. Either way the end drops with it. What a read copy moved is
+lifted and dropped as `finish` would hand it back: lifting is what frees the
+memory and handles the host lowered for the elements.
 
 This makes the cancels reachable for the first time, from the drop alone. A
 program holding an end holds no copy in flight, so it never cancels one itself.
@@ -136,3 +138,12 @@ and `read` read stdout and stderr through one set.
 
 - A future's read cannot be started. A future is read once, so nothing has
   needed to wait on one beside a stream yet.
+- A copy a handler started on another end cannot be cancelled from the end the
+  program read. Dropping it waits until that other end's peer acts, which may
+  be never.
+- A `StartedRead` dropped on its own, outside a `ReadCopy`, holds no end to
+  lift through, so it frees its buffer and leaks what the elements it moved
+  hold in memory or handles.
+- A copy that settled as it started joins a set as `Unreported`, though its
+  result is known, so the same end of stream reads as `Unreported` or
+  `Copied(Dropped)` depending on whether the copy blocked.

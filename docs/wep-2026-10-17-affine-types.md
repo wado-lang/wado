@@ -946,6 +946,13 @@ host's to deliver, and nothing says whether the reader takes it or drops first.
 An end whose copy is still pending cannot be dropped, so the write leaves it to
 the host, and the handle lives until the instance ends.
 
+### An or-pattern leaves a part unbound
+
+A destructuring binds each affine part it leaves under `_` or `..` to a local
+of its own, which drops with the pattern's scope. An or-pattern's alternatives
+share the first one's locals, so a part one alternative leaves unnamed has no
+local to bind, and is lost with the moved scrutinee.
+
 ### A panic drops nothing
 
 A trap unwinds nothing in Wasm, so a resource owned at a panic is held until

@@ -32,8 +32,7 @@ use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructPatternField,
-    TirTemplatePart, TirUnaryOp, TypeId,
+    TirStructPatternField, TirTemplatePart, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
