@@ -33,7 +33,7 @@ test "a write copy dropped in flight cancels, and the reader sees the end go" {
 test "a copy a set reported finishes on what the set took" {
     let [reader, writer] = Stream::<u8>::new();
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
-    set.join(reader.start_read(4));
+    set.insert(reader.start_read(4));
     let writing = writer.start_write([7, 8]);
     let ready = set.wait();
     assert ready.event matches { Copied(Completed) };
@@ -47,7 +47,7 @@ test "a copy a set reported finishes on what the set took" {
 test "a copy a set reported drops without a cancel" {
     let [reader, writer] = Stream::<u8>::new();
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
-    set.join(reader.start_read(4));
+    set.insert(reader.start_read(4));
     let writing = writer.start_write([9]);
     builtin::drop(set.wait().member);
     let [tx, written] = writing.finish();
@@ -58,18 +58,18 @@ test "a copy a set reported drops without a cancel" {
 test "a write copy a set reported drops without a cancel" {
     let [reader, writer] = Stream::<u8>::new();
     let mut set = WaitableSet::<WriteCopy<u8>>::new();
-    set.join(writer.start_write([5]));
+    set.insert(writer.start_write([5]));
     let [rx, chunk] = reader.start_read(4).finish();
     rx.drop();
     builtin::drop(set.wait().member);
     assert chunk.items == [5];
 }
 
-test "a copy that settled as it started joins ready with its result" {
+test "a copy that settled as it started enters ready with its result" {
     let [reader, writer] = Stream::<u8>::new();
     let writing = writer.start_write([6]);
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
-    set.join(reader.start_read(4));
+    set.insert(reader.start_read(4));
     let ready = set.wait();
     assert ready.event matches { Copied(Completed) };
     let [rx, chunk] = ready.member.finish();
@@ -79,13 +79,13 @@ test "a copy that settled as it started joins ready with its result" {
     assert chunk.items == [6];
 }
 
-test "a copy one set reported joins another ready" {
+test "a copy one set reported enters another ready" {
     let [reader, writer] = Stream::<u8>::new();
     let mut first = WaitableSet::<ReadCopy<u8>>::new();
-    first.join(reader.start_read(4));
+    first.insert(reader.start_read(4));
     let writing = writer.start_write([7]);
     let mut second = WaitableSet::<ReadCopy<u8>>::new();
-    second.join(first.wait().member);
+    second.insert(first.wait().member);
     let ready = second.wait();
     assert ready.event matches { Copied(Completed) };
     let [rx, chunk] = ready.member.finish();
@@ -99,8 +99,8 @@ test "copies a set reported finish in any order" {
     let [reader_a, writer_a] = Stream::<u8>::new();
     let [reader_b, writer_b] = Stream::<u8>::new();
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
-    set.join(reader_a.start_read(4));
-    set.join(reader_b.start_read(4));
+    set.insert(reader_a.start_read(4));
+    set.insert(reader_b.start_read(4));
     let writing_a = writer_a.start_write([1]);
     let writing_b = writer_b.start_write([2]);
     let first = set.wait().member;

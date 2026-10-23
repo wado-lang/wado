@@ -1,4 +1,4 @@
-// `cancel` consumes an `AsyncCall` as `wait` does, so a `join` after it is a
+// `cancel` consumes an `AsyncCall` as `wait` does, so an `insert` after it is a
 // use after move.
 
 use { MonotonicClock } from "wasi:clocks";
@@ -7,7 +7,7 @@ export fn run() with MonotonicClock {
     let call = MonotonicClock::wait_for(1_000_000_000);
     call.cancel();
     let mut set = WaitableSet::<AsyncCall<()>>::new();
-    set.join(call);
+    set.insert(call);
 }
 
 __DATA__
