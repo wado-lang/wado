@@ -32,9 +32,9 @@ fn stmt_always_exits(types: &impl ExprTypes, stmt: &ast::Stmt) -> bool {
     }
     match stmt {
         ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
-        ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().is_some_and(|else_block| {
-            block_always_exits(types, &if_stmt.then_block) && block_always_exits(types, else_block)
-        }),
+        ast::Stmt::If(if_stmt) => {
+            branches_always_exit(types, &if_stmt.then_block, if_stmt.else_block.as_ref())
+        }
         ast::Stmt::Loop(loop_stmt) => !loop_body_can_escape(&loop_stmt.body),
         // `while true` is the same loop written differently: reify desugars it
         // to `loop { if !true { break } B }`, so only a `break` in `B` ends it.
@@ -105,6 +105,16 @@ fn condition_always_exits(types: &impl ExprTypes, condition: &ast::Condition) ->
     expr_always_exits(types, first)
 }
 
+fn branches_always_exit(
+    types: &impl ExprTypes,
+    then_block: &ast::Block,
+    else_block: Option<&ast::Block>,
+) -> bool {
+    else_block.is_some_and(|else_block| {
+        block_always_exits(types, then_block) && block_always_exits(types, else_block)
+    })
+}
+
 fn arms_always_exit(types: &impl ExprTypes, arms: &[ast::MatchArm]) -> bool {
     !arms.is_empty() && arms.iter().all(|a| expr_always_exits(types, &a.body))
 }
@@ -124,10 +134,7 @@ pub(crate) fn expr_always_exits(types: &impl ExprTypes, expr: &ast::Expr) -> boo
         ast::Expr::LabeledBlock(lb) => labeled_block_always_exits(types, &lb.block, &lb.label),
         ast::Expr::If(if_expr) => {
             condition_always_exits(types, &if_expr.condition)
-                || if_expr.else_block.as_ref().is_some_and(|else_block| {
-                    block_always_exits(types, &if_expr.then_block)
-                        && block_always_exits(types, else_block)
-                })
+                || branches_always_exit(types, &if_expr.then_block, if_expr.else_block.as_ref())
         }
         ast::Expr::Match(m) => exits(&m.expr) || arms_always_exit(types, &m.arms),
         ast::Expr::Matches(m) => exits(&m.expr),
