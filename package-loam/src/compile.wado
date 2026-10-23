@@ -22,6 +22,8 @@ export struct Options {
     /// Patterns naming the axes of the graph's inputs and initializers.
     pub layout: List<LayoutRule> = [],
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
+    /// A `TreeMap`, since the options cross the generator's component boundary
+    /// and a `HashMap` does not.
     pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],

@@ -1,7 +1,7 @@
 //! The Wado a checked graph becomes: one marker type per axis, the kernels
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
-use { HashMap, TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Poly } from "./poly.wado";
@@ -173,7 +173,7 @@ pub fn emit(
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &placement);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
-        values: TreeMap::<String, String>::new(),
+        values: HashMap::<String, String>::new(),
         scalars,
         rhs,
     };
@@ -184,9 +184,9 @@ pub fn emit(
 /// The length of each axis that every input, output and weight naming it fixes
 /// to one, which the caller then writes as the axis's `EXTENT` rather than a
 /// number. A weight's extents are its checkpoint header's, read at build time.
-fn boundary_extents(graph: &Graph, shapes: &TreeMap<String, Shape>) -> TreeMap<String, i32> {
-    let mut fixed = TreeMap::<String, i32>::new();
-    let mut open = TreeSet::<String>::new();
+fn boundary_extents(graph: &Graph, shapes: &HashMap<String, Shape>) -> HashMap<String, i32> {
+    let mut fixed = HashMap::<String, i32>::new();
+    let mut open = HashSet::<String>::new();
     for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
         for let vi of *declared {
             for let axis of shapes.get(vi.name).unwrap().axes {
@@ -208,8 +208,8 @@ fn boundary_extents(graph: &Graph, shapes: &TreeMap<String, Shape>) -> TreeMap<S
 
 /// What each boundary tensor is held in, and where an element type no kernel
 /// reaches stops the build. A node's own output is held as it is computed.
-fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError> {
-    let mut held = TreeMap::<String, String>::new();
+fn boundary_elements(graph: &Graph) -> Result<HashMap<String, String>, EmitError> {
+    let mut held = HashMap::<String, String>::new();
     for let declared of [&graph.inputs, &graph.initializers, &graph.outputs] {
         for let vi of *declared {
             let Some(element) = element_of(&vi.dtype) else {
@@ -228,8 +228,8 @@ fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError
 /// Every identifier the generated module declares, minted from one set: the
 /// axes, then each tensor name sanitized. Two that collide stop the build.
 struct Names {
-    idents: TreeMap<String, String>,
-    reserved: TreeSet<String>,
+    idents: HashMap<String, String>,
+    reserved: HashSet<String>,
 }
 
 impl Names {
@@ -263,21 +263,21 @@ impl Names {
             tensors.push(symbol_key(&c.solved.symbol));
         }
         // In first-seen order, each tensor once.
-        let mut sanitized = TreeMap::<String, String>::new();
+        let mut sanitized = HashMap::<String, String>::new();
         for let tensor of tensors {
             if !sanitized.contains_key(tensor) {
                 sanitized[tensor] = sanitize(&tensor);
             }
         }
-        let mut claimed = TreeSet::<String>::new();
+        let mut claimed = HashSet::<String>::new();
         for let [_, ident] of sanitized.entries() {
             claimed.insert(*ident);
         }
         let mut names = Names {
-            idents: TreeMap::<String, String>::new(),
+            idents: HashMap::<String, String>::new(),
             reserved,
         };
-        let mut taken = TreeMap::<String, String>::new();
+        let mut taken = HashMap::<String, String>::new();
         for let [tensor, ident] of sanitized.entries() {
             names.take(&mut taken, tensor, *ident, &claimed)?;
         }
@@ -290,10 +290,10 @@ impl Names {
     /// renaming takes no other tensor's.
     fn take(
         &mut self,
-        taken: &mut TreeMap<String, String>,
+        taken: &mut HashMap<String, String>,
         tensor: &String,
         ident: String,
-        claimed: &TreeSet<String>,
+        claimed: &HashSet<String>,
     ) -> Result<(), EmitError> {
         let mut ident = ident;
         if is_bound(&self.reserved, &ident) {
@@ -346,13 +346,13 @@ global RUNTIME_NAMES: List<String> = [
 ];
 
 /// Whether `name` already means something in the generated module.
-fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
+fn is_bound(module: &HashSet<String>, name: &String) -> bool {
     return module.contains(*name) || is_reserved(name);
 }
 
 /// The names the generated module binds beyond the language's own.
-fn module_idents() -> TreeSet<String> {
-    let mut reserved = TreeSet::<String>::new();
+fn module_idents() -> HashSet<String> {
+    let mut reserved = HashSet::<String>::new();
     for let name of RUNTIME_NAMES {
         reserved.insert(name);
     }
@@ -425,9 +425,9 @@ fn emit_weights(
     graph: &Graph,
     checked: &Checked,
     names: &Names,
-    held: &TreeMap<String, String>,
+    held: &HashMap<String, String>,
     kept: &List<String>,
-    rhs: &TreeMap<String, bool>,
+    rhs: &HashMap<String, bool>,
     placement: &Placement,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
@@ -536,7 +536,7 @@ enum Holding {
 /// half-precision one is converted once here, so `forward` converts none.
 fn preparation(
     checked: &Checked,
-    held: &TreeMap<String, String>,
+    held: &HashMap<String, String>,
     tensor: &String,
     host: String,
     holding: Holding,
@@ -554,7 +554,7 @@ fn preparation(
 
 /// How the backend holds the weight `tensor`, prepared as a product's right
 /// operand where `rhs` names it.
-fn weight_holding(rhs: &TreeMap<String, bool>, tensor: &String) -> Holding {
+fn weight_holding(rhs: &HashMap<String, bool>, tensor: &String) -> Holding {
     return match rhs.get(*tensor) {
         Some(true) => Holding::KeepRhsTransposed,
         Some(false) => Holding::KeepRhs,
@@ -563,7 +563,7 @@ fn weight_holding(rhs: &TreeMap<String, bool>, tensor: &String) -> Holding {
 }
 
 /// The weight `tensor` as `Prepared` holds it.
-fn weight_type(checked: &Checked, rhs: &TreeMap<String, bool>, tensor: &String) -> String {
+fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, tensor: &String) -> String {
     let Some(transposed) = rhs.get(*tensor) else {
         return prepared_type(checked, tensor);
     };
@@ -578,13 +578,13 @@ fn weight_type(checked: &Checked, rhs: &TreeMap<String, bool>, tensor: &String) 
 /// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
 /// in the layout the product reads, which only a product, a product by its
 /// viewed transpose, and a row gather read.
-fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> TreeMap<String, bool> {
+fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, bool> {
     let mut uses = OperandUses {
-        right: TreeMap::new(),
-        elsewhere: TreeSet::new(),
+        right: HashMap::new(),
+        elsewhere: HashSet::new(),
     };
     uses.note(graph, checked, fuse);
-    let mut out = TreeMap::<String, bool>::new();
+    let mut out = HashMap::<String, bool>::new();
     for let vi of &graph.initializers {
         if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
         ) == 2 {
@@ -597,8 +597,8 @@ fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> TreeMap<String, 
 /// How the nodes read each operand: as a product's right operand, transposed
 /// or not, or some other way.
 struct OperandUses {
-    right: TreeMap<String, bool>,
-    elsewhere: TreeSet<String>,
+    right: HashMap<String, bool>,
+    elsewhere: HashSet<String>,
 }
 
 impl OperandUses {
@@ -614,7 +614,7 @@ impl OperandUses {
             self.elsewhere.insert(vi.name);
         }
         let decided = plan(graph, checked, fuse);
-        let mut viewed = TreeMap::<String, String>::new();
+        let mut viewed = HashMap::<String, String>::new();
         for let [at, node] of graph.nodes.into_iter().enumerate() {
             if decided.lowering(at) matches { Transposed } {
                 viewed[node.outputs[0]] = node.inputs[0];
@@ -666,7 +666,7 @@ fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
 /// Whether `node` reads its operand 1 as the right operand of a matrix
 /// product `matmul_rhs` serves, and if so whether transposed:
 /// `Gemm`'s, and `MatMul`'s beside a left operand of rank 2 or more.
-fn rhs_orientation(node: &Node, shapes: &TreeMap<String, Shape>) -> Option<bool> {
+fn rhs_orientation(node: &Node, shapes: &HashMap<String, Shape>) -> Option<bool> {
     if node.op == "Gemm" {
         return Option::Some(settled(gemm_options(node)).3);
     }
@@ -695,8 +695,8 @@ fn emit_constructor(
     graph: &Graph,
     checked: &Checked,
     names: &Names,
-    held: &TreeMap<String, String>,
-    rhs: &TreeMap<String, bool>,
+    held: &HashMap<String, String>,
+    rhs: &HashMap<String, bool>,
     kept: &List<String>,
     placement: &Placement,
 ) {
@@ -761,41 +761,41 @@ fn checkpoint_payload(e: &Expected, placement: &Placement) -> String {
 
 /// What each tensor is called inside `forward`, each a value the backend holds.
 struct Operands {
-    values: TreeMap<String, String>,
+    values: HashMap<String, String>,
     /// A folded float of one element, as the constant an `Expr` folds in.
-    scalars: TreeMap<String, f32>,
+    scalars: HashMap<String, f32>,
     /// The weights held as a product's right operand, which only `matmul_rhs`
     /// reads, as `rhs_weights` finds them.
-    rhs: TreeMap<String, bool>,
+    rhs: HashMap<String, bool>,
     /// What a kernel `Plan` fuses into the kernel after it computes, not yet
     /// written.
-    pending: TreeMap<String, Term> = TreeMap::new(),
+    pending: HashMap<String, Term> = HashMap::new(),
     /// The weight each `Transposed` lowering's output is the transpose of,
     /// which the product reading it reads as stored.
-    transposed: TreeMap<String, String> = TreeMap::new(),
+    transposed: HashMap<String, String> = HashMap::new(),
     /// The tensors whose value is a reference already: `pass`'s inputs.
-    borrowed: TreeSet<String> = TreeSet::new(),
+    borrowed: HashSet<String> = HashSet::new(),
 }
 
 /// The lengths only the run knows, each bound in `forward` from the first input
 /// axis that carries it, once something spells it.
 struct Symbols {
-    idents: TreeMap<String, String>,
-    sources: TreeMap<String, String>,
+    idents: HashMap<String, String>,
+    sources: HashMap<String, String>,
     /// The symbols in the order `forward` binds them, each after those its source reads.
     order: List<String>,
-    requires: TreeMap<String, List<String>>,
-    used: TreeSet<String>,
+    requires: HashMap<String, List<String>>,
+    used: HashSet<String>,
 }
 
 impl Symbols {
     fn of(carriers: &List<Carrier>, names: &Names) -> Symbols {
         let mut symbols = Symbols {
-            idents: TreeMap::<String, String>::new(),
-            sources: TreeMap::<String, String>::new(),
+            idents: HashMap::<String, String>::new(),
+            sources: HashMap::<String, String>::new(),
             order: [],
-            requires: TreeMap::<String, List<String>>::new(),
-            used: TreeSet::<String>::new(),
+            requires: HashMap::<String, List<String>>::new(),
+            used: HashSet::<String>::new(),
         };
         for let c of *carriers {
             let Solved { symbol, coefficient, rest, .. } = c.solved;
@@ -889,7 +889,7 @@ struct Carrier {
     axis: i32,
 }
 
-fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carrier> {
+fn symbol_carriers(graph: &Graph, shapes: &HashMap<String, Shape>) -> List<Carrier> {
     let mut extents: List<Extent> = [];
     let mut sites: List<[String, i32]> = [];
     for let vi of &graph.inputs {
@@ -923,7 +923,7 @@ fn emit_forward(
     graph: &Graph,
     checked: &Checked,
     names: &Names,
-    held: &TreeMap<String, String>,
+    held: &HashMap<String, String>,
     mut exprs: Operands,
     literals: &Literals,
     kept: &List<String>,
@@ -1303,7 +1303,7 @@ fn indented(lines: List<String>) -> List<String> {
 }
 
 /// The struct `forward` returns a graph's several outputs in, one field each.
-fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
+fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &HashMap<String, String>) {
     let mut outputs = StructSpec::new("Outputs", Vis::Pub);
     for let vi of &graph.outputs {
         outputs.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
@@ -1314,8 +1314,8 @@ fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
 }
 
 /// Every folded float of one element, as the constant an `Expr` folds in.
-fn scalar_literals(checked: &Checked) -> TreeMap<String, f32> {
-    let mut scalars = TreeMap::<String, f32>::new();
+fn scalar_literals(checked: &Checked) -> HashMap<String, f32> {
+    let mut scalars = HashMap::<String, f32>::new();
     for let [name, k] of checked.known.entries() {
         if let Floats(v) = k.elements && v.len() == 1 {
             scalars[*name] = v[0];
@@ -1330,20 +1330,20 @@ struct Literals {
     /// A tensor a node names again under the same axes (`is_alias`), and the
     /// spelled one it reads: a transformer names its mask once per layer, and
     /// the mask is as large as the context.
-    aliases: TreeMap<String, String>,
+    aliases: HashMap<String, String>,
 }
 
 /// The folded tensors something reads as a tensor: all a kernel reads or the
 /// graph returns, save a scalar an `Expr` folds.
-fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f32>) -> Literals {
-    let mut sources = TreeMap::<String, String>::new();
+fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f32>) -> Literals {
+    let mut sources = HashMap::<String, String>::new();
     for let node of &graph.nodes {
         if is_alias(node, checked) && checked.known.contains_key(node.outputs[0]) {
             sources[node.outputs[0]] = node.inputs[0];
         }
     }
-    let mut literals = Literals { spelled: [], aliases: TreeMap::<String, String>::new() };
-    let mut spelled_for = TreeMap::<String, String>::new();
+    let mut literals = Literals { spelled: [], aliases: HashMap::<String, String>::new() };
+    let mut spelled_for = HashMap::<String, String>::new();
     for let [name, _] of checked.known.entries() {
         if !checked.shapes.contains_key(*name)
             || scalars.contains_key(*name) && !read_as_tensor(graph, checked, scalars, name) {
@@ -1365,7 +1365,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f
 }
 
 /// Whether a folded scalar is returned, or read where no `Expr` folds it.
-fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f32>, scalar: &String) -> bool {
+fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f32>, scalar: &String) -> bool {
     if graph.outputs.position(|vi| vi.name == *scalar) matches { Some(_) } {
         return true;
     }
@@ -1483,9 +1483,9 @@ struct InputChecks {
     spelled: List<SpelledAxis>,
 }
 
-fn input_checks(graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) -> InputChecks {
+fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names) -> InputChecks {
     let mut checks = InputChecks { held: [], host: [], spelled: [] };
-    let mut first_seen = TreeMap::<String, String>::new();
+    let mut first_seen = HashMap::<String, String>::new();
     let mut agreements: List<String> = [];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
@@ -1522,13 +1522,13 @@ fn input_checks(graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) -
 
 /// Whether a boundary tensor is held in something other than what the kernels
 /// compute it in, so `forward` converts it on the way past.
-fn converted(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> bool {
+fn converted(checked: &Checked, held: &HashMap<String, String>, tensor: &String) -> bool {
     return held.get(*tensor).unwrap() != checked.primitives.get(*tensor).unwrap();
 }
 
 /// A tensor's type, as the axis marker types name it. A tensor the boundary
 /// does not declare is held in what stage 0 computes it in.
-fn tensor_type(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> String {
+fn tensor_type(checked: &Checked, held: &HashMap<String, String>, tensor: &String) -> String {
     let shape = checked.shapes.get(*tensor).unwrap();
     let element = match held.get(*tensor) {
         Some(p) => p,
@@ -1727,7 +1727,7 @@ fn node_term(
 /// The node's operand `index` as a `Term`: the one a fused kernel before it
 /// left pending, or else the tensor read whole, met `trailing` axes before
 /// the output's end.
-fn lane_of(node: &Node, index: i32, shapes: &TreeMap<String, Shape>, exprs: &Operands, trailing: i32) -> Term {
+fn lane_of(node: &Node, index: i32, shapes: &HashMap<String, Shape>, exprs: &Operands, trailing: i32) -> Term {
     let tensor = node.inputs[index];
     if let Some(pending) = exprs.pending.get(tensor) {
         // The plan fuses only a tensor of the reader's own axes.
@@ -1872,8 +1872,8 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
 fn folded_literal(
     node: &Node,
     index: i32,
-    scalars: &TreeMap<String, f32>,
-    shapes: &TreeMap<String, Shape>,
+    scalars: &HashMap<String, f32>,
+    shapes: &HashMap<String, Shape>,
 ) -> Option<f32> {
     let Some(literal) = scalars.get(node.inputs[index]) else {
         return null;
@@ -1892,7 +1892,7 @@ fn folded_literal(
 }
 
 /// A two-operand node's operand expressions and the shapes stage 0 gave them.
-fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> [String, String, Shape, Shape] {
+fn binary_call(node: &Node, shapes: &HashMap<String, Shape>, exprs: &Operands) -> [String, String, Shape, Shape] {
     return [
         exprs.reference(&node.inputs[0]),
         exprs.reference(&node.inputs[1]),
@@ -1904,7 +1904,7 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 /// One binary elementwise node. A folded scalar operand folds into the
 /// operator, so no tensor is allocated for it and the other operand is walked
 /// once.
-fn binary_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Term {
+fn binary_term(node: &Node, shapes: &HashMap<String, Shape>, exprs: &Operands) -> Term {
     // Stage 0 refuses every operator the kernels lack.
     let op = case_named::<BinaryOp>(&node.op).unwrap();
     if let Some(literal) = folded_literal(node, 1, &exprs.scalars, shapes) {
@@ -1920,7 +1920,7 @@ fn binary_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 }
 
 /// The window stage 0 read for a `MaxPool` or `Conv`, as the kernel takes it.
-fn window_geometry(node: &Node, shapes: &TreeMap<String, Shape>, symbols: &mut Symbols) -> Result<String, EmitError> {
+fn window_geometry(node: &Node, shapes: &HashMap<String, Shape>, symbols: &mut Symbols) -> Result<String, EmitError> {
     // Stage 0 owed these already.
     let window = settled(window_of(node, &shapes.get(node.inputs[0]).unwrap(), shapes, &mut []));
     let pads = symbols.spell_polys(&window.pads)?;
@@ -1934,7 +1934,7 @@ fn window_geometry(node: &Node, shapes: &TreeMap<String, Shape>, symbols: &mut S
 /// turbofish spells the output's.
 fn max_pool_call(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     exprs: &Operands,
     symbols: &mut Symbols,
 ) -> Result<String, EmitError> {
@@ -1950,7 +1950,7 @@ fn max_pool_call(
 /// A `Conv` as its kernel's call, every argument written but `then`.
 fn conv_head(
     node: &Node,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     exprs: &Operands,
     symbols: &mut Symbols,
 ) -> Result<String, EmitError> {
@@ -2247,7 +2247,7 @@ struct SpreadOperand {
     product: Shape,
 }
 
-fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> SpreadOperand {
+fn spread_product(s: &Spread, shapes: &HashMap<String, Shape>, exprs: &Operands) -> SpreadOperand {
     return SpreadOperand {
         reference: exprs.reference(&s.operand),
         shape: shapes[s.operand],
@@ -2259,7 +2259,7 @@ fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands)
 /// `transpose2`s followed by its scalars and its bias. Where `spread`, the
 /// product reads the operand its first `Reshape` flattened, batched over the
 /// leading axes, and computes over the axes the second restores.
-fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
+fn gemm_term(node: &Node, shapes: &HashMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let [a, left, product_axes] = match spread {
         Some(s) => [s.reference, s.shape, s.product],
@@ -2301,7 +2301,7 @@ fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spr
 
 /// The axes of `Gemm`'s matrix product, which its bias may rename where they
 /// meet at an extent of 1.
-fn gemm_product(node: &Node, shapes: &TreeMap<String, Shape>) -> Shape {
+fn gemm_product(node: &Node, shapes: &HashMap<String, Shape>) -> Shape {
     let [_, _, trans_a, trans_b] = settled(gemm_options(node));
     let rows = shapes[node.inputs[0]].axes[if trans_a { 1 } else { 0 }];
     let cols = shapes[node.inputs[1]].axes[if trans_b { 0 } else { 1 }];
@@ -2379,7 +2379,7 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool
 /// Every axis name the checked graph uses, in the order stage 0 gave each
 /// tensor its shape, so the emitted module is stable across runs.
 fn axis_names(graph: &Graph, checked: &Checked) -> List<String> {
-    let mut seen = TreeSet::<String>::new();
+    let mut seen = HashSet::<String>::new();
     let mut names: List<String> = [];
     push_scope_axes(&mut names, &mut seen, graph, checked);
     return names;
@@ -2387,7 +2387,7 @@ fn axis_names(graph: &Graph, checked: &Checked) -> List<String> {
 
 /// The axes every tensor a scope gave a shape carries, a constant a kernel
 /// reads among them, then those of each `If`'s branches.
-fn push_scope_axes(names: &mut List<String>, seen: &mut TreeSet<String>, graph: &Graph, checked: &Checked) {
+fn push_scope_axes(names: &mut List<String>, seen: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
     for let [_, shape] of checked.shapes.entries() {
         push_markers(names, seen, &shape.axes);
     }
@@ -2414,7 +2414,7 @@ fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
 
 /// A merged axis is spelled with its parts' markers, so the parts are what the
 /// module declares.
-fn push_markers(names: &mut List<String>, seen: &mut TreeSet<String>, axes: &List<Axis>) {
+fn push_markers(names: &mut List<String>, seen: &mut HashSet<String>, axes: &List<Axis>) {
     for let axis of *axes {
         if !axis.parts.is_empty() {
             push_markers(names, seen, &axis.parts);

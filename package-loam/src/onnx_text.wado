@@ -5,7 +5,7 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "lib:gale" },
     };
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use {
     Attr,
     Dim,
@@ -88,7 +88,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     let mut inputs: List<ValueInfo> = [];
     let mut outputs: List<ValueInfo> = [];
     let mut initializers: List<ValueInfo> = [];
-    let mut constants = TreeMap::<String, Known>::new();
+    let mut constants = HashMap::<String, Known>::new();
     let mut nodes: List<Node> = [];
     for let c of children(s, graph) {
         if !s.is_node(c) {

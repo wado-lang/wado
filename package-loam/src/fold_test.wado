@@ -1,6 +1,6 @@
 //! Stage 0's evaluation of what a graph computes from what the build knows.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { axis_indices, fold } from "./fold.wado";
 use { Attr, Elements, Known, Node, Stored } from "./graph.wado";
@@ -28,8 +28,8 @@ fn node(op: String, inputs: List<String>, attrs: List<Attr>) -> Node {
     };
 }
 
-fn knowns(entries: List<[String, Known]>) -> TreeMap<String, Known> {
-    let mut map = TreeMap::<String, Known>::new();
+fn knowns(entries: List<[String, Known]>) -> HashMap<String, Known> {
+    let mut map = HashMap::<String, Known>::new();
     for let [name, known] of entries {
         map[name] = known;
     }
@@ -37,18 +37,18 @@ fn knowns(entries: List<[String, Known]>) -> TreeMap<String, Known> {
 }
 
 /// A runtime tensor `X` of the given extents, symbolic where negative.
-fn runtime(extents: List<i32>) -> TreeMap<String, Shape> {
+fn runtime(extents: List<i32>) -> HashMap<String, Shape> {
     let mut axes: List<Axis> = [];
     for let [i, e] of extents.into_iter().enumerate() {
         let extent = if e < 0 { Extent::symbol(&"N") } else { Extent::Static(e) };
         axes.push(Axis { name: `A${i}`, extent });
     }
-    let mut shapes = TreeMap::<String, Shape>::new();
+    let mut shapes = HashMap::<String, Shape>::new();
     shapes["X"] = Shape { axes };
     return shapes;
 }
 
-fn folded(n: Node, k: TreeMap<String, Known>) -> Known {
+fn folded(n: Node, k: HashMap<String, Known>) -> Known {
     return fold(&n, &k, &runtime([2, 3, 4])).unwrap().unwrap();
 }
 

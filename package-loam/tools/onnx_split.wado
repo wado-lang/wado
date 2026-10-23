@@ -6,7 +6,7 @@
 use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Graph } from "../src/graph.wado";
 use { external_locations, read_with_external } from "../src/onnx_proto.wado";
 use { print } from "../src/onnx_print.wado";
@@ -36,7 +36,7 @@ fn read_model(source: &String) -> Graph with (Stderr, Exit, Preopens) {
     let bytes = or_exit(fs::read(source), "");
     // An external data file's location is relative to the model's directory.
     let dir = fs::parent(source).map(|p| p.to_string()).unwrap_or("");
-    let mut files = TreeMap::<String, ByteList>::new();
+    let mut files = HashMap::<String, ByteList>::new();
     for let location of or_exit(external_locations(&bytes), `${*source}: `) {
         files[location] = or_exit(fs::read(fs::join(&dir, &location)), "");
     }

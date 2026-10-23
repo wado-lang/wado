@@ -3,7 +3,7 @@
 //! See WEP 2026-09-20 § "Fusion Is Decided by Operator Kind" and
 //! `package-loam/webgpu.md`.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use {
     GROUP_QUERY_ATTENTION,
     Graph,
@@ -54,13 +54,13 @@ pub struct Spread {
 /// How `forward` lowers each of `graph`'s nodes, by position, and each
 /// `Spread` it finds, by the `Gemm`'s output. With `fuse` false it finds none,
 /// since a spread is there for what follows the product to join it.
-fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, TreeMap<String, Spread>] {
+fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, HashMap<String, Spread>] {
     let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
     if !fuse {
-        return [lowered, TreeMap::new()];
+        return [lowered, HashMap::new()];
     }
-    let mut made = TreeMap::<String, i32>::new();
-    let mut read = TreeMap::<String, List<i32>>::new();
+    let mut made = HashMap::<String, i32>::new();
+    let mut read = HashMap::<String, List<i32>>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         for let o of node.outputs {
             made[o] = at;
@@ -80,7 +80,7 @@ fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, T
         let by = read.get(*tensor).unwrap_or([]);
         return if by.len() == 1 { Option::Some(by[0]) } else { null };
     };
-    let mut spreads = TreeMap::<String, Spread>::new();
+    let mut spreads = HashMap::<String, Spread>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         if node.op != "Gemm" || !lowered[at] matches { Kernel } || gemm_transposes_a(&node) {
             continue;
@@ -159,7 +159,7 @@ fn same_axis(a: &Shape, i: i32, b: &Shape, j: i32) -> bool {
 }
 
 /// Records that the node at `at` reads `tensor`.
-fn read_at(readers: &mut TreeMap<String, List<i32>>, tensor: &String, at: i32) {
+fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
     let mut by = readers.get(*tensor).unwrap_or([]);
     by.push(at);
     readers[*tensor] = by;
@@ -318,13 +318,13 @@ pub variant Reason {
 /// Each kernel's decision in one scope, by the first tensor it computes, and
 /// the rows of each kernel that folds along them.
 pub struct Plan {
-    pub decisions: TreeMap<String, Decision>,
+    pub decisions: HashMap<String, Decision>,
     /// A row kernel's whole rows, by the tensor it writes: the extents it
     /// iterates, a row being the last axis.
-    rows: TreeMap<String, Shape>,
+    rows: HashMap<String, Shape>,
     /// How `forward` lowers each node, by position.
     lowered: List<Lowering>,
-    spreads: TreeMap<String, Spread>,
+    spreads: HashMap<String, Spread>,
 }
 
 impl Plan {
@@ -448,8 +448,8 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
     // alias reads the operand, and so it is for a restored product and a
     // flattened operand. A folded node reads only extents, which stage 0
     // already has.
-    let mut aliased = TreeMap::<String, String>::new();
-    let mut readers = TreeMap::<String, List<i32>>::new();
+    let mut aliased = HashMap::<String, String>::new();
+    let mut readers = HashMap::<String, List<i32>>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         match lowered[at] {
             Alias | Flattened | Restored | Transposed => aliased[node.outputs[0]] = original(&aliased, &node.inputs[0]),
@@ -462,14 +462,14 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             },
         }
     }
-    let mut returned = TreeMap::<String, bool>::new();
+    let mut returned = HashMap::<String, bool>::new();
     for let vi of &graph.outputs {
         returned[original(&aliased, &vi.name)] = true;
     }
     // The tensor each kernel's last node writes, by every tensor in it.
-    let mut heads = TreeMap::<String, String>::new();
-    let mut groups = TreeMap::<String, Group>::new();
-    let mut decisions = TreeMap::<String, Decision>::new();
+    let mut heads = HashMap::<String, String>::new();
+    let mut groups = HashMap::<String, Group>::new();
+    let mut decisions = HashMap::<String, Decision>::new();
     for let mut at = graph.nodes.len() - 1; at >= 0; at -= 1 {
         let node = &graph.nodes[at];
         if !lowered[at] matches { Kernel } {
@@ -495,7 +495,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         }
         decisions[tensor] = decision;
     }
-    let mut rows = TreeMap::<String, Shape>::new();
+    let mut rows = HashMap::<String, Shape>::new();
     for let [head, group] of groups.entries() {
         if let Some(space) = group.rows {
             rows[*head] = space;
@@ -506,7 +506,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
 
 /// The axes `forward` computes `tensor` over: its own, or for a `Spread`'s
 /// product those it restores.
-fn space_of(checked: &Checked, spreads: &TreeMap<String, Spread>, tensor: &String) -> Shape {
+fn space_of(checked: &Checked, spreads: &HashMap<String, Spread>, tensor: &String) -> Shape {
     return match spreads.get(*tensor) {
         Some(s) => checked.shapes[s.restored],
         None => checked.shapes[*tensor],
@@ -515,7 +515,7 @@ fn space_of(checked: &Checked, spreads: &TreeMap<String, Spread>, tensor: &Strin
 
 /// The tensor `tensor` names: itself, or what the alias it is the output of
 /// names.
-fn original(aliased: &TreeMap<String, String>, tensor: &String) -> String {
+fn original(aliased: &HashMap<String, String>, tensor: &String) -> String {
     return aliased.get(*tensor).unwrap_or(*tensor);
 }
 
@@ -538,10 +538,10 @@ fn decided(
     node: &Node,
     out: &Shape,
     join: &Option<Join>,
-    readers: &TreeMap<String, List<i32>>,
-    returned: &TreeMap<String, bool>,
-    heads: &TreeMap<String, String>,
-    groups: &TreeMap<String, Group>,
+    readers: &HashMap<String, List<i32>>,
+    returned: &HashMap<String, bool>,
+    heads: &HashMap<String, String>,
+    groups: &HashMap<String, Group>,
 ) -> Decision {
     let Some(joins) = join else {
         return Decision::Written(Reason::Computes(kind_of(&node.op)));

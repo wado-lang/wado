@@ -1,5 +1,5 @@
 use json from "core:json";
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
 
 /// A checkpoint that disagrees with the graph, or is not a safetensors file.
@@ -30,14 +30,14 @@ pub global METADATA_KEY: String = "__metadata__";
 
 /// The header's tensor entries, `METADATA_KEY` skipped.
 struct Header {
-    entries: TreeMap<String, HeaderEntry>,
+    entries: HashMap<String, HeaderEntry>,
 }
 
 impl Deserialize for Header {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Header, DeserializeError> {
         let on_duplicate = d.on_duplicate_field();
         let mut map = d.begin_map()?;
-        let mut entries = TreeMap::<String, HeaderEntry>::new();
+        let mut entries = HashMap::<String, HeaderEntry>::new();
         while let Some(key) = map.next_key::<String>()? {
             if key == METADATA_KEY {
                 let _ = map.next_value::<IgnoredAny>()?;
@@ -56,7 +56,7 @@ impl Deserialize for Header {
 
 /// A checkpoint's header, read, and where its payloads start.
 pub struct Checkpoint {
-    entries: TreeMap<String, HeaderEntry>,
+    entries: HashMap<String, HeaderEntry>,
     data_start: i32,
 }
 

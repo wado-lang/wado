@@ -2,7 +2,7 @@
 //! element type, shape and byte range, then the payloads back to back.
 
 use { from_string, to_string, to_string_pretty } from "core:json";
-use { HashMap, HashSet, TreeMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Deserialize } from "core:serde";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
 use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, shard_not_given } from "./runtime/checkpoint.wado";
@@ -29,7 +29,7 @@ pub fn expected(vi: &ValueInfo, shape: &Shape) -> Expected {
 /// as the build compiles it.
 pub fn check_checkpoint(
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     checkpoint: &Checkpoint,
 ) -> Result<(), LoadError> {
     return check_held(graph, shapes, checkpoint, |_| true);
@@ -55,7 +55,7 @@ pub fn placement(graph: &Graph, index: &HashMap<String, String>) -> Result<HashM
 /// answers for the graph.
 pub fn check_shard(
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     placed: &HashMap<String, String>,
     shard: &String,
     checkpoint: &Checkpoint,
@@ -77,7 +77,7 @@ pub fn check_shards_given(placed: &HashMap<String, String>, given: &HashSet<Stri
 /// that `holds` names.
 fn check_held(
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    shapes: &HashMap<String, Shape>,
     checkpoint: &Checkpoint,
     holds: fn(&String) -> bool,
 ) -> Result<(), LoadError> {
@@ -193,7 +193,7 @@ pub fn split_weights(graph: Graph) -> [Graph, List<StoredTensor>] {
 /// The file holding `tensors` in order. The header is padded with spaces to a
 /// multiple of 8 bytes, as the format recommends, so each payload is aligned.
 pub fn write_safetensors(tensors: &List<StoredTensor>) -> ByteList {
-    let mut header = TreeMap::<String, HeaderEntry>::new();
+    let mut header = HashMap::<String, HeaderEntry>::new();
     let mut offset: i64 = 0;
     for let t of *tensors {
         let end = offset + t.data.len() as i64;

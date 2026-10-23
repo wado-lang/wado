@@ -6,7 +6,7 @@
 //! UTF-8 bytes, each a `<0xXX>` token. A generated tokenizer builds one from the
 //! vocabulary and merges its `tokenizer.json` names.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use icu from "core:icu";
 
 /// How a tokenizer spells text before it merges, and back after.
@@ -24,11 +24,11 @@ global SPACE_PIECE: char = '▁';
 /// A BPE tokenizer.
 pub struct BpeTokenizer {
     spelling: TokenSpelling,
-    ids: TreeMap<String, i32>,
+    ids: HashMap<String, i32>,
     tokens: List<String>,
     /// Each mergeable pair of ids, keyed by `pair_key`, as `[rank, merged id]`:
     /// the lowest rank merges first.
-    merges: TreeMap<i64, [i32, i32]>,
+    merges: HashMap<i64, [i32, i32]>,
     /// The added tokens, matched in the text as they stand before it is split.
     specials: List<String>,
     /// Whether each id is an added token, which decodes as its own text.
@@ -70,11 +70,11 @@ impl BpeTokenizer {
         prefix: List<i32>,
     ) -> BpeTokenizer {
         let tokens = entries_of(tokens);
-        let mut ids = TreeMap::<String, i32>::new();
+        let mut ids = HashMap::<String, i32>::new();
         for let [id, token] of tokens.into_iter().enumerate() {
             ids.try_insert(token, id);
         }
-        let mut merge_ranks = TreeMap::<i64, [i32, i32]>::new();
+        let mut merge_ranks = HashMap::<i64, [i32, i32]>::new();
         let triples = List::<i32>::from_le_bytes(*merges);
         for let rank of 0..<triples.len() / 3 {
             merge_ranks.try_insert(pair_key(triples[rank * 3], triples[rank * 3 + 1]), [rank, triples[rank * 3 + 2]]);

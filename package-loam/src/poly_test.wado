@@ -1,4 +1,4 @@
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Condition, Poly } from "./poly.wado";
 
 fn s(name: String) -> Poly {
@@ -104,8 +104,8 @@ test "a polynomial renders highest degree first, the constant last" {
 }
 
 /// Each symbol `p` reads, bound under its own name.
-fn as_named(p: &Poly) -> TreeMap<String, String> {
-    let mut names = TreeMap::<String, String>::new();
+fn as_named(p: &Poly) -> HashMap<String, String> {
+    let mut names = HashMap::<String, String>::new();
     for let symbol of p.symbols() {
         names[symbol] = symbol;
     }
@@ -167,7 +167,7 @@ test "a clamp the build cannot decide is a symbol the run derives" {
     assert `${clamp}` == "min(N, 8)";
     assert clamp == Poly::min_of(&n, &c(8), &"Z = Slice");
     assert clamp.symbols() == ["N"] as List<String>;
-    let mut names = TreeMap::<String, String>::new();
+    let mut names = HashMap::<String, String>::new();
     names["N"] = "dim_N";
     assert clamp.spelled(&names) == "i64::min(dim_N, 8)";
     assert minus(c(8), clamp).is_nonnegative();

@@ -3,7 +3,7 @@ use onnx from "./onnx.proto"
     with {
         generator: { module: "lib:grog" },
     };
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Elements, Graph, Known, ReadError } from "./graph.wado";
 use { external_locations, read, read_tensor, read_with_external } from "./onnx_proto.wado";
 
@@ -319,7 +319,7 @@ fn external_weight(entries: List<[String, String]>) -> onnx::TensorProto {
     };
 }
 
-fn read_external(weight: onnx::TensorProto, files: &TreeMap<String, ByteList>) -> Result<Graph, ReadError> {
+fn read_external(weight: onnx::TensorProto, files: &HashMap<String, ByteList>) -> Result<Graph, ReadError> {
     let model = onnx::ModelProto {
         graph: Option::Some(onnx::GraphProto {
             name: Option::Some("weights"),
@@ -341,7 +341,7 @@ test "an initializer's external data comes out of the file its location names" {
         }),
     };
     assert external_locations(grog::encode(&model)).unwrap() == ["model.onnx_data"];
-    let mut files = TreeMap::<String, ByteList>::new();
+    let mut files = HashMap::<String, ByteList>::new();
     files["model.onnx_data"] = b"\xff\xff\xff\xff\x00\x00\x80\x3f\x00\x00\x00\x40\xff";
     let g = read_external(weight, &files).unwrap();
 
@@ -349,7 +349,7 @@ test "an initializer's external data comes out of the file its location names" {
 }
 
 test "external data without an offset or length is the whole file" {
-    let mut files = TreeMap::<String, ByteList>::new();
+    let mut files = HashMap::<String, ByteList>::new();
     files["w.bin"] = b"\x00\x00\x80\x3f\x00\x00\x00\x40";
     let g = read_external(external_weight([
         ["location", "w.bin"],
@@ -373,7 +373,7 @@ test "external data the reader was not given names its location" {
 }
 
 test "external data past its file's end names its range" {
-    let mut files = TreeMap::<String, ByteList>::new();
+    let mut files = HashMap::<String, ByteList>::new();
     files["w.bin"] = b"\x00\x00\x80\x3f";
     let e = read_external(external_weight([
         ["location", "w.bin"],
@@ -385,7 +385,7 @@ test "external data past its file's end names its range" {
 }
 
 test "external data whose end overflows is past its file's end" {
-    let mut files = TreeMap::<String, ByteList>::new();
+    let mut files = HashMap::<String, ByteList>::new();
     files["w.bin"] = b"\x00\x00\x80\x3f";
     let e = read_external(external_weight([
         ["location", "w.bin"],
