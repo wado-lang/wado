@@ -325,8 +325,11 @@ take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, resul
 
 A handler for `Stream<T>` or `StreamWritable<T>` answers the operations a copy
 starts with, `begin_read` and `begin_write`. It returns a copy that has already
-settled, built by `StartedRead::settled` or `StartedWrite::settled`, so every
-copy a program makes goes through it, a started one included.
+settled, built by `StartedRead::settled` or `StartedWrite::settled`, or one it
+started on another end, so every copy a program makes goes through it, a
+started one included. A copy dropped in flight is cancelled by `cancel_read` or
+`cancel_write` on the end the program holds. A handler that started the copy on
+another end answers that operation by cancelling there.
 
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands

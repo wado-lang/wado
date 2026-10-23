@@ -307,17 +307,21 @@ pub resource Stream<T> {
     #[cm("stream-read")]
     fn begin_read(&self, max: i32) -> StartedRead<T>;
 
+    /// Cancel the copy in flight, blocking until it settles, and return the
+    /// packed word the Component Model answers: the count the copy moved
+    /// shifted left by four, over its `CopyResult`. A `ReadCopy` dropped in
+    /// flight calls it, so a handler that started the copy on another end
+    /// answers it by cancelling there. It traps on an end with no copy in
+    /// flight.
+    #[cm("stream-cancel-read")]
+    fn cancel_read(&self) -> u32;
+
     /// Drop the readable end of the stream.
     #[cm("stream-drop-readable")]
     fn drop(self);
 }
 
 impl<affine T> Stream<T> {
-    /// Cancel the copy in flight, blocking until it settles, and return the
-    /// packed result it settled on.
-    #[cm("stream-cancel-read")]
-    internal fn cancel_read(&self) -> u32;
-
     /// The `count` elements a read on this end copied to `ptr`, lifted.
     #[cm("stream-lift")]
     internal fn lift_copied(&self, ptr: i32, count: i32) -> List<T>;
@@ -416,7 +420,7 @@ impl<affine T> Drop for ReadCopy<T> {
         let Some([end, mut started]) = self.copy else {
             return;
         };
-        if started.buffer.ready_cancel_on(&end) {
+        if started.buffer.ready_cancel() {
             started.buffer.packed = end.cancel_read() as i32;
         }
         // Lifting what the copy moved is what frees the memory and handles the
@@ -447,6 +451,11 @@ pub resource StreamWritable<T> {
     #[cm("stream-write")]
     fn begin_write(&self, data: List<T>) -> StartedWrite<T>;
 
+    /// Cancel the copy in flight, as `Stream::cancel_read` does, for a
+    /// `WriteCopy` dropped in flight.
+    #[cm("stream-cancel-write")]
+    fn cancel_write(&self) -> u32;
+
     /// `write_all` for a byte view, lowered once with no value-semantics copy.
     /// Any element type but a byte is a compile error.
     #[cm("stream-write-raw-all")]
@@ -464,11 +473,6 @@ internal fn write_copy_is_final(result: CopyResult, delivered: i32) -> bool {
 }
 
 impl<affine T> StreamWritable<T> {
-    /// Cancel the copy in flight, blocking until it settles, and return the
-    /// packed result it settled on.
-    #[cm("stream-cancel-write")]
-    internal fn cancel_write(&self) -> u32;
-
     /// Start one copy of `data` without waiting for it. The end moves into the
     /// copy, and `WriteCopy::finish` hands it back.
     pub fn start_write(self, data: List<T>) -> WriteCopy<T> {
@@ -547,7 +551,7 @@ impl<affine T> Drop for WriteCopy<T> {
         let Some([end, mut started]) = self.copy else {
             return;
         };
-        if started.buffer.ready_cancel_on(&end) {
+        if started.buffer.ready_cancel() {
             started.buffer.packed = end.cancel_write() as i32;
         }
     }
@@ -627,22 +631,16 @@ impl CopyBuffer {
         return CopyBuffer { handle: 0, packed, ptr: 0, size: 0, align: 1 };
     }
 
-    /// Whether the host may still be copying.
-    fn in_flight(&self) -> bool {
-        return self.wait_on() matches { Host(_) };
-    }
-
     /// The packed result the copy settled on, waiting for it where it has not.
     fn settle(&mut self) -> i32 {
         self.packed = settled_copy(self.handle, self.packed);
         return self.packed;
     }
 
-    /// Ready the copy for `end`'s cancel, and say whether `end` can cancel it:
-    /// it is in flight on `end` itself. A copy a forwarding handler started on
-    /// another end has no cancel here, so its drop waits for it instead.
-    fn ready_cancel_on<affine R: AffineResource>(&self, end: &R) -> bool {
-        if !self.in_flight() || self.handle != builtin::resource_handle(end) {
+    /// Ready the copy for a cancel, and say whether it needs one: the host may
+    /// still be copying.
+    fn ready_cancel(&self) -> bool {
+        if self.wait_on() matches { Settled(_) } {
             return false;
         }
         // A synchronous cancel traps on an end still in a set. Joining set 0

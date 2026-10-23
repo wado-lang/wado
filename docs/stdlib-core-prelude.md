@@ -1052,6 +1052,17 @@ end for the copy: a second copy on an end that is copying traps, and
 a `StartedRead` dropped in flight waits for its copy where a
 `ReadCopy` cancels it.
 
+#### `fn cancel_read(&self) -> u32`
+
+`#[cm("stream-cancel-read")]`
+
+Cancel the copy in flight, blocking until it settles, and return the
+packed word the Component Model answers: the count the copy moved
+shifted left by four, over its `CopyResult`. A `ReadCopy` dropped in
+flight calls it, so a handler that started the copy on another end
+answers it by cancelling there. It traps on an end with no copy in
+flight.
+
 #### `fn drop(self)`
 
 `#[cm("stream-drop-readable")]`
@@ -1094,6 +1105,13 @@ answers, with `StartedWrite::settled`. A program calls `start_write`,
 which holds the end for the copy: a second copy on an end that is
 copying traps, and a `StartedWrite` dropped in flight waits for its
 copy where a `WriteCopy` cancels it.
+
+#### `fn cancel_write(&self) -> u32`
+
+`#[cm("stream-cancel-write")]`
+
+Cancel the copy in flight, as `Stream::cancel_read` does, for a
+`WriteCopy` dropped in flight.
 
 #### `fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
 

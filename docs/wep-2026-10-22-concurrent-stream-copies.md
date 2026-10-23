@@ -79,9 +79,19 @@ so do the loops. A handler answers with a copy that has already settled,
 in memory, so it has no host copy to wait on. Such a copy joins a set ready with
 the result the handler gave, and dropping it cancels nothing.
 
+A handler may also answer by starting the copy on another end it holds, which
+is how one forwards a stream. Dropping such a copy in flight cannot cancel it
+on the end the program holds, where no copy is in flight. So the cancel is an
+operation too, `Stream::cancel_read(&self)` or
+`StreamWritable::cancel_write(&self)`, and a forwarding handler answers it by
+cancelling on the end it started the copy on. It returns the packed word the
+Component Model answers, since that is what the drop lifts the moved elements
+by.
+
 The operations are public, since a handler in another package implements them.
 A program that calls `begin_read` itself holds no copy in its end, so a second
-copy on that end traps where the ownership would have refused it.
+copy on that end traps where the ownership would have refused it. One that
+calls `cancel_read` on an end with no copy in flight traps likewise.
 
 ### One way to copy
 
@@ -117,8 +127,8 @@ longer copying. Either way the end drops with it. What a read copy moved is
 lifted and dropped as `finish` would hand it back: lifting is what frees the
 memory and handles the host lowered for the elements.
 
-This makes the cancels reachable for the first time, from the drop alone. A
-program holding an end holds no copy in flight, so it never cancels one itself.
+This makes the cancels reachable for the first time, from the drop. A program
+holding an end holds no copy in flight, so it has none to cancel itself.
 
 ## Roadmap
 
@@ -139,9 +149,9 @@ and `read` read stdout and stderr through one set.
 
 - A future's read cannot be started. A future is read once, so nothing has
   needed to wait on one beside a stream yet.
-- A copy a handler started on another end cannot be cancelled from the end the
-  program read. Dropping it waits until that other end's peer acts, which may
-  be never.
+- A copy a handler started on another end, dropped in flight outside that
+  handler's scope, cancels on the end the program holds, where no copy is in
+  flight, and traps.
 - A `StartedRead` dropped on its own, outside a `ReadCopy`, holds no end to
   lift through, so it frees its buffer and leaks what the elements it moved
   hold in memory or handles.
