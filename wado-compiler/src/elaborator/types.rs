@@ -705,6 +705,7 @@ pub enum TypeError {
         trait_name: String,
         method_name: String,
         param_name: String,
+        declared_name: String,
         span: Span,
     },
 
@@ -2007,11 +2008,12 @@ impl TypeError {
                 trait_name,
                 method_name,
                 param_name,
+                declared_name,
                 span,
             } => (
                 Code::AffineArgument,
                 format!(
-                    "method `{method_name}` declares `{param_name}` unmarked, but `{trait_name}` declares `affine {param_name}`: its body may copy an argument the trait admits as move-only"
+                    "method `{method_name}` declares `{param_name}` unmarked, but `{trait_name}` declares `affine {declared_name}`: its body may copy an argument the trait admits as move-only"
                 ),
                 *span,
             ),

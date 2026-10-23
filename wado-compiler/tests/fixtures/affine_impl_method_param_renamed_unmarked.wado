@@ -1,0 +1,18 @@
+// The trait's parameter is named as the trait writes it, whatever the impl
+// method calls its own.
+trait Sink with () {
+    fn put<affine T>(&mut self, v: T) -> i32;
+}
+
+struct S {}
+
+impl Sink for S {
+    fn put<V>(&mut self, v: V) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":10:12: analysis error: method `put` declares `V` unmarked, but `Sink` declares `affine T`: its body may copy an argument the trait admits as move-only"}
