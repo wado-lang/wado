@@ -391,10 +391,10 @@ test "a .txt file under generator is a generator's input" {
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file | Exposes as                                                   | Call style                                                                                    |
-| ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                                                                  |
-| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default; an import is handled with `with Iface => h do` |
+| Imported file | Exposes as                                                   | Call style                                                                      |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                                                    |
+| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default; an import takes a `with` handler |
 
 <!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
 
