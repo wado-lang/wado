@@ -906,11 +906,7 @@ impl MoveWalker<'_, '_> {
             self.report(MoveError::UseAfterMove { name, moved_at }, place.root.span);
             return;
         }
-        if self.drop_body
-            && place.fields.is_empty()
-            && place.root.name == "self"
-            && !self.decomposed.contains(&expr.id())
-        {
+        if self.is_drop_self(expr) && !self.decomposed.contains(&expr.id()) {
             let type_name = self.type_name_of(expr);
             self.report(MoveError::DropSelfMove { type_name }, place.root.span);
             return;
@@ -935,13 +931,16 @@ impl MoveWalker<'_, '_> {
     /// field.
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
         while let Some((holder, _)) = self.field_step(expr) {
-            let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
-            if !own_self && self.implements_drop(holder) {
+            if !self.is_drop_self(holder) && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
                 self.report(MoveError::DropPartialMove { type_name }, expr.span());
             }
             expr = holder;
         }
+    }
+
+    fn is_drop_self(&self, expr: &Expr) -> bool {
+        self.drop_body && matches!(expr, Expr::Ident(id) if id.name == "self")
     }
 
     fn implements_drop(&self, expr: &Expr) -> bool {
