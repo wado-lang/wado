@@ -1275,6 +1275,70 @@ test "the mock serializer writes every shape" {
     assert mock_serialize(&Shape::Line(4)) == `{"Line":4}`;
 }
 
+struct TagSplit {
+    pattern: String,
+}
+
+#[wire(tag = "type")]
+variant Tagged {
+    Split(TagSplit),
+    Empty,
+}
+
+/// A payload whose own impls write and read a bare number, which no tag can
+/// stand beside.
+struct Scalar {
+}
+
+impl Serialize for Scalar {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(1);
+    }
+}
+
+impl Deserialize for Scalar {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Scalar, DeserializeError> {
+        d.deserialize_i32()?;
+        return Result::Ok(Scalar {});
+    }
+}
+
+/// A payload whose impl begins its struct twice.
+struct Twice {
+}
+
+impl Deserialize for Twice {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Twice, DeserializeError> {
+        d.begin_struct("Twice", 0)?;
+        d.begin_struct("Twice", 0)?;
+        return Result::Ok(Twice {});
+    }
+}
+
+#[wire(tag = "type")]
+variant OddPayload {
+    Bare(Scalar),
+    Again(Twice),
+}
+
+test "a format that keeps the default refuses an internal tag" {
+    let e = json::from_string::<Flaky<Tagged>>(`{"type":"Empty"}`).unwrap_err();
+    assert e.kind == DeserializeErrorKind::UnexpectedType;
+    assert e.message == `this format cannot read an internally tagged variant, whose tag is "type"`;
+}
+
+test "a tagged write fails at each step it takes" {
+    // begin, the tag, then each field and end
+    assert failures_writing::<Tagged>(Tagged::Split(TagSplit { pattern: "x" })) == 4;
+    assert failures_writing::<Tagged>(Tagged::Empty) == 3;
+}
+
+test "a tagged case's payload is written and read as a struct" {
+    assert json::to_string(&OddPayload::Bare(Scalar {})) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert json::from_string::<OddPayload>(`{"type":"Bare"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert json::from_string::<OddPayload>(`{"type":"Again"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
 test "a discriminant no case has is an unknown one" {
     let e = json::from_string::<ReadByDisc<Light>>(`"7"`).unwrap_err();
     assert e.kind == DeserializeErrorKind::UnknownVariant && e.message == "unknown variant discriminant";

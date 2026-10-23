@@ -1897,3 +1897,48 @@ test "a skipped number is held to the read path's grammar" {
     let mut exponent = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
     assert exponent.skip_number().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
 }
+
+struct TagSplit {
+    pattern: String,
+    invert: bool = false,
+}
+
+#[wire(tag = "type")]
+variant Tagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "an internally tagged case writes its tag first" {
+    let split = Tagged::Split(TagSplit { pattern: "x", invert: true });
+    assert to_string(&split) == Result::Ok(`{"type":"Split","pattern":"x","invert":true}`);
+    assert to_string(&Tagged::Empty) == Result::Ok(`{"type":"Empty"}`);
+}
+
+test "an internal tag is read wherever it stands" {
+    let split = Tagged::Split(TagSplit { pattern: "x", invert: true });
+    assert from_string::<Tagged>(`{"type":"Split","pattern":"x","invert":true}`) == Result::Ok(split);
+    assert from_string::<Tagged>(`{"pattern":"x","invert":true,"type":"Split"}`) == Result::Ok(split);
+    assert from_string::<Tagged>(`{"extra":[1,{"a":2}],"type":"Empty","more":3}`) == Result::Ok(Tagged::Empty);
+    // An escaped key is read in full, before the tag and as the tag.
+    assert from_string::<Tagged>(`{"p\\u0061ttern":"x","type":"Split"}`) == Result::Ok(Tagged::Split(
+        TagSplit { pattern: "x" },
+    ));
+    assert from_string::<Tagged>(`{"ty\\u0070e":"Empty"}`) == Result::Ok(Tagged::Empty);
+}
+
+test "a malformed object fails the look-ahead for its tag" {
+    let malformed = [
+        `{"a":1 x`, `{"a":tru,"type":"Empty"}`, `{"type":1}`, `{"type" 1}`, `{"\\q":1}`, `{"t\\u0079pe" 1}`,
+    ] as List<String>;
+    for let input of malformed {
+        assert from_string::<Tagged>(input) matches { Err(_) };
+    }
+}
+
+test "an internal tag must be present, name a case, and stand under a key" {
+    assert from_string::<Tagged>(`{"pattern":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::MissingField };
+    assert from_string::<Tagged>(`{"type":"Join"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
+    assert from_string::<Tagged>(`{type:"Empty"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_bytes::<Tagged>(b"{\"\xff\":1}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}

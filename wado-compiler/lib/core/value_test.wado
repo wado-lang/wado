@@ -1189,3 +1189,26 @@ test "a case with more than one payload holds them as a list" {
     ]);
     assert to_value(&TwoPayloads {}) == Result::Ok(Value::Object(both));
 }
+
+struct TagSplit {
+    pattern: String,
+}
+
+#[wire(tag = "type")]
+variant InternallyTagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "an internal tag is looked up among the object's entries" {
+    let split = InternallyTagged::Split(TagSplit { pattern: "x" });
+    let written = obj([
+        ["type", Value::String("Split")],
+        ["pattern", Value::String("x")],
+    ]);
+    assert to_value(&split) == Result::Ok(Value::Object(written));
+    assert from_value::<InternallyTagged>(&Value::Object(written)) == Result::Ok(split);
+    assert fails_with::<InternallyTagged>(&Value::Object(obj([
+        ["pattern", Value::String("x")],
+    ])), MissingField);
+}

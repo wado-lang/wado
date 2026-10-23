@@ -1155,3 +1155,42 @@ test "encode: a serialize error propagates out of every container" {
     assert fails_to_encode(&BadEntry { bad_key: false });
     assert fails_to_encode(&HoldsUnencodable { inner: Unencodable {} });
 }
+
+struct TagSplit {
+    pattern: String,
+}
+
+#[wire(tag = "type")]
+variant InternallyTagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "decode: an internal tag is read wherever it stands" {
+    let split = InternallyTagged::Split(TagSplit { pattern: "x" });
+    assert from_bytes::<InternallyTagged>(to_bytes(&split).unwrap()) == Result::Ok(split);
+    // {"pattern": "x", "type": "Split"}
+    assert from_bytes::<InternallyTagged>(b"\xa2\x67pattern\x61x\x64type\x65Split") == Result::Ok(split);
+    // An indefinite-length map, and an indefinite-length key read in full:
+    // {_ "pattern": "x", (_ "type"): "Split"}
+    assert from_bytes::<InternallyTagged>(b"\xbf\x67pattern\x61x\x7f\x64type\xff\x65Split\xff") == Result::Ok(split);
+}
+
+test "decode: an internal tag must be present" {
+    // {"pattern": "x"}
+    assert decode_err_kind::<InternallyTagged>(b"\xa1\x67pattern\x61x") == DeserializeErrorKind::MissingField;
+}
+
+test "decode: a malformed map fails the look-ahead for its tag" {
+    let malformed: List<ByteList> = [
+        b"\xbf",  // an indefinite-length map that never breaks
+        b"\xa1",  // a key missing
+        b"\xa1\x64ty",  // a key cut short
+        b"\xa1\x7f\x01",  // an indefinite-length key with a chunk not text
+        b"\xa1\x64type\x01",  // a tag not text
+        b"\xa2\x61a",  // a value missing before the tag
+    ];
+    for let input of malformed {
+        assert from_bytes::<InternallyTagged>(input) matches { Err(_) };
+    }
+}
