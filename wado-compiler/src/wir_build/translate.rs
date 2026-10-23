@@ -1226,18 +1226,34 @@ impl FunctionTranslator<'_, '_> {
             tail = block_tail(self.body, expr, &mut lead);
         }
         if let Some(expr) = tail.as_expr() {
+            let results = match &self.body.exprs[expr].kind {
+                ExprKind::Call { func_id, .. } => self
+                    .multi_value_result_fields(*func_id)
+                    .filter(|got| self.abi_fields_cover(got, fields))
+                    .map(<[_]>::to_vec),
+                _ => None,
+            };
+            if let Some(results) = results {
+                let mut instrs = self.translate_stmts(&lead);
+                let call = self.take_multi_value_results(|t| t.translate_expr(expr));
+                let (bind, bound) = self.bind_multi_value_results_to_temps(call, &results);
+                instrs.extend(bind);
+                // A parameter takes the fields its callee reads, a subset of
+                // what the call returns.
+                let reads = fields
+                    .iter()
+                    .map(|(name, _)| {
+                        let at = results.iter().position(|(n, _)| n == name);
+                        let (local, ty) = &bound[at.expect("covered field")];
+                        WirInstr::LocalGet {
+                            name: local.clone(),
+                            result_ty: ty.clone(),
+                        }
+                    })
+                    .collect();
+                return (instrs, reads);
+            }
             match &self.body.exprs[expr].kind {
-                ExprKind::Call { func_id, .. }
-                    if self
-                        .multi_value_result_fields(*func_id)
-                        .is_some_and(|got| self.abi_fields_agree(got, fields)) =>
-                {
-                    let mut instrs = self.translate_stmts(&lead);
-                    let call = self.take_multi_value_results(|t| t.translate_expr(expr));
-                    let (bind, bound) = self.bind_multi_value_results_to_temps(call, fields);
-                    instrs.extend(bind);
-                    return (instrs, local_reads(&bound));
-                }
                 // A split `&S` takes only the fields its callee reads, so the
                 // literal may write more: each still runs where it stands.
                 ExprKind::StructLiteral {
@@ -1374,13 +1390,15 @@ impl FunctionTranslator<'_, '_> {
     /// parameters, which the lowered `WirType` of each field decides.
     // Not `TypeKey`: it resolves through newtype erasure, so two fields share
     // one and still lower to a ref against an i32.
-    fn abi_fields_agree(&self, left: &[(String, TypeId)], right: &[(String, TypeId)]) -> bool {
-        left.len() == right.len()
-            && left.iter().zip(right).all(|((ln, lt), (rn, rt))| {
-                ln == rn
-                    && self.ctx.type_id_to_wir_type(self.type_table, *lt)
-                        == self.ctx.type_id_to_wir_type(self.type_table, *rt)
+    /// Whether every one of `wanted` is among `got`, with the same Wasm type.
+    fn abi_fields_cover(&self, got: &[(String, TypeId)], wanted: &[(String, TypeId)]) -> bool {
+        wanted.iter().all(|(wn, wt)| {
+            got.iter().any(|(gn, gt)| {
+                gn == wn
+                    && self.ctx.type_id_to_wir_type(self.type_table, *gt)
+                        == self.ctx.type_id_to_wir_type(self.type_table, *wt)
             })
+        })
     }
 
     /// Bind `let local = Call(f)` to one split local per result of `f`, which a

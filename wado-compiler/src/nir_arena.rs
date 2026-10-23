@@ -195,7 +195,7 @@ pub struct ArenaStructPatternField {
 }
 
 /// A constant array given as the little-endian bytes of its elements.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PackedData {
     pub bytes: Vec<u8>,
     pub elem: PrimitiveType,

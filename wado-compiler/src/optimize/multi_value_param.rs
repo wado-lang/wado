@@ -69,14 +69,16 @@ struct Candidate {
 }
 
 impl Candidate {
-    /// The fields a call hands over: every one for an aggregate taken by
-    /// value, which often arrives as a literal or a multi-value result, and
-    /// only those read for a `&S`, whose fields are loaded at every call.
+    /// The fields a call hands over: those the body reads. A field nothing
+    /// reads is still evaluated at the call, and never passed. An aggregate
+    /// taken by value and read in fewer fields than the ABI's width passes them
+    /// all, as it did before any was dropped.
     fn taken(&self) -> (Vec<TypeId>, Vec<String>) {
+        let every = !self.through_ref && self.reads.len() < 2;
         self.field_types
             .iter()
             .zip(&self.field_names)
-            .filter(|(_, name)| !self.through_ref || self.reads.contains(name.as_str()))
+            .filter(|(_, name)| every || self.reads.contains(name.as_str()))
             .map(|(&ty, name)| (ty, name.clone()))
             .unzip()
     }
@@ -217,8 +219,8 @@ fn may_fit(
     all_names: &[String],
     type_table: &TypeTable,
 ) -> bool {
-    if !through_ref {
-        return splittable(all_types, type_table);
+    if !through_ref && splittable(all_types, type_table) {
+        return true;
     }
     let read: Vec<TypeId> = all_types
         .iter()
