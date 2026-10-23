@@ -596,16 +596,12 @@ Verified against the tree.
   elaborator's source-level last-use pass reached lowering keyed by span, which
   every synthesized node shares, so it moved a synthesized read final or not.
   A read synthesis wrote is now judged like any other, and the pass is gone.
-- [x] A `break LABEL` resumes where its labeled block ends, at both levels that
-  compute last-use liveness. Each kept a stack of exit sets that only loops
-  pushed, so every such break fell back to _every_ local live. A template
-  string lowers to a labeled block, so one interpolation anywhere in a
-  function retired its whole last-use set. That showed most often as a
-  whole-array copy of a `String` handed to a callee that keeps it. The
-  source-level walk had
-  the same fallback, and is fixed here rather than left. No fixture changes
-  with that half fixed: a template is not a labeled block where that walk
-  runs.
+- [x] A `break LABEL` resumes where its labeled block ends in the last-use walk.
+  It kept a stack of exit sets that only loops pushed, so every such break fell
+  back to _every_ local live. A template string lowers to a labeled block, so
+  one interpolation anywhere in a function retired its whole last-use set. That
+  showed most often as a whole-array copy of a `String` handed to a callee that
+  keeps it.
 - [x] A caller takes the whole `&mut` handle as written when the callee names a
   write it cannot re-root there. Re-rooting kept only the writes whose owner
   was the handle's own type and dropped the rest, so a callee writing through
