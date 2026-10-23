@@ -1015,7 +1015,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
             // A value tuple is copied on assignment, so only a handle to one shares it.
             ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
-                under_ref.then(|| type_table.type_key(type_table.monomorphized_or_self(type_id)))
+                under_ref.then(|| type_table.type_key(type_id))
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit

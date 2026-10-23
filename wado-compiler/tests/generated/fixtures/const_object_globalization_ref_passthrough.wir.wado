@@ -25,15 +25,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//const_object_globalization_ref_passthrough.wado/total" = fn(ref Array<u8>, i32) -> i32;  // TypeId(10)
+type "functype//const_object_globalization_ref_passthrough.wado/emit" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(10)
 
-type "functype//const_object_globalization_ref_passthrough.wado/relay" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> i32;  // TypeId(11)
+type "functype//const_object_globalization_ref_passthrough.wado/run" = fn();  // TypeId(11)
 
-type "functype//const_object_globalization_ref_passthrough.wado/emit" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(12)
+type "functype//const_object_globalization_ref_passthrough.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//const_object_globalization_ref_passthrough.wado/run" = fn();  // TypeId(13)
+type "functype//const_object_globalization_ref_passthrough.wado/relay$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> i32;  // TypeId(13)
 
-type "functype//const_object_globalization_ref_passthrough.wado/$cm_export__run" = fn();  // TypeId(14)
+type "functype//const_object_globalization_ref_passthrough.wado/total$spec0$sroa[s.repr]" = fn(ref Array<u8>) -> i32;  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
@@ -47,7 +47,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
@@ -77,41 +77,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:const_object_globalization_ref_passthrough.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 114, 101, 97, 116, 101, 100, 95, 97, 116), used: 10 };
 global global:const_object_globalization_ref_passthrough.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "const_object_globalization_ref_passthrough.wado/total"($mv$s$repr, $mv$s$used) {
-    let sum: i32;
-    let i: i32;
-    sum = 0;
-    i = 0;
-    b0: block {
-        l1: loop {
-            break_if b0 i >= $mv$s$used;
-            sum = sum + builtin::array_get_value<u8>($mv$s$repr, i);
-            i = i + 1;
-            continue l1;
-        };
-    };
-    return sum;
-}
-
-fn "const_object_globalization_ref_passthrough.wado/relay"(s, out) {
-    let n_10: i32;
-    let new_used: i32;
-    let start_15: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_3: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_3 local.tee n_10(s.used) == 0;
-        if @unlikely(local.tee new_used(out.used + n_10) > builtin::array_len(out.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-        }
-        start_15 = out.used;
-        out.used = new_used;
-        builtin::array_copy<u8>(out.repr, start_15, s.repr, 0, n_10);
-    };
-    return "const_object_globalization_ref_passthrough.wado/total"(s.repr, s.used);
-}
-
 fn "const_object_globalization_ref_passthrough.wado/emit"(out) {
-    return "const_object_globalization_ref_passthrough.wado/relay"(global:const_object_globalization_ref_passthrough.wado::$const_obj_0, out);
+    return "const_object_globalization_ref_passthrough.wado/relay$spec0"(global:const_object_globalization_ref_passthrough.wado::$const_obj_0, out);
 }
 
 fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
@@ -125,18 +92,18 @@ fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     sum = 0;
     k = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 k >= 3;
+    b0: block {
+        l1: loop {
+            break_if b0 k >= 3;
             sum = sum + "const_object_globalization_ref_passthrough.wado/emit"(buf_0);
             k = k + 1;
-            continue l4;
+            continue l1;
         };
     };
     $sroa_$f_buf_71 = local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_14 = local.tee k(buf_0.used) < 0;
     k = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(k); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, is_negative_14, k);
+    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, is_negative_14, k);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee buf_0($sroa_$f_buf_71).repr, is_negative_14, x_18, k);
     if @unlikely(local.tee k($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -148,7 +115,7 @@ fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
     $sroa_$f_buf_71 = $local_3;
     is_negative_14 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(sum); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, is_negative_14, sum);
+    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, is_negative_14, sum);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, is_negative_14, x_18, sum);
     sum = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
     is_negative_14 = builtin::i32_wrap_i64(x_18 >> 32_i64);
@@ -166,6 +133,36 @@ fn "const_object_globalization_ref_passthrough.wado/$cm_binding__Stdout_write_vi
 fn "const_object_globalization_ref_passthrough.wado/$cm_export__run"() {
     "const_object_globalization_ref_passthrough.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "const_object_globalization_ref_passthrough.wado/relay$spec0"(s, out) {
+    let $load_4: ref Array<u8>;
+    let new_used: i32;
+    let start_15: i32;
+    if @unlikely(local.tee new_used(out.used + 10) > builtin::array_len(out.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
+    }
+    start_15 = out.used;
+    out.used = new_used;
+    builtin::array_copy<u8>(out.repr, start_15, local.tee $load_4(s.repr), 0, 10);
+    return "const_object_globalization_ref_passthrough.wado/total$spec0$sroa[s.repr]"($load_4);
+}
+
+fn "const_object_globalization_ref_passthrough.wado/total$spec0$sroa[s.repr]"(s) {
+    let sum: i32;
+    let i: i32;
+    sum = 0;
+    i = 0;
+    b4: block {
+        l5: loop {
+            break_if b4 i >= 10;
+            sum = sum + builtin::array_get_value<u8>(s, i);
+            i = i + 1;
+            continue l5;
+        };
+    };
+    return sum;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -343,7 +340,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

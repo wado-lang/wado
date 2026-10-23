@@ -76,7 +76,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/
 
 type "functype//effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Closure_0::$call" = fn(ref "effect_dup_name_across_modules.wado//$Closure_0", ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
@@ -105,7 +105,8 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log: ref null "effect_dup_name_across_modules.wado//$Dispatch_effect_dup_name_across_modules.wado/Log" = ref.null none;
-global global:effect_dup_name_across_modules.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
+global global:effect_dup_name_across_modules.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:effect_dup_name_across_modules.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 76, 111, 103, 58, 58, 101, 109, 105, 116, 96), used: 36 };
 
 fn "effect_dup_name_across_modules.wado/run"() with Stdout {
     let sink: ref "effect_dup_name_across_modules.wado//Sink";
@@ -124,11 +125,11 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
         message_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         if @likely(ref.is_null(local.tee $local_1_9(global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log)) == 0) {
             global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log = local.tee $d_effect_dup_name_across_modules.wado/Log(ref.as_non_null($local_1_9)).outer;
-            let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_effect_dup_name_across_modules.wado/Log.op_emit)).env, message_8);
+            let $indirect_call_2: ref "canonical//CanonicalClosure_0";
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_effect_dup_name_across_modules.wado/Log.op_emit)).env, message_8);
             break $inline__effect_dispatch__effect_dup_name_across_modules_wado_Log__emit_2: global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log = $local_1_9;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);
+            "core:rt/panic"(local.tee message_8(global:effect_dup_name_across_modules.wado::$const_obj_1).repr, message_8.used);
             unreachable;
         }
     };
@@ -136,7 +137,7 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
     $sroa_$f_buf_77 = local.tee message_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_20 = local.tee self_13(sink.lines.used) < 0;
     self_13 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_13); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, is_negative_20, self_13);
+    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, is_negative_20, self_13);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, is_negative_20, x_24, self_13);
     if @unlikely(local.tee self_13(message_8.used + 1) > builtin::array_len(message_8.repr)) {
         cold_path;
@@ -144,8 +145,8 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
     }
     is_negative_20 = message_8.used;
     message_8.used = self_13;
-    builtin::array_copy<u8>(message_8.repr, is_negative_20, global:effect_dup_name_across_modules.wado::$const_obj_3, 0, 1);
-    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_77(message_8), 0, 1);
+    builtin::array_copy<u8>(message_8.repr, is_negative_20, global:effect_dup_name_across_modules.wado::$const_obj_0, 0, 1);
+    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_77(message_8), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, is_negative_20, 7_i64, 1);
     is_negative_20 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
     self_13 = builtin::i32_wrap_i64(x_24 >> 32_i64);
@@ -373,7 +374,7 @@ fn "effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Clo
     self_4.used = used + 1;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

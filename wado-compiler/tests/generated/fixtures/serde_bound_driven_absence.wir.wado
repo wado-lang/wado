@@ -61,7 +61,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
@@ -69,11 +69,11 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:core:serde::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_20: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-global global:core:serde::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(123);
-global global:core:json::$const_obj_22: ref Array<u8> = array.new_fixed<u8>(34, 58);
-global global:core:json::$const_obj_24: ref Array<u8> = array.new_fixed<u8>(44, 34);
+global global:core:serde::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_15: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+global global:core:serde::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(123);
+global global:core:json::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(34, 58);
+global global:core:json::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(44, 34);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: ref "core:prelude/types.wado//Option<char>" = struct.new "core:prelude/types.wado//Option<char>" { 0 };
 
 fn "serde_bound_driven_absence.wado/$cm_export__run"() {
@@ -193,7 +193,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_24, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_19, 0, 2);
         if @unlikely(local.tee start_18(buf.used + 3) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_18);
@@ -202,7 +202,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         buf.used = start_18;
         builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 1);
         count = count + 1;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_22, 0, 2);
+        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_17, 0, 2);
         return;
     }
     if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -220,7 +220,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
     buf.used = start_18;
     builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 1);
     count = count + 1;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_22, 0, 2);
+    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_17, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -294,11 +294,11 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     }
     start_29 = s.used;
     s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_21, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_20, 0);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_16, 0, 1);
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_15, 0);
     start_29 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_29, self);
+    start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(s, start_29, self);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4(s.repr), start_29, x, self);
     if @unlikely(local.tee self(s.used + 1) > builtin::array_len($load_4)) {
         cold_path;
@@ -306,11 +306,11 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     }
     start_29 = s.used;
     s.used = self;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_19, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_14, 0, 1);
     return ref.null none;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

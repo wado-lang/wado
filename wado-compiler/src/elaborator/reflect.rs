@@ -918,7 +918,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        if !self.check_reflect_args(&[], static_call, ctx) {
+        // `tail` and `raw_tail` read the segment out of a template value.
+        let params = if method == methods.members {
+            Vec::new()
+        } else {
+            vec![self.tysys.type_table.borrow_mut().make_ref(self_ty)]
+        };
+        if !self.check_reflect_args(&params, static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -948,12 +954,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String)
             };
+            let param_is_mut = arg_param_is_mut(method != methods.members);
             self.record_type_param_reflect_dispatch(
                 &name,
                 trait_name,
                 method,
                 static_call,
-                Vec::new(),
+                param_is_mut,
             );
             return return_type;
         }
@@ -990,7 +997,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method,
             module_source,
         );
-        self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
+        self.record_reflect_dispatch(
+            static_call.id,
+            func_ref,
+            arg_param_is_mut(method != methods.members),
+        );
 
         return_type
     }

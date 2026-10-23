@@ -4857,7 +4857,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Annotate diagnosed the template or the tag.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         };
-        let (struct_name, hole_types, open) = {
+        let (struct_name, shape, open) = {
             let tt = self.tysys.type_table.borrow();
             let ResolvedType::Struct {
                 def: def @ StructDef::Anon(id),
@@ -4868,12 +4868,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             let shape = tt
                 .template_shape_of_type(template_ty)
-                .expect("annotate records a template type for a tagged template");
-            let holes = shape.hole_types();
+                .expect("annotate records a template type for a tagged template")
+                .clone();
             // The name the shape was registered under, not the one a message
             // shows: both render the shape, and only the mangle is a key.
-            (tt.struct_head_name(*def), holes, tt.anon_shape_is_open(*id))
+            (tt.struct_head_name(*def), shape, tt.anon_shape_is_open(*id))
         };
+        let hole_types = shape.hole_types();
 
         let unique_id = ctx.fresh_serial();
         let mut stmts: Vec<TirStmt> = Vec::new();
@@ -4926,6 +4927,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx.address_taken_locals.insert(taken);
             }
             fields.push(field);
+        }
+        // Annotate validated every segment's escapes.
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
+        let segments = tagged.template.raw_segments();
+        for key in shape.segment_keys() {
+            let text = match TemplateShape::segment_of(key) {
+                (k, true) => segments[k].clone(),
+                (k, false) => unescape_template_segment(&segments[k]),
+            };
+            let (name, field_index) = shape.segment_field(key);
+            fields.push(TirStructField {
+                name,
+                value: TirExpr::new(TirExprKind::StringLiteral(text), string_type, span),
+                field_index,
+            });
         }
 
         let literal = TirExpr::new(

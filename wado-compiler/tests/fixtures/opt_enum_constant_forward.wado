@@ -1,13 +1,13 @@
 // An `enum` case is a compile-time constant, so a local bound to one forwards
-// into its uses like any other scalar literal: the second call below must carry
-// the discriminant directly instead of reading `k2` back.
+// into its uses like any other scalar literal: the second call below must not
+// read `k2` back. The struct literal carrying it is a constant for `kind`, so
+// `param_spec` folds the discriminant into a clone that takes only `at`.
 //
 // The first call keeps a genuinely runtime-dependent `kind`, so it must *not*
 // fold — the guard against a forward that ignores the branch.
 //
 // `describe` reads both fields and nothing else, so its parameter takes the
-// multi-value ABI and the argument arrives field by field. The constant is
-// therefore visible at the call rather than inside a struct literal.
+// multi-value ABI and the argument arrives field by field.
 
 use { println, Stdout } from "core:cli";
 
@@ -41,7 +41,7 @@ __DATA__
 {
     "stdout": "11\n11\n",
     "wir_expect:O2": [
-        "describe\"(1, at)",
+        "describe$spec0$sroa[e.at]\"(at)",
         "describe\"(kind, at)"
     ],
     "wir_not_expect:O2": ["describe\"(k2"]

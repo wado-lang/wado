@@ -23,6 +23,10 @@ use super::multi_value_return::is_eligible_field_type;
 /// call costs more than the aggregate it avoids.
 const MAX_PARAM_FIELDS: usize = 8;
 
+/// One field is `sroa_param`'s, which knows a by-value `Box<T>` for the
+/// reference it is.
+const MIN_PARAM_FIELDS: usize = 2;
+
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
 /// Runs after every transformation, so it sees the final NIR shape.
 pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Arc<Executor>) -> bool {
@@ -69,14 +73,16 @@ struct Candidate {
 }
 
 impl Candidate {
-    /// The fields a call hands over: every one for an aggregate taken by
-    /// value, which often arrives as a literal or a multi-value result, and
-    /// only those read for a `&S`, whose fields are loaded at every call.
+    /// The fields a call hands over: those the body reads. A field nothing
+    /// reads is still evaluated at the call, and never passed. An aggregate
+    /// taken by value and read in fewer fields than the ABI's narrowest passes
+    /// them all, as it did before any was dropped.
     fn taken(&self) -> (Vec<TypeId>, Vec<String>) {
+        let every = !self.through_ref && self.reads.len() < MIN_PARAM_FIELDS;
         self.field_types
             .iter()
             .zip(&self.field_names)
-            .filter(|(_, name)| !self.through_ref || self.reads.contains(name.as_str()))
+            .filter(|(_, name)| every || self.reads.contains(name.as_str()))
             .map(|(&ty, name)| (ty, name.clone()))
             .unzip()
     }
@@ -113,8 +119,8 @@ fn settle(
 }
 
 /// One round over the forwards: drop a candidate whose callee does not take
-/// the ABI on the same shape, and widen one to the reads of its callees.
-/// Whether anything changed.
+/// the ABI on the same shape, and widen one to the fields its callees take,
+/// which the call passes on from those it arrived in. Whether anything changed.
 fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &TypeTable) -> bool {
     let keys: Vec<ParamKey> = candidates.keys().copied().collect();
     let mut changed = false;
@@ -131,7 +137,7 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
                     type_table.type_key(g.aggregate),
                     type_table.type_key(c.aggregate)
                 );
-                reads.extend(g.reads.iter().cloned());
+                reads.extend(g.taken().1);
                 g.through_ref == c.through_ref
             })
         });
@@ -217,8 +223,8 @@ fn may_fit(
     all_names: &[String],
     type_table: &TypeTable,
 ) -> bool {
-    if !through_ref {
-        return splittable(all_types, type_table);
+    if !through_ref && splittable(all_types, type_table) {
+        return true;
     }
     let read: Vec<TypeId> = all_types
         .iter()
@@ -227,16 +233,15 @@ fn may_fit(
         .map(|(&ty, _)| ty)
         .collect();
     read.len() <= MAX_PARAM_FIELDS
-        && (read.len() >= 2 || !reads.forwards.is_empty())
+        && (read.len() >= MIN_PARAM_FIELDS || !reads.forwards.is_empty())
         && read.iter().all(|&t| is_eligible_field_type(t, type_table))
 }
 
 /// Whether `field_types` fit the ABI: within its width, and each taking a Wasm
 /// slot. A field the return side declines takes none, so splitting it would
-/// leave the signature and the call site counting differently. One field read
-/// is `sroa_param`'s, which knows a by-value `Box<T>` for the reference it is.
+/// leave the signature and the call site counting differently.
 fn splittable(field_types: &[TypeId], type_table: &TypeTable) -> bool {
-    (2..=MAX_PARAM_FIELDS).contains(&field_types.len())
+    (MIN_PARAM_FIELDS..=MAX_PARAM_FIELDS).contains(&field_types.len())
         && field_types
             .iter()
             .all(|&t| is_eligible_field_type(t, type_table))

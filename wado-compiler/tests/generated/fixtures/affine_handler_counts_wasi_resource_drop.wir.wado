@@ -274,6 +274,8 @@ type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Stdou
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(87)
 
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(88)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -460,7 +462,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     start_139 = $cm_handle_3;
     $cm_handle_3 = 0;
     $local_4 = global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_139, $local_4.repr, $local_4.used);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_139, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_139 = start_23; start_23 = 0; start_139);
 }
 
@@ -635,6 +637,16 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l44;
         };
     };
+}
+
+fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(18)), 0, $mv$message$repr, 0, 17);
+    builtin::array_set_u8(new_repr, 17, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 18);
+    });
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
