@@ -1,7 +1,7 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Enumeration } from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -452,7 +452,7 @@ pub struct Graph {
     pub inputs: List<ValueInfo>,
     pub outputs: List<ValueInfo>,
     pub initializers: List<ValueInfo>,
-    pub constants: TreeMap<String, Known> = TreeMap::new(),
+    pub constants: HashMap<String, Known> = HashMap::new(),
     pub nodes: List<Node>,
     /// The default domain's opset, which fixes what an operator means. `None`
     /// where the graph names none, read as the current one.
@@ -463,7 +463,7 @@ impl Graph {
     /// The tensors the graph reads and does not define, which a subgraph reads
     /// from the scope around it.
     pub fn outer_reads(&self) -> List<String> {
-        let mut defined = TreeSet::<String>::new();
+        let mut defined = HashSet::<String>::new();
         for let declared of [&self.inputs, &self.initializers] {
             for let vi of *declared {
                 defined.insert(vi.name);
@@ -748,7 +748,7 @@ pub fn constant_without_values(tensor: &String) -> String {
 pub fn parameters(
     inputs: List<ValueInfo>,
     initializers: &List<ValueInfo>,
-    constants: &TreeMap<String, Known>,
+    constants: &HashMap<String, Known>,
 ) -> List<ValueInfo> {
     let mut named: List<String> = [];
     for let vi of *initializers {

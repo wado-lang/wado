@@ -1,7 +1,7 @@
 //! Reading a graph out of a serialized ONNX `ModelProto`. The schema is
 //! `onnx.proto` as ONNX ships it, and Grog generates its types.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use grog from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -171,7 +171,7 @@ fn is_external(t: &onnx::TensorProto) -> bool {
 }
 
 /// `t`'s bytes out of the file its `external_data` names, among `files`.
-fn external_bytes(t: &onnx::TensorProto, name: &String, files: &TreeMap<String, ByteList>) -> Result<ByteList, String> {
+fn external_bytes(t: &onnx::TensorProto, name: &String, files: &HashMap<String, ByteList>) -> Result<ByteList, String> {
     let Some(location) = external_entry(t, "location") else {
         return Result::Err(`${*name}: external data with no location`);
     };
@@ -200,7 +200,7 @@ fn read_initializer(
     t: &onnx::TensorProto,
     name: String,
     dtype: String,
-    files: &TreeMap<String, ByteList>,
+    files: &HashMap<String, ByteList>,
 ) -> Result<ValueInfo, String> {
     let extents = extents_of(t, &name)?;
     let mut dims: List<Dim> = [];
@@ -223,7 +223,7 @@ fn external_payload(
     name: &String,
     dtype: &String,
     extents: &List<i32>,
-    files: &TreeMap<String, ByteList>,
+    files: &HashMap<String, ByteList>,
 ) -> Result<ByteList, String> {
     let Some(element) = element_of(dtype) else {
         return Result::Err(`${*name}: external ${*dtype} data`);
@@ -307,7 +307,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         Some(onnx::AttributeProtoAttributeType::Graph) => {
             if let Some(g) = &a.g {
                 // A branch's own initializers stop the build, so none is external.
-                let graph = read_graph(g, &TreeMap::<String, ByteList>::new())?;
+                let graph = read_graph(g, &HashMap::<String, ByteList>::new())?;
                 return Result::Ok(Attr { name, values, is_list, graph: Option::Some(graph) });
             }
         },
@@ -345,12 +345,12 @@ fn qualified_op(n: &onnx::NodeProto) -> String {
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
 /// cover names itself, as the textual reader's errors do.
 pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, ReadError> {
-    return read_with_external(bytes, &TreeMap::<String, ByteList>::new());
+    return read_with_external(bytes, &HashMap::<String, ByteList>::new());
 }
 
 /// Read a graph whose initializers may keep their data in other files: `files`
 /// holds each such file's bytes under the location the model names it by.
-pub fn read_with_external<S: AsByteSlice>(bytes: S, files: &TreeMap<String, ByteList>) -> Result<Graph, ReadError> {
+pub fn read_with_external<S: AsByteSlice>(bytes: S, files: &HashMap<String, ByteList>) -> Result<Graph, ReadError> {
     return read_model(bytes, files).map_err(|reason| ReadError { reason });
 }
 
@@ -370,7 +370,7 @@ pub fn external_locations<S: AsByteSlice>(bytes: S) -> Result<List<String>, Read
     return Result::Ok(locations);
 }
 
-fn read_model<S: AsByteSlice>(bytes: S, files: &TreeMap<String, ByteList>) -> Result<Graph, String> {
+fn read_model<S: AsByteSlice>(bytes: S, files: &HashMap<String, ByteList>) -> Result<Graph, String> {
     let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| `${e}`)?;
     let Some(graph) = &model.graph else {
         return Result::Err("a model without a graph");
@@ -385,9 +385,9 @@ fn read_model<S: AsByteSlice>(bytes: S, files: &TreeMap<String, ByteList>) -> Re
 }
 
 /// A `GraphProto` as written, its operators not yet read at an opset.
-fn read_graph(graph: &onnx::GraphProto, files: &TreeMap<String, ByteList>) -> Result<Graph, String> {
+fn read_graph(graph: &onnx::GraphProto, files: &HashMap<String, ByteList>) -> Result<Graph, String> {
     let mut initializers: List<ValueInfo> = [];
-    let mut constants = TreeMap::<String, Known>::new();
+    let mut constants = HashMap::<String, Known>::new();
     for let t of graph.initializer {
         let name = name_of(&t);
         let elem_type = t.data_type.unwrap_or(0);

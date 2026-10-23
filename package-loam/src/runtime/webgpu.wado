@@ -28,7 +28,7 @@ use {
     row_extents,
     slices_within,
 } from "./tensor.wado";
-use { HashMap, TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use {
     Webgpu,
     Gpu,
@@ -197,7 +197,9 @@ pub affine struct WebGpuBackend {
     device: GpuDevice,
     queue: GpuQueue,
     pipelines: List<Pipeline>,
-    /// Each compiled shader's place in `pipelines`, by what it is made of.
+    /// Each compiled shader's place in `pipelines`, by what it is made of. A
+    /// `ShaderKey` has no `Hash` while its derivation is a roadmap item of WEP:
+    /// HashMap.
     compiled: TreeMap<ShaderKey, i32>,
     /// The buffers `keep` wrote, which live as long as the backend.
     kept: List<Slot>,
@@ -217,7 +219,7 @@ pub affine struct WebGpuBackend {
     pass_start: i32,
     /// The slots of this pass's buffers, and of those carried into it, that
     /// `retain` keeps through the next `begin`.
-    retaining: TreeSet<i32>,
+    retaining: HashSet<i32>,
     /// The buffers of earlier passes that the pass before this one retained.
     carried: List<Carried>,
     /// The commands recorded and not yet submitted: none, or one encoder.
@@ -329,7 +331,7 @@ impl WebGpuBackend {
             spare: [],
             pass: [],
             pass_start: 0,
-            retaining: TreeSet::new(),
+            retaining: HashSet::new(),
             carried: [],
             recording: [],
             unsubmitted: 0,
@@ -1497,7 +1499,7 @@ impl Backend for WebGpuBackend {
             }
         }
         self.carried = carried;
-        self.retaining = TreeSet::new();
+        self.retaining = HashSet::new();
         for let at of 0..<self.groups.held.len() {
             if let Some(g) = &self.groups.held[at] && g.used < self.passes {
                 self.group_at.remove(g.key);
