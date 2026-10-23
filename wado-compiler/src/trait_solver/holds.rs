@@ -311,6 +311,7 @@ impl Query<'_> {
                     RefRule::Always | RefRule::Never => None,
                 }
             })
+            .or_else(|| never_holds(program, ty, trait_))
     }
 
     /// Whether one impl applies to `ty`: its target matches, and every bound
@@ -525,6 +526,30 @@ pub(super) fn at_self(
 pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
     let (eq, ord) = program.comparisons?;
     row_is(program, ty, eq).then_some(ord)
+}
+
+/// `!` holds what no impl answers for it, binding each associated type to
+/// `!` (spec-types.md § The Never Type).
+fn never_holds(program: &Program, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+    let never = SolverType::Decl(program.never?, Vec::new());
+    if *ty != never {
+        return None;
+    }
+    let assoc = program.traits[&trait_]
+        .assoc_bounds
+        .keys()
+        .map(|&assoc| {
+            let member = Member {
+                binding: never.clone(),
+                matched: Vec::new(),
+            };
+            (assoc, member)
+        })
+        .collect();
+    Some(Holds {
+        requests: Vec::new(),
+        assoc,
+    })
 }
 
 /// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait

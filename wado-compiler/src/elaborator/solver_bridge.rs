@@ -1043,6 +1043,7 @@ impl SolverBridge {
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
         Self::intern_declarations(tysys, modules, &mut lowering);
         program.copyable = Self::derived_trait(tysys, &mut lowering, CompilerItem::Copyable);
+        program.never = Some(lowering.builtin(NEVER_TYPE_NAME));
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {

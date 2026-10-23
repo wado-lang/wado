@@ -1,0 +1,74 @@
+// `!` and a newtype over it satisfy every trait bound. An associated type
+// projected from `!` is `!`, a static method called at `Self = !` traps, and a
+// written impl answers before the built-in one.
+
+type Never = !;
+
+fn fail() -> Never {
+    panic("fail");
+}
+
+fn show<T: Display>(x: T) -> String {
+    return `${x}`;
+}
+
+trait Labeled with () {
+    fn label() -> String;
+}
+
+fn label_of<T: Labeled>() -> String {
+    return T::label();
+}
+
+test "a `!` operand meets the bound its use asks" {
+    if builtin::black_box(false) {
+        let _ = `${panic("display")}`;
+        let _ = show(fail());
+        let _ = show(panic("bound"));
+    }
+}
+
+#[expect_trap]
+test "a static method no impl answers traps at `Self = !`" {
+    let _ = label_of::<!>();
+}
+
+#[expect_trap]
+test "a static method no impl answers traps at a newtype over `!`" {
+    let _ = label_of::<Never>();
+}
+
+trait Source with () {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+fn item_of<S: Source>(s: S) -> S::Item {
+    return s.get();
+}
+
+test "an associated type projected from `!` is `!`" {
+    if builtin::black_box(false) {
+        let _: ! = item_of(fail());
+        let _: ! = item_of(panic("item"));
+    }
+}
+
+trait Named with () {
+    fn name() -> String;
+}
+
+impl Named for ! {
+    fn name() -> String {
+        return "never";
+    }
+}
+
+fn name_of<T: Named>() -> String {
+    return T::name();
+}
+
+test "a written impl for `!` answers" {
+    assert name_of::<!>() == "never";
+    assert name_of::<Never>() == "never";
+}

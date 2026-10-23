@@ -7,6 +7,7 @@ mod call_instance;
 mod call_rewrite;
 mod func_inst;
 mod instance_patterns;
+mod never_dispatch;
 mod state;
 mod struct_inst;
 mod substitute;
@@ -502,6 +503,7 @@ impl Monomorphizer {
 
         // Phase 12.5: Lower the comparisons on non-primitive types left to trait calls
         func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_env);
+        never_dispatch::trap_never_dispatch_in_module(&mut module);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);
