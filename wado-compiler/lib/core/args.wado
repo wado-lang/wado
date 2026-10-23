@@ -662,9 +662,9 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         Err(e) => e,
     };
     let recorded = if let Some(err) = de.err {
-        err
+        err;
     } else if e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
-        bad
+        bad;
     } else {
         return Result::Err(ArgsError::from(e));
     };
