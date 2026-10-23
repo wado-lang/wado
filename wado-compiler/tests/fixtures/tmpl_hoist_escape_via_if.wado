@@ -7,8 +7,9 @@
 // every pushed element aliased one hoisted buffer that was reset each
 // iteration, printing the last item three times.
 //
-// The second loop pins the precision side: an alias `let` whose target does
-// NOT escape must still hoist (wir_expect $tmpl_buf_).
+// The third loop pins the precision side: an alias `let` whose target does
+// NOT escape must still hoist, its `len ${i}` buffer allocated at the top
+// level of `run`, ahead of the loop (wir_expect).
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -49,5 +50,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "total=15\n",
-    "wir_expect:O2": ["$tmpl_buf_"]
+    "wir_scope": "/run\"",
+    "wir_expect:O2": [
+        "\n    $local_{} = struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(20), used: 0 };"
+    ]
 }
