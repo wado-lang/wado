@@ -301,9 +301,9 @@ fn optimize_scoped(
     profiler.span_end(&scope.name("phase8_dce_compact"));
 
     // Phase 9: settle the locals. A local read once is forwarded into its read
-    // first, while no merge has given its name a second live range. Coalescing turns a copy between two merged
-    // locals into a self-copy it drops, and leaves set-then-get pairs across
-    // them. Tee fusion comes late: a tee hides the copy it replaces from every
+    // first, while no merge has given its name a second live range.
+    // Coalescing turns a copy between two merged locals into a self-copy it
+    // drops, and leaves set-then-get pairs across them. Tee fusion comes late: a tee hides the copy it replaces from every
     // pass before it. A set fused into its local's only read leaves a tee
     // nothing reads, which the write-only sweep takes back to its value.
     wir_pass(scope, "forward_once_read_locals", module, profiler, |m| {
