@@ -299,12 +299,7 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// The packed result of the stream or future copy on `handle` that answered
-/// `packed`, awaiting it first if BLOCKED. Either way it is in the
-/// `(count << 4) | status` packing the canonical returns directly.
-///
-/// Whether a given copy blocks is the host's scheduling, so the test lives here,
-/// where every copy reaches it, rather than at each call.
+/// `settled_copy`, where the bindings reach it: synthesis calls into `core:rt`.
 #[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
     return settled_copy(handle, packed);
