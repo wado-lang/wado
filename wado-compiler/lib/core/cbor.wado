@@ -40,6 +40,8 @@ use {
     DeserializeErrorKind,
     deeper,
     read_tag,
+    report_duplicate_field,
+    DuplicateFieldPolicy,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -1541,32 +1543,32 @@ impl DeserializeStruct for CborStructAccess {
         return Result::Ok(());
     }
 
-    /// A tag that leads the map is read past. One further in is reached by
-    /// skipping the entries before it, which are then read again from the
-    /// map's start.
-    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+    fn tag<S: AsStrSlice>(&mut self, key: S, on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
         let wanted = key.as_str_slice();
         let start = self.de.pos;
         let remaining = self.remaining;
-        let mut leads = true;
+        let mut found: Option<String> = null;
         while !self.de.container_step(self.remaining, self.indef)? {
             if !self.indef {
                 self.remaining -= 1;
             }
             let is_tag = self.entry_key()? == wanted.as_bytes();
             self.de.depth = self.depth;
-            if is_tag {
-                let value = read_tag(self.de, wanted)?;
-                if !leads {
-                    self.de.pos = start;
-                    self.remaining = remaining;
-                }
-                return Result::Ok(value);
+            if !is_tag {
+                self.de.skip_item(self.depth)?;
+                continue;
             }
-            self.de.skip_item(self.depth)?;
-            leads = false;
+            if found matches { Some(_) } {
+                report_duplicate_field(on_duplicate, &wanted.to_string())?;
+            }
+            found = Option::Some(read_tag(self.de, wanted)?);
         }
-        return Result::Err(DeserializeError::missing_field(key));
+        let Some(value) = found else {
+            return Result::Err(DeserializeError::missing_field(key));
+        };
+        self.de.pos = start;
+        self.remaining = remaining;
+        return Result::Ok(value);
     }
 }
 

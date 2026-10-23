@@ -802,7 +802,8 @@ impl DeserializeStruct for ValueObjectAccess {
         return Result::Ok(());
     }
 
-    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+    /// An object holds a key once, so nothing repeats it.
+    fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
         let Some(value) = self.fields.get_ref_str(key.as_str_slice()) else {
             return Result::Err(DeserializeError::missing_field(key));
         };

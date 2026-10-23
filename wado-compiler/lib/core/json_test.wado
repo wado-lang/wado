@@ -1969,6 +1969,7 @@ test "an error names the fields and elements it was reached through" {
     assert path_of(`{"hashed_set":[1,"x"]}`) == "hashed_set[1]";
     assert path_of(`{"stage":{"type":"Join"}}`) == "stage.type";
     assert path_of(`{"stage":{"type":7}}`) == "stage.type";
+    assert path_of(`{"stage":{"type":"Split","pattern":"x","type":"Empty"}}`) == "stage";
     assert path_of(`{"stage":{"pattern":"x"}}`) == "stage";
     assert path_of(`{"stage":{"pattern":[1 2],"type":"Split"}}`) == "stage";
     assert path_of(`{"stage":{"type":"Split","pattern":1}}`) == "stage.pattern";

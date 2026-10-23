@@ -28,6 +28,7 @@ use {
     TextKeyDeserializer,
     TextKeySerializer,
     deeper,
+    DuplicateFieldPolicy,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -390,8 +391,9 @@ impl DeserializeStruct for NsdStructAccess {
     }
 
     // NSD names no key, so the tag is the element a tagged case is written
-    // with first. The payload's fields follow it from index 0.
-    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+    // with first, and nothing can repeat it. The payload's fields follow it
+    // from index 0.
+    fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
         if !entry_head(self.de, b']', self.first)? {
             return Result::Err(DeserializeError::missing_field(key));
         }

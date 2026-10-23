@@ -1223,3 +1223,10 @@ test "an internal tag is looked up among the object's entries" {
     ]));
     assert from_value::<InternallyTagged>(&untyped) matches { Err(e) && e.path == "type" };
 }
+
+test "a repeated internal tag meets the duplicate policy, and an accepted one gives the last" {
+    let repeated = `{"type":"Empty","pattern":"x","type":"Split"}`;
+    assert from_string::<InternallyTagged>(repeated) matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    let last: Result<ReadLastWins<InternallyTagged>, DeserializeError> = from_string(repeated);
+    assert last matches { Ok(r) && r.value == InternallyTagged::Split(TagSplit { pattern: "x" }) };
+}

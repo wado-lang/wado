@@ -505,12 +505,15 @@ pub trait DeserializeStruct with () {
     fn end(&mut self) -> Result<(), DeserializeError>;
 
     /// The string under `key`, wherever it stands among the entries: an
-    /// internally tagged variant's case. The entries `next_field` yields after
-    /// it may hold `key`'s again. An error reading the string names `key` in its
-    /// path; one reading past another entry names nothing, as `next_field`'s
-    /// skip does. A format that cannot look ahead keeps the default, which
-    /// refuses rather than read the wrong case.
-    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+    /// internally tagged variant's case. Every entry is looked at, so a repeat
+    /// of `key` meets `on_duplicate` as a repeated field does, and an accepted
+    /// one gives the last string. The entries are then read again from the
+    /// first, where `next_field` passes `key`'s over as a key no field has. An
+    /// error reading the string names `key` in its path; one reading past
+    /// another entry names nothing, as `next_field`'s skip does. A format that
+    /// cannot look ahead keeps the default, which refuses rather than read the
+    /// wrong case.
+    fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type(
             `this format cannot read an internally tagged variant, whose tag is "${key}"`,
         ));
@@ -1447,13 +1450,10 @@ struct TaggedCaseSerializer<S: Serializer> {
 }
 
 impl<S: Serializer> TaggedCaseSerializer<S> {
+    /// The compiler admits a payload only where the derivation writes it as one
+    /// struct (`check_internal_tag`), which calls nothing else.
     fn no_struct<T>(&self) -> Result<T, SerializeError> {
-        builtin::cold_path();
-        return Result::Err(
-            SerializeError::unsupported_value(
-                `the payload of internally tagged case "${self.case_name}" is written as no struct, so nothing holds the tag`,
-            ),
-        );
+        unreachable();
     }
 }
 
@@ -1557,17 +1557,14 @@ impl<S: Serializer> Serializer for TaggedCaseSerializer<S> {
 /// that object as already begun.
 struct TaggedCaseDeserializer<A: DeserializeStruct> {
     access: A,
-    begun: bool = false,
-    case_name: String,
     on_duplicate: DuplicateFieldPolicy,
 }
 
 impl<A: DeserializeStruct> TaggedCaseDeserializer<A> {
+    /// The compiler admits a payload only where the derivation reads it as one
+    /// struct (`check_internal_tag`), which calls nothing else.
     fn no_struct<T>(&self) -> Result<T, DeserializeError> {
-        builtin::cold_path();
-        return Result::Err(DeserializeError::unexpected_type(
-            `the payload of internally tagged case "${self.case_name}" is read as no struct, so nothing holds the tag`,
-        ));
+        unreachable();
     }
 }
 
@@ -1646,10 +1643,6 @@ impl<A: DeserializeStruct> Deserializer for TaggedCaseDeserializer<A> {
     }
 
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<A, DeserializeError> {
-        if self.begun {
-            return self.no_struct();
-        }
-        self.begun = true;
         return Result::Ok(self.access);
     }
 
@@ -1868,7 +1861,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
         if let Some(tag) = ReflectVariant::<V>::wire_tag() {
             let on_duplicate = d.on_duplicate_field();
             let mut sd = d.begin_struct(&Reflect::<V>::type_name(), members.len())?;
-            let name = sd.tag(&tag)?;
+            let name = sd.tag(&tag, on_duplicate)?;
             for let case of members {
                 if wire_name(&case, policy) == name {
                     if case.is_unit() {
@@ -1878,11 +1871,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
                         sd.end()?;
                         return Result::Ok(case.make());
                     }
-                    let payload = P::deserialize(&mut TaggedCaseDeserializer {
-                        access: sd,
-                        case_name: name,
-                        on_duplicate,
-                    })?;
+                    let payload = P::deserialize(&mut TaggedCaseDeserializer { access: sd, on_duplicate })?;
                     return Result::Ok(case.construct(payload));
                 }
             }

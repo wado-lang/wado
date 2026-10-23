@@ -1199,3 +1199,9 @@ test "decode: an error reading the tag names it, and one before it does not" {
     assert from_bytes::<InternallyTagged>(b"\xa1\x64type\x01") matches { Err(e) && e.path == "type" };
     assert from_bytes::<InternallyTagged>(b"\xa2\x61a") matches { Err(e) && e.path == "" };
 }
+
+test "decode: a repeated internal tag is a duplicate field" {
+    // {"type": "Split", "pattern": "x", "type": "Empty"}
+    let repeated = b"\xa3\x64type\x65Split\x67pattern\x61x\x64type\x65Empty";
+    assert decode_err_kind::<InternallyTagged>(repeated) == DeserializeErrorKind::DuplicateField;
+}
