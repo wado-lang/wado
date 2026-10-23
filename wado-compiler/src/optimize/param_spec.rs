@@ -10,6 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncCell, FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp,
 };
+use crate::const_eval::MAX_SEQ_ELEMENTS;
 use crate::nir_arena::{
     ArenaStructField, Body, ExprId, ExprKind, NodeRef, Operand, PackedData, PatKind, StmtKind,
     Tracked,
@@ -143,7 +144,7 @@ impl FieldConst {
     fn of_literal(body: &Body, types: &TypeTable, expr: ExprId) -> Option<Self> {
         let node = &body.exprs[expr];
         let literal = match &node.kind {
-            ExprKind::PackedArray(data) => {
+            ExprKind::PackedArray(data) if data.len() <= MAX_SEQ_ELEMENTS => {
                 ConstLiteral::Packed(data.clone(), ConstType::of(types, node.type_id))
             }
             ExprKind::StructLiteral {
@@ -255,13 +256,17 @@ enum Slot {
 /// slot it replaces, and the constant.
 type Binding = (u32, Slot, FieldConst);
 
-/// Identity of a clone: the original callee plus the bindings substituted into
-/// it, sorted for a stable key. Two call sites agreeing on the bindings share
-/// one clone.
+/// One substitution by the parameter's name, which `dae` leaves alone while it
+/// renumbers locals.
+type NamedBinding = (String, Slot, FieldConst);
+
+/// Identity of a clone: the function no clone came from, and every binding
+/// substituted on the way down, sorted for a stable key. Two call sites
+/// agreeing on them share one clone, by however many steps each got there.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SpecKey {
-    callee: FuncId,
-    bindings: Vec<Binding>,
+    root: FuncId,
+    bindings: Vec<NamedBinding>,
 }
 
 /// Cross-iteration state, so a clone minted in one iteration is reused by the
@@ -271,9 +276,8 @@ struct SpecKey {
 pub(super) struct ParamSpecState {
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
-    /// The slots each clone has substituted, its ancestors' included, by
-    /// parameter name, as `param_consts` is.
-    bound_slots: IndexMap<FuncId, IndexSet<(String, Slot)>>,
+    /// Each clone's identity, which a clone of it extends.
+    specs: IndexMap<FuncId, SpecKey>,
     /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
@@ -1158,14 +1162,13 @@ fn select_sites(
         // A clone is specialized further on the slots it left open, so a
         // constant that settles a round after another still reaches it. A
         // bound slot stays bound: its parameter is still passed the constant.
-        if let Some(bound) = state.bound_slots.get(&callee) {
+        if let Some(spec) = state.specs.get(&callee) {
+            let locals = &signatures.param_locals[index];
             let names = &signatures.param_names[index];
             bindings.retain(|(param, slot, _)| {
-                let position = signatures.param_locals[index]
-                    .iter()
-                    .position(|p| p == param);
+                let position = locals.iter().position(|p| p == param);
                 let name = &names[position.expect("a binding names a parameter")];
-                !bound.contains(&(name.clone(), *slot))
+                !spec.bindings.iter().any(|(n, s, _)| n == name && s == slot)
             });
         }
         if bindings.is_empty() {
@@ -1510,14 +1513,12 @@ fn plan_clones<'s>(
         })
     });
     for (caller, site) in hot_then_cold {
-        let key = SpecKey {
-            callee: site.callee,
-            bindings: site.bindings.clone(),
-        };
-        if let Some(&existing) = state.clones.get(&key) {
-            if signatures_match(project, site.callee, existing) {
-                retarget.push((*caller, site.call, existing));
-            }
+        let key = spec_key(project, state, site);
+        let cached = state.clones.get(&key).copied();
+        if let Some(existing) = cached
+            && signatures_match(project, site.callee, existing)
+        {
+            retarget.push((*caller, site.call, existing));
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
@@ -1527,33 +1528,43 @@ fn plan_clones<'s>(
         {
             continue;
         }
-        let callee = project.functions[site.callee.index()].borrow();
         compiler_trace!(
             "param_spec",
             "specialized {} on {} binding(s)",
-            callee.name,
+            project.functions[site.callee.index()].borrow().name,
             site.bindings.len()
         );
         let id = FuncId::new(next_id);
         next_id += 1;
-        let mut bound = state
-            .bound_slots
-            .get(&site.callee)
-            .cloned()
-            .unwrap_or_default();
-        for (param_local, slot, _) in &site.bindings {
-            let param = callee.params.iter().find(|p| p.local_index == *param_local);
-            let param = param.expect("a binding names a parameter");
-            bound.insert((param.name.clone(), *slot));
+        // A clone reached by another path whose signature has since moved
+        // keeps the key; this one is minted beside it.
+        if cached.is_none() {
+            state.clones.insert(key.clone(), id);
         }
-        drop(callee);
-        state.bound_slots.insert(id, bound);
-        state.clones.insert(key, id);
+        state.specs.insert(id, key);
         state.per_callee.insert(site.callee, ordinal + 1);
         retarget.push((*caller, site.call, id));
         planned.push((site, id, ordinal));
     }
     (retarget, planned)
+}
+
+/// The identity of the clone `site` asks for: its callee's own, extended by
+/// the site's bindings.
+fn spec_key(project: &NirPackage, state: &ParamSpecState, site: &Site) -> SpecKey {
+    let mut key = state.specs.get(&site.callee).cloned().unwrap_or(SpecKey {
+        root: site.callee,
+        bindings: Vec::new(),
+    });
+    let callee = project.functions[site.callee.index()].borrow();
+    for (param_local, slot, value) in &site.bindings {
+        let param = callee.params.iter().find(|p| p.local_index == *param_local);
+        let param = param.expect("a binding names a parameter");
+        key.bindings.push((param.name.clone(), *slot, value.clone()));
+    }
+    key.bindings
+        .sort_unstable_by(|(a, x, _), (b, y, _)| (a, x).cmp(&(b, y)));
+    key
 }
 
 /// Build the planned clones, in id order, to append to the store.

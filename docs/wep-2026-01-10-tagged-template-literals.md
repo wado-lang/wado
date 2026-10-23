@@ -37,10 +37,11 @@ Three things the language has grown since decide the shape:
   hoists a closed constant expression to a global, and `niri` projects fields
   back out of one.
 
-Together they let the static part of a template — its literal segments, its
-specifiers, its arity and the type at each hole — live in a _type_, so that a
-tag body reading them is reading constants. That is what makes a tagged template
-cost what the untagged one costs.
+Together they let the static part of a template live where a tag body reads
+it as a constant. Its specifiers, its arity and the type at each hole live in
+a _type_. Its literal segments live in the value, as fields every call site
+writes as literals. That is what makes a tagged template cost what the untagged
+one costs.
 
 ## Decision
 
@@ -459,7 +460,7 @@ introduces a mechanism; each item names the existing one it extends.
 ### Prelude (`lib/core/prelude/traits.wado`, `lib/core/builtin.wado`)
 
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
-  with `Holes`, `Members`, `members()`, `tail()`, `raw_tail()`, each method
+  with `Holes`, `Members`, `members()`, `tail(t)`, `raw_tail(t)`, each method
   carrying its own `compiler_item`.
 - `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, has_spec }` with the constant accessors reading fields, and three bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
