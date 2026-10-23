@@ -1220,7 +1220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.clear_binders();
                 scope.register_generic_params(method_type_params, base);
                 method_type_params
                     .iter()
@@ -1956,7 +1956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // just type_params and assoc_type_bindings — other parts (bounds,
         // self_type, …) are kept from the parent for this lookup.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
         // Set up type parameters for resolving generic associated types
@@ -2136,20 +2136,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         };
 
-        // The method's canonical signature comes from the decl pass; only its
-        // type parameters and the impl's trait reference come off the header.
-        let method_data = header
+        // The method's canonical signature comes from the decl pass; only the
+        // impl's trait reference comes off the header.
+        let method_sig = header
             .methods
             .iter()
             .find(|m| m.name == method_name)
             .map(|m| {
-                let sig = scope
+                scope
                     .tysys
                     .signatures
                     .method_sig(m.def)
                     .expect("the decl pass records every impl-declared method's signature")
-                    .clone();
-                (sig, m.type_params.clone())
+                    .clone()
             });
         // A header whose trait reaches no declaration implements none, so it
         // contributes no trait method. The index still holds it under the
@@ -2172,34 +2171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("a header carrying a trait declaration names it");
 
         let mut method_found = false;
-        if let Some((method_sig, method_type_params)) = method_data {
-            // Bring the reported slots into scope, so the body resolves `T`
-            // to the slot the call site binds. Effect and `fn`-bound params
-            // occupy none, so they are not registered.
-            let method_slot_params: Vec<&ast::GenericParam> = method_type_params
-                .iter()
-                .filter(|p| p.is_real_type_param())
-                .collect();
-            let method_type_param_ids: Vec<TypeId> = method_sig.own_type_param_ids();
-            assert_eq!(
-                method_slot_params.len(),
-                method_type_param_ids.len(),
-                "`{method_name}` declares {} slots, its signature reports {}",
-                method_slot_params.len(),
-                method_type_param_ids.len()
-            );
-            let self_binding = scope.self_binding();
-            for (type_param, &type_param_id) in
-                method_slot_params.iter().zip(method_type_param_ids.iter())
-            {
-                let index = scope.declared_slot(type_param_id);
-                scope.bind_param(
-                    &type_param.name,
-                    BinderInScope::declared(index, type_param_id, type_param),
-                    ScopedBound::pin_declared(type_param, self_binding),
-                );
-            }
-
+        if let Some(method_sig) = method_sig {
             // `Self` needs no special handling: the canonical frame bound it
             // to the impl target, so filling the slots with the receiver's
             // arguments yields the concrete receiver. The impl's effect
@@ -2216,19 +2188,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &effect_binding,
             );
 
-            // Remove method-level type params from scope
-            for type_param in &method_type_params {
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .shift_remove(&type_param.name);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .shift_remove(&type_param.name);
-            }
             found_traits.push(TraitMethodMatch {
                 trait_name: trait_name_of_impl.clone(),
                 trait_decl,

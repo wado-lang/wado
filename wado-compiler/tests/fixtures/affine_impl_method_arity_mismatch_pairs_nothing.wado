@@ -1,0 +1,18 @@
+// An impl method declaring the wrong number of type parameters pairs none of
+// them with the trait's, so the arity is the one error it gets.
+trait Sink with () {
+    fn put<affine T, U>(&mut self, v: T, u: U) -> i32;
+}
+
+struct S {}
+
+impl Sink for S {
+    fn put<V>(&mut self, v: V, u: V) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":10:8: analysis error: method `put` takes 1 type parameter(s) but `Sink` declares 2", "compile_error_codes": ["ARITY_MISMATCH"]}

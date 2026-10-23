@@ -473,6 +473,15 @@ impl<T> List<T> {
         return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 
+    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _ {
+        let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
+        copy.sort_by(cmp);
+        return copy;
+    }
+}
+
+// Sorting only moves elements, so it takes an affine one.
+impl<affine T> List<T> {
     /// In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
     /// handed references as `iter_ref` hands them out: a `Ref` element in
     /// place, a scalar as a read-only snapshot.
@@ -521,12 +530,6 @@ impl<T> List<T> {
             }
             width *= 2;
         }
-    }
-
-    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _ {
-        let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
-        copy.sort_by(cmp);
-        return copy;
     }
 }
 
@@ -616,14 +619,15 @@ impl<T> IntoIterator for &mut List<T> {
     }
 }
 
-// sort/sorted require T: Ord (elements must be comparable via Ord::cmp)
-impl<T: Ord> List<T> {
+impl<affine T: Ord> List<T> {
     pub fn sort(&mut self) {
         self.sort_by(|a: &T, b: &T| {
             return a.cmp(b);
         });
     }
+}
 
+impl<T: Ord> List<T> {
     pub fn sorted(&self) -> List<T> {
         let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
         copy.sort();

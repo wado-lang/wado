@@ -699,6 +699,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` method leaving unmarked a type parameter its trait declares
+    /// `affine`: a call through the trait moves in what the body may copy.
+    AffineImplParamUnmarked {
+        trait_name: String,
+        method_name: String,
+        param_name: String,
+        declared_name: String,
+        span: Span,
+    },
+
     /// An impl binding an affine type to an associated type not declared
     /// `affine type`, which a generic body may copy (WEP: Affine Types).
     AffineAssocBinding {
@@ -1999,6 +2009,19 @@ impl TypeError {
                 Code::AffineArgument,
                 format!(
                     "affine type '{type_name}' given for '{param_name}', which may be copied; `affine {param_name}` would admit it"
+                ),
+                *span,
+            ),
+            TypeError::AffineImplParamUnmarked {
+                trait_name,
+                method_name,
+                param_name,
+                declared_name,
+                span,
+            } => (
+                Code::AffineArgument,
+                format!(
+                    "method `{method_name}` declares `{param_name}` unmarked, but `{trait_name}` declares `affine {declared_name}`: its body may copy an argument the trait admits as move-only"
                 ),
                 *span,
             ),

@@ -3054,7 +3054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {

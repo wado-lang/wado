@@ -297,6 +297,9 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
+    /// The binders a method's parameter of the same name shadowed. No name
+    /// reaches one, but the body still holds values of it, through `self`.
+    pub(super) shadowed: Vec<(String, BinderInScope)>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc
     /// types), each paired with the `Self` its written types mean. Used for
     /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
@@ -325,14 +328,34 @@ pub(super) struct TraitContext {
 }
 
 impl TraitContext {
-    /// The type parameters in scope declared `affine T`, which a body treats
-    /// as move-only.
-    pub(super) fn affine_params(&self) -> Vec<String> {
+    /// The binders in scope declared `affine T`, which a body treats as
+    /// move-only. A binder is its type, not its name: a method's `T` is not
+    /// the impl's `T` it shadows.
+    pub(super) fn affine_params(&self) -> Vec<TypeId> {
+        self.binders()
+            .filter(|(_, binder)| binder.is_affine)
+            .map(|(_, binder)| binder.type_id)
+            .collect()
+    }
+
+    /// Every binder the frame holds, by name, a shadowed one included.
+    pub(super) fn binders(&self) -> impl Iterator<Item = (&String, &BinderInScope)> {
         self.type_params
             .iter()
-            .filter(|(_, binder)| binder.is_affine)
-            .map(|(name, _)| name.clone())
-            .collect()
+            .chain(self.shadowed.iter().map(|(name, binder)| (name, binder)))
+    }
+
+    /// Bind `name` to `binder`, keeping the binder it shadows.
+    pub(super) fn bind(&mut self, name: &str, binder: BinderInScope) {
+        if let Some(shadowed) = self.type_params.insert(name.to_string(), binder) {
+            self.shadowed.push((name.to_string(), shadowed));
+        }
+    }
+
+    /// Unbind every type parameter, for a frame naming its own.
+    pub(super) fn clear_binders(&mut self) {
+        self.type_params.clear();
+        self.shadowed.clear();
     }
 }
 
@@ -474,7 +497,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
-        ctx.type_params.clear();
+        ctx.clear_binders();
         ctx.type_param_bounds.clear();
         scope.register_generic_params(params, 0);
         scope
@@ -488,7 +511,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let ctx = &mut scope.annotate_ctx.trait_ctx;
-        ctx.type_params.clear();
+        ctx.clear_binders();
         ctx.type_param_bounds.clear();
         ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
@@ -532,7 +555,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .collect();
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params = binders;
+        let ctx = &mut scope.annotate_ctx.trait_ctx;
+        ctx.clear_binders();
+        ctx.type_params = binders;
         body(&mut scope)
     }
 
@@ -548,10 +573,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
         for (slot, (name, &type_id)) in names.iter().zip(args).enumerate() {
-            scope.annotate_ctx.trait_ctx.type_params.insert(
-                name.clone(),
-                BinderInScope::undeclared(base + slot as u32, type_id),
-            );
+            scope
+                .annotate_ctx
+                .trait_ctx
+                .bind(name, BinderInScope::undeclared(base + slot as u32, type_id));
         }
         body(&mut scope)
     }
@@ -800,8 +825,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut tt = self.tysys.type_table.borrow_mut();
         self.annotate_ctx
             .trait_ctx
-            .type_params
-            .iter()
+            .binders()
             .flat_map(|(name, binder)| {
                 let elem = tt
                     .is_type_pack(binder.type_id)
@@ -923,10 +947,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         binder: BinderInScope,
         bounds: Vec<ScopedBound>,
     ) {
-        self.annotate_ctx
-            .trait_ctx
-            .type_params
-            .insert(name.to_string(), binder);
+        self.annotate_ctx.trait_ctx.bind(name, binder);
         self.annotate_ctx
             .trait_ctx
             .type_param_bounds
@@ -1235,21 +1256,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(arg) = arg else {
                 continue;
             };
-            if self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&param.name)
-            {
+            let resolved_arg = self.resolve_type(arg);
+            let ctx = &mut self.annotate_ctx.trait_ctx;
+            let binder = BinderInScope::declared(ctx.type_params.len() as u32, resolved_arg, param);
+            // The impl's own parameter keeps the name, but the trait's mark
+            // still reaches what it binds.
+            if ctx.type_params.contains_key(&param.name) {
+                ctx.shadowed.push((param.name.clone(), binder));
                 continue;
             }
-            let resolved_arg = self.resolve_type(arg);
-            let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.bind_param(
-                &param.name,
-                BinderInScope::declared(idx, resolved_arg, param),
-                bounds,
-            );
+            self.bind_param(&param.name, binder, bounds);
         }
     }
 }

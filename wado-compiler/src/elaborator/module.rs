@@ -248,39 +248,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for method in &impl_block.methods {
                     // Set up method-level type parameters so that `V::Output`-style
                     // associated type projections can be resolved in the return type.
-                    let mut method_type_param_names: Vec<String> = Vec::new();
-                    let offset = scope.annotate_ctx.trait_ctx.type_params.len();
-                    let self_binding = scope.self_binding();
+                    let mut method_scope = scope.enter_inherited_type_param_scope();
+                    let offset = method_scope.annotate_ctx.trait_ctx.type_params.len();
+                    let self_binding = method_scope.self_binding();
                     for (i, param) in method.type_params.iter().enumerate() {
                         let idx = (offset + i) as u32;
-                        let type_id = scope.tysys.type_table.borrow_mut().make_declared_param(
-                            param.name.clone(),
-                            idx,
-                            param.is_pack,
-                        );
-                        scope.bind_param(
+                        let type_id = method_scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_declared_param(param.name.clone(), idx, param.is_pack);
+                        method_scope.bind_param(
                             &param.name,
                             BinderInScope::declared(idx, type_id, param),
                             ScopedBound::pin_declared(param, self_binding),
                         );
-                        method_type_param_names.push(param.name.clone());
                     }
 
                     let return_type = method
                         .return_type
                         .as_ref()
-                        .map(|t| scope.resolve_type(t))
+                        .map(|t| method_scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
-
-                    // Remove method-level type params from scope
-                    for name in &method_type_param_names {
-                        scope.annotate_ctx.trait_ctx.type_params.shift_remove(name);
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_param_bounds
-                            .shift_remove(name);
-                    }
+                    drop(method_scope);
 
                     let mangled_name =
                         MethodName::format_local(&struct_name, trait_name.as_ref(), &method.name);

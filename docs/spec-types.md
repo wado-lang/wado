@@ -483,6 +483,10 @@ Every sort is stable and O(n log n) in the worst case:
 `sort()` and `sorted()` put every NaN in a list of floats last. See
 [Float Comparison](./spec-standard-traits.md#float-comparison).
 
+`sort()` and `sort_by()` only move elements, so they take a list of
+[affine](#affine-types) elements. `sorted()` and `sorted_by()` copy the list,
+so they do not.
+
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
 ```wado
@@ -1291,6 +1295,12 @@ export fn run() {
 }
 ```
 
+The mark belongs to the parameter's declaration, not its name: a method's
+`T` that shadows its impl's `affine T` is unmarked unless written so, and a
+value of the impl's `T` stays affine in that method. An `impl` method restates
+every `affine` its trait's method declares, since a call through the trait
+moves in what an unmarked body may copy (`AFFINE_ARGUMENT`).
+
 An associated type without the mark may be copied wherever a body projects
 it. An `impl` binding an affine type to one is an error at the binding, under
 the same code. `Iterator` and `IntoIterator` leave `Item` and `Iter`
@@ -1323,7 +1333,9 @@ export fn run() {
 An affine type implements only an `affine trait`, whose default bodies are
 checked with `Self` affine. A trait without the mark may copy `Self` in a
 default body, so implementing it for an affine type is an error at the impl
-(`AFFINE_DECLARATION`).
+(`AFFINE_DECLARATION`). An `affine trait`'s signatures treat `Self` as affine
+too, so `Self` given for a parameter without the mark is an error
+(`AFFINE_ARGUMENT`).
 
 <!-- {"fixture":"affine_impl_of_affine_trait.wado"} -->
 

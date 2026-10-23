@@ -452,8 +452,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
     pub(crate) probes_without_instance: IndexSet<u32>,
-    /// The `affine` type parameters of the impl whose methods are reified.
-    pub(crate) impl_affine_params: Vec<String>,
     /// The ownership of the body being reified, which says what
     /// [`Self::reify_expr`] marks `Move`. `None` outside a body.
     pub(crate) body_ownership: Option<Rc<BodyOwnership>>,
@@ -462,7 +460,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
 /// What decides the places a body moves.
 pub(crate) struct BodyOwnership {
     modes: Modes,
-    affine_params: Vec<String>,
+    affine_params: Vec<tir::TypeId>,
 }
 
 /// [`ownership::BodyFacts`] as reify reads them, through the active tuple
@@ -470,7 +468,7 @@ pub(crate) struct BodyOwnership {
 /// moves.
 struct ReifyFacts<'r, 'a, H: CompilerHost> {
     reify: &'r Reify<'a, H>,
-    affine_params: &'r [String],
+    affine_params: &'r [tir::TypeId],
 }
 
 impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
@@ -577,7 +575,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             coverage: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
-            impl_affine_params: Vec::new(),
             body_ownership: None,
         }
     }
@@ -587,7 +584,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn with_body_ownership<R>(
         &mut self,
         body: &ast::Block,
-        affine_params: Vec<String>,
+        affine_params: Vec<tir::TypeId>,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
         self.with_ownership(
@@ -613,7 +610,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     fn with_ownership<R>(
         &mut self,
-        affine_params: Vec<String>,
+        affine_params: Vec<tir::TypeId>,
         walk: impl FnOnce(&ReifyFacts<'_, 'a, H>) -> Modes,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
@@ -713,6 +710,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_pack_spread_subject => pack_spread_subjects: (String, u32),
             ann_method_impl_type_params => method_impl_type_params: Vec<TirTypeParam>,
             ann_fn_param_types => fn_param_types: Vec<tir::TypeId>,
+            ann_fn_affine_params => fn_affine_params: Vec<tir::TypeId>,
             ann_fn_return_type => fn_return_types: tir::TypeId,
             ann_effect_ops => effect_ops: Vec<TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<TirTypeParam>,
@@ -863,20 +861,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl facts the body walk recorded on
                     // `sem.default_method_facts`.
-                    // A default method's facts are the impl's own walk, which
-                    // states its types in the impl's parameters.
-                    let affine_params = ownership::affine_params(&impl_block.type_params);
-                    let methods = util::replaced(
-                        self,
-                        |this| &mut this.impl_affine_params,
-                        affine_params,
-                        |this| {
-                            let mut methods = this.reify_impl(impl_block);
-                            methods.extend(this.reify_impl_default_methods(impl_block));
-                            methods
-                        },
-                    )
-                    .0;
+                    let mut methods = self.reify_impl(impl_block);
+                    methods.extend(self.reify_impl_default_methods(impl_block));
                     let bound = bind_trait_contracts(
                         methods,
                         &self.contract_bindings(impl_block),
@@ -1362,8 +1348,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         let body = func.body.as_ref().map(|b| {
-            let mut affine_params = self.impl_affine_params.clone();
-            affine_params.extend(ownership::affine_params(&func.type_params));
+            let affine_params = self
+                .ann_fn_affine_params(func.id)
+                .expect("a walked body records its affine parameters");
             self.with_body_ownership(b, affine_params, |this| this.reify_block(b, &mut ctx, None))
         });
 

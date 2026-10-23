@@ -5624,13 +5624,13 @@ Walks by reference: an element yielded by value is copied out.
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
 
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
+
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _`
 
 In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
 handed references as `iter_ref` hands them out: a `Ref` element in
 place, a scalar as a read-only snapshot.
-
-#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
 
 #### `pub fn sort(&mut self)`
 

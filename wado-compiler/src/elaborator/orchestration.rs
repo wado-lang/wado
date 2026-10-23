@@ -1112,6 +1112,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                 }
+                // Parameters pair by position only where the lists agree.
+                let arity_agrees = ast::written_params(&declared.type_params).count()
+                    == ast::written_params(&method.type_params).count();
+                let unmarked = ast::written_params(&declared.type_params)
+                    .zip(ast::written_params(&method.type_params))
+                    .filter(|(declared, written)| {
+                        arity_agrees && declared.is_affine && !written.is_affine
+                    });
+                for (declared, written) in unmarked {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::AffineImplParamUnmarked {
+                            trait_name: decl.name.clone(),
+                            method_name: method.name.clone(),
+                            param_name: written.name.clone(),
+                            declared_name: declared.name.clone(),
+                            span: written.name_span,
+                        },
+                    );
+                }
                 // The receiver counts as much as the parameters, since no call
                 // site writes one the trait did not declare.
                 if declared.has_receiver != method.has_receiver {
