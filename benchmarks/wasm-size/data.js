@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792721202884,
+  "lastUpdate": 1792737584580,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69709,6 +69709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/863c217a09a707faa06c98568ffb38f9f699df6f"
         },
         "date": 1792721201915,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19803,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294877,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eec1dcb6fc439950419a343641f89245e4cd3c4e",
+          "message": "Merge pull request #2427 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): drop what a by-value pattern leaves as its arm is entered",
+          "timestamp": "2026-10-23T15:18:28+09:00",
+          "tree_id": "b28090df64c8214b504b725adf2bb22d94fb3c79",
+          "url": "https://github.com/wado-lang/wado/commit/eec1dcb6fc439950419a343641f89245e4cd3c4e"
+        },
+        "date": 1792737584159,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
