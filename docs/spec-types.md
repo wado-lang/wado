@@ -483,6 +483,10 @@ Every sort is stable and O(n log n) in the worst case:
 `sort()` and `sorted()` put every NaN in a list of floats last. See
 [Float Comparison](./spec-standard-traits.md#float-comparison).
 
+`sort()` and `sort_by()` only move elements, so they take a list of
+[affine](#affine-types) elements. `sorted()` and `sorted_by()` copy the list,
+so they do not.
+
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
 ```wado
