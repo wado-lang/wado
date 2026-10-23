@@ -301,6 +301,15 @@ pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, Deserializ
     return Result::Ok(next);
 }
 
+/// The string an internal tag holds, read from `d` once `DeserializeStruct::tag`
+/// has found it under `key`, which an error names in its path.
+pub fn read_tag<D: Deserializer, S: AsStrSlice>(d: &mut D, key: S) -> Result<String, DeserializeError> {
+    return match d.deserialize_string() {
+        Ok(tag) => Result::Ok(tag),
+        Err(e) => Result::Err(e.within_field(key)),
+    };
+}
+
 #[compiler_item("serialize_seq")]
 pub trait SerializeSeq with () {
 

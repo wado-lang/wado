@@ -36,6 +36,7 @@ use {
     DuplicateFieldPolicy,
     TextKeyDeserializer,
     TextKeySerializer,
+    read_tag,
 } from "core:serde";
 
 use { TreeMap, MapEntriesRefIter } from "core:collections";
@@ -805,10 +806,7 @@ impl DeserializeStruct for ValueObjectAccess {
         let Some(value) = self.fields.get_ref_str(key.as_str_slice()) else {
             return Result::Err(DeserializeError::missing_field(key));
         };
-        return match (ValueDeserializer { value }).deserialize_string() {
-            Ok(tag) => Result::Ok(tag),
-            Err(e) => Result::Err(e.within_field(key)),
-        };
+        return read_tag(&mut ValueDeserializer { value }, key);
     }
 }
 

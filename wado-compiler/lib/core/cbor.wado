@@ -39,6 +39,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     deeper,
+    read_tag,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -1555,12 +1556,7 @@ impl DeserializeStruct for CborStructAccess {
             let is_tag = self.entry_key()? == wanted.as_bytes();
             self.de.depth = self.depth;
             if is_tag {
-                let value = match self.de.deserialize_string() {
-                    Ok(value) => value,
-                    Err(e) => {
-                        return Result::Err(e.within_field(wanted));
-                    },
-                };
+                let value = read_tag(self.de, wanted)?;
                 if !leads {
                     self.de.pos = start;
                     self.remaining = remaining;

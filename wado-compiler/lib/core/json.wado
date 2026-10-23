@@ -83,6 +83,7 @@ use {
     TextKeyDeserializer,
     TextKeySerializer,
     deeper,
+    read_tag,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -2408,12 +2409,7 @@ impl DeserializeStruct for JsonStructAccess {
         while de.entry_head(b'}')? {
             let b = de.peek_after_whitespace();
             if de.entry_key(b)? == wanted.as_bytes() {
-                let value = match de.deserialize_string() {
-                    Ok(value) => value,
-                    Err(e) => {
-                        return Result::Err(e.within_field(wanted));
-                    },
-                };
+                let value = read_tag(de, wanted)?;
                 if !leads {
                     de.pos = start;
                     de.first_entry = first_entry;
