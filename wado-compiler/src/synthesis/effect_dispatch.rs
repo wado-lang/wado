@@ -2544,10 +2544,11 @@ pub fn rewrite_resource_drops(project: &Package) {
 }
 
 /// Post-monomorphize half of [`rewrite_call_sites_to_wrappers`]: a `#[cm]` call
-/// whose receiver was a type parameter matched no instantiation until now.
-pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage) {
+/// whose receiver was a type parameter matched no instantiation until now. The
+/// functions ahead of `from` were rewritten already.
+pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage, from: usize) {
     rewrite_resource_calls(
-        &flat.functions,
+        &flat.functions[from..],
         &flat.resource_wrappers,
         &flat.type_table,
         &flat.entry_module_source,

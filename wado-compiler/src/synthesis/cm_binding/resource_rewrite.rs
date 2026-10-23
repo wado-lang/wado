@@ -169,9 +169,11 @@ impl<'a> BindingSites<'a> {
         }
     }
 
-    fn from_flat(flat: &'a FlatPackage) -> Self {
+    /// The functions of `flat` from `from` on, the ones ahead of it bound
+    /// already.
+    fn from_flat(flat: &'a FlatPackage, from: usize) -> Self {
         Self {
-            functions: flat.functions.clone(),
+            functions: flat.functions[from..].to_vec(),
             existing: flat
                 .functions
                 .iter()
@@ -470,12 +472,15 @@ pub(super) fn rewrite_async_primitives(project: &mut Package, _validated: Payloa
 }
 
 /// Post-monomorphize half: the bodies that were generic, where a `#[cm]` call's
-/// payload only became concrete when the instance was minted.
+/// payload only became concrete when the instance was minted. The functions
+/// ahead of `from` were bound already. One validation answers for every run:
+/// what a later run binds, the helpers of a validated payload instantiated.
 pub fn rewrite_async_primitives_monomorphized(
     flat: &mut FlatPackage,
-    _validated: PayloadsValidated,
+    _validated: &PayloadsValidated,
+    from: usize,
 ) {
-    let generated = rewrite_async_primitives_at(&BindingSites::from_flat(flat));
+    let generated = rewrite_async_primitives_at(&BindingSites::from_flat(flat, from));
     // Link is what stamps a module source on a pre-monomorphize helper, by the
     // module it was placed in. These arrive after it, so they carry the entry
     // module themselves — the module their `entry_call` sites name.
@@ -1208,6 +1213,20 @@ fn synthesize_stream_read_funcs(
         TypeTable::I32,
         false,
     );
+    let count_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("count".to_string()),
+        TypeTable::I32,
+        false,
+    );
+    stmts.push(let_stmt(
+        "count",
+        count_idx,
+        TypeTable::I32,
+        copy_count(local_ref(max_idx, "max", TypeTable::I32)),
+    ));
+    let count = || local_ref(count_idx, "count", TypeTable::I32);
     let byte_count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1219,10 +1238,7 @@ fn synthesize_stream_read_funcs(
         "byte_count",
         byte_count_idx,
         TypeTable::I32,
-        buffer_bytes(
-            copy_count(local_ref(max_idx, "max", TypeTable::I32)),
-            elem_size,
-        ),
+        buffer_bytes(count(), elem_size),
     ));
     let byte_count = || local_ref(byte_count_idx, "byte_count", TypeTable::I32);
     let ptr_idx = alloc_named_local(
@@ -1251,11 +1267,7 @@ fn synthesize_stream_read_funcs(
     let handle = || local_ref(handle_idx, "handle", TypeTable::I32);
     let packed = cm_canonical_call(
         stream_read_name,
-        vec![
-            handle(),
-            ptr(),
-            copy_count(local_ref(max_idx, "max", TypeTable::I32)),
-        ],
+        vec![handle(), ptr(), count()],
         TypeTable::I32,
     );
     let started = started_copy_literal(

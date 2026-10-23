@@ -295,6 +295,35 @@ fn refuse_expanding_instances<H: CompilerHost>(
     Err(Bail)
 }
 
+/// Bind the `#[cm]` calls a generic body holds, now that `mono` made their
+/// payloads concrete. An installed handler claims a call before the CM binding
+/// does. The helpers that binding mints call generics of their own, whose new
+/// instances hold `#[cm]` calls in turn (a stream lift's `List<R>::push` drops
+/// an `R`), so binding and instantiating repeat until an instantiation adds
+/// nothing.
+fn bind_monomorphized<H: CompilerHost>(
+    flat: &mut FlatPackage,
+    mono: &mut Monomorphization,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    // Ahead of the rewrites: both consume the pristine `#[cm]` call shape the
+    // scan matches.
+    let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(flat)
+        .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?;
+    let mut unbound = 0;
+    loop {
+        synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(flat, unbound);
+        synthesis::cm_binding::rewrite_async_primitives_monomorphized(flat, &validated, unbound);
+        let bound = flat.functions.len();
+        mono.resume(flat);
+        refuse_expanding_instances(mono, logger)?;
+        if flat.functions.len() == bound {
+            return Ok(());
+        }
+        unbound = bound;
+    }
+}
+
 /// Report each synthesis failure, at what it concerns where it names that.
 fn bail_with_synthesis<H: CompilerHost>(
     logger: &Logger<'_, H>,
@@ -2096,19 +2125,7 @@ fn compile_after_load<H: CompilerHost>(
         refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
-
-        // A `#[cm]` primitive in a generic body learns its payload only here.
-        // An installed handler claims the call before the CM binding does, and
-        // the helpers that binding mints call generics of their own — hence the
-        // resume.
-        // Ahead of the rewrites, as pre-monomorphize: both consume the pristine
-        // `#[cm]` call shape the scan matches.
-        let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?;
-        synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
-        synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
-        mono.resume(&mut flat);
-        refuse_expanding_instances(&mono, logger)?;
+        bind_monomorphized(&mut flat, &mut mono, logger)?;
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
@@ -2574,13 +2591,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 lower::contract_checks::check_marked_calls(&flat);
                 let mut mono = monomorphize(&mut flat);
                 refuse_expanding_instances(&mono, &logger)?;
-                let validated =
-                    synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
-                        .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?;
-                synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
-                synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
-                mono.resume(&mut flat);
-                refuse_expanding_instances(&mono, &logger)?;
+                bind_monomorphized(&mut flat, &mut mono, &logger)?;
                 synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
             lower_instance_patterns(&flat, &logger)?;
