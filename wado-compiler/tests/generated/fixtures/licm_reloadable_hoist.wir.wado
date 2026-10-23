@@ -25,9 +25,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//licm_reloadable_hoist.wado/$cm_export__run" = fn();  // TypeId(10)
+type "functype//licm_reloadable_hoist.wado/escape_quotes" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(10)
 
-type "functype//licm_reloadable_hoist.wado/escape_quotes$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(11)
+type "functype//licm_reloadable_hoist.wado/$cm_export__run" = fn();  // TypeId(11)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
@@ -62,7 +62,35 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:licm_reloadable_hoist.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(91, 81, 93);
+global global:licm_reloadable_hoist.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(91, 81, 93);
+
+fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
+    let i: i32;
+    let self_5: i32;
+    let new_used: i32;
+    let start_27: i32;
+    let $licm_repr_29: ref Array<u8>;
+    self_5 = s.used;
+    i = 0;
+    $licm_repr_29 = s.repr;
+    b0: block {
+        l1: loop {
+            break_if b0 i >= self_5;
+            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
+                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
+                    $licm_repr_29 = s.repr;
+                }
+                start_27 = buf.used;
+                buf.used = new_used;
+                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
+            }
+            i = i + 1;
+            continue l1;
+        };
+    };
+}
 
 fn "licm_reloadable_hoist.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
@@ -76,8 +104,8 @@ fn "licm_reloadable_hoist.wado/$cm_export__run"() {
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    src = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a\"b\"c\"d"), used: 7 };
-    "licm_reloadable_hoist.wado/escape_quotes$spec0"(out, src);
+    src = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a\"b\"c\"d"), used: 7 });
+    "licm_reloadable_hoist.wado/escape_quotes"(out, src);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "licm_reloadable_hoist.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
@@ -86,32 +114,6 @@ fn "licm_reloadable_hoist.wado/$cm_export__run"() {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, out.repr, out.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
     "wasi/task-return"(0);
-}
-
-fn "licm_reloadable_hoist.wado/escape_quotes$spec0"(buf, s) {
-    let i: i32;
-    let new_used: i32;
-    let start_27: i32;
-    let $licm_repr_29: ref Array<u8>;
-    i = 0;
-    $licm_repr_29 = s.repr;
-    b0: block {
-        l1: loop {
-            break_if b0 i >= 7;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_2, 0, 3);
-            }
-            i = i + 1;
-            continue l1;
-        };
-    };
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

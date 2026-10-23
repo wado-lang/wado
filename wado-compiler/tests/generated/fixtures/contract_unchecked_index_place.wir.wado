@@ -47,7 +47,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
@@ -89,7 +89,7 @@ fn "contract_unchecked_index_place.wado/run"() with Stdout {
     $sroa_$f_buf_150 = local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_49 = local.tee self_36(builtin::array_get_value<ref "contract_unchecked_index_place.wado//P">(elements, 0).x) < 0;
     self_36 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_53(x_53 = builtin::i64_extend_i32_s(self_36); select i64(x_53 < 0_i64, 0_i64 - x_53, x_53)));
-    is_negative_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, is_negative_49, self_36);
+    is_negative_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, is_negative_49, self_36);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, is_negative_49, x_53, self_36);
     if @unlikely(local.tee self_36($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -101,7 +101,7 @@ fn "contract_unchecked_index_place.wado/run"() with Stdout {
     $sroa_$f_buf_150 = $local_2;
     self_36 = local.tee is_negative_49(builtin::array_get_value<ref "contract_unchecked_index_place.wado//P">(elements, 1).x) < 0;
     is_negative_49 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_53(x_53 = builtin::i64_extend_i32_s(is_negative_49); select i64(x_53 < 0_i64, 0_i64 - x_53, x_53)));
-    self_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, self_36, is_negative_49);
+    self_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, self_36, is_negative_49);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, self_36, x_53, is_negative_49);
     is_negative_49 = builtin::i32_wrap_i64(local.tee x_53("wasi/stream-new"()));
     self_36 = builtin::i32_wrap_i64(x_53 >> 32_i64);
@@ -113,7 +113,7 @@ fn "contract_unchecked_index_place.wado/run"() with Stdout {
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $moved_4_114 = local.tee self_36(builtin::array_get_value<ref "contract_unchecked_index_place.wado//P">(elements, 0).x) < 0;
     self_36 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_53(x_53 = builtin::i64_extend_i32_s(self_36); select i64(x_53 < 0_i64, 0_i64 - x_53, x_53)));
-    $moved_4_114 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, $moved_4_114, self_36);
+    $moved_4_114 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, $moved_4_114, self_36);
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, $moved_4_114, x_53, self_36);
     self_36 = builtin::i32_wrap_i64(local.tee x_53("wasi/stream-new"()));
     $moved_4_114 = builtin::i32_wrap_i64(x_53 >> 32_i64);
@@ -306,7 +306,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

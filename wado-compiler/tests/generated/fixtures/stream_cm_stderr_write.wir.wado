@@ -75,6 +75,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:transmission-wasi/cli/types.wado#error-code from "wasi/future-read:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
+global global:stream_cm_stderr_write.wado::$const_obj_0: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
 
 fn "stream_cm_stderr_write.wado/run"() with Stderr {
@@ -85,8 +86,7 @@ fn "stream_cm_stderr_write.wado/run"() with Stderr {
     $sroa_$pattern_temp_0_0_12 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_13 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
     $moved_4 = "stream_cm_stderr_write.wado/$cm_binding__Stderr_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_12; $sroa_$pattern_temp_0_0_12 = 0; $moved_4);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($sroa_$pattern_temp_0_1_13, struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("err msg
-"), used: 8 });
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($sroa_$pattern_temp_0_1_13, global:stream_cm_stderr_write.wado::$const_obj_0);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_12 = $sroa_$pattern_temp_0_1_13; $sroa_$pattern_temp_0_1_13 = 0; $sroa_$pattern_temp_0_0_12);
     drop("stream_cm_stderr_write.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"($sroa_$pattern_temp_0_0_12 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_12));
 }

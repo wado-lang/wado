@@ -102,8 +102,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:stream_cm_stdin_read.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32, 98, 121, 116, 101, 115);
-global global:stream_cm_stdin_read.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100, 32);
+global global:stream_cm_stdin_read.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32, 98, 121, 116, 101, 115);
+global global:stream_cm_stdin_read.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100, 32);
 
 fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let $load_12: ref Array<u8>;
@@ -153,7 +153,7 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     }
     $mv$chunk$result = $local_3.used;
     $local_3.used = other_len;
-    builtin::array_copy<u8>(local.tee $load_12($local_3.repr), $mv$chunk$result, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_12($local_3.repr), $mv$chunk$result, global:stream_cm_stdin_read.wado::$const_obj_1, 0, 5);
     $mv$chunk$result = new_used_17 < 0;
     new_used_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(new_used_17); select i64(x < 0_i64, 0_i64 - x, x)));
     if $mv$chunk$result {
@@ -179,7 +179,7 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     }
     $mv$chunk$result = $local_3.used;
     $local_3.used = new_used_17;
-    builtin::array_copy<u8>($local_3.repr, $mv$chunk$result, global:stream_cm_stdin_read.wado::$const_obj_3, 0, 6);
+    builtin::array_copy<u8>($local_3.repr, $mv$chunk$result, global:stream_cm_stdin_read.wado::$const_obj_0, 0, 6);
     $mv$chunk$result = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_17 = builtin::i32_wrap_i64(x >> 32_i64);
     other_len = "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(other_len = $mv$chunk$result; $mv$chunk$result = 0; other_len);

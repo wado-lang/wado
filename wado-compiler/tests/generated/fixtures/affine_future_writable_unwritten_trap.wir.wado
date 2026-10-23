@@ -62,11 +62,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//affine_future_writable_unwritten_trap.wado/produce$sroa[return]" = fn(ref Array<u8>, i32) -> ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";  // TypeId(18)
+type "functype//affine_future_writable_unwritten_trap.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//affine_future_writable_unwritten_trap.wado/$cm_export__run" = fn();  // TypeId(19)
+type "functype//affine_future_writable_unwritten_trap.wado/$cm_future_write_i32" = fn(i32, i32) -> ref "core:prelude/types.wado//FutureWrite<i32>";  // TypeId(19)
 
-type "functype//affine_future_writable_unwritten_trap.wado/$cm_future_write_i32" = fn(i32, i32) -> ref "core:prelude/types.wado//FutureWrite<i32>";  // TypeId(20)
+type "functype//affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0" = fn(ref Array<u8>, i32) -> ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";  // TypeId(20)
 
 type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(21)
 
@@ -76,15 +76,15 @@ type "functype//core:rt/unreachable" = fn();  // TypeId(23)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
-type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(25)
+type "functype//wasi/future-drop-readable:s32" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:s32" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
+type "functype//wasi/future-write:s32" = fn(i32, i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/future-write:s32" = fn(i32, i32) -> i32;  // TypeId(28)
+type "functype//wasi/future-drop-writable:s32" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-writable:s32" = fn(i32);  // TypeId(29)
+type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(29)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
@@ -102,68 +102,23 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/future-new:s32 from "wasi/future-new:s32";
 import fn wasi/future-drop-readable:s32 from "wasi/future-drop-readable:s32";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-write:s32 from "wasi/future-write:s32";
 import fn wasi/future-drop-writable:s32 from "wasi/future-drop-writable:s32";
+import fn wasi/future-new:s32 from "wasi/future-new:s32";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:affine_future_writable_unwritten_trap.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(120);
-global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>" { 0 };
+global global:affine_future_writable_unwritten_trap.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(120);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
-
-fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]"($mv$text$repr, $mv$text$used) {
-    let $qm_e: ref "core:prelude/string.wado//String";
-    let $drop_spill_6: ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";
-    let $moved_8: ref null "core:prelude//$Resource";
-    let $cm_pair_10: i64;
-    let b: ref Array<u8>;
-    let i: i32;
-    let $sroa_$pattern_temp_0_0_26: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_27: i32;
-    $sroa_$pattern_temp_0_0_26 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_10("wasi/future-new:s32"())) };
-    $sroa_$pattern_temp_0_1_27 = builtin::i32_wrap_i64($cm_pair_10 >> 32_i64);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        b = global:affine_future_writable_unwritten_trap.wado::$const_obj_1;
-        if $mv$text$used != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
-        }
-        i = 0;
-        b2: block {
-            l3: loop {
-                break_if b2 i >= $mv$text$used;
-                if builtin::array_get_value<u8>($mv$text$repr, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
-                }
-                i = i + 1;
-                continue l3;
-            };
-        };
-        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
-    }) {
-        $qm_e = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not a number"), used: 12 };
-        cold_path;
-        $drop_spill_6 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0, 2: $qm_e };
-        if @unlikely(($sroa_$pattern_temp_0_1_27 == 0) == 0) {
-            "core:rt/panic"(local.tee b(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever")), 77);
-            unreachable;
-        }
-        if ref.is_null($sroa_$pattern_temp_0_0_26) == 0 {
-            "wasi/future-drop-readable:s32"($sroa_$pattern_temp_0_0_26.value);
-        }
-        return $drop_spill_6;
-    }
-    drop("affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"(i = $sroa_$pattern_temp_0_1_27; $sroa_$pattern_temp_0_1_27 = 0; i, 1));
-    return local.tee $drop_spill_6(struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $moved_8 = $sroa_$pattern_temp_0_0_26; $sroa_$pattern_temp_0_0_26 = ref.null none; $moved_8 }, 2: ref.null none });
-}
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>" { 0 };
 
 fn "affine_future_writable_unwritten_trap.wado/$cm_export__run"() {
     let $discarded_0: ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";
     $discarded_0 = block -> ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" {
-        "affine_future_writable_unwritten_trap.wado/produce$sroa[return]"(array.new_fixed<u8>(120), 1);
+        "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"(array.new_fixed<u8>(120), 1);
     };
     let $match_scrut_0: i32;
     if local.tee $match_scrut_0($discarded_0.0) == 0 {
@@ -210,6 +165,47 @@ fn "affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"(handle, val
         }
         break $inline_cm_future_write_result_0;
     } };
+}
+
+fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$text$repr, $mv$text$used) {
+    let $qm_e: ref "core:prelude/string.wado//String";
+    let $drop_spill_6: ref null "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]";
+    let $moved_8: ref null "core:prelude//$Resource";
+    let $cm_pair_10: i64;
+    let b: ref Array<u8>;
+    let i: i32;
+    let $sroa_$pattern_temp_0_0_26: ref null "core:prelude//$Resource";
+    $sroa_$pattern_temp_0_0_26 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_10("wasi/future-new:s32"())) };
+    $mv$text$used = builtin::i32_wrap_i64($cm_pair_10 >> 32_i64);
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        b = global:affine_future_writable_unwritten_trap.wado::$const_obj_3;
+        i = 0;
+        b11: block {
+            l12: loop {
+                break_if b11 i >= 1;
+                if builtin::array_get_value<u8>($mv$text$repr, i) != builtin::array_get_value<u8>(b, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                }
+                i = i + 1;
+                continue l12;
+            };
+        };
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
+    }) {
+        $qm_e = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not a number"), used: 12 };
+        cold_path;
+        $drop_spill_6 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0, 2: $qm_e };
+        if @unlikely(($mv$text$used == 0) == 0) {
+            "core:rt/panic"(local.tee b(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever")), 77);
+            unreachable;
+        }
+        if ref.is_null($sroa_$pattern_temp_0_0_26) == 0 {
+            "wasi/future-drop-readable:s32"($sroa_$pattern_temp_0_0_26.value);
+        }
+        return $drop_spill_6;
+    }
+    drop("affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"(i = $mv$text$used; $mv$text$used = 0; i, 1));
+    return local.tee $drop_spill_6(struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $moved_8 = $sroa_$pattern_temp_0_0_26; $sroa_$pattern_temp_0_0_26 = ref.null none; $moved_8 }, 2: ref.null none });
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
@@ -260,17 +256,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b19: block {
-        l20: loop {
-            break_if b19 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b18: block {
+        l19: loop {
+            break_if b18 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l20;
+            continue l19;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l22: loop {
+        l21: loop {
             ptr_24 = ptr_13 + i;
             count_25 = $mv$data$end - i;
             count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
@@ -300,7 +296,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_24;
             }
-            continue l22;
+            continue l21;
         };
     };
 }

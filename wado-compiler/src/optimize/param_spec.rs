@@ -1600,7 +1600,7 @@ fn build_clones(
             for (name, seed) in clone.param_consts {
                 match seeds.get_mut(&name) {
                     Some(known) if known.pointee == seed.pointee => {
-                        known.consts.extend(seed.consts)
+                        known.consts.extend(seed.consts);
                     }
                     Some(_) | None => {
                         seeds.insert(name, seed);
@@ -1880,27 +1880,26 @@ fn redirect_const_reads(
                     continue;
                 }
                 let key = Arc::as_ptr(literal);
-                let local = match built.get(&key) {
-                    Some(&local) => local,
-                    None => {
-                        let Some(init) = literal.build(engine, types, type_id, span) else {
-                            continue;
-                        };
-                        let local = engine.alloc_minted_local("bound", type_id, false);
-                        lets.push(engine.alloc_stmt(
-                            StmtKind::Let {
-                                name: engine.local_name(local),
-                                local_index: local,
-                                is_mut: false,
-                                type_id,
-                                value: Operand::Expr(init),
-                                skip_value_copy: true,
-                            },
-                            span,
-                        ));
-                        built.insert(key, local);
-                        local
-                    }
+                let local = if let Some(&local) = built.get(&key) {
+                    local
+                } else {
+                    let Some(init) = literal.build(engine, types, type_id, span) else {
+                        continue;
+                    };
+                    let local = engine.alloc_minted_local("bound", type_id, false);
+                    lets.push(engine.alloc_stmt(
+                        StmtKind::Let {
+                            name: engine.local_name(local),
+                            local_index: local,
+                            is_mut: false,
+                            type_id,
+                            value: Operand::Expr(init),
+                            skip_value_copy: true,
+                        },
+                        span,
+                    ));
+                    built.insert(key, local);
+                    local
                 };
                 let name = engine.local_name(local);
                 Operand::Expr(engine.alloc_expr(

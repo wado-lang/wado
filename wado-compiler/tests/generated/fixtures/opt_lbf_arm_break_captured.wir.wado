@@ -67,6 +67,8 @@ type "functype//opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_st
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
 
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -80,9 +82,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_lbf_arm_break_captured.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 };
-global global:opt_lbf_arm_break_captured.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
-global global:opt_lbf_arm_break_captured.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(115, 111, 109, 101, 32);
+global global:opt_lbf_arm_break_captured.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 };
+global global:opt_lbf_arm_break_captured.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
+global global:opt_lbf_arm_break_captured.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(115, 111, 109, 101, 32);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
@@ -109,7 +111,7 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
             }
             start_18 = $local_4.used;
             $local_4.used = m;
-            builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_18, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
+            builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_18, global:opt_lbf_arm_break_captured.wado::$const_obj_2, 0, 5);
             start_18 = n < 0;
             n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
             if start_18 {
@@ -145,8 +147,8 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
         m = 0;
         m = start_18;
         start_18 = 0;
-        $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_4;
-        "core:rt/write_string_to_stream$dae[add_newline]"(m, $local_4.repr, $local_4.used);
+        $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_1;
+        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(m, $local_4.repr, $local_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(m = n; n = 0; m);
     };
     m = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
@@ -156,8 +158,8 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
     n = 0;
     n = m;
     m = 0;
-    $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_3;
-    "core:rt/write_string_to_stream$dae[add_newline]"(n, $local_4.repr, $local_4.used);
+    $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_0;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(n, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n = start_18; start_18 = 0; n);
 }
 
@@ -230,7 +232,7 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                 }
                 start_19 = $local_5.used;
                 $local_5.used = new_used_18;
-                builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_19, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
+                builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_19, global:opt_lbf_arm_break_captured.wado::$const_obj_2, 0, 5);
                 is_negative_28 = v < 0;
                 x = builtin::i64_extend_i32_s(v);
                 abs_val = select i64(x < 0_i64, 0_i64 - x, x);
@@ -347,8 +349,8 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
             $moved_3_74 = $moved_5_67;
             $moved_5_67 = 0;
             let $mv_arg_2: ref "core:prelude/string.wado//String";
-            $mv_arg_2 = global:opt_lbf_arm_break_captured.wado::$const_obj_4;
-            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_74, $mv_arg_2.repr, $mv_arg_2.used);
+            $mv_arg_2 = global:opt_lbf_arm_break_captured.wado::$const_obj_1;
+            "core:rt/write_string_to_stream$spec0$dae[add_newline]"($moved_3_74, $mv_arg_2.repr, $mv_arg_2.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_68 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_6_68);
             continue l7;
         };
@@ -360,8 +362,8 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
     $moved_3_74 = 0;
     $moved_3_74 = $moved_6_68;
     $moved_6_68 = 0;
-    $mv_arg_2 = global:opt_lbf_arm_break_captured.wado::$const_obj_3;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_74, $mv_arg_2.repr, $mv_arg_2.used);
+    $mv_arg_2 = global:opt_lbf_arm_break_captured.wado::$const_obj_0;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($moved_3_74, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_3_74 = $moved_4_66; $moved_4_66 = 0; $moved_3_74);
 }
 
@@ -536,6 +538,16 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l65;
         };
     };
+}
+
+fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(5)), 0, $mv$message$repr, 0, 4);
+    builtin::array_set_u8(new_repr, 4, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 5);
+    });
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

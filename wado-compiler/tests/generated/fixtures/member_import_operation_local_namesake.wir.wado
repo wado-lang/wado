@@ -77,6 +77,8 @@ type "functype//member_import_operation_local_namesake.wado/$cm_binding__Stdout_
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(30)
 
+type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -91,9 +93,9 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting" = ref.null none;
-global global:member_import_operation_local_namesake.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(53), used: 1 };
-global global:member_import_operation_local_namesake.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 32);
-global global:member_import_operation_local_namesake.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(72, 69, 76, 76, 79, 32);
+global global:member_import_operation_local_namesake.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(53), used: 1 };
+global global:member_import_operation_local_namesake.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 32);
+global global:member_import_operation_local_namesake.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(72, 69, 76, 76, 79, 32);
 
 fn "member_import_operation_local_namesake.wado/run"() with Stdout {
     let name_6: ref "core:prelude/string.wado//String";
@@ -117,7 +119,7 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
             break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_1: $local_3_9;
         } else {
             local.tee $local_3_9(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6;
-            builtin::array_copy<u8>($local_3_9.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_6, 0, 6);
+            builtin::array_copy<u8>($local_3_9.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_3, 0, 6);
             $inline_core_prelude_string_wado_String__internal_push_string_11: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_11 local.tee n_32(name_6.used) == 0;
                 if @unlikely(local.tee new_used_36(6 + n_32) > 22) {
@@ -152,7 +154,7 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
             break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_14: name_6;
         } else {
             local.tee name_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6;
-            builtin::array_copy<u8>(name_6.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_6, 0, 6);
+            builtin::array_copy<u8>(name_6.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_3, 0, 6);
             $inline_core_prelude_string_wado_String__internal_push_string_24: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_24 local.tee start_37($local_3_9.used) == 0;
                 if @unlikely(local.tee new_used_36(6 + start_37) > 22) {
@@ -183,8 +185,8 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
     new_used_36 = 0;
     new_used_36 = n_32;
     n_32 = 0;
-    name_6 = global:member_import_operation_local_namesake.wado::$const_obj_5;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_36, name_6.repr, name_6.used);
+    name_6 = global:member_import_operation_local_namesake.wado::$const_obj_2;
+    "core:rt/write_string_to_stream$dae[add_newline]$spec0"(new_used_36, name_6.repr, name_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_36 = start_37; start_37 = 0; new_used_36);
 }
 
@@ -272,6 +274,16 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
+fn "core:rt/write_string_to_stream$dae[add_newline]$spec0"(tx, $mv$message$repr, $mv$message$used) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(2)), 0, $mv$message$repr, 0, 1);
+    builtin::array_set_u8(new_repr, 1, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 2);
+    });
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
@@ -292,7 +304,7 @@ fn "member_import_operation_local_namesake.wado/member_import_operation_local_na
     let n_23: i32;
     let new_used_27: i32;
     let start_28: i32;
-    return local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6, builtin::array_copy<u8>($local_1.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_8, 0, 6), $inline_core_prelude_string_wado_String__internal_push_string_9: block {
+    return local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6, builtin::array_copy<u8>($local_1.repr, 0, global:member_import_operation_local_namesake.wado::$const_obj_5, 0, 6), $inline_core_prelude_string_wado_String__internal_push_string_9: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_9 local.tee n_23(name.used) == 0;
         if @unlikely(local.tee new_used_27(6 + n_23) > 22) {
             cold_path;

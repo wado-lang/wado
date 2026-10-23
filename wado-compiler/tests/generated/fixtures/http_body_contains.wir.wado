@@ -337,6 +337,7 @@ import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-dr
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/future-drop-writable from "wasi/future-drop-writable";
 
+global global:http_body_contains.wado::$const_obj_0: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33), used: 13 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 
@@ -394,7 +395,7 @@ fn "http_body_contains.wado/$cm_task_entry__handle"(request) {
     $moved_9 = 0;
     $moved_9 = local.tee $moved_12(ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_198).payload_0)).value;
     "wasi/task-return:handle"(0, $moved_9, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($sroa_$pattern_temp_1_1_196, struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("Hello, World!"), used: 13 });
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($sroa_$pattern_temp_1_1_196, global:http_body_contains.wado::$const_obj_0);
     "wasi/stream-drop-writable"($moved_9 = $sroa_$pattern_temp_1_1_196; $sroa_$pattern_temp_1_1_196 = 0; $moved_9);
     drop("http_body_contains.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_9 = $sroa_$pattern_temp_0_1_194; $sroa_$pattern_temp_0_1_194 = 0; $moved_9, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null($sroa_$pattern_temp_1_0_195) == 0 {

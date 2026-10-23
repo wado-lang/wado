@@ -79,7 +79,7 @@ type "functype//global_init_namespaced_operation.wado/global_init_namespaced_ope
 
 type "functype//global_init_namespaced_operation.wado/global_init_namespaced_operation.wado/$Closure_1::$call" = fn(ref "global_init_namespaced_operation.wado//$Closure_1") -> i32;  // TypeId(30)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
@@ -110,7 +110,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:global_init_namespaced_operation.wado::COUNTED: i32 = 0;
 global mut global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter" = ref.null none;
 global mut global:global_init_namespaced_operation.wado::$modules_initialized: bool = 0;
-global global:global_init_namespaced_operation.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
+global global:global_init_namespaced_operation.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 67, 111, 117, 110, 116, 101, 114, 58, 58, 110, 101, 120, 116, 96), used: 40 };
+global global:global_init_namespaced_operation.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "global_init_namespaced_operation.wado/run"() with Stdout {
     let tally: ref "global_init_namespaced_operation.wado//Tally";
@@ -120,6 +121,7 @@ fn "global_init_namespaced_operation.wado/run"() with Stdout {
     let self_8: i32;
     let is_negative_14: bool;
     let x_18: i64;
+    let self_19: ref "core:prelude/string.wado//String";
     let $local_0: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
     let $moved_4: i32;
     let $sroa_$f_buf_74: ref "core:prelude/string.wado//String";
@@ -133,33 +135,33 @@ fn "global_init_namespaced_operation.wado/run"() with Stdout {
     $sroa_$f_buf_74 = local.tee $local_1_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_14 = local.tee self_8(global:global_init_namespaced_operation.wado::COUNTED) < 0;
     self_8 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(self_8); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_74, is_negative_14, self_8);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_74.repr, is_negative_14, x_18, self_8);
+    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_74, is_negative_14, self_8);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_19($sroa_$f_buf_74).repr, is_negative_14, x_18, self_8);
     if @unlikely(local.tee self_8($local_1_1.used + 1) > builtin::array_len($local_1_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, self_8);
     }
     is_negative_14 = $local_1_1.used;
     $local_1_1.used = self_8;
-    builtin::array_copy<u8>($local_1_1.repr, is_negative_14, global:global_init_namespaced_operation.wado::$const_obj_3, 0, 1);
+    builtin::array_copy<u8>($local_1_1.repr, is_negative_14, global:global_init_namespaced_operation.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_74 = $local_1_1;
     self_8 = local.tee is_negative_14($inline__effect_dispatch____sub_ns_counter_wado_Counter__next_15: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter)) == 0) {
             global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = local.tee $d_./sub/ns_counter.wado/Counter(ref.as_non_null($local_0)).outer;
             is_negative_14 = block -> i32 {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_./sub/ns_counter.wado/Counter.op_next)).env);
+                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_./sub/ns_counter.wado/Counter.op_next)).env);
             };
             global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $local_0;
             break $inline__effect_dispatch____sub_ns_counter_wado_Counter__next_15: is_negative_14;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
+            "core:rt/panic"(local.tee self_19(global:global_init_namespaced_operation.wado::$const_obj_0).repr, self_19.used);
             unreachable;
         }
         unreachable;
     }) < 0;
     is_negative_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(is_negative_14); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    self_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_74, self_8, is_negative_14);
+    self_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_74, self_8, is_negative_14);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_74.repr, self_8, x_18, is_negative_14);
     is_negative_14 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
     self_8 = builtin::i32_wrap_i64(x_18 >> 32_i64);
@@ -419,7 +421,7 @@ fn "global_init_namespaced_operation.wado/global_init_namespaced_operation.wado/
     return self_1.value;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
