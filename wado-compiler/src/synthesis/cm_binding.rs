@@ -182,14 +182,14 @@ mod payload_validation {
     }
 
     /// Post-monomorphize: the sites the `is_concrete` guard deferred, judged now
-    /// that each instance names a concrete payload.
+    /// that each instance from `from` on names a concrete payload.
     pub fn reject_unresolvable_payloads_monomorphized(
         flat: &FlatPackage,
+        from: usize,
     ) -> Result<PayloadsValidated, String> {
         let reachable = reachable_from_export_bindings_flat(flat);
         let tt = flat.type_table.borrow();
-        let functions = flat
-            .functions
+        let functions = flat.functions[from..]
             .iter()
             .map(|f| (f.borrow().module_source.clone(), f));
         match first_unresolvable(&tt, &flat.cm_interface_registry, functions, &reachable) {

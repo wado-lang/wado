@@ -64,7 +64,7 @@ pub fn eprint(message: String) with Stderr {
 pub fn print_bytes(data: List<u8>) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stdout::write_via_stream(rx);
-    tx.write_all(data);
+    tx.write_raw_all(data.as_slice());
     tx.drop();
     handle.drop();
 }

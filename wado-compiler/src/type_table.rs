@@ -2192,14 +2192,13 @@ impl TypeTable {
         })
     }
 
-    /// The `StreamChunk<T>` a `Stream<T>::read` returns.
-    pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(CompilerItem::StreamChunk);
+    pub fn make_started_read(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StartedRead);
         self.make_generic_instance(def, vec![elem])
     }
 
-    pub fn make_stream_write(&mut self, elem: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(CompilerItem::StreamWrite);
+    pub fn make_started_write(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StartedWrite);
         self.make_generic_instance(def, vec![elem])
     }
 
@@ -2226,6 +2225,11 @@ impl TypeTable {
 
     pub fn make_result_buffer(&mut self) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::ResultBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
+    pub fn make_copy_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::CopyBuffer);
         self.make_struct(StructDef::Decl(def))
     }
 

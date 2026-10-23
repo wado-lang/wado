@@ -452,8 +452,9 @@ pub affine trait Drop with () {
   work. `x.drop()` names a type's `Drop` impl, so a type without one, and an
   `affine T` in a generic body, is dropped by name this way.
 - A type with an impl runs its `drop`. The body may move fields out of `self`,
-  and whatever is left at its end is dropped field by field. `self` is never
-  dropped as a whole again, which would run `drop` once more.
+  and whatever is left at its end is dropped field by field. Moving `self`
+  whole is an error, since wherever it went it would run `drop` once more. A
+  pattern taking it apart is a move of each field, so it stays allowed.
 - A resource's `fn drop(self)` is its `Drop` impl, which calls the Component
   Model's `resource.drop`.
 - Only an affine type implements `Drop`. A copyable type with one would run it
@@ -675,8 +676,13 @@ A waitable set holds the members joined to it, and a wait hands back the member
 that is ready:
 
 ```wado
-pub affine trait Waitable {                       // sealed
-    fn waitable_id(&self) -> Option<ResourceId>;  // None: ready without the host
+pub affine trait Waitable {      // sealed
+    fn wait_on(&self) -> WaitOn;
+}
+
+pub variant WaitOn {
+    Host(ResourceId),            // the handle the host reports the event by
+    Settled(ReadyEvent),         // ready already, with this event
 }
 
 pub affine struct WaitableSet<affine W: Waitable> { … }
@@ -691,8 +697,9 @@ impl<affine W: Waitable> WaitableSet<W> {
 pub struct Ready<affine W> { pub member: W, pub event: ReadyEvent }
 
 pub variant ReadyEvent {
-    Unreported,                  // no handle for the host to report
+    Unreported,                  // no handle for the host, and no event of its own
     Call(CallState),
+    Copied(CopyResult),
 }
 ```
 
@@ -702,13 +709,14 @@ variant. A raw code and payload would leave every caller to decode the
 Component Model's numbering, and a caller that read a stream's count as a
 call's state would drop a call still in flight. `Subtask` and `AsyncCall`
 implement `Waitable`. An `AsyncCall` that completed synchronously has no
-subtask, so its `waitable_id` is `None`, and `wait` hands it back first without
-asking the host.
+subtask, so it is `Settled(Call(Returned))`, and `wait` hands it back first
+without asking the host. So is a subtask whose resolution a set already
+delivered, with the state it resolved in.
 
-A stream or future end does not implement it. Each copy on one waits inside the
-binding (`cm_await_blocked`), so no copy is ever left pending for the host to
-report, and a set of ends would wait forever. Nor does `ReadyEvent` carry a copy
-event, since no member can produce one.
+A stream or future end does not implement it: no copy on a bare end is in
+flight, so a set of ends would wait forever. A started copy is a member
+instead, and `Copied` is its event
+([Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)).
 
 The host reports an event by handle index only, so something in the guest has
 to map the index back to the value. The set is that table, and the ownership
@@ -726,15 +734,15 @@ member returns moved out. A set has one member type. A loop that waits on
 several kinds declares a variant of its own and derives `Waitable` on it. The
 resource behind the set becomes internal to `core`.
 
-`Waitable` is sealed. The set trusts `waitable_id`: it joins the handle named
-there, and treats the member as ready without the host where there is none. A
+`Waitable` is sealed. The set trusts `wait_on`: it joins the handle named
+there, and treats the member as ready with the event named there otherwise. A
 hand-written impl could name a handle another value owns, so that value's
 events would arrive for the wrong member, or one that owns a handle could say
 it has none. The standard library implements the trait on the values that own
 a waitable handle, and nothing else may. A loop's variant derives it with the
 marker `impl Waitable for V;`, which the compiler writes out case by case: a
-case with a payload asks the payload, and one without is ready without the
-host. `Subtask` stays public, since a function waiting on a call it was neither
+case with a payload asks the payload, and one without is
+`Settled(Unreported)`. `Subtask` stays public, since a function waiting on a call it was neither
 handed nor started names it as an effect, but no value of it can be had
 outside `core`.
 

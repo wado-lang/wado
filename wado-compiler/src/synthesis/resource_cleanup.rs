@@ -831,7 +831,9 @@ impl TirRefVisitor for ResourceProbe<'_> {
             self.found = true;
             return;
         }
-        self.walk_expr_in_frame(expr);
+        // Into closures too: a body owning nothing affine still holds the
+        // closures whose drops this pass elaborates.
+        self.walk_expr(expr);
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {

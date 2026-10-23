@@ -43,7 +43,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
@@ -64,7 +64,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -92,9 +92,19 @@ fn "param_warn.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_72 = $sroa_$pattern_temp_0_0_13_71;
     $sroa_$pattern_temp_0_0_13_71 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
+<<<<<<< HEAD
     $mv_arg_2 = global:param_warn.wado::$const_obj_1;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"($sroa_$pattern_temp_0_1_14_72, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_72 = $moved_4_62; $moved_4_62 = 0; $sroa_$pattern_temp_0_1_14_72);
+||||||| 315ee9d4f
+    $mv_arg_2 = global:param_warn.wado::$const_obj_4;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_72, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_72 = $moved_4_62; $moved_4_62 = 0; $sroa_$pattern_temp_0_1_14_72);
+=======
+    $mv_arg_2 = global:param_warn.wado::$const_obj_4;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_72, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_72 = $moved_4_62; $moved_4_62 = 0; $sroa_$pattern_temp_0_1_14_72);
+>>>>>>> origin/main
     local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }).used = 7;
     builtin::array_copy<u8>($mv_arg_2.repr, 0, global:param_warn.wado::$const_obj_0, 0, 7);
     v = global:param_warn.wado::REGION;
@@ -119,7 +129,7 @@ fn "param_warn.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_72 = $sroa_$pattern_temp_0_0_13_71;
     $sroa_$pattern_temp_0_0_13_71 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_71 = $sroa_$pattern_temp_0_1_14_72; $sroa_$pattern_temp_0_1_14_72 = 0; $sroa_$pattern_temp_0_0_13_71, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_13_71 = $moved_4_62; $moved_4_62 = 0; $sroa_$pattern_temp_0_0_13_71);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_71 = $moved_4_62; $moved_4_62 = 0; $sroa_$pattern_temp_0_0_13_71);
 }
 
 fn "param_warn.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -204,8 +214,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

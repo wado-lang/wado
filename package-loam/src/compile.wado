@@ -159,10 +159,11 @@ pub fn generate_tokenizer(path: &String, bytes: ByteList, runtime: &String) -> R
 
 /// A checkpoint's leading bytes, through the end of its header, of the file, or
 /// of a length no module can address. The payloads are the loader's to read.
-pub fn read_header(content: Stream<u8>) -> ByteList {
+pub fn read_header(mut content: Stream<u8>) -> ByteList {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
-        let chunk = content.read(HEADER_CHUNK);
+        let [end, chunk] = content.start_read(HEADER_CHUNK).finish();
+        content = end;
         prefix.extend(&(chunk.items as ByteList));
         if chunk.result != CopyResult::Completed || holds_header(&prefix) {
             break;
@@ -191,10 +192,11 @@ global HEADER_CHUNK: i32 = 65536;
 /// declare a header no module can address, which the check then refuses, and
 /// all of a file that ends inside them. Reads the eight bytes and no more, so a
 /// build reads none of the payloads.
-pub fn header_extent(content: Stream<u8>) -> u64 {
+pub fn header_extent(mut content: Stream<u8>) -> u64 {
     let mut length = ByteList::with_capacity(8);
     loop {
-        let chunk = content.read(8 - length.len());
+        let [end, chunk] = content.start_read(8 - length.len()).finish();
+        content = end;
         length.extend(&(chunk.items as ByteList));
         if chunk.result != CopyResult::Completed || length.len() == 8 {
             break;

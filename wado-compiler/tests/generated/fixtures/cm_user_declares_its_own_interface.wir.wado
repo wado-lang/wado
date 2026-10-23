@@ -8,7 +8,7 @@ type "functype//wasi/wasi:demo/Handle::new" = fn() -> i32;  // TypeId(1)
 
 type "functype//cm_user_declares_its_own_interface.wado/$cm_export__run" = fn();  // TypeId(2)
 
-type "functype//wasi/resource-drop:cm_user_declares_its_own_interface.wado#handle" = fn(i32);  // TypeId(3)
+type "functype//wasi/resource-drop:cm_user_declares_its_own_interface.wado#Handle" = fn(i32);  // TypeId(3)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
@@ -17,7 +17,7 @@ type "functype//cm_user_declares_its_own_interface.wado/$cm_binding__Handle_new"
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Handle::new from "wasi/wasi:demo/Handle::new";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:cm_user_declares_its_own_interface.wado#handle from "wasi/resource-drop:cm_user_declares_its_own_interface.wado#handle";
+import fn wasi/resource-drop:cm_user_declares_its_own_interface.wado#Handle from "wasi/resource-drop:cm_user_declares_its_own_interface.wado#Handle";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_user_declares_its_own_interface.wado/$cm_binding__Handle_new"() with Handle {
@@ -30,7 +30,7 @@ fn "cm_user_declares_its_own_interface.wado/$cm_export__run"() {
         let $cm_handle_2: i32;
         $cm_handle_2 = h;
         h = 0;
-        "wasi/resource-drop:cm_user_declares_its_own_interface.wado#handle"($cm_handle_2);
+        "wasi/resource-drop:cm_user_declares_its_own_interface.wado#Handle"($cm_handle_2);
     }
     "wasi/task-return"(0);
 }

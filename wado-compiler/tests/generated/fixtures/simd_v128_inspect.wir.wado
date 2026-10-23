@@ -47,7 +47,7 @@ type "functype//core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelud
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
@@ -66,7 +66,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -112,7 +112,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     new_used_23 = start_24;
     start_24 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_24 = new_used_23; new_used_23 = 0; start_24, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_24 = $moved_4_49; $moved_4_49 = 0; start_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_24 = $moved_4_49; $moved_4_49 = 0; start_24);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$sroa[self.bytes]$spec0$sroa[f.buf]"(v, $local_2);
     start_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_52("wasi/stream-new"()));
@@ -121,7 +121,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     start_24 = $moved_4_49;
     $moved_4_49 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_49 = start_24; start_24 = 0; $moved_4_49, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_49 = new_used_23; new_used_23 = 0; $moved_4_49);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_49 = new_used_23; new_used_23 = 0; $moved_4_49);
 }
 
 fn "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -192,8 +192,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -338,72 +340,72 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
     builtin::array_copy<u8>(f.repr, start_19, global:core:prelude/primitive.wado::$const_obj_33, 0, 7);
     start_19 = 0;
     $tmpl_buf_71 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    b30: block {
-        l31: loop {
-            break_if b30 start_19 >= 16;
-            byte_3 = b32: block -> i32 {
-                b33: block {
-                    b34: block {
-                        b35: block {
-                            b36: block {
-                                b37: block {
-                                    b38: block {
-                                        b39: block {
-                                            b40: block {
-                                                b41: block {
-                                                    b42: block {
-                                                        b43: block {
-                                                            b44: block {
-                                                                b45: block {
-                                                                    b46: block {
-                                                                        b47: block {
-                                                                            b48: block {
+    b31: block {
+        l32: loop {
+            break_if b31 start_19 >= 16;
+            byte_3 = b33: block -> i32 {
+                b34: block {
+                    b35: block {
+                        b36: block {
+                            b37: block {
+                                b38: block {
+                                    b39: block {
+                                        b40: block {
+                                            b41: block {
+                                                b42: block {
+                                                    b43: block {
+                                                        b44: block {
+                                                            b45: block {
+                                                                b46: block {
+                                                                    b47: block {
+                                                                        b48: block {
+                                                                            b49: block {
                                                                                 br_table start_19 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                             };
                                                                             i8x16.extract_lane_u(15, self);
-                                                                            break b32;
+                                                                            break b33;
                                                                         };
                                                                         i8x16.extract_lane_u(0, self);
-                                                                        break b32;
+                                                                        break b33;
                                                                     };
                                                                     i8x16.extract_lane_u(1, self);
-                                                                    break b32;
+                                                                    break b33;
                                                                 };
                                                                 i8x16.extract_lane_u(2, self);
-                                                                break b32;
+                                                                break b33;
                                                             };
                                                             i8x16.extract_lane_u(3, self);
-                                                            break b32;
+                                                            break b33;
                                                         };
                                                         i8x16.extract_lane_u(4, self);
-                                                        break b32;
+                                                        break b33;
                                                     };
                                                     i8x16.extract_lane_u(5, self);
-                                                    break b32;
+                                                    break b33;
                                                 };
                                                 i8x16.extract_lane_u(6, self);
-                                                break b32;
+                                                break b33;
                                             };
                                             i8x16.extract_lane_u(7, self);
-                                            break b32;
+                                            break b33;
                                         };
                                         i8x16.extract_lane_u(8, self);
-                                        break b32;
+                                        break b33;
                                     };
                                     i8x16.extract_lane_u(9, self);
-                                    break b32;
+                                    break b33;
                                 };
                                 i8x16.extract_lane_u(10, self);
-                                break b32;
+                                break b33;
                             };
                             i8x16.extract_lane_u(11, self);
-                            break b32;
+                            break b33;
                         };
                         i8x16.extract_lane_u(12, self);
-                        break b32;
+                        break b33;
                     };
                     i8x16.extract_lane_u(13, self);
-                    break b32;
+                    break b33;
                 };
                 i8x16.extract_lane_u(14, self);
             } & 255;
@@ -427,9 +429,9 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
                 }
                 padding = 2 - byte_3;
                 i_251 = 0;
-                b52: block {
-                    l53: loop {
-                        break_if b52 i_251 >= padding;
+                b53: block {
+                    l54: loop {
+                        break_if b53 i_251 >= padding;
                         if @unlikely(local.tee new_used_473($tmpl_buf_71.used + 1) > builtin::array_len($tmpl_buf_71.repr)) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_71, new_used_473);
@@ -438,7 +440,7 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
                         $tmpl_buf_71.used = new_used_473;
                         builtin::array_set_u8($tmpl_buf_71.repr, start_474, 48);
                         i_251 = i_251 + 1;
-                        continue l53;
+                        continue l54;
                     };
                 };
                 if @unlikely(local.tee new_used_254($tmpl_buf_71.used + byte_3) > builtin::array_len($tmpl_buf_71.repr)) {
@@ -455,14 +457,14 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
                 builtin::array_set_u8(arr, offset_35, 48);
             } else {
                 temp = val_i64_31;
-                b57: block {
-                    l58: loop {
-                        break_if b57 temp == 0_i64;
+                b58: block {
+                    l59: loop {
+                        break_if b58 temp == 0_i64;
                         byte_3 = byte_3 - 1;
                         digit = builtin::i32_wrap_i64(temp & 15_i64);
                         builtin::array_set_u8(arr, byte_3, select i32(digit < 10, 48 + digit, (97 + digit) - 10) & 255);
                         temp = temp >>u 4_i64;
-                        continue l58;
+                        continue l59;
                     };
                 };
             }
@@ -477,7 +479,7 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
                 builtin::array_copy<u8>(f.repr, start_67, $tmpl_buf_71.repr, 0, n_62);
             };
             start_19 = start_19 + 1;
-            continue l31;
+            continue l32;
         };
     };
     if @unlikely(local.tee start_67(f.used + 1) > builtin::array_len(f.repr)) {

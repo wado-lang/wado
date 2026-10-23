@@ -141,7 +141,7 @@ impl MethodInfo {
             param_defaults: Param::defaults(&sig.params),
             param_names: Param::names(&sig.params),
             owner: MethodOwner::Receiver,
-            cm_name: None,
+            cm_name: sig.cm_name.clone(),
             is_ref_impl: false,
             method_type_param_ids: sig.own_type_param_ids(),
             method_own_params: sig.own_params.clone(),
@@ -3598,10 +3598,7 @@ impl TypeSystem {
         let instantiated = sig
             .decl
             .instantiate(&self.type_table, receiver_type_args.unwrap_or(&[]));
-        Some(MethodInfo {
-            cm_name: sig.cm_name.clone(),
-            ..MethodInfo::of_sig(sig, instantiated)
-        })
+        Some(MethodInfo::of_sig(sig, instantiated))
     }
 
     /// The nearest of `def` and its ancestors declaring `method_name` as an

@@ -45,7 +45,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
 
@@ -64,7 +64,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -230,7 +230,7 @@ fn "tmpl_hoist_escape_safe.wado/run"() with Stdout {
     total = pair_69;
     pair_69 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(pair_69 = total; total = 0; pair_69, $tmpl_buf_345.repr, $tmpl_buf_345.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(pair_69 = tens_70; tens_70 = 0; pair_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(pair_69 = tens_70; tens_70 = 0; pair_69);
     q_68 = 0_i64;
     pair_69 = 0;
     $tmpl_buf_345 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -374,7 +374,7 @@ fn "tmpl_hoist_escape_safe.wado/run"() with Stdout {
     pair_69 = tens_70;
     tens_70 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(tens_70 = pair_69; pair_69 = 0; tens_70, $tmpl_buf_345.repr, $tmpl_buf_345.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(tens_70 = start_548; start_548 = 0; tens_70);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(tens_70 = start_548; start_548 = 0; tens_70);
     tens_70 = 0;
     start_548 = 0;
     pair_69 = 0;
@@ -444,7 +444,7 @@ fn "tmpl_hoist_escape_safe.wado/run"() with Stdout {
     start_548 = new_used_547;
     new_used_547 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_547 = start_548; start_548 = 0; new_used_547, $tmpl_buf_349.repr, $tmpl_buf_349.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_547 = tens_70; tens_70 = 0; new_used_547);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_547 = tens_70; tens_70 = 0; new_used_547);
     new_used_547 = 0;
     tens_70 = 0;
     $tmpl_buf_349 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -578,7 +578,7 @@ fn "tmpl_hoist_escape_safe.wado/run"() with Stdout {
     new_used_547 = pair_69;
     pair_69 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(pair_69 = new_used_547; new_used_547 = 0; pair_69, $tmpl_buf_349.repr, $tmpl_buf_349.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(pair_69 = tens_70; tens_70 = 0; pair_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(pair_69 = tens_70; tens_70 = 0; pair_69);
 }
 
 fn "tmpl_hoist_escape_safe.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -732,8 +732,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

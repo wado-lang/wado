@@ -41,7 +41,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+||||||| 315ee9d4f
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
@@ -58,7 +64,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -119,6 +125,7 @@ fn "newtype_eq_impl_survives_relowering.wado/run"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
+<<<<<<< HEAD
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec1_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec1_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
             break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec1_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_354(text_58.used) == 0;
@@ -139,6 +146,25 @@ fn "newtype_eq_impl_survives_relowering.wado/run"() with Stdout {
     start_98 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_98 = start_354; start_354 = 0; start_98, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_98 = new_used_353; new_used_353 = 0; start_98);
+||||||| 315ee9d4f
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_86, $arg_spill_1.repr, $arg_spill_1.used);
+    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    new_used_25 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_26; start_26 = 0; $moved_4);
+    start_26 = new_used_25;
+    new_used_25 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_25 = $moved_4; $moved_4 = 0; new_used_25);
+=======
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_86, $arg_spill_1.repr, $arg_spill_1.used);
+    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    new_used_25 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_26; start_26 = 0; $moved_4);
+    start_26 = new_used_25;
+    new_used_25 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = $moved_4; $moved_4 = 0; new_used_25);
+>>>>>>> origin/main
 }
 
 fn "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -209,8 +235,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

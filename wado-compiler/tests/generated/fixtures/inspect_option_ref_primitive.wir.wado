@@ -75,7 +75,7 @@ type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<&i32>^co
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
@@ -94,7 +94,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -155,7 +155,7 @@ fn "inspect_option_ref_primitive.wado/run"() with Stdout {
     new_used_33 = start_34;
     start_34 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = new_used_33; new_used_33 = 0; start_34, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_34 = $moved_4; $moved_4 = 0; start_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = $moved_4; $moved_4 = 0; start_34);
 }
 
 fn "inspect_option_ref_primitive.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -309,8 +309,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -394,9 +396,9 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     $sroa_$iter_0_byte_index_446 = 0;
     $tmpl_buf_140 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_844 = f.used;
-    b35: block {
-        l36: loop {
-            break_if b35 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
+    b36: block {
+        l37: loop {
+            break_if b36 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
             $sroa_slot_438 = 0;
             $sroa_slot_439 = 0;
             $inline_decode_char_at_1: block {
@@ -428,7 +430,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
             $sroa_$iter_0_byte_index_446 = $sroa_$iter_0_byte_index_446 + $sroa_slot_439;
             if start_148 >= 256 {
                 new_used_147 = 1;
-                break b35;
+                break b36;
             }
             if $sroa_slot_438 == 34 {
                 if @unlikely(local.tee new_used_191($hfs_used_844 + 1) > builtin::array_len(f.repr)) {
@@ -549,14 +551,14 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     builtin::array_set_u8(arr, start_538, 48);
                 } else {
                     temp = val_i64_73;
-                    b61: block {
-                        l62: loop {
-                            break_if b61 temp == 0_i64;
+                    b62: block {
+                        l63: loop {
+                            break_if b62 temp == 0_i64;
                             pos_92 = pos_92 - 1;
                             digit = builtin::i32_wrap_i64(temp & 15_i64);
                             builtin::array_set_u8(arr, pos_92, select i32(digit < 10, 48 + digit, (97 + digit) - 10) & 255);
                             temp = temp >>u 4_i64;
-                            continue l62;
+                            continue l63;
                         };
                     };
                 }
@@ -587,7 +589,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
             }
             start_148 = start_148 + 1;
             f.used = $hfs_used_844;
-            continue l36;
+            continue l37;
         };
     };
     if @unlikely(local.tee start_402(f.used + 1) > builtin::array_len(f.repr)) {

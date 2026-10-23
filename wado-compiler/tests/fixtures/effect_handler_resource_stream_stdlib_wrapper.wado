@@ -21,16 +21,16 @@ impl Stream<u8> for MockStream {
     // `read_to_end` loops until a copy reports something other than
     // `Completed`, so the drained handler reports `Dropped` rather than an
     // empty chunk — an empty `Completed` would spin forever.
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.log;
         self.log = [];
         let drained = snapshot.is_empty();
-        resume StreamChunk {
+        resume StartedRead::settled(StreamChunk {
             items: snapshot,
             result: if drained { CopyResult::Dropped } else { CopyResult::Completed },
-        }
+        })
     }
     fn drop(&mut self, this: &Stream<u8>) {
         let _ = this;
@@ -40,12 +40,12 @@ impl Stream<u8> for MockStream {
 }
 
 impl StreamWritable<u8> for MockStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
+    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
         let _ = this;
         for let b of data {
             self.log.push(b);
         }
-        resume StreamWrite { rest: [], result: CopyResult::Completed }
+        resume StartedWrite::settled(StreamWrite { rest: [], result: CopyResult::Completed })
     }
     fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         let _ = this;

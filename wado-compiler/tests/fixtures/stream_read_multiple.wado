@@ -1,4 +1,4 @@
-// Test: Stream::read() loop pattern works correctly
+// Test: a loop of started reads ends on the first non-Completed result.
 // Tests the read-until-EOF loop pattern that is used in HTTP handlers.
 use { println, Stdout } from "core:cli";
 
@@ -8,10 +8,11 @@ export fn run() with Stdout {
     // Close writer immediately so reads see EOF
     tx.drop();
 
-    // Read loop should terminate immediately on the first non-Completed result
+    let mut rx = rx;
     let mut reads = 0;
     loop {
-        let chunk = rx.read(2);
+        let [end, chunk] = rx.start_read(2).finish();
+        rx = end;
         if chunk.result != CopyResult::Completed {
             break;
         }

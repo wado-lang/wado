@@ -501,6 +501,12 @@ internal fn is_moved<affine T>(value: T) -> bool;
 #[side_effect(none)]
 pub fn drop<affine T>(value: T);
 
+/// End `value` without its drop, for what the host has taken over: the
+/// elements a stream write delivered belong to the reader.
+#[storage(none)]
+#[side_effect(none)]
+internal fn forget<affine T>(value: T);
+
 /// Store `value` where `r` points and return what was there, the one way
 /// `core` moves a value out through a reference (WEP: Affine Types). Resource
 /// drop synthesis expands the call, and the move check trusts it.
@@ -677,11 +683,12 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask, blocking until it resolves.
+/// Cancel an in-progress subtask, blocking until it resolves. Returns the
+/// status it resolved with.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn subtask_cancel(handle: i32);
+pub fn subtask_cancel(handle: i32) -> i32;
 
 /// Join a waitable (subtask/stream/future) to a waitable set, or leave its
 /// set where `ws` is 0.

@@ -1397,8 +1397,9 @@ pub affine trait Drop with () {
 ```
 
 - A type with an impl runs its `drop`. The body may move fields out of `self`,
-  and the fields left at its end are dropped one by one. `self` is not dropped
-  again as a whole.
+  and the fields left at its end are dropped one by one. A pattern may take
+  `self` apart, but nothing may hold it whole: a move of `self` to a binding, a
+  call, or `_` is an error, since wherever it went it would run `drop` again.
 - A type without an impl drops its fields one by one, in declaration order.
 - A resource's `fn drop(self)` is its `Drop` impl, which ends the handle in the
   host.
