@@ -446,13 +446,12 @@ pub enum AnonShape {
     Template(TemplateShape),
 }
 
-/// One hole of a template shape: its expression's type, its specifier as
-/// written, and its expression's source text.
+/// One hole of a template shape: its expression's type and its specifier as
+/// written.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateHole {
     pub ty: TypeId,
     pub spec: Option<String>,
-    pub source: String,
 }
 
 /// The static part of a tagged template literal: the raw literal segments —

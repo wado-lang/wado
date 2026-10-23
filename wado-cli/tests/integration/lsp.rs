@@ -77,9 +77,14 @@ struct LspSession {
 
 impl LspSession {
     fn start() -> Self {
+        Self::start_with_env(&[])
+    }
+
+    fn start_with_env(env: &[(&str, &std::path::Path)]) -> Self {
         let mut child = Command::new(wado_bin())
             .args(["lsp"])
             .current_dir(project_root())
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -534,6 +539,51 @@ fn lsp_definition_cross_file() {
     assert_eq!(result["uri"], helper_uri);
     assert_eq!(result["range"]["start"]["line"], 0);
 
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+/// A pinned dependency missing from the cache is pulled in the background, and
+/// a pull that fails says so rather than vanishing.
+#[test]
+fn lsp_warns_when_a_prefetch_fails() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let project = tmpdir.path().join("app");
+    std::fs::create_dir_all(&project).unwrap();
+    // Port 9 (discard) refuses the connection, so the pull fails at once.
+    std::fs::write(
+        project.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://127.0.0.1:9\"\n\n[dependencies]\n\"acme:demo\" = { version = \"^0.1\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        project.join("wado.lock"),
+        "version = 1\ndeps-hash = \"sha256:00\"\n\n[[package]]\nid = \"registry+oci://127.0.0.1:9/acme:demo\"\nversion = \"0.1.0\"\nintegrity = \"sha256:00\"\ndeps = []\n",
+    )
+    .unwrap();
+    let main_path = project.join("main.wado");
+    let source = "export fn run() {}\n";
+    std::fs::write(&main_path, source).unwrap();
+
+    let mut session = LspSession::start_with_env(&[
+        ("WADO_ROOT", &tmpdir.path().join("cache")),
+        ("DOCKER_CONFIG", &tmpdir.path().join("docker")),
+    ]);
+    session.initialize();
+    session.open_doc(&format!("file://{}", main_path.display()), source);
+
+    let deadline = std::time::Instant::now() + READ_TIMEOUT;
+    let warned = loop {
+        let stderr = session.stderr_buf.lock().unwrap().clone();
+        if stderr.contains("warning: prefetching acme:demo@0.1.0") {
+            break true;
+        }
+        if std::time::Instant::now() > deadline {
+            break false;
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+    let stderr = session.stderr_buf.lock().unwrap().clone();
+    assert!(warned, "no prefetch warning; stderr:\n{stderr}");
     assert_eq!(session.shutdown_and_exit(), 0);
 }
 

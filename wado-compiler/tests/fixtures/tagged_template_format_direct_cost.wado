@@ -1,0 +1,26 @@
+// A `format` site costs what the direct lowering of the same template does:
+// the buffer sized from the segments, the radix renderer spliced in with its
+// prefix a constant, and a plain `String` hole appended without a `Formatter`.
+use { println, Stdout } from "core:cli";
+
+fn render(i: i32, s: String) -> String {
+    return format`i=${i:#x} s=${s} end`;
+}
+
+export fn run() with Stdout {
+    println(render(builtin::black_box(255), builtin::black_box("a")));
+}
+
+__DATA__
+{
+    "stdout": "i=0xff s=a end\n",
+    "wir_expect:O2": [
+        "struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(41), used: 0 }"
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/format.wado//Formatter\"",
+        "fmt_base",
+        "Formatter::pad",
+        "= array.new_fixed<u8>(48, 120);"
+    ]
+}

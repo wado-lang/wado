@@ -92,10 +92,10 @@ pub fn encode_component_type_from(
 
     // UTF-8 matches Wado's native string encoding (WEP: WIT Bundling §"What Is
     // Embedded"). `None` extra producers — `metadata::encode` writes its own
-    // `processed-by` record.
-    wit_component::metadata::encode(&resolve, world, StringEncoding::UTF8, None).map_err(|e| {
-        WitEmitError::Embed {
+    // `processed-by` record. `false`: names as written, not canonicalized.
+    wit_component::metadata::encode(&resolve, world, StringEncoding::UTF8, None, false).map_err(
+        |e| WitEmitError::Embed {
             description: format!("encoding component-type metadata failed: {e}"),
-        }
-    })
+        },
+    )
 }

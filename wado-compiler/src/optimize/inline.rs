@@ -35,7 +35,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, cold_functions, cold_path_id};
+use super::arena_query::{self, cold_exprs, cold_path_id, unreached_through};
 use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
@@ -1024,6 +1024,8 @@ struct BodyScan {
     hot_callees: IndexSet<FuncId>,
     /// The callees called from at least one site a `cold_path()` marker covers.
     cold_callees: IndexSet<FuncId>,
+    /// The callees called from at least one site outside every loop.
+    unlooped_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -1038,21 +1040,21 @@ pub(super) struct InlineScans {
 }
 
 /// What a sweep reads about a function that its own body does not decide:
-/// as a callee, whether a site admits it; as a caller, whether its sites are
-/// cold. Each moves with call sites anywhere in the program.
+/// as a callee, whether a site admits it; as a caller, which [`Site`] its body
+/// starts at. Each moves with call sites anywhere in the program.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct SweepRead {
     reach: Reach,
     shrinks: bool,
-    cold: bool,
+    entry: Site,
 }
 
 /// Have the inliner revisit each function whose sweep would read something
-/// new: a caller of a callee whose admission moved, and a function that turned
-/// cold or hot. The gate re-dirties only a changed body's neighbours, so a
-/// callee left with one site after a splice elsewhere would otherwise wait on
-/// an unrelated change to reach its last caller. A function new this round is
-/// dirty already.
+/// new: a caller of a callee whose admission moved, and a function whose body
+/// starts at another site. The gate re-dirties only a changed body's
+/// neighbours, so a callee left with one site after a splice elsewhere would
+/// otherwise wait on an unrelated change to reach its last caller. A function
+/// new this round is dirty already.
 fn revisit_moved_reads(
     before: &[SweepRead],
     after: &[SweepRead],
@@ -1060,7 +1062,7 @@ fn revisit_moved_reads(
     gate: &mut FunctionGate,
 ) {
     let pair = |i: usize| before.get(i).map(|b| (b, &after[i]));
-    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.cold != a.cold);
+    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.entry != a.entry);
     let readmitted =
         |i: usize| pair(i).is_some_and(|(b, a)| (b.reach, b.shrinks) != (a.reach, a.shrinks));
     for (caller, scan) in scans.iter().enumerate() {
@@ -1090,6 +1092,7 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
         return scan;
     };
     let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+    let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
@@ -1130,12 +1133,39 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
                 } else {
                     scan.hot_callees.insert(*func_id);
                 }
+                if !looped.contains(&e) {
+                    scan.unlooped_callees.insert(*func_id);
+                }
             }
             _ => {}
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
     scan
+}
+
+/// Every expression under a `loop`. A loop inside another is covered by the
+/// outer one's walk, so it is not walked again.
+fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
+    let mut out = IndexSet::default();
+    let mut covered: IndexSet<StmtId> = IndexSet::default();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(st) = node
+            && !covered.contains(&st)
+            && let StmtKind::Loop { body: b } = &body.stmts[st].kind
+        {
+            body.for_each_live_node_under(NodeRef::Block(*b), |n| match n {
+                NodeRef::Expr(e) => {
+                    out.insert(e);
+                }
+                NodeRef::Stmt(inner) => {
+                    covered.insert(inner);
+                }
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            });
+        }
+    });
+    out
 }
 
 /// Locals a body binds once, to a constant, and never writes — the shape a
@@ -1491,7 +1521,7 @@ enum Reach {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Site {
     Plain,
-    /// Inside a loop of the caller.
+    /// Inside a loop of the caller, or anywhere in a function only loops reach.
     Loop,
     /// After a `cold_path()` marker, or anywhere in a function only such sites
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
@@ -2094,7 +2124,12 @@ pub fn inline_functions(
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(scans);
-    let cold = cold_functions(project, &call_sites, |caller| &scans[caller].hot_callees);
+    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
+    // A function only loops reach runs once per iteration of one, so each of
+    // its sites pays its call edge on every iteration, as a site in a loop does.
+    let looped = unreached_through(project, &call_sites, |caller| {
+        &scans[caller].unlooped_callees
+    });
     let called_cold = called_cold(scans, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
@@ -2369,12 +2404,19 @@ pub fn inline_functions(
             SweepRead {
                 reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
                 shrinks: shrinking.contains(&id),
-                cold: cold[i],
+                entry: if cold[i] {
+                    Site::Cold
+                } else if looped[i] {
+                    Site::Loop
+                } else {
+                    Site::Plain
+                },
             }
         })
         .collect();
     revisit_moved_reads(read, &now, scans, gate);
     *read = now;
+    let read = &*read;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
@@ -2430,6 +2472,13 @@ pub fn inline_functions(
         {
             let body = func.body.as_mut().unwrap();
             let root = body.root();
+            let entry = read[fid.index()].entry;
+            // The body is one iteration of the loops that reach it, so a callee
+            // admitted at its only site in a loop is admitted at its only site
+            // here.
+            if entry == Site::Loop {
+                frame.loop_calls.push(call_counts(body, root, &carried));
+            }
             inline_calls_in_block(
                 body,
                 root,
@@ -2440,11 +2489,7 @@ pub fn inline_functions(
                 &mut inlined_funcs,
                 &mut labels,
                 &mut reval,
-                if cold[fid.index()] {
-                    Site::Cold
-                } else {
-                    Site::Plain
-                },
+                entry,
             );
         }
         func.address_taken_locals = frame.address_taken;
@@ -2625,11 +2670,10 @@ fn carried_calls(
     out
 }
 
-/// Inline function calls in a block, each statement processed in place: a
-/// `Let` / `Expr` / `Return` value gets a top-level attempt that then re-scans
-/// the inlined body, while others recurse. `site` is the context the block's
-/// calls sit in; a `cold_path()` marker turns it [`Site::Cold`] for the rest of
-/// the block, and a loop body is a [`Site::Loop`].
+/// Inline function calls in a block, each statement processed in place. `site`
+/// is the context the block's calls sit in; a `cold_path()` marker turns it
+/// [`Site::Cold`] for the rest of the block, and a loop body is a
+/// [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
@@ -2643,8 +2687,7 @@ fn inline_calls_in_block(
     mut site: Site,
 ) {
     enum Shape {
-        TopLevel(ExprId),
-        Nested(ExprId),
+        Value(ExprId),
         If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         Loop(BlockId),
@@ -2657,9 +2700,13 @@ fn inline_calls_in_block(
             site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
-            StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
-            StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::TopLevel),
-            StmtKind::Return { value: Some(v) } => v.as_expr().map_or(Shape::None, Shape::TopLevel),
+            StmtKind::Let { value, .. }
+            | StmtKind::LetDestructure { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::Return { value: Some(value) }
+            | StmtKind::Break {
+                value: Some(value), ..
+            } => value.as_expr().map_or(Shape::None, Shape::Value),
             StmtKind::If {
                 condition,
                 then_block,
@@ -2667,38 +2714,10 @@ fn inline_calls_in_block(
             } => Shape::If(condition.as_expr(), *then_block, *else_block),
             StmtKind::Loop { body: b } => Shape::Loop(*b),
             StmtKind::LabeledBlock { block: b, .. } => Shape::Block(*b),
-            StmtKind::Break { value: Some(v), .. } => {
-                v.as_expr().map_or(Shape::None, Shape::Nested)
-            }
-            StmtKind::LetDestructure { value, .. } => {
-                value.as_expr().map_or(Shape::None, Shape::Nested)
-            }
             _ => Shape::None,
         };
         match shape {
-            Shape::TopLevel(value) => {
-                let new_value = inline_top_level(
-                    body,
-                    value,
-                    candidates,
-                    descriptors,
-                    frame,
-                    type_table,
-                    inlined_funcs,
-                    labels,
-                    reval,
-                    site,
-                );
-                if new_value != value {
-                    match &mut body.stmts[stmt_id].kind {
-                        StmtKind::Let { value, .. } => *value = new_value.into(),
-                        StmtKind::Expr(expr) => *expr = new_value.into(),
-                        StmtKind::Return { value } => *value = Some(new_value.into()),
-                        _ => {}
-                    }
-                }
-            }
-            Shape::Nested(value) => inline_calls_in_expr(
+            Shape::Value(value) => inline_calls_in_expr(
                 body,
                 value,
                 candidates,
@@ -2784,59 +2803,6 @@ fn inline_calls_in_block(
             }
             Shape::None => {}
         }
-    }
-}
-
-/// Top-level inline of a statement value: try to inline the call, and if it
-/// fires, re-scan the inlined body for nested opportunities, as far as the
-/// re-scan cap pays for. Returns the (possibly new) value expression id.
-fn inline_top_level(
-    body: &mut Body,
-    value: ExprId,
-    candidates: Candidates<'_>,
-    descriptors: &[FunctionRef],
-    frame: &mut CallerFrame<'_>,
-    type_table: &TypeTable,
-    inlined_funcs: &mut Vec<FuncId>,
-    labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
-    site: Site,
-) -> ExprId {
-    let result = try_inline_call_expr(
-        body, value, candidates, frame, type_table, labels, reval, site,
-    );
-    if let Some((new_id, inlined_key)) = result {
-        if !inlined_funcs.contains(&inlined_key) {
-            inlined_funcs.push(inlined_key);
-        }
-        let left = Cell::new(candidates.rescan_cap);
-        inline_calls_in_expr(
-            body,
-            new_id,
-            candidates.rescanning(&left),
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-        new_id
-    } else {
-        inline_calls_in_expr(
-            body,
-            value,
-            candidates,
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-        value
     }
 }
 
@@ -3810,7 +3776,9 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
     })
 }
 
-/// Recursively inline calls within an expression
+/// Inline calls within an expression. A call is tried before its arguments:
+/// once spliced, the re-scan of its body reaches them, so each node is walked
+/// once and the whole splice stays within one re-scan cap.
 fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
@@ -3823,65 +3791,9 @@ fn inline_calls_in_expr(
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) {
-    let args: Option<Vec<Operand>> = match &body.exprs[e].kind {
-        ExprKind::Call { args, .. } => Some(args.iter().map(|a| a.expr).collect()),
-        _ => None,
-    };
-    let Some(args) = args else {
-        let (exprs, blocks) = inline_expr_children(body, e);
-        for ex in exprs {
-            inline_calls_in_expr(
-                body,
-                ex,
-                candidates,
-                descriptors,
-                frame,
-                type_table,
-                inlined_funcs,
-                labels,
-                reval,
-                site,
-            );
-        }
-        for b in blocks {
-            inline_calls_in_block(
-                body,
-                b,
-                candidates,
-                descriptors,
-                frame,
-                type_table,
-                inlined_funcs,
-                labels,
-                reval,
-                site,
-            );
-        }
-        return;
-    };
-
-    // Recurse into arguments first, then attempt to inline this call.
-    for a in args {
-        let Some(a) = a.as_expr() else { continue };
-        inline_calls_in_expr(
-            body,
-            a,
-            candidates,
-            descriptors,
-            frame,
-            type_table,
-            inlined_funcs,
-            labels,
-            reval,
-            site,
-        );
-    }
     if let Some((new_id, inlined_key)) =
         try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
     {
-        if !inlined_funcs.contains(&inlined_key) {
-            inlined_funcs.push(inlined_key);
-        }
         // Move the inlined labeled-block node into the call slot and null out
         // the now-dead `new_id`, so the inner block is owned by exactly one node
         // (`e`). Cloning would leave `new_id` as an orphan sharing the same
@@ -3896,6 +3808,52 @@ fn inline_calls_in_expr(
             },
         );
         body.exprs[e] = moved;
+        if !inlined_funcs.contains(&inlined_key) {
+            inlined_funcs.push(inlined_key);
+        }
+        let left = Cell::new(candidates.rescan_cap);
+        inline_calls_in_expr(
+            body,
+            e,
+            candidates.rescanning(&left),
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
+        return;
+    }
+    let (exprs, blocks) = inline_expr_children(body, e);
+    for ex in exprs {
+        inline_calls_in_expr(
+            body,
+            ex,
+            candidates,
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
+    }
+    for b in blocks {
+        inline_calls_in_block(
+            body,
+            b,
+            candidates,
+            descriptors,
+            frame,
+            type_table,
+            inlined_funcs,
+            labels,
+            reval,
+            site,
+        );
     }
 }
 

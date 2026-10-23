@@ -158,6 +158,8 @@ passed on the TODO axis, not as a failure on the pass/fail axis.
 The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
+  A crash of the compiler is not such a failure: it ends the run, as it does
+  for any other module.
 - If the module compiles, each test block is treated as `#[TODO]`, so every one
   of them must trap, and a single test that completes normally fails the run.
 

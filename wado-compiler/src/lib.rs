@@ -126,7 +126,8 @@ pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
     GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
     GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ProbeInput, ProbeRequest, Severity,
+    SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{
@@ -1636,15 +1637,19 @@ fn compile_after_load<H: CompilerHost>(
     };
 
     let kiln_options_descriptor = if is_kiln_generator {
-        match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
-            Ok(d) => Some(d),
-            Err(diags) => {
-                for d in diags {
-                    logger.host().emit_diagnostic(d);
-                }
-                return Err(Bail);
+        let (descriptor, mut diags) =
+            match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
+                Ok(d) => (Some(d), Vec::new()),
+                Err(diags) => (None, diags),
+            };
+        diags.extend(kiln::check_probe(&sem, &sem.entry_module_source));
+        if !diags.is_empty() {
+            for d in diags {
+                logger.host().emit_diagnostic(d);
             }
+            return Err(Bail);
         }
+        descriptor
     } else {
         None
     };

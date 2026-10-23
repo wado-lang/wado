@@ -1712,13 +1712,11 @@ pub(crate) fn member_visible(public_only: bool, inherent: bool, visibility: Visi
 
 #[cfg(test)]
 mod tests {
+    use futures::executor::block_on;
+
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
-
-    fn block_on<F: std::future::Future>(future: F) -> F::Output {
-        tokio::runtime::Runtime::new().unwrap().block_on(future)
-    }
 
     /// The body walk's facts stay in the [`ModuleSemantics`] that recorded
     /// them, and `Semantics` reads through to it rather than holding a copy.

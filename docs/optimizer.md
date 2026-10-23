@@ -104,14 +104,18 @@ Allocation and aggregates:
   sites reach, unless the body is no bigger than the call. A callee that
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop.
+  back: at its only call site, or at its only site in a loop. A function only
+  loops reach runs once per iteration, so its body counts as a loop's. A call
+  is tried before its arguments, and a spliced body, arguments included, is
+  scanned again for calls to splice, wherever the call it replaced sat.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
 - `sroa` — split into scalar locals a struct, tuple, or array local used only
   for element access, or a local bound to a reference to a struct or tuple
   literal. The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
-- `sroa_param` — pass the one field a callee reads instead of the struct.
+- `sroa_param` — pass the one field a callee reads instead of the struct, by
+  value or by reference.
 - `sroa_variant_return` — return a variant, or hold a variant local, as a
   `[tag, slots…]` tuple ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
 - `elide_box_local` — collapse a box bound once and read once into its value.
@@ -145,7 +149,8 @@ Scalars and dataflow:
 
 - `copy_prop` — propagate a trivial copy and drop the binding.
 - `param_spec` — specialize a callee on the constant arguments its callers
-  pass.
+  pass, and on the constant fields of a struct they pass by reference, a
+  reference to a struct literal included.
 - `dae` — drop a parameter the callee never reads.
 - `drve` — drop a return value every caller discards.
 - `store_load_forward` — forward a stored value to a later load.

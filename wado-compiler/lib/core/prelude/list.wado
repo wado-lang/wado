@@ -473,7 +473,9 @@ impl<T> List<T> {
         return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 
-    /// In-place sort with comparator. Stable, O(n log n) worst case.
+    /// In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
+    /// handed references as `iter_ref` hands them out: a `Ref` element in
+    /// place, a scalar as a read-only snapshot.
     pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _ {
         let n = self.used;
         if n <= 1 {
@@ -493,21 +495,21 @@ impl<T> List<T> {
                 for let mut k = start; k < end; k += 1 {
                     if i < mid {
                         if j < end {
-                            let a = self.repr[i];
-                            let b = self.repr[j];
-                            if let Greater = cmp(&a, &b) {
-                                buf[k] = b;
+                            let a = builtin::array_get_ref(&self.repr, i);
+                            let b = builtin::array_get_ref(&self.repr, j);
+                            if let Greater = cmp(a, b) {
+                                builtin::array_move(&mut buf, k, &self.repr, j, 1);
                                 j += 1;
                             } else {
-                                buf[k] = a;
+                                builtin::array_move(&mut buf, k, &self.repr, i, 1);
                                 i += 1;
                             }
                         } else {
-                            buf[k] = self.repr[i];
+                            builtin::array_move(&mut buf, k, &self.repr, i, 1);
                             i += 1;
                         }
                     } else {
-                        buf[k] = self.repr[j];
+                        builtin::array_move(&mut buf, k, &self.repr, j, 1);
                         j += 1;
                     }
                 }

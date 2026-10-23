@@ -183,6 +183,14 @@ impl Default for TypeTable {
     }
 }
 
+/// What [`TypeTable::declared_members`] finds for a declaration.
+struct DeclaredMembers {
+    types: Vec<TypeId>,
+    /// Whether `types` are the template's, written in terms of its parameters,
+    /// rather than the instance's own.
+    of_template: bool,
+}
+
 impl TypeTable {
     pub const I8: TypeId = TypeId(0);
     pub const I16: TypeId = TypeId(1);
@@ -1285,7 +1293,6 @@ impl TypeTable {
                         }
                         None => h.update([0u8]),
                     }
-                    digest_str(&mut h, &hole.source);
                 }
                 let bytes: [u8; 32] = h.finalize().into();
                 let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
@@ -2495,22 +2502,13 @@ impl TypeTable {
                 if self.is_affine_decl(*def) {
                     return true;
                 }
-                if self.is_tuple_def(*def) {
-                    (None, &[], type_args.clone())
-                } else if let Some(fields) = self
-                    .struct_field_index
-                    .get(&(*def, self.type_keys(type_args)))
-                    .or_else(|| self.struct_field_index.get(&(*def, Vec::new())))
-                {
-                    // An instance's own fields are concrete, so the arguments
-                    // its template would read are only the recursion guard's.
-                    (Some(*def), type_args.as_slice(), fields.clone())
-                } else if let Some(cases) = self.variant_case_index.get(def) {
-                    let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
-                    (Some(*def), type_args.as_slice(), payloads)
-                } else {
+                let Some(members) = self.declared_members(*def, type_args) else {
                     return false;
-                }
+                };
+                // An instance's own fields are concrete, so the arguments its
+                // template would read are only the recursion guard's.
+                let guarded = (!self.is_tuple_def(*def)).then_some(*def);
+                (guarded, type_args.as_slice(), members.types)
             }
             ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
                 Some(cases) => (
@@ -2543,6 +2541,140 @@ impl TypeTable {
             .any(|member| self.holds_affine_in(member, &inner, open));
         open.pop();
         held
+    }
+
+    /// The member types of declaration `def` instantiated with `type_args`: a
+    /// tuple's elements, a struct's fields, a variant's payloads. `None` where
+    /// nothing registered them.
+    fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
+        if self.is_tuple_def(def) {
+            return Some(DeclaredMembers {
+                types: type_args.to_vec(),
+                of_template: false,
+            });
+        }
+        if let Some(fields) = self
+            .struct_field_index
+            .get(&(def, self.type_keys(type_args)))
+        {
+            return Some(DeclaredMembers {
+                types: fields.clone(),
+                of_template: false,
+            });
+        }
+        let types = match self.struct_field_index.get(&(def, Vec::new())) {
+            Some(fields) => fields.clone(),
+            None => self
+                .variant_case_index
+                .get(&def)?
+                .iter()
+                .map(|(_, _, payload)| *payload)
+                .collect(),
+        };
+        Some(DeclaredMembers {
+            types,
+            of_template: true,
+        })
+    }
+
+    /// Whether a value of `ty` reaches a `&mut`, through which a holder of a
+    /// `&` to it may still write: one it is or holds at any depth, or one
+    /// behind a function or resource, whose captures and state no type shows.
+    /// A type whose members are not registered may hold anything, so it does.
+    #[must_use]
+    pub fn reaches_mut_ref(&self, ty: TypeId) -> bool {
+        self.reaches_mut_ref_in(ty, &[], &mut IndexSet::default())
+    }
+
+    /// [`Self::reaches_mut_ref`] of `ty` as written inside a template
+    /// instantiated with `args`. `walked` holds what the walk is already
+    /// inside, which adds nothing.
+    fn reaches_mut_ref_in(
+        &self,
+        ty: TypeId,
+        args: &[TypeId],
+        walked: &mut IndexSet<(TypeKey, Vec<TypeKey>)>,
+    ) -> bool {
+        let bind = |ty: TypeId| match self.get(self.representation_head(ty)) {
+            ResolvedType::TypeParam { index, .. } => args.get(*index as usize).copied(),
+            _ => Some(ty),
+        };
+        let Some(ty) = bind(ty) else {
+            return true;
+        };
+        let ty = self.representation_head(ty);
+        if !walked.insert((self.type_key(ty), self.type_keys(args))) {
+            return false;
+        }
+        if let Some(elem) = self.list_element(ty) {
+            return self.reaches_mut_ref_in(elem, args, walked);
+        }
+        let (template_args, members): (Vec<TypeId>, Vec<TypeId>) = match self.get(ty) {
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. } => return false,
+            ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => {
+                return self.reaches_mut_ref_in(*inner, args, walked);
+            }
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => (
+                args.to_vec(),
+                self.anon_struct_fields(*shape)
+                    .iter()
+                    .map(|(_, ty)| *ty)
+                    .collect(),
+            ),
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
+            | ResolvedType::GenericInstance { def, type_args } => {
+                let Some(bound) = type_args
+                    .iter()
+                    .map(|&arg| bind(arg))
+                    .collect::<Option<Vec<_>>>()
+                else {
+                    return true;
+                };
+                let Some(members) = self.declared_members(*def, &bound) else {
+                    return true;
+                };
+                let template_args = if members.of_template {
+                    bound
+                } else {
+                    Vec::new()
+                };
+                (template_args, members.types)
+            }
+            ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
+                Some(cases) => (
+                    Vec::new(),
+                    cases.iter().map(|(_, _, payload)| *payload).collect(),
+                ),
+                None => return true,
+            },
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.reaches_mut_ref_in(*base_type, args, walked);
+            }
+            ResolvedType::MutRef(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return true,
+        };
+        members
+            .into_iter()
+            .any(|member| self.reaches_mut_ref_in(member, &template_args, walked))
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
@@ -5273,6 +5405,12 @@ impl TypeTable {
             }
             _ => self.any_constituent(id, &mut |t| self.contains_type_param_index(t, index)),
         }
+    }
+
+    /// Whether `id` is one of `slots` or is built over one, matched by id as a
+    /// substitution binds them.
+    pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
+        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.

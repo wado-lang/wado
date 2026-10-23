@@ -265,6 +265,17 @@ impl Invocation {
         self.output_dir = default_output_dir(&self.decl_site().synthetic_id);
     }
 
+    /// Every file the generator reads, primary first, each with its `type`.
+    /// This is the order a probe answers in and the order extents are recorded
+    /// in.
+    pub fn files(&self) -> impl Iterator<Item = (&InvocationPath, Option<&String>)> {
+        std::iter::once((&self.from, self.use_type.as_ref())).chain(
+            self.inputs
+                .iter()
+                .map(|input| (&input.path, input.use_type.as_ref())),
+        )
+    }
+
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
     /// key. Nothing decodes it.
     #[must_use]

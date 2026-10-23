@@ -99,7 +99,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let elements: ref "Array<core:prelude/string.wado/String>";
     let used: i32;
-    let self_20: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let self_18: ref "core:prelude//List<core:prelude/string.wado/String>";
     let is_negative: bool;
     let x: i64;
     let other_45: ref "core:prelude/string.wado//String";
@@ -107,7 +107,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     let $sroa_o_value_87: ref null "opt_value_copy_unwrap_passes_through.wado//Shape";
     $sroa_o_value_87 = struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: used = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used } };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    is_negative = local.tee used(local.tee self_20($sroa_o_value_87.axes).used) < 0;
+    is_negative = local.tee used(local.tee self_18($sroa_o_value_87.axes).used) < 0;
     used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, used);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1($local_2.repr), is_negative, x, used);
@@ -118,13 +118,13 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     is_negative = $local_2.used;
     $local_2.used = used;
     builtin::array_copy<u8>(local.tee $load_1($local_2.repr), is_negative, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_4, 0, 1);
-    is_negative = local.tee self_20($sroa_o_value_87.axes).used;
+    is_negative = local.tee self_18($sroa_o_value_87.axes).used;
     if @unlikely(0 >= is_negative) {
         cold_path;
         "opt_value_copy_unwrap_passes_through.wado/first$cold0$dae[o,$contract_arg_1]"(is_negative);
         unreachable;
     }
-    other_45 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, 0);
+    other_45 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_18.repr, 0);
     $inline_core_prelude_string_wado_String__internal_push_string_23: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_23 local.tee is_negative(other_45.used) == 0;
         if @unlikely(local.tee used($local_2.used + is_negative) > builtin::array_len($load_1)) {
@@ -142,13 +142,13 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     start_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_74 = is_negative; is_negative = 0; start_74, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_74 = used; used = 0; start_74);
-    start_74 = local.tee self_20($sroa_o_value_87.axes).used;
+    start_74 = local.tee self_18($sroa_o_value_87.axes).used;
     if @unlikely(1 >= start_74) {
         cold_path;
         "opt_value_copy_unwrap_passes_through.wado/run$cold0$dae[$contract_arg_0]"(start_74);
         unreachable;
     }
-    $local_2 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, 1);
+    $local_2 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_18.repr, 1);
     start_74 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__Stdout_write_via_stream"(is_negative = start_74; start_74 = 0; is_negative);
@@ -298,32 +298,32 @@ fn "core:rt/unreachable"() {
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
-    let ptr_15: i32;
-    let ptr_17: i32;
-    let count_18: i32;
+    let ptr_13: i32;
     let i: i32;
+    let ptr_24: i32;
+    let count_25: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b28: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b28: block {
         l29: loop {
             break_if b28 i >= $mv$data$end;
-            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l29;
         };
-    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l31: loop {
-            ptr_17 = ptr_15 + i;
-            count_18 = $mv$data$end - i;
-            count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+            ptr_24 = ptr_13 + i;
+            count_25 = $mv$data$end - i;
+            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_7: $mv$data$start;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -333,20 +333,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_6: status;
+                break $inline_cm_await_blocked_7: status;
             }) >>u 4;
-            ptr_17 = (if local.tee ptr_17(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_17 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_18;
-            if ((ptr_17 != 0) | (count_18 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
-                return ptr_17;
+            i = i + count_25;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return ptr_24;
             }
             continue l31;
         };

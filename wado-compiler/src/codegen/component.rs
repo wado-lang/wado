@@ -1673,10 +1673,10 @@ fn emit_canonical_intrinsics(
                 builder.waitable_join();
             }
             CanonicalIntrinsic::WaitableSetWait => {
-                builder.waitable_set_wait(false, ctx.memory_idx());
+                builder.waitable_set_wait(ctx.memory_idx());
             }
             CanonicalIntrinsic::WaitableSetPoll => {
-                builder.waitable_set_poll(false, ctx.memory_idx());
+                builder.waitable_set_poll(ctx.memory_idx());
             }
             CanonicalIntrinsic::WaitableSetDrop => {
                 builder.waitable_set_drop();

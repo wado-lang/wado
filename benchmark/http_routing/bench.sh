@@ -3,7 +3,8 @@
 # one worker shape per entry in SHAPES. README.md covers the methodology.
 #
 # Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER, OHA_CORE_COUNT,
-# HEADROOM_CHECK, WADO_BIN (an A/B arm), SERVERS (e.g. "wado" alone).
+# HEADROOM_CHECK, WADO_BIN (an A/B arm), SERVERS (e.g. "wado" alone),
+# REQUEST (e.g. "GET /user" alone).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -25,6 +26,10 @@ REQUESTS=(
   "POST /event/abcd1234/comment"
   "GET /static/index.html"
 )
+# REQUEST narrows the run to one of them, for an A/B of the server alone.
+if [ -n "${REQUEST:-}" ]; then
+  REQUESTS=("$REQUEST")
+fi
 
 OHA_BIN="$(command -v oha || true)"
 [ -z "$OHA_BIN" ] && OHA_BIN="$HOME/.cargo/bin/oha"
@@ -37,11 +42,19 @@ command -v taskset >/dev/null 2>&1 && [ "$NPROC" -ge 4 ] && PIN_AVAILABLE=1
 echo "=== Building wado (release) ==="
 cargo build --release --quiet --manifest-path ../../wado-cli/Cargo.toml
 
-echo "=== Building Axum server (release) ==="
-cargo build --release --quiet --manifest-path Cargo.toml
+case " ${SERVERS:-axum} " in
+  *" axum "*)
+    echo "=== Building Axum server (release) ==="
+    cargo build --release --quiet --manifest-path Cargo.toml
+    ;;
+esac
 
-echo "=== Installing Hono dependencies ==="
-npm install --prefix . --silent --no-audit --no-fund
+case " ${SERVERS:-node} " in
+  *" node "* | *" bun "*)
+    echo "=== Installing Hono dependencies ==="
+    npm install --prefix . --silent --no-audit --no-fund
+    ;;
+esac
 
 PIDS=()
 cleanup() {

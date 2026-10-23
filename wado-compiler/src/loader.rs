@@ -63,6 +63,8 @@ pub enum LoadError {
     },
     /// I/O error reading file
     IoError { path: String, message: String },
+    /// A file an `#include_str` or `#include_bytes` names is not there.
+    IncludeNotFound { path: String },
     /// A namespaced import (`ns:pkg`, `lib:nick`) that no dependency declares.
     /// Every namespace but the bundled `core` and `wasi` is one a dependency
     /// supplies. `manifest` is the `wado.toml` it would be declared in.
@@ -157,6 +159,7 @@ impl std::fmt::Display for LoadError {
             LoadError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
             }
+            LoadError::IncludeNotFound { path } => write!(f, "file not found: '{path}'"),
             LoadError::UndeclaredDependency {
                 name,
                 manifest: Some(manifest),
@@ -248,7 +251,7 @@ impl LoadError {
             LoadError::BindError { .. } => Code::DuplicateDefinition,
             LoadError::WasmImport { .. } => Code::InvalidSyntax,
             LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
-            LoadError::IoError { .. } => Code::FileReadError,
+            LoadError::IoError { .. } | LoadError::IncludeNotFound { .. } => Code::FileReadError,
             LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
             LoadError::ModuleNotFound { .. }
             | LoadError::UndeclaredDependency { .. }
@@ -2197,7 +2200,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 .host
                 .load_source(&resolved)
                 .await
-                .map_err(LoadError::from)?;
+                .map_err(|e| match e {
+                    SourceError::NotFound { path } => LoadError::IncludeNotFound { path },
+                    e => LoadError::from(e),
+                })?;
             included.insert(pair, bytes);
         }
         Ok(included)
