@@ -936,6 +936,12 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&e.right);
         }
         Expr::Unary(e) => v.visit_expr(&e.expr),
+        Expr::Assign(e) if e.destructuring_targets().is_some() => {
+            v.visit_expr(&e.value);
+            for place in e.places() {
+                v.visit_expr(place);
+            }
+        }
         Expr::Assign(e) => {
             v.visit_expr(&e.target);
             v.visit_expr(&e.value);
@@ -3568,13 +3574,31 @@ pub struct TupleComprehensionExpr {
     pub span: Span,
 }
 
-/// Assignment expression: `x = value` or `x.field = value`
+/// Assignment expression: `x = value` or `x.field = value`, or a destructuring
+/// assignment `[a, b] = value`, whose target is a tuple literal of places.
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub id: AstId,
     pub target: Expr,
     pub value: Expr,
     pub span: Span,
+}
+
+impl AssignExpr {
+    /// The tuple of places a destructuring assignment writes, each element of
+    /// `value` to its own.
+    pub fn destructuring_targets(&self) -> Option<&[Expr]> {
+        match &self.target {
+            Expr::TupleLiteral(tuple) => Some(&tuple.elements),
+            _ => None,
+        }
+    }
+
+    /// The places this assignment writes, in the order it writes them.
+    pub fn places(&self) -> &[Expr] {
+        self.destructuring_targets()
+            .unwrap_or(std::slice::from_ref(&self.target))
+    }
 }
 
 /// Compound assignment operators

@@ -356,6 +356,9 @@ fn positions(expr: &Expr) -> Vec<(&Expr, Position)> {
         Expr::Unary(u) => vec![(&u.expr, borrow)],
         Expr::Binary(b) => vec![(&b.left, borrow), (&b.right, borrow)],
         Expr::CompoundAssign(a) => vec![(&a.target, borrow), (&a.value, borrow)],
+        Expr::Assign(a) if a.destructuring_targets().is_some() => std::iter::once((&a.value, consume))
+            .chain(a.places().iter().map(|place| (place, borrow)))
+            .collect(),
         Expr::Assign(a) => vec![(&a.target, borrow), (&a.value, consume)],
         Expr::ComparisonChain(c) => std::iter::once((&c.first, borrow))
             .chain(c.comparisons.iter().map(|cmp| (&cmp.right, borrow)))

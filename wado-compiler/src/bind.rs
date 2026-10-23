@@ -1008,6 +1008,17 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         match expr {
             Expr::Ident(ident) => self.read(&ident.name, ident.span)?,
 
+            // A destructuring assignment computes the whole value first, then
+            // writes each place in turn.
+            Expr::Assign(assign) if assign.destructuring_targets().is_some() => {
+                self.bind_expr(&assign.value)?;
+                for place in assign.places() {
+                    match place {
+                        Expr::Ident(ident) => self.assign(&ident.name, ident.span)?,
+                        place => self.bind_expr(place)?,
+                    }
+                }
+            }
             // A place evaluates before the value it receives; a name only
             // takes the value once it is computed.
             Expr::Assign(assign) => match &assign.target {

@@ -1254,8 +1254,22 @@ impl MoveWalker<'_, '_> {
 
     fn visit_assign(&mut self, a: &AssignExpr) {
         self.visit_at(&a.value);
-        let owners = self.owners_of(&a.value);
-        match &a.target {
+        let places = a.places();
+        let owners: Vec<Owners> = match (&a.value, a.destructuring_targets()) {
+            (Expr::TupleLiteral(value), Some(_)) if value.elements.len() == places.len() => value
+                .elements
+                .iter()
+                .map(|element| self.owners_of(element))
+                .collect(),
+            _ => vec![self.owners_of(&a.value); places.len()],
+        };
+        for (place, owners) in places.iter().zip(owners) {
+            self.write_place(place, owners);
+        }
+    }
+
+    fn write_place(&mut self, place: &Expr, owners: Owners) {
+        match place {
             Expr::Ident(ident) => {
                 if let Some(def) = self.note_capture(ident) {
                     self.rebind(def, owners);
@@ -1267,9 +1281,9 @@ impl MoveWalker<'_, '_> {
                 }
             }
         }
-        match self.place_path(&a.target) {
+        match self.place_path(place) {
             Some(place) => self.clear_place(&place),
-            None => self.visit_at(&a.target),
+            None => self.visit_at(place),
         }
     }
 

@@ -207,6 +207,13 @@ fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'
     }
 }
 
+/// The value an assignment writes: written in source, or a destructuring
+/// assignment's element, already bound to its `$daN` local.
+enum WrittenValue<'e> {
+    Ast(&'e ast::Expr),
+    Tir(TirExpr),
+}
+
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
@@ -2866,69 +2873,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::If(if_expr) => {
                 self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
             }
-            ast::Expr::Assign(assign) => {
-                // IndexAssign rewrite: `arr[i] = v` lowers to
-                // `arr.index_assign(i, v)`. The elaborator's
-                // `assign_to_target` records the resolved
-                // `FunctionRef` on `index_assign_dispatch[index.id]`;
-                // reify replays the same method-call shape.
-                if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
-                {
-                    let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-                    let receiver = adjust_receiver_for_self_kind(
-                        receiver,
-                        dispatch.self_kind,
-                        false,
-                        span,
-                        &self.tysys.type_table,
-                    );
-                    let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
-                    let value_expr = self.reify_expr(&assign.value, ctx, None);
-                    return build_tir_method_call(
-                        receiver,
-                        dispatch.function_ref,
-                        vec![],
-                        vec![
-                            CallArg::new(idx_expr, false),
-                            CallArg::new(value_expr, false),
-                        ],
-                        dispatch.return_type,
-                        span,
-                    );
-                }
-                // `target = value` — both sides walked recursively; the
-                // expression's type is `Unit` (assignment is a stmt-shape
-                // expression in Wado, mirroring Rust).
-                let target = self.reify_expr(&assign.target, ctx, None);
-                let value = self.reify_expr(&assign.value, ctx, Some(target.type_id));
-                // Global-var write: `g = v` lowers to `GlobalVarSet` so
-                // codegen actually mutates the global. The production
-                // `assign_to_target` rewrites here too.
-                if let TirExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } = &target.kind
-                {
-                    return TirExpr::new(
-                        TirExprKind::GlobalVarSet {
-                            module_source: module_source.clone(),
-                            name: name.clone(),
-                            value: Box::new(value),
-                        },
-                        TypeTable::UNIT,
-                        span,
-                    );
-                }
-                TirExpr::new(
-                    TirExprKind::Assign {
-                        target: Box::new(target),
-                        value: Box::new(value),
-                    },
-                    recorded_type,
-                    span,
-                )
-            }
+            ast::Expr::Assign(assign) => match assign.destructuring_targets() {
+                Some(targets) => self.reify_destructuring_assign(assign, targets, ctx),
+                None => self.reify_write(&assign.target, WrittenValue::Ast(&assign.value), span, ctx),
+            },
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`
                 // TIR are positional; the elaborator looks them up from
@@ -5416,6 +5364,135 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             idx.clone(),
             dispatch,
             deref_type,
+            span,
+        )
+    }
+
+    /// `target = value`. An `IndexAssign` target becomes
+    /// `recv.index_assign(idx, value)`, replaying the dispatch
+    /// `assign_to_target` recorded on the subscript; a global becomes a
+    /// `GlobalVarSet`. A place's operands evaluate before an AST value.
+    fn reify_write(
+        &mut self,
+        target: &ast::Expr,
+        value: WrittenValue<'_>,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        if let ast::Expr::Index(index_expr) = target
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+        {
+            let receiver = self.reify_expr(&index_expr.expr, ctx, None);
+            let receiver = adjust_receiver_for_self_kind(
+                receiver,
+                dispatch.self_kind,
+                false,
+                span,
+                &self.tysys.type_table,
+            );
+            let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
+            let value_expr = self.reify_written_value(value, None, ctx);
+            return build_tir_method_call(
+                receiver,
+                dispatch.function_ref,
+                vec![],
+                vec![
+                    CallArg::new(idx_expr, false),
+                    CallArg::new(value_expr, false),
+                ],
+                dispatch.return_type,
+                span,
+            );
+        }
+        let target = self.reify_expr(target, ctx, None);
+        let value = self.reify_written_value(value, Some(target.type_id), ctx);
+        if let TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &target.kind
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    value: Box::new(value),
+                },
+                TypeTable::UNIT,
+                span,
+            );
+        }
+        TirExpr::new(
+            TirExprKind::Assign {
+                target: Box::new(target),
+                value: Box::new(value),
+            },
+            TypeTable::UNIT,
+            span,
+        )
+    }
+
+    fn reify_written_value(
+        &mut self,
+        value: WrittenValue<'_>,
+        expected_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        match value {
+            WrittenValue::Ast(expr) => self.reify_expr(expr, ctx, expected_type),
+            WrittenValue::Tir(expr) => expr,
+        }
+    }
+
+    /// `[t0, t1, …] = value` as `{ let [$da0, $da1, …] = value; t0 = $da0;
+    /// t1 = $da1; … }`: the whole value first, then each target in turn.
+    fn reify_destructuring_assign(
+        &mut self,
+        assign: &ast::AssignExpr,
+        targets: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let span = assign.span;
+        let value = self.reify_expr(&assign.value, ctx, None);
+        let element_types = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_tuple(value.type_id)
+            .expect("annotate checked the value is a tuple of one element per target");
+        assert_eq!(element_types.len(), targets.len());
+        let ctx = &mut ctx.enter_scope();
+        let bindings: Vec<(String, u32, TypeId)> = element_types
+            .into_iter()
+            .enumerate()
+            .map(|(idx, type_id)| {
+                let name = format!("$da{idx}");
+                let index = ctx.add_local(name.clone(), type_id, false, None);
+                (name, index, type_id)
+            })
+            .collect();
+        let pattern = TirPattern::Tuple(
+            bindings
+                .iter()
+                .map(|(name, local_index, type_id)| TirPattern::Binding {
+                    name: name.clone(),
+                    local_index: *local_index,
+                    type_id: *type_id,
+                })
+                .collect(),
+            false,
+        );
+        let mut stmts = vec![TirStmt::new(
+            TirStmtKind::LetDestructure { pattern, value },
+            span,
+        )];
+        for (target, (name, index, type_id)) in targets.iter().zip(bindings) {
+            let element = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
+            let write = self.reify_write(target, WrittenValue::Tir(element), span, ctx);
+            stmts.push(TirStmt::new(TirStmtKind::Expr(write), span));
+        }
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
             span,
         )
     }

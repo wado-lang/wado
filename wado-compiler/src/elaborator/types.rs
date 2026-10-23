@@ -1338,6 +1338,19 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A destructuring assignment whose value is not a tuple of one element
+    /// per target.
+    DestructuringArity {
+        targets: usize,
+        found: String,
+        span: Span,
+    },
+
+    /// A destructuring assignment target that is a spread (`[a, ..rest]`).
+    DestructuringRest {
+        span: Span,
+    },
+
     /// Pattern expects different type kind (tuple, struct, variant, enum)
     PatternTypeMismatch {
         expected: String,
@@ -2871,6 +2884,23 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::DestructuringArity {
+                targets,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "a destructuring assignment to {targets} targets takes a tuple of \
+                     {targets} elements, found '{found}'"
+                ),
+                *span,
+            ),
+            TypeError::DestructuringRest { span } => (
+                Code::InvalidSyntax,
+                "a destructuring assignment takes no rest; name each target".to_string(),
                 *span,
             ),
             TypeError::UnsupportedSynthesisTrait {

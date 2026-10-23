@@ -1024,7 +1024,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        if let Some(targets) = assign.destructuring_targets() {
+            return self.resolve_destructuring_assign(assign, targets, ctx);
+        }
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
+    }
+
+    /// Resolve `[t0, t1, …] = value` as `let [$da0, $da1, …] = value;` and
+    /// then `t0 = $da0; t1 = $da1; …`. The tuple of the targets' types is the
+    /// value's expected type, so each target is read for its type first, as
+    /// a compound assignment reads its target.
+    fn resolve_destructuring_assign(
+        &mut self,
+        assign: &ast::AssignExpr,
+        targets: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        if let Some(rest) = targets
+            .iter()
+            .find(|target| matches!(target, ast::Expr::Spread(..)))
+        {
+            let _ = self.emit(TypeError::DestructuringRest { span: rest.span() });
+            return TypeTable::ERROR;
+        }
+        self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
+        let target_types: Vec<TypeId> = targets
+            .iter()
+            .map(|target| self.resolve_expr(target, ctx, None))
+            .collect();
+        let expected = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_tuple(target_types);
+        let value_type = self.resolve_expr(&assign.value, ctx, Some(expected));
+        if value_type == TypeTable::ERROR {
+            return TypeTable::ERROR;
+        }
+        let element_types = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_tuple(value_type)
+            .filter(|elements| elements.len() == targets.len());
+        let Some(element_types) = element_types else {
+            let found = self.tysys.type_table.borrow().type_name(value_type);
+            let _ = self.emit(TypeError::DestructuringArity {
+                targets: targets.len(),
+                found,
+                span: assign.value.span(),
+            });
+            return TypeTable::ERROR;
+        };
+        let ctx = &mut ctx.enter_scope();
+        for (idx, &type_id) in element_types.iter().enumerate() {
+            let _local_index = ctx.add_local(format!("$da{idx}"), type_id, false, None);
+        }
+        for (target, type_id) in targets.iter().zip(element_types) {
+            self.assign_to_target(
+                target,
+                AssignValue::Resolved {
+                    type_id,
+                    span: assign.value.span(),
+                },
+                ctx,
+            );
+        }
+        TypeTable::UNIT
     }
 
     /// Resolve `expr` with every subscript `target` projects through standing as

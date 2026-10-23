@@ -1,7 +1,7 @@
 //! Where `unchecked` may stand: before a call whose callee a `contract` clause
 //! binds, by its own clauses or by its trait's.
 
-use crate::ast::{self, AstVisitor, Expr, Item, Module, UnaryOp};
+use crate::ast::{self, AstVisitor, Expr, IndexExpr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::DefId;
 use crate::elaborator::sem::ModuleSemantics;
@@ -133,16 +133,25 @@ impl Finder<'_> {
 impl AstVisitor for Finder<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         let assignment = match expr {
-            Expr::Assign(assign) => Some((&assign.target, &assign.value)),
-            Expr::CompoundAssign(compound) => Some((&compound.target, &compound.value)),
+            Expr::Assign(assign) => Some((assign.places(), &assign.value)),
+            Expr::CompoundAssign(compound) => {
+                Some((std::slice::from_ref(&compound.target), &compound.value))
+            }
             _ => None,
         };
-        if let Some((Expr::Index(index), value)) = assignment
-            && let Some(span) = index.unchecked
+        if let Some((places, value)) = assignment
+            && places.iter().any(|place| unchecked_subscript(place).is_some())
         {
-            self.report(ASSIGNED, span);
-            self.visit_expr(&index.expr);
-            self.visit_expr(&index.index);
+            for place in places {
+                match unchecked_subscript(place) {
+                    Some((index, span)) => {
+                        self.report(ASSIGNED, span);
+                        self.visit_expr(&index.expr);
+                        self.visit_expr(&index.index);
+                    }
+                    None => self.visit_expr(place),
+                }
+            }
             self.visit_expr(value);
             return;
         }
@@ -174,6 +183,14 @@ impl Finder<'_> {
             message: message.to_string(),
             span: Some(DiagnosticSpan::from_span(&span, None)),
         });
+    }
+}
+
+/// The subscript `place` is, with the span of the `unchecked` marking it.
+fn unchecked_subscript(place: &Expr) -> Option<(&IndexExpr, Span)> {
+    match place {
+        Expr::Index(index) => index.unchecked.map(|span| (&**index, span)),
+        _ => None,
     }
 }
 
