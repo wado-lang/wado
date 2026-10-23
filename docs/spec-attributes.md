@@ -313,6 +313,7 @@ Each declaration reads its own keys:
 | Declaration                          | Keys                 |
 | ------------------------------------ | -------------------- |
 | `struct`, `enum`, `variant`, `flags` | `name_policy`        |
+| `variant`                            | `tag`                |
 | Struct field                         | `name`, `positional` |
 | Enum case, variant case              | `name`               |
 
@@ -353,6 +354,14 @@ test {
     assert to_string(&e).unwrap() == "{\"createdAt\":\"now\",\"type\":\"click\"}";
 }
 ```
+
+#### Internal Tags
+
+`#[wire(tag = "key")]` on a `variant` writes each case with its wire name under
+`key`, beside the fields of its payload, rather than as the key around it (see
+[Serialized Shapes](./spec-serialization.md#serialized-shapes)).
+
+> Not yet implemented: `#[wire(tag = "...")]` is not recognized.
 
 #### Positional Fields
 
