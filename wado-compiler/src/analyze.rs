@@ -18,7 +18,9 @@ use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
-use crate::name::{mangle_local_method, namespace_member_alias, validate_module_path};
+use crate::name::{
+    interface_basename, mangle_local_method, namespace_member_alias, validate_module_path,
+};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
@@ -173,20 +175,14 @@ pub enum AnalyzeError {
         name: String,
         span: Span,
     },
-    /// An operation more than one of a component's default interfaces
-    /// declares, imported by bare name.
-    SharedDefaultOperation {
+    /// A name two items of one rank share, so it names neither: an operation
+    /// two default interfaces declare, a basename two interfaces share, or a
+    /// full name without a version where the module offers two. `candidates`
+    /// spells each item as a `use` reaches it.
+    AmbiguousName {
         module_source: ModuleSource,
         name: String,
-        interfaces: Vec<String>,
-        span: Span,
-    },
-    /// A full interface name without a version, where the module offers the
-    /// interface at more than one.
-    InterfaceVersionRequired {
-        module_source: ModuleSource,
-        name: String,
-        versions: Vec<String>,
+        candidates: Vec<String>,
         span: Span,
     },
     /// Duplicate top-level definition within a single module.
@@ -319,34 +315,19 @@ impl AnalyzeError {
                 format!("symbol '{name}' not found in module '{module_source}'"),
                 *span,
             ),
-            AnalyzeError::SharedDefaultOperation {
+            AnalyzeError::AmbiguousName {
                 module_source,
                 name,
-                interfaces,
+                candidates,
                 span,
             } => (
                 Code::ImportNotFound,
                 format!(
-                    "symbol '{name}' is in more than one default interface of module \
-                     '{module_source}' ({}); name it through one, as `{}::{name}`",
-                    interfaces.join(", "),
-                    interfaces[0],
-                ),
-                *span,
-            ),
-            AnalyzeError::InterfaceVersionRequired {
-                module_source,
-                name,
-                versions,
-                span,
-            } => (
-                Code::ImportNotFound,
-                format!(
-                    "module '{module_source}' offers '{name}' at more than one version; \
+                    "'{name}' names more than one item of module '{module_source}'; \
                      write the one you mean: {}",
-                    versions
+                    candidates
                         .iter()
-                        .map(|version| format!("`\"{name}@{version}\"`"))
+                        .map(|candidate| format!("`{candidate}`"))
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
@@ -560,9 +541,9 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// [`resolve_use_decl_source`] so analyze-phase imports get
     /// canonicalized identities.
     interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// The operations a component's default interfaces share, which no bare
-    /// name imports, each with the interfaces that declare it.
-    shared_default_ops: hashmap::IndexMap<(ModuleSource, String), Vec<String>>,
+    /// The names two items of one rank of a component share, which import
+    /// neither, each with the items as a `use` reaches them.
+    ambiguous_names: hashmap::IndexMap<(ModuleSource, String), Vec<String>>,
     /// The name each package's `export use` publishes an adopted type under.
     adopted_names: hashmap::IndexMap<(PackageId, AstId), String>,
 }
@@ -577,7 +558,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             entry_module_source: ModuleSource::entry_point_uninitialized(),
             invocations: InvocationIndex::new(),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
-            shared_default_ops: hashmap::IndexMap::default(),
+            ambiguous_names: hashmap::IndexMap::default(),
             adopted_names: hashmap::IndexMap::default(),
         }
     }
@@ -1158,6 +1139,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) {
         if module_source.is_wasm_asset() {
             self.reexport_default_interface(module, module_source);
+            self.record_shared_basenames(module, module_source);
         }
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -1268,11 +1250,39 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
                 [_] => {}
                 shared => {
-                    let names = shared.iter().map(|iface| iface.name.clone()).collect();
-                    self.shared_default_ops
-                        .insert((module_source.clone(), op.to_string()), names);
+                    let candidates = shared
+                        .iter()
+                        .map(|iface| format!("{}::{op}", iface.name))
+                        .collect();
+                    self.ambiguous_names
+                        .insert((module_source.clone(), op.to_string()), candidates);
                 }
             }
+        }
+    }
+
+    /// Record each basename two of a component's interfaces share, which the
+    /// bindings declare neither under (see `wit_consume`), unless a higher-rank
+    /// item took it.
+    fn record_shared_basenames(&mut self, module: &Module, module_source: &ModuleSource) {
+        let mut sharing: hashmap::IndexMap<String, Vec<String>> = hashmap::IndexMap::default();
+        for item in &module.items {
+            if let Item::Interface(decl) = item
+                && let Some(cm) = cm_import_of(&decl.attrs)
+            {
+                let basename = interface_basename(cm);
+                if decl.name != basename && !self.symbols.is_defined_in_module(module_source, &basename) {
+                    sharing
+                        .entry(basename)
+                        .or_default()
+                        .push(format!("\"{}\"", cm.interface_path()));
+                }
+            }
+        }
+        for (basename, candidates) in sharing {
+            assert!(candidates.len() > 1, "a basename no item takes is shared");
+            self.ambiguous_names
+                .insert((module_source.clone(), basename), candidates);
         }
     }
 
@@ -1370,11 +1380,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     ) -> Result<(), Bail> {
         let Some(symbol) = self.symbols.lookup_in_module(module_source, lookup_name) else {
             let key = (module_source.clone(), lookup_name.to_string());
-            let error = match self.shared_default_ops.get(&key) {
-                Some(interfaces) => AnalyzeError::SharedDefaultOperation {
+            let error = match self.ambiguous_names.get(&key) {
+                Some(candidates) => AnalyzeError::AmbiguousName {
                     module_source: module_source.clone(),
                     name: lookup_name.to_string(),
-                    interfaces: interfaces.clone(),
+                    candidates: candidates.clone(),
                     span: name_span,
                 },
                 None => AnalyzeError::ImportNotFound {
@@ -1418,12 +1428,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 name: name.to_string(),
                 span,
             },
-            several => AnalyzeError::InterfaceVersionRequired {
+            several => AnalyzeError::AmbiguousName {
                 module_source: module_source.clone(),
-                name: name.to_string(),
-                versions: several
+                name: format!("\"{name}\""),
+                candidates: several
                     .iter()
-                    .filter_map(|(_, symbol)| symbol.cm_import()?.version.clone())
+                    .filter_map(|(_, symbol)| Some(format!("\"{}\"", symbol.cm_import()?.interface_path())))
                     .collect(),
                 span,
             },

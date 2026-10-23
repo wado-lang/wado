@@ -15,7 +15,7 @@ use crate::primitive::PrimitiveType;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
-use heck::{ToKebabCase, ToSnakeCase};
+use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
 use std::fmt;
 use std::hash::Hash;
 
@@ -452,6 +452,18 @@ pub fn cm_task_entry_func_name(name: &str) -> String {
 /// The core function of the `wado:callback/callback` export `name`.
 pub fn cm_callback_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_callback__{name}")
+}
+
+/// An interface's basename: the last label of its interface name, without the
+/// version, in `PascalCase` (`a:x/trip@0.1.0` is `Trip`).
+pub fn interface_basename(interface: &ast::CmImport) -> String {
+    interface.interface.to_upper_camel_case()
+}
+
+/// The name a component's interface is declared under where its basename is
+/// not its own: its interface name, which no Wado identifier can spell.
+pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
+    format!("{INTERNAL_PREFIX}{}", interface.interface_path())
 }
 
 /// The binding of the import `method` of `interface`.

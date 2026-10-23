@@ -17,7 +17,7 @@ use crate::ast::{
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
-use crate::name::wado_identifier;
+use crate::name::{interface_basename, unnamed_interface_name, wado_identifier};
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -137,6 +137,8 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         }
     }
 
+    b.unname_shared_basenames();
+
     if !b.errors.is_empty() {
         // One unsupported shape reaches the collector once per signature
         // position it occupies; the reader needs it once.
@@ -232,6 +234,36 @@ impl Builder {
         })
     }
 
+    /// Declare under its interface name each interface whose basename is not its
+    /// own: one another interface shares, or one a world function or a type
+    /// takes, as each outranks a basename. Such an interface is reached by its
+    /// full name alone.
+    fn unname_shared_basenames(&mut self) {
+        let mut interfaces: hashmap::IndexMap<String, usize> = hashmap::IndexMap::default();
+        let mut taken: hashmap::IndexSet<String> = hashmap::IndexSet::default();
+        for item in &self.items {
+            match item {
+                Item::Interface(decl) => *interfaces.entry(decl.name.clone()).or_default() += 1,
+                Item::Function(func) => {
+                    taken.insert(func.name.clone());
+                }
+                other => {
+                    if let Some(head) = other.type_decl() {
+                        taken.insert(head.name.to_string());
+                    }
+                }
+            }
+        }
+        for item in &mut self.items {
+            if let Item::Interface(decl) = item
+                && (interfaces[&decl.name] > 1 || taken.contains(&decl.name))
+            {
+                let cm = cm_import_of(&decl.attrs).expect("a synthesized interface carries `#[cm]`");
+                decl.name = unnamed_interface_name(cm);
+            }
+        }
+    }
+
     fn id(&mut self) -> AstId {
         let id = AstId::new(self.space, self.count);
         self.count += 1;
@@ -278,11 +310,7 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
-        let iface_name = iface
-            .name
-            .as_deref()
-            .unwrap_or_default()
-            .to_upper_camel_case();
+        let iface_name = interface_basename(&CmImport::parse(fq).expect("interface FQ is well-formed"));
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {

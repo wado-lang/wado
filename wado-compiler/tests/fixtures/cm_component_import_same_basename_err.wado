@@ -1,0 +1,10 @@
+// `Trip` is the basename of `a:x/trip` and of `b:y/trip`, so it names neither,
+// and the report names both.
+use { Trip } from "./sub/wasm_import_cm_two_trips.wat" with { type: "wat" };
+
+test {
+    assert Trip::f() == 1;
+}
+
+__DATA__
+{"compile_error_codes": ["IMPORT_NOT_FOUND"]}
