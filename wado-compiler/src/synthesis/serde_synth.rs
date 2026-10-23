@@ -134,12 +134,13 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         return;
     };
 
-    let (serialize_key, deserialize_key) = {
+    let (serialize_key, deserialize_key, schema_key) = {
         let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
             items.trait_def(CompilerItem::Serialize),
             items.trait_def(CompilerItem::Deserialize),
+            items.trait_def(CompilerItem::FieldSchema),
         )
     };
 
@@ -147,7 +148,9 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     // `synthesize_traits`) before the scan below, so a program with no
     // bound-driven serde requests skips it entirely.
     let requests = type_table.borrow().bound_driven_synth_requests(|key| {
-        Some(key) == serialize_key.as_ref() || Some(key) == deserialize_key.as_ref()
+        [&serialize_key, &deserialize_key, &schema_key]
+            .into_iter()
+            .any(|ours| ours.as_ref() == Some(key))
     });
     if requests.is_empty() {
         return;
@@ -170,17 +173,18 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             .collect()
     };
 
+    // A struct's `FieldSchema` is synthesized with its `Deserialize`, so a
+    // request for either asks the same synthesis, once.
+    let mut asked: IndexSet<(TypeHead, ModuleSource, SynthTrait)> = IndexSet::default();
     for (target_head, module_source, trait_key) in requests {
         let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
-            assert_eq!(
-                Some(&trait_key),
-                deserialize_key.as_ref(),
-                "`requests` is filtered to the two serde traits"
-            );
             SynthTrait::Deserialize
         };
+        if !asked.insert((target_head.clone(), module_source.clone(), trait_ref)) {
+            continue;
+        }
         let Some(&target_type_id) = by_head.get(&target_head) else {
             continue;
         };

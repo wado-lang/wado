@@ -3724,7 +3724,7 @@ pub struct TirTraitMethod {
 /// syntax boundary and rejects anything else with a diagnostic, so downstream
 /// synthesis never needs to re-parse a trait-name string. A `From` marker
 /// never reaches here: `marker` writes it out as an ordinary impl.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SynthTrait {
     Serialize,
     Deserialize,
