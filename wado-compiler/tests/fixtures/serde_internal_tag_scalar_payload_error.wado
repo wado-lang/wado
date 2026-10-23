@@ -1,0 +1,13 @@
+// An internally tagged case writes the tag beside its payload's fields, so a
+// payload with no fields has no object to hold the tag.
+
+#[wire(tag = "type")]
+variant Shape {
+    Circle(f64),
+    Empty,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:5: `Shape::Circle` carries `f64`, but a case of a variant with `#[wire(tag)]` carries a struct or nothing", "compile_error_codes": ["ATTR_MISUSE"]}

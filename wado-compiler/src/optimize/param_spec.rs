@@ -134,9 +134,6 @@ pub(super) struct ParamSpecState {
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
     /// set of clones, which are never specialized again.
     param_consts: IndexMap<FuncId, IndexMap<String, ParamSeed>>,
-    /// The per-function walks behind the reachable set the constants are
-    /// taken over.
-    reachability: ReachabilityCache,
     /// The call graph whose cycles a clone must not split.
     callees: BodyMemo<Vec<usize>>,
 }
@@ -988,6 +985,7 @@ pub(super) fn specialize_const_params(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
     descriptors: &mut DescriptorCache,
+    reachability: &mut ReachabilityCache,
 ) -> bool {
     let cached: Vec<_> = state
         .clones
@@ -995,13 +993,8 @@ pub(super) fn specialize_const_params(
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let mut reachable = reachable_function_positions(
-        project,
-        descriptors,
-        &mut state.reachability,
-        gate.exec(),
-        cached,
-    );
+    let mut reachable =
+        reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;

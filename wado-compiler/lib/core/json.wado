@@ -2343,9 +2343,8 @@ impl DeserializeStruct for JsonStructAccess {
         }
         de.first_entry = false;
 
-        // Fast path: scan JSON string key without allocating.
-        // For unescaped keys (the common case), we pass the byte range
-        // directly to S::lookup, avoiding String allocation entirely.
+        // `entry_key`'s read, kept inline: calling it costs json-twitter's
+        // decode 2%.
         if b != b'"' {
             builtin::cold_path();
             return Result::Err(de.key_quote_error(b));
@@ -2394,6 +2393,60 @@ impl DeserializeStruct for JsonStructAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         return self.close_container(b'}');
+    }
+
+    /// A tag that leads the object is read past. One further in is reached by
+    /// skipping the entries before it, which are then read again from the
+    /// object's start.
+    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+        let de = *self as &mut JsonDeserializer;
+        let wanted = key.as_str_slice();
+        let start = de.pos;
+        let first_entry = de.first_entry;
+        let mut leads = true;
+        while de.entry_head(b'}')? {
+            let b = de.peek_after_whitespace();
+            if de.entry_key(b)? == wanted.as_bytes() {
+                let value = de.deserialize_string()?;
+                if !leads {
+                    de.pos = start;
+                    de.first_entry = first_entry;
+                }
+                return Result::Ok(value);
+            }
+            de.skip_value(de.depth)?;
+            leads = false;
+        }
+        return Result::Err(DeserializeError::missing_field(key));
+    }
+}
+
+impl JsonDeserializer {
+    /// Reads an entry's key from its opening quote `b`, and the `:` after it.
+    fn entry_key(&mut self, b: i32) -> Result<ByteSlice, DeserializeError> {
+        if b != b'"' {
+            builtin::cold_path();
+            return Result::Err(self.key_quote_error(b));
+        }
+        self.pos += 1;
+        let key_start = self.pos;
+        let scan = self.scan_string_run(key_start);
+        // Fast path: a key without escapes is read from the input in place.
+        if scan.stop == b'"' {
+            if !scan.valid {
+                builtin::cold_path();
+                return Result::Err(self.invalid_utf8_string(key_start));
+            }
+            self.pos = scan.end + 1;
+            self.expect_char(b':')?;
+            return Result::Ok(self.input.slice(key_start, scan.end));
+        }
+        // Slow path: a key with escapes, or a malformed one, is parsed in full.
+        builtin::cold_path();
+        self.pos = key_start - 1;
+        let key = self.read_json_string()?;
+        self.expect_char(b':')?;
+        return Result::Ok(key.as_bytes());
     }
 }
 

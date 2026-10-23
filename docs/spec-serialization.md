@@ -100,8 +100,6 @@ the entries. A case carries no payload or a struct, and a
 payload field whose wire name is `key` is a compile error. Reading, a tag that
 names no case is `UnknownVariant`, and a missing tag is `MissingField`.
 
-> Not yet implemented: `#[wire(tag = "...")]` is not recognized.
-
 The standard library's own impls:
 
 | Type                                 | Written as                                 |

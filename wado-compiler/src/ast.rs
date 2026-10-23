@@ -1800,6 +1800,35 @@ impl NamePolicy {
             .find(|(name, _)| *name == written)
             .map(|&(_, policy)| policy)
     }
+
+    /// `name` spelled under this policy. Source-casing-agnostic, since Wado
+    /// casing is convention, not a rule.
+    #[must_use]
+    pub fn apply(self, name: &str) -> String {
+        use heck::{
+            ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
+            ToUpperCamelCase,
+        };
+        match self {
+            Self::Camel => name.to_lower_camel_case(),
+            Self::Snake => name.to_snake_case(),
+            Self::Pascal => name.to_upper_camel_case(),
+            Self::ScreamingSnake => name.to_shouty_snake_case(),
+            Self::Kebab => name.to_kebab_case(),
+            Self::ScreamingKebab => name.to_shouty_kebab_case(),
+        }
+    }
+
+    /// The wire name of a member: its `#[wire(name)]`, or else its source
+    /// `name` under the declaration's `policy`.
+    #[must_use]
+    pub fn wire_name(overridden: Option<&str>, policy: Option<Self>, name: &str) -> String {
+        match (overridden, policy) {
+            (Some(written), _) => written.to_string(),
+            (None, Some(policy)) => policy.apply(name),
+            (None, None) => name.to_string(),
+        }
+    }
 }
 
 /// Attribute like #[cm("...")]

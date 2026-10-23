@@ -1,0 +1,17 @@
+// A payload field whose wire name is the tag would write the key twice. The
+// field's wire name counts, so a rename onto the tag collides too.
+
+#[wire(tag = "kind")]
+variant Event {
+    Click(Click),
+}
+
+struct Click {
+    #[wire(name = "kind")]
+    button: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:5: `Event::Click` writes its payload's field `button` as `kind`, the key its tag is written under", "compile_error_codes": ["ATTR_MISUSE"]}

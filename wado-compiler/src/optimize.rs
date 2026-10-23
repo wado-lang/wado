@@ -79,7 +79,7 @@ use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
-    Initializers, analyze_dce, drop_self_feeding_globals, filter_bytes_literals,
+    Initializers, ReachabilityCache, analyze_dce, drop_self_feeding_globals, filter_bytes_literals,
     filter_string_literals, remove_unreachable_closure_functors, remove_unreachable_functions,
     remove_unreachable_globals, remove_unreachable_types, unhoist_unobserved_globals,
 };
@@ -737,6 +737,9 @@ fn run_optimization_passes(
     // functions still held, which is when a hold can no longer pay.
     let mut inline_holds = inline::InlineHolds::default();
     let mut inline_scans = inline::InlineScans::default();
+    // The walks behind the reachable set `nir/inline` and `nir/param_spec`
+    // read their call sites over.
+    let mut reachability = ReachabilityCache::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -858,6 +861,7 @@ fn run_optimization_passes(
             descriptor_cache,
             &mut mod_ref_summaries,
             &mut inline_scans,
+            &mut reachability,
         ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
@@ -901,7 +905,13 @@ fn run_optimization_passes(
         // summary taken before a callee gained a write, an unsound substitution
         // (see its module doc).
         gated!("nir/param_spec", GatedPass::ParamSpec, |p, g| {
-            param_spec::specialize_const_params(p, &mut param_spec_state, g, descriptor_cache)
+            param_spec::specialize_const_params(
+                p,
+                &mut param_spec_state,
+                g,
+                descriptor_cache,
+                &mut reachability,
+            )
         });
         gated!("nir/licm", GatedPass::Licm, |p, g| {
             apply_licm(p, g, &mut heap_effects)

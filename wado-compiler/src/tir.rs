@@ -3592,6 +3592,9 @@ pub struct TirVariantDecl {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
     pub wire_name_policy: Option<NamePolicy>,
+    /// `#[wire(tag = "...")]` — the key an internally tagged case is written
+    /// under.
+    pub wire_tag: Option<String>,
 }
 
 /// A case in a variant declaration

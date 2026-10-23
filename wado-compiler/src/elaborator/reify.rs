@@ -1248,6 +1248,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect(),
         );
 
+        let wire_tag = wire_value_of(&variant_decl.attrs, "tag");
+        if let Some(tag) = &wire_tag {
+            self.check_internal_tag(variant_decl, tag, &cases);
+        }
+
         TirVariantDecl {
             def,
             name: variant_decl.name.clone(),
@@ -1257,7 +1262,72 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cases,
             span: variant_decl.span,
             wire_name_policy: wire_name_policy_of(&variant_decl.attrs),
+            wire_tag,
         }
+    }
+
+    /// An internally tagged case is written as an object holding `tag` beside
+    /// its payload's fields, so the payload is a struct, or nothing, and writes
+    /// no field under `tag`.
+    fn check_internal_tag(
+        &self,
+        variant_decl: &ast::VariantDecl,
+        tag: &str,
+        cases: &[tir::TirVariantCase],
+    ) {
+        for (case, reified) in variant_decl.cases.iter().zip(cases) {
+            if reified.payload == TypeTable::UNIT {
+                continue;
+            }
+            let case_path = format!("{}::{}", variant_decl.name, case.name);
+            let Some(payload) = self.struct_decl_of(reified.payload) else {
+                let payload = self.tysys.type_table.borrow().type_name(reified.payload);
+                self.error_at(
+                    Code::AttrMisuse,
+                    case.span,
+                    format!(
+                        "`{case_path}` carries `{payload}`, but a case of a variant with \
+                         `#[wire(tag)]` carries a struct or nothing"
+                    ),
+                );
+                continue;
+            };
+            let policy = wire_name_policy_of(&payload.attrs);
+            for field in &payload.fields {
+                let wire_name = NamePolicy::wire_name(
+                    wire_name_override_of(&field.attrs).as_deref(),
+                    policy,
+                    &field.name,
+                );
+                if wire_name == tag {
+                    self.error_at(
+                        Code::AttrMisuse,
+                        case.span,
+                        format!(
+                            "`{case_path}` writes its payload's field `{}` as `{tag}`, \
+                             the key its tag is written under",
+                            field.name
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The struct declaration `ty` instantiates, or `None` where `ty` is not a
+    /// declared struct.
+    fn struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
+        let def = self.tysys.type_table.borrow().nominal_def(ty)?;
+        let defs = self.tysys.resolutions.defs();
+        let target = defs.ast_id(def);
+        self.loaded_modules
+            .get(defs.module(def))?
+            .items
+            .iter()
+            .find_map(|item| match item {
+                ast::Item::Struct(decl) if decl.id == target => Some(decl),
+                _ => None,
+            })
     }
 
     /// Reify an `interface E { … }` declaration. Effects have no
@@ -10746,9 +10816,14 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
 
 /// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
+    wire_value_of(attrs, "name")
+}
+
+/// The string a `#[wire(key = "...")]` on the declaration writes.
+fn wire_value_of(attrs: &[ast::Attribute], key: &str) -> Option<String> {
     attrs.iter().find_map(|a| {
         if a.name == WIRE {
-            a.kv_value("name").map(str::to_string)
+            a.kv_value(key).map(str::to_string)
         } else {
             None
         }

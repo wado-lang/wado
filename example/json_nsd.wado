@@ -388,6 +388,17 @@ impl DeserializeStruct for NsdStructAccess {
     fn end(&mut self) -> Result<(), DeserializeError> {
         return self.de.expect_char(b']');
     }
+
+    // NSD names no key, so the tag is the element a tagged case is written
+    // with first. The payload's fields follow it from index 0.
+    fn tag<S: AsStrSlice>(&mut self, key: S) -> Result<String, DeserializeError> {
+        if !entry_head(self.de, b']', self.first)? {
+            return Result::Err(DeserializeError::missing_field(key));
+        }
+        self.first = false;
+        self.de.depth = self.depth;
+        return NsdDeserializer { de: self.de }.deserialize_string();
+    }
 }
 
 impl DeserializeVariant for NsdVariantAccess {
@@ -892,6 +903,19 @@ test "round-trip a map with scalar keys" {
 
 test "round-trip enum" {
     assert from_string::<Color>(to_string(&Color::Green).unwrap()) == Result::Ok(Color::Green);
+}
+
+#[wire(tag = "type")]
+variant Mark {
+    At(Point),
+    Nowhere,
+}
+
+test "an internally tagged case is its tag, then its payload's fields" {
+    assert to_string(&Mark::At(Point { x: 1, y: 2 })) == Result::Ok(`["At",1,2]`);
+    assert to_string(&Mark::Nowhere) == Result::Ok(`["Nowhere"]`);
+    assert from_string::<Mark>(`["At",1,2]`) == Result::Ok(Mark::At(Point { x: 1, y: 2 }));
+    assert from_string::<Mark>(`["Nowhere"]`) == Result::Ok(Mark::Nowhere);
 }
 
 // --- Error cases ---

@@ -504,6 +504,8 @@ pub enum CompilerItem {
     ReflectVariantDiscriminant,
     /// `ReflectVariant::members` — the per-case member tuple.
     ReflectVariantMembers,
+    /// `ReflectVariant::wire_tag` — the variant's `#[wire(tag)]` key.
+    ReflectVariantWireTag,
     /// `ReflectEnum::discriminant` — the value's tag as `i32`.
     ReflectEnumDiscriminant,
     /// `ReflectEnum::from_discriminant` — the reverse bridge; unknown
@@ -906,6 +908,7 @@ impl CompilerItem {
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantMembers,
+        Self::ReflectVariantWireTag,
         Self::ReflectEnumDiscriminant,
         Self::ReflectEnumFromDiscriminant,
         Self::ReflectEnumMembers,
@@ -1196,6 +1199,7 @@ impl CompilerItem {
             Self::Bf16FromU128 => "bf16_from_u128",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantMembers => "reflect_variant_members",
+            Self::ReflectVariantWireTag => "reflect_variant_wire_tag",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
             Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
             Self::ReflectEnumMembers => "reflect_enum_members",
@@ -1405,6 +1409,7 @@ impl CompilerItem {
             | Self::FormatterWriteStr
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireTag
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
@@ -1719,6 +1724,7 @@ impl CompilerItem {
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireTag
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
