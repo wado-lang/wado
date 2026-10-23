@@ -2343,8 +2343,9 @@ impl DeserializeStruct for JsonStructAccess {
         }
         de.first_entry = false;
 
-        // `entry_key`'s read, kept inline: calling it costs json-twitter's
-        // decode 2%.
+        // `entry_key`'s read, kept inline: `next_field` has an instance per
+        // struct, and the inliner declines a callee that size at that many
+        // sites, which costs json-twitter's decode 1%.
         if b != b'"' {
             builtin::cold_path();
             return Result::Err(de.key_quote_error(b));

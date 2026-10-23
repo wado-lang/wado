@@ -1506,8 +1506,9 @@ impl DeserializeStruct for CborStructAccess {
         if !self.indef {
             self.remaining -= 1;
         }
-        // `entry_key`'s read, kept inline: calling it costs cbor-twitter's
-        // decode 3%.
+        // `entry_key`'s read, kept inline: `next_field` has an instance per
+        // struct, and the inliner declines a callee that size at that many
+        // sites, which costs cbor-twitter's decode 5%.
         let head = self.de.peek_byte()?;
         if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
             let key_range = (unchecked self.de.read_text_key_range(head))?;
