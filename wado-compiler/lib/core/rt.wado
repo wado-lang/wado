@@ -30,7 +30,7 @@ use {
     WaitEvent,
     CM_BLOCKED,
     call_state,
-    settled_copy,
+    cm_await_copy,
     cm_packed_upper,
     copy_result,
     write_copy_is_final,
@@ -299,10 +299,15 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// `settled_copy`, where the bindings reach it: synthesis calls into `core:rt`.
+/// The packed result of a copy that answered `packed`, awaited first if it
+/// answered BLOCKED. Every caller starts the copy and waits on it at once, so no
+/// set can have reported it: `SETTLED_COPIES` never holds it.
 #[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
-    return settled_copy(handle, packed);
+    if packed != CM_BLOCKED {
+        return packed;
+    }
+    return cm_await_copy(handle);
 }
 
 /// How a future write whose packed result is `packed` ended, a BLOCKED one
