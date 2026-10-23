@@ -33,7 +33,7 @@ use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
     field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    variant_tag_helper_name,
+    template_segment_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -2571,7 +2571,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
-        // the shape only.
+        // and `template_segment<T>` the shape only.
         if func.is_builtin_named("hole_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
@@ -2583,11 +2583,16 @@ impl FunctionTranslator<'_, '_> {
             };
             return Some(self.bridge_call(ta[0], name, args, "hole_get"));
         }
-        if func.is_builtin_named("hole_fmt") {
-            let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
-            let name =
-                hole_fmt_helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
-            return Some(self.bridge_call(ta[0], name, args, "hole_fmt"));
+        for (builtin, helper_name) in [
+            ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
+            ("template_segment", template_segment_helper_name),
+        ] {
+            if func.is_builtin_named(builtin) {
+                let ta = Self::marker_type_args::<1>(type_args, mi, builtin);
+                let name =
+                    helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
+                return Some(self.bridge_call(ta[0], name, args, builtin));
+            }
         }
 
         let helper_name_for: fn(&str, &str) -> String =

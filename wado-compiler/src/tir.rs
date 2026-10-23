@@ -454,11 +454,11 @@ pub struct TemplateHole {
     pub spec: Option<String>,
 }
 
-/// The static part of a tagged template literal: the raw literal segments —
-/// one more than the holes, cooked forms derived on demand — and the holes.
+/// The static part of a tagged template literal: its holes. The literal
+/// segments are no part of it: a value carries its own, so templates differing
+/// only in their text share one type and one instantiation of the tag.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TemplateShape {
-    pub segments: Vec<String>,
     pub holes: Vec<TemplateHole>,
 }
 
@@ -467,6 +467,34 @@ impl TemplateShape {
     #[must_use]
     pub fn field_name(k: usize) -> String {
         format!("h{k}")
+    }
+
+    /// Segment `k`, cooked or raw, as `builtin::template_segment` numbers it.
+    #[must_use]
+    pub fn segment_key(k: usize, raw: bool) -> u32 {
+        (2 * k + usize::from(raw)) as u32
+    }
+
+    /// The segment `key` numbers, and whether it is the raw form.
+    #[must_use]
+    pub fn segment_of(key: u32) -> (usize, bool) {
+        ((key / 2) as usize, key % 2 == 1)
+    }
+
+    /// The field holding the segment `key` numbers. The segments follow the
+    /// holes, so a hole's field index is its own.
+    #[must_use]
+    pub fn segment_field(&self, key: u32) -> (String, u32) {
+        let name = match Self::segment_of(key) {
+            (k, false) => format!("s{k}"),
+            (k, true) => format!("r{k}"),
+        };
+        (name, self.holes.len() as u32 + key)
+    }
+
+    /// The segment keys, one cooked and one raw per segment, in field order.
+    pub fn segment_keys(&self) -> std::ops::Range<u32> {
+        0..Self::segment_key(self.holes.len() + 1, false)
     }
 
     #[must_use]

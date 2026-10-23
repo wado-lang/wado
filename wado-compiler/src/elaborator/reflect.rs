@@ -918,7 +918,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        if !self.check_reflect_args(&[], static_call, ctx) {
+        // `tail` and `raw_tail` read the segment out of a template value.
+        let params = if method == methods.members {
+            Vec::new()
+        } else {
+            vec![self.tysys.type_table.borrow_mut().make_ref(self_ty)]
+        };
+        if !self.check_reflect_args(&params, static_call, ctx) {
             return TypeTable::ERROR;
         }
 

@@ -8,11 +8,11 @@ struct P {
 }
 
 fn no_holes<T: ReflectTemplate<Holes = []>>(t: T) -> String {
-    return ReflectTemplate::<T>::tail();
+    return ReflectTemplate::<T>::tail(&t);
 }
 
 fn unit_holes<T: ReflectTemplate<Holes = ()>>(t: T) -> String {
-    return ReflectTemplate::<T>::tail();
+    return ReflectTemplate::<T>::tail(&t);
 }
 
 fn int_fields<T: ReflectStruct<FieldTypes = [i32]>>(t: T) -> i32 {

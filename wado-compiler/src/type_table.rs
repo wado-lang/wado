@@ -989,16 +989,23 @@ impl TypeTable {
     }
 
     /// The fields a struct of shape `id` holds: a literal's as written, a
-    /// template's one per hole typed by [`Self::hole_field_type`].
+    /// template's one per hole typed by [`Self::hole_field_type`], then each
+    /// segment as a `String`, cooked and raw.
     pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {
         match self.anon_structs[id.0 as usize].shape.clone() {
             AnonShape::Fields(fields) => fields,
-            AnonShape::Template(shape) => shape
-                .holes
-                .iter()
-                .enumerate()
-                .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)))
-                .collect(),
+            AnonShape::Template(shape) => {
+                let string_type = self.make_compiler_struct(CompilerItem::String);
+                let holes = shape
+                    .holes
+                    .iter()
+                    .enumerate()
+                    .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)));
+                let segments = shape
+                    .segment_keys()
+                    .map(|key| (shape.segment_field(key).0, string_type));
+                holes.chain(segments).collect()
+            }
             AnonShape::Synthetic(name) => {
                 unreachable!("synthetic shape `{name}` carries its fields itself")
             }
@@ -1107,7 +1114,6 @@ impl TypeTable {
                         ..hole
                     })
                     .collect(),
-                ..shape
             }),
         };
         if shape == self.anon_structs[id.0 as usize].shape {
@@ -1200,8 +1206,8 @@ impl TypeTable {
         }
     }
 
-    /// A template shape as its text, each hole spelled as its type and
-    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    /// A template shape as its holes, each spelled as its type and specifier,
+    /// cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
     fn template_shape_name(
         &self,
         shape: &TemplateShape,
@@ -1225,15 +1231,12 @@ impl TypeTable {
             }
             true
         };
-        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
-            push(segment)
-                && shape.holes.get(k).is_none_or(|hole| {
-                    let spec = hole
-                        .spec
-                        .as_ref()
-                        .map_or(String::new(), |s| format!(":{s}"));
-                    push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
-                })
+        let complete = shape.holes.iter().all(|hole| {
+            let spec = hole
+                .spec
+                .as_ref()
+                .map_or(String::new(), |s| format!(":{s}"));
+            push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
         });
         if !complete {
             name.push_str("...");
@@ -1273,16 +1276,12 @@ impl TypeTable {
                     .collect();
                 format!("$anon_{{{}}}", parts.join(","))
             }
-            // The literal text is arbitrary, so the name is a digest of the
+            // A specifier is arbitrary text, so the name is a digest of the
             // shape, its hole types rendered through `field_type`. It names a
             // compiled artifact, so no Rust release may move it, and every
             // piece goes in length-prefixed so no two shapes encode alike.
             AnonShape::Template(shape) => {
                 let mut h = sha2::Sha256::new();
-                digest_len(&mut h, shape.segments.len());
-                for segment in &shape.segments {
-                    digest_str(&mut h, segment);
-                }
                 digest_len(&mut h, shape.holes.len());
                 for hole in &shape.holes {
                     digest_str(&mut h, &field_type(self, hole.ty));

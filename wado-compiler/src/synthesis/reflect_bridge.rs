@@ -36,7 +36,8 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
 
 /// `$field_get$S$F` for each monomorphized struct instantiated from a
 /// `ReflectStruct`-derived generic base, and for each anonymous shape only a
-/// substitution reached; `$hole_get$S$V` where that shape is a template's.
+/// substitution reached; `$hole_get$S$V` and `$template_segment$S` where that
+/// shape is a template's.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     let targets: Vec<usize> = {
         let tt = flat.type_table.borrow();
@@ -86,22 +87,14 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
         if !seen_subjects.insert(subject_mangle) {
             continue;
         }
-        let hole_types: Option<Vec<TypeId>> = match decl.def {
-            StructDef::Anon(shape) => flat
-                .type_table
-                .borrow()
-                .template_shape(shape)
-                .map(TemplateShape::hole_types),
+        let shape: Option<TemplateShape> = match decl.def {
+            StructDef::Anon(shape) => flat.type_table.borrow().template_shape(shape).cloned(),
             StructDef::Decl(_) => None,
         };
-        let helpers = match hole_types {
-            Some(hole_types) => generate_hole_bridge_helpers(
-                &flat.type_table,
-                &fields,
-                &hole_types,
-                subject,
-                decl.span,
-            ),
+        let helpers = match shape {
+            Some(shape) => {
+                generate_hole_bridge_helpers(&flat.type_table, &shape, &fields, subject, decl.span)
+            }
             None => generate_field_bridge_helpers(
                 &flat.type_table,
                 &fields,

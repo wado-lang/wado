@@ -6,7 +6,7 @@ use { println, Stdout } from "core:cli";
 fn count<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(h.lit());
+        out.push_str(h.lit(&t));
         h.fmt(&t, &mut Formatter::new(&mut out));
         out.push_str(&"|");
     }

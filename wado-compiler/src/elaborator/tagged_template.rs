@@ -93,10 +93,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 TemplateHole { ty, spec }
             })
             .collect();
-        sound.then_some(TemplateShape {
-            segments: parts.segments,
-            holes,
-        })
+        sound.then_some(TemplateShape { holes })
     }
 
     /// Whether `ty` can be a hole of a shape: decided, and free of a type pack.
