@@ -50,6 +50,10 @@ global HOLE_CAPACITY_GUESS: i32 = 16;
 
 global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 
+global CM_BLOCKED: i32 = -1;
+
+global mut SETTLED_COPIES: core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement> = deferred null;
+
 global mut DELIVERED: core:prelude/list.wado/List<core:prelude/types.wado/Resolution> = deferred null;
 
 global mut COVERAGE_SEEN: Array<u8> = deferred null;
@@ -57,8 +61,6 @@ global mut COVERAGE_SEEN: Array<u8> = deferred null;
 global mut CM_CALLBACKS: core:prelude/list.wado/List<fn()->()> = deferred null;
 
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
-
-global CM_BLOCKED: i32 = -1;
 
 global CM_COPY_MAX: i32 = deferred 0;
 
@@ -209,9 +211,23 @@ pub struct ResourceId {
     handle: i32,
 }
 
+struct CopySettlement {
+    handle: i32,
+    packed: i32,
+}
+
+struct CopyBuffer {
+    internal handle: i32,
+    internal packed: i32,
+    internal ptr: i32,
+    internal size: i32,
+    internal align: i32,
+}
+
 struct WaitEvent {
     internal handle: i32,
     internal event: core:prelude/types.wado/ReadyEvent,
+    internal payload: i32,
 }
 
 struct Resolution {
@@ -220,9 +236,9 @@ struct Resolution {
 }
 
 struct ResultBuffer {
-    ptr: i32,
-    size: i32,
-    align: i32,
+    internal ptr: i32,
+    internal size: i32,
+    internal align: i32,
 }
 
 struct Point {
@@ -354,6 +370,13 @@ pub struct "VariantCase<mess_dirty.wado/Shape,f64>" {
     is_unit: bool,
 }
 
+pub struct "VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>" {
+    index: i32,
+    case_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    is_unit: bool,
+}
+
 pub struct "VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>" {
     index: i32,
     case_name: core:prelude/string.wado/String,
@@ -362,6 +385,20 @@ pub struct "VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wa
 }
 
 pub struct "VariantCase<core:prelude/types.wado/ReadyEvent,()>" {
+    index: i32,
+    case_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    is_unit: bool,
+}
+
+pub struct "VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>" {
+    index: i32,
+    case_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    is_unit: bool,
+}
+
+pub struct "VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>" {
     index: i32,
     case_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -433,6 +470,22 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wad
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/CopyBuffer,i32>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/types.wado/CopySettlement,i32>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -854,6 +907,12 @@ pub struct "Slice<core:prelude/types.wado/Resolution>" {
     end: i32,
 }
 
+pub struct "Slice<core:prelude/types.wado/CopySettlement>" {
+    repr: &Array<core:prelude/types.wado/CopySettlement>,
+    start: i32,
+    end: i32,
+}
+
 pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
     pub inner: core:prelude/string.wado/StrCharIter,
     pub f: fn mut(char)->charwith($e88),
@@ -1076,14 +1135,14 @@ pub struct "Slice<u64>" {
     end: i32,
 }
 
-pub struct "StreamWrite<u8>" {
-    pub rest: core:prelude/list.wado/List<u8>,
-    pub result: core:prelude/types.wado/CopyResult,
+pub struct "StartedWrite<u8>" {
+    internal buffer: core:prelude/types.wado/CopyBuffer,
+    internal data: core:prelude/list.wado/List<u8>,
 }
 
-pub struct "StreamChunk<u8>" {
-    pub items: core:prelude/list.wado/List<u8>,
-    pub result: core:prelude/types.wado/CopyResult,
+pub struct "StartedRead<u8>" {
+    internal buffer: core:prelude/types.wado/CopyBuffer,
+    internal items: core:prelude/list.wado/List<u8>,
 }
 
 pub struct "RangeInclusive<i32>" {
@@ -1149,7 +1208,7 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/types.wado/CopyResult>" {
+pub struct "StructField<core:prelude/types.wado/StartedRead<u8>,core:prelude/list.wado/List<u8>>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -1157,7 +1216,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/typ
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/list.wado/List<u8>>" {
+pub struct "StructField<core:prelude/types.wado/StartedRead<u8>,core:prelude/types.wado/CopyBuffer>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -1165,7 +1224,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/lis
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/types.wado/StreamWrite<u8>,core:prelude/types.wado/CopyResult>" {
+pub struct "StructField<core:prelude/types.wado/StartedWrite<u8>,core:prelude/list.wado/List<u8>>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -1173,7 +1232,7 @@ pub struct "StructField<core:prelude/types.wado/StreamWrite<u8>,core:prelude/typ
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/types.wado/StreamWrite<u8>,core:prelude/list.wado/List<u8>>" {
+pub struct "StructField<core:prelude/types.wado/StartedWrite<u8>,core:prelude/types.wado/CopyBuffer>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -1920,6 +1979,28 @@ pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
     pub f: fn mut(char)->charwith(E),
 }
 
+pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>,i32>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>,&Array<core:prelude/types.wado/CopySettlement>>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "SliceValueIter<core:prelude/types.wado/CopySettlement>" {
+    repr: &Array<core:prelude/types.wado/CopySettlement>,
+    index: i32,
+    end: i32,
+}
+
 pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution>,i32>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
@@ -2123,6 +2204,22 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/type
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Resolution>,&Array<core:prelude/types.wado/Resolution>>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>,i32>" {
+    index: i32,
+    field_name: core:prelude/string.wado/String,
+    wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>,&Array<core:prelude/types.wado/CopySettlement>>" {
     index: i32,
     field_name: core:prelude/string.wado/String,
     wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>,
@@ -2396,6 +2493,14 @@ pub struct "VariantCase<core:prelude/types.wado/Option<i32>,[(),i32]>" {
     is_unit: bool,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T>,core:prelude/types.wado/StartedRead<T>]>>" {
+    value: core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T>,core:prelude/types.wado/StartedRead<T>]>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>>" {
+    value: core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" {
     value: core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>,
 }
@@ -2480,8 +2585,12 @@ pub struct "Box<core:prelude/types.wado/CallState>" {
     value: core:prelude/types.wado/CallState,
 }
 
-pub struct "Box<core:prelude/types.wado/Option<i32>>" {
-    value: core:prelude/types.wado/Option<i32>,
+pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<?29>,core:prelude/types.wado/StartedRead<?29>]>>" {
+    value: core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<?29>,core:prelude/types.wado/StartedRead<?29>]>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<?33>,core:prelude/types.wado/StartedWrite<?33>]>>" {
+    value: core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<?33>,core:prelude/types.wado/StartedWrite<?33>]>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<wasi:cli/terminal_output.wado/TerminalOutput>>" {
@@ -2508,6 +2617,22 @@ pub struct "Box<core:prelude/primitive.wado/CharErrorKind>" {
     value: core:prelude/primitive.wado/CharErrorKind,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<i32>>" {
+    value: core:prelude/types.wado/Option<i32>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>>" {
+    value: core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T>,core:prelude/types.wado/StartedRead<T>]>>>" {
+    value: core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T>,core:prelude/types.wado/StartedRead<T>]>>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>>>" {
+    value: core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>>,
+}
+
 pub struct "Box<core:prelude/types.wado/ReadyEvent>" {
     value: core:prelude/types.wado/ReadyEvent,
 }
@@ -2522,6 +2647,10 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<co
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>>" {
     value: core:prelude/types.wado/Option<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>,
+}
+
+pub struct "Box<core:prelude/types.wado/WaitOn>" {
+    value: core:prelude/types.wado/WaitOn,
 }
 
 pub struct "Box<mess_dirty.wado/Shape>" {
@@ -2856,10 +2985,6 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice
     value: core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>,
 }
 
-pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>>" {
-    value: core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>,
-}
-
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>" {
     value: core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>,
 }
@@ -2966,6 +3091,10 @@ pub struct "Box<core:prelude/types.wado/Option<&Array<fn()->()>>>" {
 
 pub struct "Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/Resolution>>>" {
     value: core:prelude/types.wado/Option<&Array<core:prelude/types.wado/Resolution>>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>>" {
+    value: core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>" {
@@ -6055,6 +6184,27 @@ fn write_copy_is_final(result: core:prelude/types.wado/CopyResult, delivered: i3
     return ((result != core:prelude/types.wado/CopyResult::Completed) || (delivered <= 0));
 }
 
+fn copy_result(packed: i32) -> core:prelude/types.wado/CopyResult {
+    return match (packed & 15) {
+        0 => core:prelude/types.wado/CopyResult::Completed,
+        1 => core:prelude/types.wado/CopyResult::Dropped,
+        2 => core:prelude/types.wado/CopyResult::Cancelled,
+        _ => core::rt::unreachable(),
+    };
+}
+
+fn cm_await_copy(handle: i32) -> i32 {
+    let ws: i32 = core::builtin::waitable_set_new();
+    core::builtin::waitable_join(handle, ws);
+    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
+    let status: i32 = core::builtin::i32_load((evt_ptr + 4));
+    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
+    core::builtin::waitable_join(handle, 0);
+    core::builtin::waitable_set_drop(ws);
+    return status;
+}
+
 fn call_state(raw: u32) -> core:prelude/types.wado/CallState {
     return match raw {
         0 => core:prelude/types.wado/CallState::Starting,
@@ -6085,9 +6235,50 @@ pub fn "$field_ref$core:prelude/types.wado/ResourceId$i32"(v: &core:prelude/type
     };
 }
 
+pub fn "$field_get$core:prelude/types.wado/CopySettlement$i32"(v: &core:prelude/types.wado/CopySettlement, index: i32) -> i32 {
+    return match index {
+        0 => v.handle,
+        1 => v.packed,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/types.wado/CopySettlement$i32"(v: &core:prelude/types.wado/CopySettlement, index: i32) -> core:prelude/types.wado/Box<i32> {
+    return match index {
+        0 => Box<i32> { value: v.handle },
+        1 => Box<i32> { value: v.packed },
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/CopyBuffer$i32"(v: &core:prelude/types.wado/CopyBuffer, index: i32) -> i32 {
+    return match index {
+        0 => v.handle,
+        1 => v.packed,
+        2 => v.ptr,
+        3 => v.size,
+        4 => v.align,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/types.wado/CopyBuffer$i32"(v: &core:prelude/types.wado/CopyBuffer, index: i32) -> core:prelude/types.wado/Box<i32> {
+    return match index {
+        0 => Box<i32> { value: v.handle },
+        1 => Box<i32> { value: v.packed },
+        2 => Box<i32> { value: v.ptr },
+        3 => Box<i32> { value: v.size },
+        4 => Box<i32> { value: v.align },
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "$field_get$core:prelude/types.wado/WaitEvent$i32"(v: &core:prelude/types.wado/WaitEvent, index: i32) -> i32 {
     return match index {
         0 => v.handle,
+        2 => v.payload,
         _ => core::builtin::unreachable(),
     };
 }
@@ -6103,6 +6294,7 @@ pub fn "$field_get$core:prelude/types.wado/WaitEvent$core:prelude/types.wado/Rea
 pub fn "$field_ref$core:prelude/types.wado/WaitEvent$i32"(v: &core:prelude/types.wado/WaitEvent, index: i32) -> core:prelude/types.wado/Box<i32> {
     return match index {
         0 => Box<i32> { value: v.handle },
+        2 => Box<i32> { value: v.payload },
         _ => core::builtin::unreachable(),
     };
 }
@@ -6164,12 +6356,60 @@ pub fn "$field_ref$core:prelude/types.wado/ResultBuffer$i32"(v: &core:prelude/ty
     };
 }
 
+pub fn "core:prelude/types.wado/WaitOn^core:prelude/traits.wado/ReflectVariant::discriminant"(self: core:prelude/types.wado/Box<core:prelude/types.wado/WaitOn>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "core:prelude/types.wado/WaitOn^core:prelude/traits.wado/ReflectVariant::members"() -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>] {
+    return [VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId> { index: 0, case_name: String { repr: packed"Host", used: 4 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent> { index: 1, case_name: String { repr: packed"Settled", used: 7 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: false }];
+}
+
+pub fn "$case_extract$core:prelude/types.wado/WaitOn$core:prelude/types.wado/ResourceId"(v: core:prelude/types.wado/Box<core:prelude/types.wado/WaitOn>, index: i32) -> core:prelude/types.wado/ResourceId {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/WaitOn$core:prelude/types.wado/ResourceId"(payload: core:prelude/types.wado/ResourceId, index: i32) -> core:prelude/types.wado/WaitOn {
+    return match index {
+        0 => core:prelude/types.wado/WaitOn::Host(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/WaitOn$core:prelude/types.wado/ReadyEvent"(v: core:prelude/types.wado/Box<core:prelude/types.wado/WaitOn>, index: i32) -> core:prelude/types.wado/ReadyEvent {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/WaitOn$core:prelude/types.wado/ReadyEvent"(payload: core:prelude/types.wado/ReadyEvent, index: i32) -> core:prelude/types.wado/WaitOn {
+    return match index {
+        1 => core:prelude/types.wado/WaitOn::Settled(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/WaitOn$()"(payload: (), index: i32) -> core:prelude/types.wado/WaitOn {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn "core:prelude/types.wado/ReadyEvent^core:prelude/traits.wado/ReflectVariant::discriminant"(self: core:prelude/types.wado/Box<core:prelude/types.wado/ReadyEvent>) -> i32 {
     return $variant_tag(self.value);
 }
 
-pub fn "core:prelude/types.wado/ReadyEvent^core:prelude/traits.wado/ReflectVariant::members"() -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>] {
-    return [VariantCase<core:prelude/types.wado/ReadyEvent,()> { index: 0, case_name: String { repr: packed"Unreported", used: 10 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: true }, VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState> { index: 1, case_name: String { repr: packed"Call", used: 4 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: false }];
+pub fn "core:prelude/types.wado/ReadyEvent^core:prelude/traits.wado/ReflectVariant::members"() -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>] {
+    return [VariantCase<core:prelude/types.wado/ReadyEvent,()> { index: 0, case_name: String { repr: packed"Unreported", used: 10 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: true }, VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState> { index: 1, case_name: String { repr: packed"Call", used: 4 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult> { index: 2, case_name: String { repr: packed"Copied", used: 6 }, wire_override: core:prelude/types.wado/Option<core:prelude/string.wado/String>::None, is_unit: false }];
 }
 
 pub fn "$case_extract$core:prelude/types.wado/ReadyEvent$()"(v: core:prelude/types.wado/Box<core:prelude/types.wado/ReadyEvent>, index: i32) {
@@ -6202,6 +6442,23 @@ pub fn "$case_extract$core:prelude/types.wado/ReadyEvent$core:prelude/types.wado
 pub fn "$case_construct$core:prelude/types.wado/ReadyEvent$core:prelude/types.wado/CallState"(payload: core:prelude/types.wado/CallState, index: i32) -> core:prelude/types.wado/ReadyEvent {
     return match index {
         1 => core:prelude/types.wado/ReadyEvent::Call(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/ReadyEvent$core:prelude/types.wado/CopyResult"(v: core:prelude/types.wado/Box<core:prelude/types.wado/ReadyEvent>, index: i32) -> core:prelude/types.wado/CopyResult {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        2 => $variant_payload(v.value, case=2),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/ReadyEvent$core:prelude/types.wado/CopyResult"(payload: core:prelude/types.wado/CopyResult, index: i32) -> core:prelude/types.wado/ReadyEvent {
+    return match index {
+        2 => core:prelude/types.wado/ReadyEvent::Copied(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -6417,7 +6674,7 @@ fn cm_callback_key(callback: fn()->()) -> u32 {
                     };
                     if !$cond {
                         core::builtin::cold_path();
-                        "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1, String { repr: packed"core:rt:246", used: 11 });
+                        "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1, String { repr: packed"core:rt:250", used: 11 });
                     }
                 }
                 i;
@@ -6442,7 +6699,7 @@ fn cm_callback(key: u32) -> fn()->() {
             };
             if !$cond {
                 core::builtin::cold_path();
-                "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key as i32, $v1, String { repr: packed"core:rt:257", used: 11 });
+                "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key as i32, $v1, String { repr: packed"core:rt:261", used: 11 });
             }
         }
         key as i32;
@@ -6475,37 +6732,17 @@ fn inspect_handle(f: &mut core:prelude/format.wado/Formatter, name: core:prelude
 }
 
 fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
-    if (packed != core::rt::CM_BLOCKED) {
+    if (packed != core::prelude/types.wado::CM_BLOCKED) {
         return packed;
     }
-    return core::rt::cm_await_copy(handle);
-}
-
-fn cm_await_copy(handle: i32) -> i32 {
-    let ws: i32 = core::builtin::waitable_set_new();
-    core::builtin::waitable_join(handle, ws);
-    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
-    let status: i32 = core::builtin::i32_load((evt_ptr + 4));
-    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
-    core::builtin::waitable_join(handle, 0);
-    core::builtin::waitable_set_drop(ws);
-    return status;
-}
-
-fn cm_copy_result(packed: i32) -> core:prelude/types.wado/CopyResult {
-    return match (packed & 15) {
-        0 => core:prelude/types.wado/CopyResult::Completed,
-        1 => core:prelude/types.wado/CopyResult::Dropped,
-        _ => core::rt::unreachable(),
-    };
+    return "core::prelude/types.wado::cm_await_copy"(handle);
 }
 
 fn cm_future_write_result(packed: i32) -> core:prelude/types.wado/FutureWriteResult {
-    if (packed == core::rt::CM_BLOCKED) {
+    if (packed == core::prelude/types.wado::CM_BLOCKED) {
         return core:prelude/types.wado/FutureWriteResult::Pending;
     }
-    return match core::rt::cm_copy_result(packed) {
+    return match "core::prelude/types.wado::copy_result"(packed) {
         Completed => core:prelude/types.wado/FutureWriteResult::Completed,
         Dropped => core:prelude/types.wado/FutureWriteResult::Dropped,
         Cancelled => core::rt::unreachable(),
@@ -6524,27 +6761,22 @@ fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
     return (count * elem_size);
 }
 
-fn cm_packed_count(packed: i32) -> i32 {
-    return "core::prelude/types.wado::cm_packed_upper"(packed);
-}
-
-fn cm_stream_read_u8(handle: i32, max: i32) -> core:prelude/types.wado/StreamChunk<u8> {
+fn cm_stream_read_u8(handle: i32, max: i32) -> core:prelude/types.wado/StartedRead<u8> {
     let room: i32 = core::rt::cm_buffer_bytes(core::rt::cm_copy_count(max), 1);
     let ptr: i32 = core::builtin::realloc(0, 0, 1, room);
-    let result: i32 = core::rt::cm_await_blocked(handle, core::builtin::stream_read(handle, ptr, room));
-    let count: i32 = core::rt::cm_packed_count(result);
-    let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
-    let freed: i32 = core::builtin::realloc(ptr, room, 1, 0);
-    return StreamChunk<u8> { items: "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(arr, count), result: core::rt::cm_copy_result(result) };
+    let packed: i32 = core::builtin::stream_read(handle, ptr, room);
+    return StartedRead<u8> { buffer: CopyBuffer { handle: handle, packed: packed, ptr: ptr, size: room, align: 1 }, items: "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([]) };
 }
 
-fn cm_stream_write_u8(handle: i32, data: core:prelude/list.wado/List<u8>) -> core:prelude/types.wado/StreamWrite<u8> {
-    let bytes: &Array<u8> = data."core:prelude/list.wado/List<u8>::internal_raw_data_ref"();
+fn cm_stream_lift_u8(handle: i32, ptr: i32, count: i32) -> core:prelude/list.wado/List<u8> {
+    return "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(core::rt::memory_to_gc_array(ptr, count), count);
+}
+
+fn cm_stream_write_u8(handle: i32, data: core:prelude/list.wado/List<u8>) -> core:prelude/types.wado/StartedWrite<u8> {
     let len: i32 = data."core:prelude/list.wado/List<u8>::len"();
-    let ptr: i32 = core::rt::cm_lower_list_u8(bytes, 0, len) as i32;
-    let written: i32 = core::rt::cm_stream_write_once(handle, ptr, len);
-    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
-    return StreamWrite<u8> { rest: "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(bytes, core::rt::cm_packed_count(written), len)."core:prelude/slice.wado/Slice<u8>::to_list"(), result: core::rt::cm_copy_result(written) };
+    let ptr: i32 = core::rt::cm_lower_list_u8(data."core:prelude/list.wado/List<u8>::internal_raw_data_ref"(), 0, len) as i32;
+    let packed: i32 = core::builtin::stream_write(handle, ptr, core::rt::cm_copy_count(len));
+    return StartedWrite<u8> { buffer: CopyBuffer { handle: handle, packed: packed, ptr: ptr, size: len, align: 1 }, data: "mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"(data) };
 }
 
 fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> i32 {
@@ -6560,8 +6792,8 @@ fn cm_stream_write_raw_all_u8(handle: i32, data: core:prelude/slice.wado/Slice<u
     let mut taken: i32 = 0;
     loop {
         let written: i32 = core::rt::cm_stream_write_once(handle, (ptr + taken), (len - taken));
-        let delivered: i32 = core::rt::cm_packed_count(written);
-        let result: core:prelude/types.wado/CopyResult = core::rt::cm_copy_result(written);
+        let delivered: i32 = "core::prelude/types.wado::cm_packed_upper"(written);
+        let result: core:prelude/types.wado/CopyResult = "core::prelude/types.wado::copy_result"(written);
         taken = (taken + delivered);
         if ("core::prelude/types.wado::write_copy_is_final"(result, delivered) || (taken >= len)) {
             let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
@@ -6607,34 +6839,15 @@ fn cm_waitable_set_poll(ws: i32) -> core:prelude/types.wado/Option<core:prelude/
 }
 
 fn cm_wait_event(code: i32, out_ptr: i32) -> core:prelude/types.wado/WaitEvent {
-    $assert_0: {
-        let $cond: bool = (code == 1);
-        if !$cond {
-            core::builtin::cold_path();
-            core::rt::panic($tmpl: {
-                let mut $r: core:prelude/string.wado/String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(136);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"cm_wait_event", used: 13 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:rt", used: 7 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
-                let mut $f: core:prelude/format.wado/Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 495 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"only a subtask joins a set", used: 26 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: code == 1\n", used: 22 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"code: ", used: 6 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: code }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                break $tmpl: $r;
-            });
-        }
-    }
     let handle: i32 = core::builtin::i32_load(out_ptr);
     let payload: i32 = core::builtin::i32_load((out_ptr + 4));
     let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { handle: handle, event: core:prelude/types.wado/ReadyEvent::Call("core::prelude/types.wado::call_state"(payload as u32)) };
+    let event: core:prelude/types.wado/ReadyEvent = match code {
+        1 => core:prelude/types.wado/ReadyEvent::Call("core::prelude/types.wado::call_state"(payload as u32)),
+        2 | 3 => core:prelude/types.wado/ReadyEvent::Copied("core::prelude/types.wado::copy_result"(payload)),
+        _ => core::rt::unreachable(),
+    };
+    return WaitEvent { handle: handle, event: event, payload: payload };
 }
 
 fn f16_widen(v: f16) -> f32 {
@@ -6899,11 +7112,6 @@ fn "core:prelude/slice.wado/Slice<u8>::internal_repr"(self: &core:prelude/slice.
     return self.repr;
 }
 
-pub fn "core:prelude/slice.wado/Slice<u8>::to_list"(self: &core:prelude/slice.wado/Slice<u8>) -> core:prelude/list.wado/List<u8> {
-    let len: i32 = "core::prelude/primitive.wado::i32::max"((self.end - self.start), 0);
-    return "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(self."core:prelude/slice.wado/Slice<u8>::to_array"(), len);
-}
-
 fn "core:prelude/list.wado/List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> core:prelude/list.wado/List<u8> {
     return List<u8> { repr: repr, used: used };
 }
@@ -6981,6 +7189,31 @@ pub fn "core:prelude/list.wado/List<core:prelude/types.wado/Resolution>::len"(se
 fn "core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<core:prelude/types.wado/Resolution>) -> core:prelude/list.wado/List<core:prelude/types.wado/Resolution> {
     let used: i32 = core::builtin::array_len::<core:prelude/types.wado/Resolution>(&elements);
     return List<core:prelude/types.wado/Resolution> { repr: elements, used: used };
+}
+
+fn "core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>, index: i32) -> core:prelude/types.wado/CopySettlement {
+    $assert_0: {
+        let $v1: i32 = self."core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::len"();
+        let $cond: bool = $block_0: {
+            let $m0: i32 = 0;
+            let $m1: i32 = index;
+            (($m0 <= $m1) & ($m1 < $v1));
+        };
+        if !$cond {
+            core::builtin::cold_path();
+            "core::prelude/list.wado::core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, String { repr: packed"core:prelude/list.wado:379", used: 26 });
+        }
+    }
+    return "core::prelude/list.wado::core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"(self, index);
+}
+
+pub fn "core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::len"(self: &core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>) -> i32 {
+    return self.used;
+}
+
+fn "core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<core:prelude/types.wado/CopySettlement>) -> core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement> {
+    let used: i32 = core::builtin::array_len::<core:prelude/types.wado/CopySettlement>(&elements);
+    return List<core:prelude/types.wado/CopySettlement> { repr: elements, used: used };
 }
 
 pub fn "core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(self: &mut core:prelude/format.wado/Formatter, close: core:prelude/string.wado/String) {
@@ -7063,15 +7296,6 @@ fn "core/prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32,
         i = (i + 1);
     }
     return true;
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>::to_array"(self: &core:prelude/slice.wado/Slice<u8>) -> Array<u8> {
-    let len: i32 = (self.end - self.start);
-    let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"("core::prelude/primitive.wado::i32::max"(len, 0));
-    if (len > 0) {
-        "core::builtin::core/builtin/array_copy<u8>"(&mut out, 0, self.repr, self.start, len);
-    }
-    return out;
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
@@ -7287,6 +7511,11 @@ pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &core:prelude/slice.wado/S
     return (self.end - self.start);
 }
 
+fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<u8>) -> core:prelude/list.wado/List<u8> {
+    let used: i32 = "core::builtin::core/builtin/array_len<u8>"(&elements);
+    return List<u8> { repr: elements, used: used };
+}
+
 pub fn "core:prelude/list.wado/List<i32>::len"(self: &core:prelude/list.wado/List<i32>) -> i32 {
     return self.used;
 }
@@ -7358,6 +7587,10 @@ pub fn "Array<u32>::len"(self: &Array<u32>) -> i32 {
 // retains: self
 fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &&core:prelude/string.wado/String) -> core:prelude/string.wado/StrSlice {
     return *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+}
+
+fn "core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"(self: &core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>, index: i32) -> core:prelude/types.wado/CopySettlement {
+    return core::builtin::array_get_value::<core:prelude/types.wado/CopySettlement>(&self.repr, index);
 }
 
 fn "core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"(self: &core:prelude/list.wado/List<core:prelude/types.wado/Resolution>, index: i32) -> core:prelude/types.wado/Resolution {
@@ -7696,6 +7929,39 @@ pub fn "$field_ref$core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolut
 
 // retains: v
 pub fn "$field_ref$core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution>$i32"(v: &core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution>, index: i32) -> core:prelude/types.wado/Box<i32> {
+    return match index {
+        1 => Box<i32> { value: v.start },
+        2 => Box<i32> { value: v.end },
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_get$core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>$&Array<core:prelude/types.wado/CopySettlement>"(v: &core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>, index: i32) -> &Array<core:prelude/types.wado/CopySettlement> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>$i32"(v: &core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>, index: i32) -> i32 {
+    return match index {
+        1 => v.start,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>$&Array<core:prelude/types.wado/CopySettlement>"(v: &core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>, index: i32) -> &&Array<core:prelude/types.wado/CopySettlement> {
+    return match index {
+        0 => &v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>$i32"(v: &core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>, index: i32) -> core:prelude/types.wado/Box<i32> {
     return match index {
         1 => Box<i32> { value: v.start },
         2 => Box<i32> { value: v.end },
@@ -9089,62 +9355,62 @@ pub fn "$field_ref$core:prelude/slice.wado/Slice<u64>$i32"(v: &core:prelude/slic
     };
 }
 
-pub fn "$field_get$core:prelude/types.wado/StreamWrite<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StreamWrite<u8>, index: i32) -> core:prelude/list.wado/List<u8> {
+pub fn "$field_get$core:prelude/types.wado/StartedWrite<u8>$core:prelude/types.wado/CopyBuffer"(v: &core:prelude/types.wado/StartedWrite<u8>, index: i32) -> core:prelude/types.wado/CopyBuffer {
     return match index {
-        0 => v.rest,
+        0 => v.buffer,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/types.wado/StreamWrite<u8>$core:prelude/types.wado/CopyResult"(v: &core:prelude/types.wado/StreamWrite<u8>, index: i32) -> core:prelude/types.wado/CopyResult {
+pub fn "$field_get$core:prelude/types.wado/StartedWrite<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StartedWrite<u8>, index: i32) -> core:prelude/list.wado/List<u8> {
     return match index {
-        1 => v.result,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-// retains: v
-pub fn "$field_ref$core:prelude/types.wado/StreamWrite<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StreamWrite<u8>, index: i32) -> &core:prelude/list.wado/List<u8> {
-    return match index {
-        0 => &v.rest,
+        1 => v.data,
         _ => core::builtin::unreachable(),
     };
 }
 
 // retains: v
-pub fn "$field_ref$core:prelude/types.wado/StreamWrite<u8>$core:prelude/types.wado/CopyResult"(v: &core:prelude/types.wado/StreamWrite<u8>, index: i32) -> core:prelude/types.wado/Box<core:prelude/types.wado/CopyResult> {
+pub fn "$field_ref$core:prelude/types.wado/StartedWrite<u8>$core:prelude/types.wado/CopyBuffer"(v: &core:prelude/types.wado/StartedWrite<u8>, index: i32) -> &core:prelude/types.wado/CopyBuffer {
     return match index {
-        1 => Box<core:prelude/types.wado/CopyResult> { value: v.result },
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/types.wado/StreamChunk<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StreamChunk<u8>, index: i32) -> core:prelude/list.wado/List<u8> {
-    return match index {
-        0 => v.items,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/types.wado/StreamChunk<u8>$core:prelude/types.wado/CopyResult"(v: &core:prelude/types.wado/StreamChunk<u8>, index: i32) -> core:prelude/types.wado/CopyResult {
-    return match index {
-        1 => v.result,
+        0 => &v.buffer,
         _ => core::builtin::unreachable(),
     };
 }
 
 // retains: v
-pub fn "$field_ref$core:prelude/types.wado/StreamChunk<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StreamChunk<u8>, index: i32) -> &core:prelude/list.wado/List<u8> {
+pub fn "$field_ref$core:prelude/types.wado/StartedWrite<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StartedWrite<u8>, index: i32) -> &core:prelude/list.wado/List<u8> {
     return match index {
-        0 => &v.items,
+        1 => &v.data,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/StartedRead<u8>$core:prelude/types.wado/CopyBuffer"(v: &core:prelude/types.wado/StartedRead<u8>, index: i32) -> core:prelude/types.wado/CopyBuffer {
+    return match index {
+        0 => v.buffer,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/StartedRead<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StartedRead<u8>, index: i32) -> core:prelude/list.wado/List<u8> {
+    return match index {
+        1 => v.items,
         _ => core::builtin::unreachable(),
     };
 }
 
 // retains: v
-pub fn "$field_ref$core:prelude/types.wado/StreamChunk<u8>$core:prelude/types.wado/CopyResult"(v: &core:prelude/types.wado/StreamChunk<u8>, index: i32) -> core:prelude/types.wado/Box<core:prelude/types.wado/CopyResult> {
+pub fn "$field_ref$core:prelude/types.wado/StartedRead<u8>$core:prelude/types.wado/CopyBuffer"(v: &core:prelude/types.wado/StartedRead<u8>, index: i32) -> &core:prelude/types.wado/CopyBuffer {
     return match index {
-        1 => Box<core:prelude/types.wado/CopyResult> { value: v.result },
+        0 => &v.buffer,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/types.wado/StartedRead<u8>$core:prelude/list.wado/List<u8>"(v: &core:prelude/types.wado/StartedRead<u8>, index: i32) -> &core:prelude/list.wado/List<u8> {
+    return match index {
+        1 => &v.items,
         _ => core::builtin::unreachable(),
     };
 }
@@ -9290,6 +9556,39 @@ pub fn "$field_ref$core:prelude/slice.wado/SliceValueIter<u64>$&Array<u64>"(v: &
 
 // retains: v
 pub fn "$field_ref$core:prelude/slice.wado/SliceValueIter<u64>$i32"(v: &core:prelude/slice.wado/SliceValueIter<u64>, index: i32) -> core:prelude/types.wado/Box<i32> {
+    return match index {
+        1 => Box<i32> { value: v.index },
+        2 => Box<i32> { value: v.end },
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>$&Array<core:prelude/types.wado/CopySettlement>"(v: &core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>, index: i32) -> &Array<core:prelude/types.wado/CopySettlement> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>$i32"(v: &core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>, index: i32) -> i32 {
+    return match index {
+        1 => v.index,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>$&Array<core:prelude/types.wado/CopySettlement>"(v: &core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>, index: i32) -> &&Array<core:prelude/types.wado/CopySettlement> {
+    return match index {
+        0 => &v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$field_ref$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>$i32"(v: &core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>, index: i32) -> core:prelude/types.wado/Box<i32> {
     return match index {
         1 => Box<i32> { value: v.index },
         2 => Box<i32> { value: v.end },
@@ -12514,44 +12813,6 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>$()"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>>, index: i32) {
-    if ($variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        0 => $variant_payload(v.value, case=0),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>$()"(payload: (), index: i32) -> core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId> {
-    return match index {
-        0 => core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>::None,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>$core:prelude/types.wado/ResourceId"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>>, index: i32) -> core:prelude/types.wado/ResourceId {
-    if ($variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        1 => $variant_payload(v.value, case=1),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>$core:prelude/types.wado/ResourceId"(payload: core:prelude/types.wado/ResourceId, index: i32) -> core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId> {
-    return match index {
-        1 => core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>::Some(payload),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>>) -> i32 {
-    return $variant_tag(self.value);
-}
-
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$()"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -13184,6 +13445,44 @@ pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/F
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/FutureWriteResult>"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/FutureWriteResult>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>$()"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>$()"(payload: (), index: i32) -> core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer> {
+    return match index {
+        0 => core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>$core:prelude/types.wado/CopyBuffer"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>>, index: i32) -> core:prelude/types.wado/CopyBuffer {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>$core:prelude/types.wado/CopyBuffer"(payload: core:prelude/types.wado/CopyBuffer, index: i32) -> core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer> {
+    return match index {
+        1 => core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyBuffer>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -13838,6 +14137,46 @@ pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/types
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/Resolution>>"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/Resolution>>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>$()"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>$()"(payload: (), index: i32) -> core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>> {
+    return match index {
+        0 => core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>$&Array<core:prelude/types.wado/CopySettlement>"(v: core:prelude/types.wado/Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>>, index: i32) -> &Array<core:prelude/types.wado/CopySettlement> {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>$&Array<core:prelude/types.wado/CopySettlement>"(payload: &Array<core:prelude/types.wado/CopySettlement>, index: i32) -> core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>> {
+    return match index {
+        1 => core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Option<&Array<core:prelude/types.wado/CopySettlement>>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -14496,6 +14835,31 @@ pub fn "core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:pre
     });
 }
 
+pub fn "core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index: i32, $v1: i32, $site: core:prelude/string.wado/String) -> ! {
+    $block_0: {
+        let $m0: i32 = 0;
+        let $m1: i32 = index;
+        (($m0 <= $m1) & ($m1 < $v1));
+    };
+    core::rt::panic($tmpl: {
+        let mut $r: core:prelude/string.wado/String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(144);
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Contract of ", used: 12 });
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"List::index_value", used: 17 });
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" failed at ", used: 11 });
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($site);
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: 0 <= index < self.len()\n", used: 36 });
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index: ", used: 7 });
+        let mut $f: core:prelude/format.wado/Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+        Box<i32> { value: index }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.len(): ", used: 12 });
+        $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+        Box<i32> { value: $v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+        $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+        break $tmpl: $r;
+    });
+}
+
 pub fn "core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index: i32, $v1: i32, $site: core:prelude/string.wado/String) -> ! {
     $block_0: {
         let $m0: i32 = 0;
@@ -14582,6 +14946,7 @@ pub fn "$initialize_module"() {
 }
 
 pub fn "$initialize_module"() {
+    core::prelude/types.wado::SETTLED_COPIES = "core::prelude/list.wado::core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T>>::from"([]);
     core::prelude/types.wado::DELIVERED = "core::prelude/list.wado::core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/From<Array<T>>::from"([]);
 }
 
@@ -14680,13 +15045,6 @@ fn "$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v: core:prelude/types
     return match v {
         None => v,
         Some($vc_payload_1) => core:prelude/types.wado/Option<Array<u8>>::Some(core::builtin::array_clone::<u8>(&$vc_payload_1)),
-    };
-}
-
-fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>"(v: core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>) -> core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId> {
-    return match v {
-        None => v,
-        Some($vc_payload_1) => core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>::Some("mess_dirty.wado::$value_copy$core:prelude/types.wado/ResourceId"($vc_payload_1)),
     };
 }
 
@@ -15152,6 +15510,11 @@ fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/R
 }
 
 // retains: v
+fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>"(v: core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement>) -> core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/CopySettlement> {
+    return SliceValueIter<core:prelude/types.wado/CopySettlement> { repr: v.repr, index: v.index, end: v.end };
+}
+
+// retains: v
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u64>"(v: core:prelude/slice.wado/SliceValueIter<u64>) -> core:prelude/slice.wado/SliceValueIter<u64> {
     return SliceValueIter<u64> { repr: v.repr, index: v.index, end: v.end };
 }
@@ -15375,6 +15738,11 @@ fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCha
 }
 
 // retains: v
+fn "$value_copy$core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>"(v: core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement>) -> core:prelude/slice.wado/Slice<core:prelude/types.wado/CopySettlement> {
+    return Slice<core:prelude/types.wado/CopySettlement> { repr: v.repr, start: v.start, end: v.end };
+}
+
+// retains: v
 fn "$value_copy$core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution>"(v: core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution>) -> core:prelude/slice.wado/Slice<core:prelude/types.wado/Resolution> {
     return Slice<core:prelude/types.wado/Resolution> { repr: v.repr, start: v.start, end: v.end };
 }
@@ -15432,6 +15800,10 @@ fn "$value_copy$Array<u32>"(v: Array<u32>) -> Array<u32> {
 
 fn "$value_copy$core:prelude/list.wado/List<u32>"(v: core:prelude/list.wado/List<u32>) -> core:prelude/list.wado/List<u32> {
     return List<u32> { repr: core::builtin::array_clone_prefix::<u32>(&v.repr, v.used), used: v.used };
+}
+
+fn "$value_copy$Array<core:prelude/types.wado/CopySettlement>"(v: Array<core:prelude/types.wado/CopySettlement>) -> Array<core:prelude/types.wado/CopySettlement> {
+    return core::builtin::array_clone::<core:prelude/types.wado/CopySettlement>(&v);
 }
 
 fn "$value_copy$Array<core:prelude/types.wado/Resolution>"(v: Array<core:prelude/types.wado/Resolution>) -> Array<core:prelude/types.wado/Resolution> {
@@ -15513,14 +15885,6 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent
     };
 }
 
-fn "$value_copy$core:prelude/types.wado/StreamWrite<u8>"(v: core:prelude/types.wado/StreamWrite<u8>) -> core:prelude/types.wado/StreamWrite<u8> {
-    return StreamWrite<u8> { rest: "mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"(v.rest), result: v.result };
-}
-
-fn "$value_copy$core:prelude/types.wado/StreamChunk<u8>"(v: core:prelude/types.wado/StreamChunk<u8>) -> core:prelude/types.wado/StreamChunk<u8> {
-    return StreamChunk<u8> { items: "mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"(v.items), result: v.result };
-}
-
 fn "$value_copy$core:prelude/list.wado/List<u8>"(v: core:prelude/list.wado/List<u8>) -> core:prelude/list.wado/List<u8> {
     return List<u8> { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
 }
@@ -15542,8 +15906,24 @@ fn "$value_copy$core:prelude/slice.wado/Slice<u8>"(v: core:prelude/slice.wado/Sl
     return Slice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
 
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult> {
+    return VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
 fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState> {
     return VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()> {
+    return VariantCase<core:prelude/types.wado/ReadyEvent,()> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>]"(v: [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>]) -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>] {
+    return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CopyResult>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent> {
+    return VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
 }
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v: core:prelude/types.wado/Option<core:prelude/string.wado/String>) -> core:prelude/types.wado/Option<core:prelude/string.wado/String> {
@@ -15553,12 +15933,19 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"
     };
 }
 
-fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()> {
-    return VariantCase<core:prelude/types.wado/ReadyEvent,()> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>"(v: core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>) -> core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId> {
+    return VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
 }
 
-fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>]"(v: [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>]) -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>] {
-    return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,()>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/CallState>"(v.1) };
+fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>]"(v: [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>]) -> [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>] {
+    return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ResourceId>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/WaitOn,core:prelude/types.wado/ReadyEvent>"(v.1) };
+}
+
+fn "$value_copy$core:prelude/types.wado/WaitOn"(v: core:prelude/types.wado/WaitOn) -> core:prelude/types.wado/WaitOn {
+    return match v {
+        Host($vc_payload_0) => core:prelude/types.wado/WaitOn::Host("mess_dirty.wado::$value_copy$core:prelude/types.wado/ResourceId"($vc_payload_0)),
+        Settled($vc_payload_1) => core:prelude/types.wado/WaitOn::Settled($vc_payload_1),
+    };
 }
 
 fn "$value_copy$core:prelude/types.wado/Resolution"(v: core:prelude/types.wado/Resolution) -> core:prelude/types.wado/Resolution {
@@ -15566,7 +15953,11 @@ fn "$value_copy$core:prelude/types.wado/Resolution"(v: core:prelude/types.wado/R
 }
 
 fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: core:prelude/types.wado/WaitEvent) -> core:prelude/types.wado/WaitEvent {
-    return WaitEvent { handle: v.handle, event: v.event };
+    return WaitEvent { handle: v.handle, event: v.event, payload: v.payload };
+}
+
+fn "$value_copy$core:prelude/types.wado/CopySettlement"(v: core:prelude/types.wado/CopySettlement) -> core:prelude/types.wado/CopySettlement {
+    return CopySettlement { handle: v.handle, packed: v.packed };
 }
 
 fn "$value_copy$core:prelude/types.wado/ResourceId"(v: core:prelude/types.wado/ResourceId) -> core:prelude/types.wado/ResourceId {
@@ -15696,6 +16087,10 @@ fn "$value_copy$core:prelude/list.wado/List<fn()->()>"(v: core:prelude/list.wado
 
 fn "$value_copy$core:prelude/list.wado/List<core:prelude/types.wado/Resolution>"(v: core:prelude/list.wado/List<core:prelude/types.wado/Resolution>) -> core:prelude/list.wado/List<core:prelude/types.wado/Resolution> {
     return List<core:prelude/types.wado/Resolution> { repr: core::builtin::array_clone_prefix::<core:prelude/types.wado/Resolution>(&v.repr, v.used), used: v.used };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>"(v: core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>) -> core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement> {
+    return List<core:prelude/types.wado/CopySettlement> { repr: core::builtin::array_clone_prefix::<core:prelude/types.wado/CopySettlement>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/fpfmt.wado/BinaryFormat"(v: core:prelude/fpfmt.wado/BinaryFormat) -> core:prelude/fpfmt.wado/BinaryFormat {

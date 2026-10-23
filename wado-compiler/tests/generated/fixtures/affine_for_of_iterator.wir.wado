@@ -710,8 +710,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -773,7 +775,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/tr
     $licm_f_12 = $licm_inner_9.f;
     $hfs_n_13 = $licm_inner_11.n;
     block {
-        l103: loop {
+        l104: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
                 $fused_$inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
                     break_if $fused_$inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__1 $hfs_n_13 >= 3;
@@ -794,7 +796,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/tr
                 $licm_inner_11.n = $hfs_n_13;
                 return 0, 0;
             };
-            continue l103;
+            continue l104;
         };
     };
 }
@@ -806,8 +808,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/tr
         block {
             self_1 = self.inner;
             remaining = self.gap;
-            b108: block {
-                l109: loop {
+            b109: block {
+                l110: loop {
                     let $mv$$local_4$0: i32;
                     let $mv$$local_4$1: i32;
                     multivalue_bind [$mv$$local_4$0, $mv$$local_4$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_1);
@@ -817,9 +819,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/tr
                         }
                         remaining = remaining - 1;
                     } else {
-                        break b108;
+                        break b109;
                     }
-                    continue l109;
+                    continue l110;
                 };
             };
             return 0, 0;

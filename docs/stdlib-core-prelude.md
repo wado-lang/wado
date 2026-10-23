@@ -4456,6 +4456,12 @@ _Fields are private._
 A copy that already ended as `written` says, for a handler to answer
 `StreamWritable::begin_write` with.
 
+#### `impl Drop for StartedWrite<T>`
+
+##### `fn drop(self)`
+
+What the copy did not deliver is still the writer's, so it drops here.
+
 ### `pub affine struct WriteCopy<affine T>`
 
 One copy started on a writable end, holding the end until it is finished.
