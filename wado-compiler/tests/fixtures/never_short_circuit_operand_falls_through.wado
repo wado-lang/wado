@@ -1,0 +1,13 @@
+// The right operand of `&&` or `||` may not run, so one of type `!` does not
+// end the body.
+
+fn f(flag: bool) -> bool {
+    let b = flag || panic("gone");
+}
+
+export fn run() {
+    f(true);
+}
+
+__DATA__
+{"compile_error_codes": ["MISSING_RETURN"]}

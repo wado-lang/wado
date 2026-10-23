@@ -2,7 +2,8 @@
 //! over the parsed AST reading types from `TypeAnnotations::expression_types`,
 //! so the body walk answers them without a `TirBlock` to read.
 //! Both the diagnostic point and reify's closure return-type derivation build a
-//! [`CtrlFlowCtx`] and dispatch to the same free functions, arm for arm.
+//! [`CtrlFlowCtx`] and dispatch to the same free functions, arm for arm. Whether
+//! control reaches past a construct is [`crate::divergence`]'s to answer.
 
 use std::cell::RefCell;
 
@@ -14,6 +15,7 @@ use crate::type_table::TypeTable;
 
 use super::types::LoopJump;
 use crate::ast::AstId;
+use crate::divergence::{AstTreeProbe, ExprTypes, Step, any_in_tree};
 use crate::tir::agree_branch_types;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
@@ -43,114 +45,12 @@ impl CtrlFlowCtx<'_> {
         self.type_of(expr)
             .filter(|t| !self.type_table.borrow().is_indefinite(*t))
     }
+}
 
+impl ExprTypes for CtrlFlowCtx<'_> {
     fn is_never(&self, expr: &ast::Expr) -> bool {
         self.type_of(expr)
             .is_some_and(|t| self.type_table.borrow().is_never(t))
-    }
-}
-
-/// Whether every control path through `block` exits before reaching
-/// the end. AST mirror of `Elaborator::block_always_exits`.
-pub(super) fn block_always_exits(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
-    block_always_exits_past(ctx, block, &[])
-}
-
-/// Whether control can reach the end of a labeled block's body, which decides
-/// whether its trailing statement is a branch of the block.
-pub(super) fn labeled_block_falls_through(
-    ctx: CtrlFlowCtx<'_>,
-    block: &ast::Block,
-    label: &str,
-) -> bool {
-    !block_always_exits_past(ctx, block, &[label])
-}
-
-/// `exit_labels` name blocks a `break` leaves along with the region analysed,
-/// so such a break never reaches the statement after a loop it sits in.
-fn block_always_exits_past(ctx: CtrlFlowCtx<'_>, block: &ast::Block, exit_labels: &[&str]) -> bool {
-    block
-        .stmts
-        .iter()
-        .any(|s| stmt_always_exits(ctx, s, exit_labels))
-}
-
-fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str]) -> bool {
-    match stmt {
-        ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
-        ast::Stmt::Expr(e) => expr_always_exits_past(ctx, &e.expr, exit_labels),
-        ast::Stmt::Let(l) => l
-            .value
-            .as_ref()
-            .is_some_and(|value| expr_always_exits_past(ctx, value, exit_labels)),
-        ast::Stmt::If(if_stmt) => {
-            if let Some(else_block) = &if_stmt.else_block {
-                block_always_exits_past(ctx, &if_stmt.then_block, exit_labels)
-                    && block_always_exits_past(ctx, else_block, exit_labels)
-            } else {
-                false
-            }
-        }
-        ast::Stmt::Loop(loop_stmt) => !loop_body_can_escape(ctx, &loop_stmt.body, exit_labels),
-        // `while true` is the same loop written differently: reify desugars it
-        // to `loop { if !true { break } B }`, so only a `break` in `B` ends it.
-        ast::Stmt::While(w) if w.condition.is_always_true() => {
-            !loop_body_can_escape(ctx, &w.body, exit_labels)
-        }
-        // So is a C-style `for` with no condition, or one always true: its
-        // `init` and `update` cannot leave it.
-        ast::Stmt::For(f)
-            if f.condition
-                .as_ref()
-                .is_none_or(ast::Condition::is_always_true) =>
-        {
-            !loop_body_can_escape(ctx, &f.body, exit_labels)
-        }
-        ast::Stmt::LabeledBlock(lb) => {
-            block_always_exits_past(ctx, &lb.block, exit_labels)
-                && !block_can_break_to_label(ctx, &lb.block, &lb.label)
-        }
-        // `match { ... }` as a top-level statement diverges when every
-        // arm diverges. AST keeps it as `Stmt::Match`, but the TIR
-        // walker saw the same construct as `TirStmtKind::Expr` over an
-        // `Expr::Match` — route through the expression-level check.
-        ast::Stmt::Match(m) => {
-            !m.arms.is_empty()
-                && m.arms
-                    .iter()
-                    .all(|a| expr_always_exits_past(ctx, &a.body, exit_labels))
-        }
-        _ => false,
-    }
-}
-
-fn expr_always_exits_past(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, exit_labels: &[&str]) -> bool {
-    if ctx.is_never(expr) {
-        return true;
-    }
-    match expr {
-        ast::Expr::Block(block) => block_always_exits_past(ctx, block, exit_labels),
-        ast::Expr::LabeledBlock(lb) => {
-            block_always_exits_past(ctx, &lb.block, exit_labels)
-                && !block_can_break_to_label(ctx, &lb.block, &lb.label)
-        }
-        ast::Expr::If(if_expr) => {
-            if let Some(else_block) = &if_expr.else_block {
-                block_always_exits_past(ctx, &if_expr.then_block, exit_labels)
-                    && block_always_exits_past(ctx, else_block, exit_labels)
-            } else {
-                false
-            }
-        }
-        ast::Expr::Match(m) => {
-            !m.arms.is_empty()
-                && m.arms
-                    .iter()
-                    .all(|a| expr_always_exits_past(ctx, &a.body, exit_labels))
-        }
-        // `with … do { body }`: defer to body's definite-exit.
-        ast::Expr::WithHandler(wh) => block_always_exits_past(ctx, &wh.body, exit_labels),
-        _ => false,
     }
 }
 
@@ -329,90 +229,6 @@ fn collect_return_types_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, out: &mu
     }
 }
 
-/// Per-node decision for the generic AST predicate walk used by
-/// [`loop_body_can_escape`] and [`block_can_break_to_label`].
-#[derive(Clone, Copy)]
-enum Step {
-    /// Predicate matched — short-circuit and return `true`.
-    Match,
-    /// Not matched here, and do not descend into children.
-    Skip,
-    /// Not matched here; continue descending into children.
-    Descend,
-}
-
-/// `'t` is the tree's own lifetime, so a probe may keep what it visits.
-trait AstTreeProbe<'t> {
-    fn check_stmt(&mut self, stmt: &'t ast::Stmt) -> Step;
-    fn check_expr(&mut self, _expr: &'t ast::Expr) -> Step {
-        Step::Descend
-    }
-}
-
-/// Searches a loop body for a `break` that reaches the statement after the
-/// loop. `inner_labels` holds the labels whose `break` does not: those declared
-/// inside the body, and the seeded `exit_labels`.
-struct LoopEscape {
-    inner_labels: Vec<String>,
-}
-
-impl AstTreeProbe<'_> for LoopEscape {
-    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
-        match stmt {
-            ast::Stmt::Break(b) => match &b.label {
-                None => Step::Match,
-                Some(l) => {
-                    if self.inner_labels.iter().any(|owned| owned == l) {
-                        Step::Skip
-                    } else {
-                        Step::Match
-                    }
-                }
-            },
-            // Nested loops / for-of / while / C-style for catch their own
-            // unlabeled breaks.
-            ast::Stmt::Loop(_) | ast::Stmt::While(_) | ast::Stmt::For(_) | ast::Stmt::ForOf(_) => {
-                Step::Skip
-            }
-            ast::Stmt::LabeledBlock(lb) => {
-                self.inner_labels.push(lb.label.clone());
-                Step::Descend
-            }
-            _ => Step::Descend,
-        }
-    }
-
-    fn check_expr(&mut self, expr: &ast::Expr) -> Step {
-        if let ast::Expr::LabeledBlock(lb) = expr {
-            self.inner_labels.push(lb.label.clone());
-        }
-        Step::Descend
-    }
-}
-
-/// Searches for `break <label>` targeting `label`, treating an inner
-/// labeled block that reuses the same name as a shadowing scope.
-struct BreakToLabel<'a> {
-    label: &'a str,
-}
-
-impl AstTreeProbe<'_> for BreakToLabel<'_> {
-    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
-        match stmt {
-            ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) => Step::Match,
-            ast::Stmt::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
-            _ => Step::Descend,
-        }
-    }
-
-    fn check_expr(&mut self, expr: &ast::Expr) -> Step {
-        match expr {
-            ast::Expr::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
-            _ => Step::Descend,
-        }
-    }
-}
-
 /// Collects the spans of `break <label>: <null>` values whose recorded
 /// type is still unresolved. AST mirror of `NullBreakPatcher` (whose TIR
 /// mutation was dead — reify rebuilds the `null` from its `expected_type`):
@@ -464,22 +280,18 @@ pub(super) fn collect_unresolved_null_breaks(
         label,
         spans: Vec::new(),
     };
-    any_in_tree(ctx, block, &mut probe);
+    any_in_tree(block, &mut probe);
     probe.spans
 }
 
 /// The values every `break <label>: <value>` inside `block` yields, an inner
 /// labeled block reusing the name shadowing it.
-pub(super) fn break_values<'t>(
-    ctx: CtrlFlowCtx<'_>,
-    block: &'t ast::Block,
-    label: &str,
-) -> Vec<&'t ast::Expr> {
+pub(super) fn break_values<'t>(block: &'t ast::Block, label: &str) -> Vec<&'t ast::Expr> {
     let mut probe = BreakValues {
         label,
         values: Vec::new(),
     };
-    any_in_tree(ctx, block, &mut probe);
+    any_in_tree(block, &mut probe);
     probe.values
 }
 
@@ -510,8 +322,8 @@ impl<'t> AstTreeProbe<'t> for BreakValues<'_, 't> {
 
 /// Whether the body names its result anywhere. The walk stops at a closure
 /// body, which is a function of its own and where `task return` is rejected.
-pub(super) fn block_delivers(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
-    any_in_tree(ctx, block, &mut TaskReturnPresent)
+pub(super) fn block_delivers(block: &ast::Block) -> bool {
+    any_in_tree(block, &mut TaskReturnPresent)
 }
 
 struct TaskReturnPresent;
@@ -552,221 +364,8 @@ impl AstTreeProbe<'_> for UnboundLoopJump {
 
 /// Kind and span of the first `break` / `continue` in `block` that no enclosing
 /// loop binds. WIR panics on one, so it has to be rejected here.
-pub(super) fn find_unbound_loop_jump(
-    ctx: CtrlFlowCtx<'_>,
-    block: &ast::Block,
-) -> Option<(LoopJump, Span)> {
+pub(super) fn find_unbound_loop_jump(block: &ast::Block) -> Option<(LoopJump, Span)> {
     let mut probe = UnboundLoopJump { found: None };
-    any_in_tree(ctx, block, &mut probe);
+    any_in_tree(block, &mut probe);
     probe.found
-}
-
-fn loop_body_can_escape(ctx: CtrlFlowCtx<'_>, body: &ast::Block, exit_labels: &[&str]) -> bool {
-    let mut probe = LoopEscape {
-        inner_labels: exit_labels.iter().map(|l| (*l).to_string()).collect(),
-    };
-    any_in_tree(ctx, body, &mut probe)
-}
-
-fn block_can_break_to_label(ctx: CtrlFlowCtx<'_>, block: &ast::Block, label: &str) -> bool {
-    let mut probe = BreakToLabel { label };
-    any_in_tree(ctx, block, &mut probe)
-}
-
-fn any_in_tree<'t, P: AstTreeProbe<'t>>(
-    ctx: CtrlFlowCtx<'_>,
-    block: &'t ast::Block,
-    probe: &mut P,
-) -> bool {
-    block.stmts.iter().any(|s| any_in_stmt(ctx, s, probe))
-}
-
-fn any_in_stmt<'t, P: AstTreeProbe<'t>>(
-    ctx: CtrlFlowCtx<'_>,
-    stmt: &'t ast::Stmt,
-    probe: &mut P,
-) -> bool {
-    match probe.check_stmt(stmt) {
-        Step::Match => return true,
-        Step::Skip => return false,
-        Step::Descend => {}
-    }
-    match stmt {
-        ast::Stmt::If(if_stmt) => {
-            condition_any(ctx, &if_stmt.condition, probe)
-                || any_in_tree(ctx, &if_stmt.then_block, probe)
-                || if_stmt
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| any_in_tree(ctx, b, probe))
-        }
-        ast::Stmt::While(w) => {
-            condition_any(ctx, &w.condition, probe) || any_in_tree(ctx, &w.body, probe)
-        }
-        ast::Stmt::For(f) => {
-            f.init.as_ref().is_some_and(|s| any_in_stmt(ctx, s, probe))
-                || f.condition
-                    .as_ref()
-                    .is_some_and(|c| condition_any(ctx, c, probe))
-                || f.update
-                    .as_ref()
-                    .is_some_and(|e| any_in_expr(ctx, e, probe))
-                || any_in_tree(ctx, &f.body, probe)
-        }
-        ast::Stmt::ForOf(fo) => {
-            any_in_expr(ctx, &fo.iterable, probe) || any_in_tree(ctx, &fo.body, probe)
-        }
-        ast::Stmt::Loop(l) => any_in_tree(ctx, &l.body, probe),
-        ast::Stmt::LabeledBlock(lb) => any_in_tree(ctx, &lb.block, probe),
-        ast::Stmt::Match(m) => {
-            any_in_expr(ctx, &m.expr, probe)
-                || m.arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|g| any_in_expr(ctx, g, probe))
-                        || any_in_expr(ctx, &arm.body, probe)
-                })
-        }
-        ast::Stmt::Expr(e) => any_in_expr(ctx, &e.expr, probe),
-        ast::Stmt::Let(l) => {
-            l.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe))
-                || l.else_block
-                    .as_ref()
-                    .is_some_and(|b| any_in_tree(ctx, b, probe))
-        }
-        ast::Stmt::TaskReturn(tr) => any_in_expr(ctx, &tr.value, probe),
-        ast::Stmt::Return(r) => r.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe)),
-        ast::Stmt::Break(b) => b.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe)),
-        ast::Stmt::Assert(a) => {
-            any_in_expr(ctx, &a.condition, probe)
-                || a.message
-                    .as_ref()
-                    .is_some_and(|m| any_in_expr(ctx, m, probe))
-        }
-        ast::Stmt::Continue(_) => false,
-        // A local type/impl declaration's methods have their own
-        // control-flow scope, like a closure body — a `break`/`continue`/
-        // loop-escape inside one is not part of the enclosing function.
-        ast::Stmt::Item(_) => false,
-        // Parser error-recovery placeholder: nothing to probe.
-        ast::Stmt::Error(_) => false,
-    }
-}
-
-fn condition_any<'t, P: AstTreeProbe<'t>>(
-    ctx: CtrlFlowCtx<'_>,
-    cond: &'t ast::Condition,
-    probe: &mut P,
-) -> bool {
-    match cond {
-        ast::Condition::Expr(e) => any_in_expr(ctx, e, probe),
-        ast::Condition::LetChain { elements, .. } => {
-            elements.iter().any(|el| any_in_expr(ctx, el.expr(), probe))
-        }
-    }
-}
-
-fn any_in_expr<'t, P: AstTreeProbe<'t>>(
-    ctx: CtrlFlowCtx<'_>,
-    expr: &'t ast::Expr,
-    probe: &mut P,
-) -> bool {
-    match probe.check_expr(expr) {
-        Step::Match => return true,
-        Step::Skip => return false,
-        Step::Descend => {}
-    }
-    // Descend into every sub-expression / sub-block carrier except
-    // `Closure`, whose body has its own control-flow scope.
-    match expr {
-        // Pure leaves.
-        ast::Expr::Ident(_) | ast::Expr::Literal(_) => false,
-
-        ast::Expr::Block(block) => any_in_tree(ctx, block, probe),
-        ast::Expr::LabeledBlock(lb) => any_in_tree(ctx, &lb.block, probe),
-
-        ast::Expr::If(if_expr) => {
-            condition_any(ctx, &if_expr.condition, probe)
-                || any_in_tree(ctx, &if_expr.then_block, probe)
-                || if_expr
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| any_in_tree(ctx, b, probe))
-        }
-        ast::Expr::Match(m) => {
-            any_in_expr(ctx, &m.expr, probe)
-                || m.arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|g| any_in_expr(ctx, g, probe))
-                        || any_in_expr(ctx, &arm.body, probe)
-                })
-        }
-        ast::Expr::Matches(m) => {
-            any_in_expr(ctx, &m.expr, probe)
-                || m.guard.as_ref().is_some_and(|g| any_in_expr(ctx, g, probe))
-        }
-        ast::Expr::Binary(b) => {
-            any_in_expr(ctx, &b.left, probe) || any_in_expr(ctx, &b.right, probe)
-        }
-        ast::Expr::Unary(u) => any_in_expr(ctx, &u.expr, probe),
-        ast::Expr::Cast(c) => any_in_expr(ctx, &c.expr, probe),
-        ast::Expr::FieldAccess(f) => any_in_expr(ctx, &f.expr, probe),
-        ast::Expr::Assign(a) => {
-            any_in_expr(ctx, &a.target, probe) || any_in_expr(ctx, &a.value, probe)
-        }
-        ast::Expr::CompoundAssign(a) => {
-            any_in_expr(ctx, &a.target, probe) || any_in_expr(ctx, &a.value, probe)
-        }
-        ast::Expr::ComparisonChain(c) => {
-            any_in_expr(ctx, &c.first, probe)
-                || c.comparisons
-                    .iter()
-                    .any(|cmp| any_in_expr(ctx, &cmp.right, probe))
-        }
-        ast::Expr::Index(i) => {
-            any_in_expr(ctx, &i.expr, probe) || any_in_expr(ctx, &i.index, probe)
-        }
-        ast::Expr::Call(c) => {
-            any_in_expr(ctx, &c.callee, probe) || c.args.iter().any(|a| any_in_expr(ctx, a, probe))
-        }
-        ast::Expr::MethodCall(mc) => {
-            any_in_expr(ctx, &mc.receiver, probe)
-                || mc.args.iter().any(|a| any_in_expr(ctx, a, probe))
-        }
-        ast::Expr::StaticMethodCall(sc) => sc.args.iter().any(|a| any_in_expr(ctx, a, probe)),
-        ast::Expr::StructLiteral(s) => {
-            s.fields.iter().any(|f| any_in_expr(ctx, &f.value, probe))
-                || s.spreads.iter().any(|sp| any_in_expr(ctx, &sp.expr, probe))
-        }
-        ast::Expr::TupleLiteral(t) => t.elements.iter().any(|e| any_in_expr(ctx, e, probe)),
-        ast::Expr::TupleComprehension(c) => {
-            any_in_expr(ctx, &c.iterable, probe) || any_in_expr(ctx, &c.body, probe)
-        }
-        ast::Expr::Spread(inner, _) => any_in_expr(ctx, inner, probe),
-        ast::Expr::Range(r) => any_in_expr(ctx, &r.start, probe) || any_in_expr(ctx, &r.end, probe),
-        ast::Expr::TryOp(t) => any_in_expr(ctx, &t.expr, probe),
-        ast::Expr::TemplateString(ts) => ts.parts.iter().any(|p| match p {
-            ast::TemplatePart::Interpolation { expr, .. } => any_in_expr(ctx, expr, probe),
-            ast::TemplatePart::String(_) => false,
-        }),
-        ast::Expr::TaggedTemplate(t) => {
-            any_in_expr(ctx, &t.tag, probe)
-                || t.template
-                    .interpolations()
-                    .any(|expr| any_in_expr(ctx, expr, probe))
-        }
-        ast::Expr::WithHandler(wh) => {
-            wh.handlers
-                .iter()
-                .any(|b| any_in_expr(ctx, &b.handler, probe))
-                || any_in_tree(ctx, &wh.body, probe)
-        }
-
-        // Closures stay in their own scope.
-        ast::Expr::Closure(_) => false,
-
-        // Parser error-recovery placeholder: nothing to probe.
-        ast::Expr::Error(_) => false,
-    }
 }

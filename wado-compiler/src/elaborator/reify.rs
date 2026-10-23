@@ -2214,8 +2214,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// builds. A `return` / `break` ends a path too, but a normal exit is not a
     /// cold one, so it is left alone.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+        let tt = self.tysys.type_table.borrow();
         let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
+            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
         if !stmts.iter().any(diverges) {
             return stmts;
         }
