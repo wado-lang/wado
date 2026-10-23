@@ -457,7 +457,10 @@ impl Visitor for MergeVisitor {
         let Some([left, right]) = merge.split_once(" ") else {
             return Result::Err(DeserializeError::invalid_value(`merge ${merge} is not two tokens`));
         };
-        return Result::Ok(Merge { left: left.to_string(), right: right.to_string() });
+        return Result::Ok(Merge {
+            left: left.to_string(),
+            right: right.to_string(),
+        });
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Merge, DeserializeError> {
