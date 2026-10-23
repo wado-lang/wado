@@ -583,8 +583,7 @@ serial advances on read, so a template nested inside a hole mints its own
 A segment reaches the tag as a field of its argument, so folding it takes three
 things the optimizer gains here.
 
-- `param_spec` keys a clone on a closed literal (`String { repr: packed"…",
-  used: n }`) as on a scalar, and on the fields of a struct passed by value to
+- `param_spec` keys a clone on a closed literal (`String { repr: packed"…", used: n }`) as on a scalar, and on the fields of a struct passed by value to
   a parameter the body never rebinds. A read of a bound slot becomes a fresh
   copy of the literal, as the literal at the call builds a fresh object. A
   callee reading its parameter through `let r = &p`, which inlining a `&self`
