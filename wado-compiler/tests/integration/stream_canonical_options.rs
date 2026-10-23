@@ -1,8 +1,8 @@
 //! The stream copy canonicals must carry the `async` option.
 //!
 //! Without it the canonical never hands BLOCKED back to the guest, so the
-//! BLOCKED branch of `core:rt`'s `cm_await_blocked`, which every stream read
-//! and write settles through, is unreachable code shipped in every component.
+//! BLOCKED branch of the prelude's `settled_copy`, which every stream read and
+//! write settles through, is unreachable code shipped in every component.
 //! Runtime fixtures cannot catch the regression: they pass either way, since
 //! the host blocks instead. The option is only observable in the emitted
 //! component.
@@ -19,7 +19,7 @@ use { Stdin } from "wasi:cli";
 
 export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
-    let chunk = stdin_stream.read(16);
+    let [stdin_stream, chunk] = stdin_stream.start_read(16).finish();
     stdin_stream.drop();
     println(`read ${chunk.items.len()} bytes`);
 }

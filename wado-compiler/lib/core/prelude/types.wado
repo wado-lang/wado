@@ -671,7 +671,7 @@ impl Drop for CopyBuffer {
 /// The packed result of the copy on `handle` that answered `packed`: that
 /// answer, the one a set reported, or the one the host reports once this
 /// waits for it.
-fn settled_copy(handle: i32, packed: i32) -> i32 {
+internal fn settled_copy(handle: i32, packed: i32) -> i32 {
     if packed != CM_BLOCKED {
         return packed;
     }
@@ -685,7 +685,7 @@ fn settled_copy(handle: i32, packed: i32) -> i32 {
 ///
 /// The handle must be unjoined before the set is dropped; a set still holding a
 /// waitable cannot be deleted.
-internal fn cm_await_copy(handle: i32) -> i32 {
+fn cm_await_copy(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);

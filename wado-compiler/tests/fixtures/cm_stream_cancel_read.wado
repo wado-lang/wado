@@ -1,11 +1,5 @@
-// The canonical's core type is the canonical's to give. A cancel answers with
-// the `u32` its copy ended on, and `fn cancel_read(&self)` states no result, so
-// a core import typed from the call site asked for `(param i32)` where the
-// component provides `(param i32) (result i32)`, and the module failed to
-// validate.
-//
-// Dropping a copy still in flight is what reaches the cancel: no writer has
-// written, so the read blocks, and the drop cancels it.
+// Dropping a read copy still in flight cancels it: no writer has written, so
+// the read blocks, and the drop cancels it and ends without waiting for one.
 
 use { println, Stdout } from "core:cli";
 

@@ -30,7 +30,7 @@ use {
     WaitEvent,
     CM_BLOCKED,
     call_state,
-    cm_await_copy,
+    settled_copy,
     cm_packed_upper,
     copy_result,
     write_copy_is_final,
@@ -304,14 +304,10 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
 /// `(count << 4) | status` packing the canonical returns directly.
 ///
 /// Whether a given copy blocks is the host's scheduling, so the test lives here,
-/// where every copy reaches it, rather than at each call. It stays small enough
-/// to inline, so a copy that did not block pays no call.
+/// where every copy reaches it, rather than at each call.
 #[compiler_item("cm_await_blocked")]
 internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
-    if packed != CM_BLOCKED {
-        return packed;
-    }
-    return cm_await_copy(handle);
+    return settled_copy(handle, packed);
 }
 
 /// How a future write whose packed result is `packed` ended, a BLOCKED one
