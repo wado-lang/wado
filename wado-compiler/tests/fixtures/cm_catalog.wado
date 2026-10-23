@@ -499,11 +499,12 @@ export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
 // linear memory (lift on read, lower on write). `async` because both halves
 // block until the peer makes progress; the readable end is delivered with
 // `task return` and the copy loop runs after.
-export async fn id_stream_u32(v: Stream<u32>) -> Stream<u32> {
+export async fn id_stream_u32(mut v: Stream<u32>) -> Stream<u32> {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
@@ -512,11 +513,12 @@ export async fn id_stream_u32(v: Stream<u32>) -> Stream<u32> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
+export async fn id_stream_string(mut v: Stream<String>) -> Stream<String> {
     let [rx, tx] = Stream::<String>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
@@ -525,11 +527,12 @@ export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
+export async fn id_stream_record(mut v: Stream<Point>) -> Stream<Point> {
     let [rx, tx] = Stream::<Point>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
@@ -538,11 +541,12 @@ export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_enum(v: Stream<Color>) -> Stream<Color> {
+export async fn id_stream_enum(mut v: Stream<Color>) -> Stream<Color> {
     let [rx, tx] = Stream::<Color>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
@@ -551,11 +555,12 @@ export async fn id_stream_enum(v: Stream<Color>) -> Stream<Color> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
+export async fn id_stream_variant(mut v: Stream<Shape>) -> Stream<Shape> {
     let [rx, tx] = Stream::<Shape>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;
@@ -565,11 +570,12 @@ export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
     tx.drop();
 }
 // The element whose CM width differs from its Wado one: checks the stride.
-export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
+export async fn id_stream_flags(mut v: Stream<Perms>) -> Stream<Perms> {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         let written = tx.write_all(chunk.items);
         if written != CopyResult::Completed || chunk.result != CopyResult::Completed {
             break;

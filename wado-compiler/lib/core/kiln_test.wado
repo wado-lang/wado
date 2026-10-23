@@ -72,11 +72,11 @@ struct ScriptedInput {
 }
 
 impl Stream<u8> for ScriptedInput {
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
         let items = self.chunks[self.at];
         self.at += 1;
         let result = if self.at == self.chunks.len() { CopyResult::Dropped } else { CopyResult::Completed };
-        resume StreamChunk { items, result };
+        resume StartedRead::settled(StreamChunk { items, result });
     }
 
     fn drop(&mut self, this: &Stream<u8>) {

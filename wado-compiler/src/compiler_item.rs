@@ -182,6 +182,9 @@ pub enum CompilerItem {
     AsyncCall,
     /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
     ResultBuffer,
+    /// `CopyBuffer` — the linear memory a started stream copy moves through,
+    /// with the copy it belongs to.
+    CopyBuffer,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -696,25 +699,23 @@ pub enum CompilerItem {
     CopyResult,
     /// `core:prelude/types::FutureWriteResult`, how a future write ended.
     FutureWriteResult,
-    /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
-    StreamChunk,
-    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` did
+    /// `core:prelude/types::FutureWrite`, what one `FutureWritable::write` did
     /// not deliver.
-    StreamWrite,
-    /// `core:prelude/types::FutureWrite`, likewise for `FutureWritable::write`.
     FutureWrite,
-    /// `core:rt::cm_copy_result`.
-    CmCopyResult,
+    /// `core:prelude/types::StartedRead`, a `stream.read` not yet settled.
+    StartedRead,
+    /// `core:prelude/types::StartedWrite`, a `stream.write` not yet settled.
+    StartedWrite,
     /// `core:rt::cm_future_write_result`.
     CmFutureWriteResult,
     /// `core:rt::cm_copy_count`.
     CmCopyCount,
     /// `core:rt::cm_buffer_bytes`.
     CmBufferBytes,
-    /// `core:rt::cm_packed_count`.
-    CmPackedCount,
     /// `core:rt::cm_stream_read_u8`.
     CmStreamReadU8,
+    /// `core:rt::cm_stream_lift_u8`.
+    CmStreamLiftU8,
     /// `core:rt::cm_stream_write_u8`.
     CmStreamWriteU8,
     /// `core:rt::cm_stream_write_raw_all_u8`.
@@ -778,9 +779,9 @@ impl CompilerItem {
         Self::Ordering,
         Self::CopyResult,
         Self::FutureWriteResult,
-        Self::StreamChunk,
-        Self::StreamWrite,
         Self::FutureWrite,
+        Self::StartedRead,
+        Self::StartedWrite,
         Self::CaseStyle,
         Self::Default,
         Self::Drop,
@@ -796,6 +797,7 @@ impl CompilerItem {
         Self::Slice,
         Self::AsyncCall,
         Self::ResultBuffer,
+        Self::CopyBuffer,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -981,12 +983,11 @@ impl CompilerItem {
         Self::CmCallbackKey,
         Self::CmCallback,
         Self::CmAwaitBlocked,
-        Self::CmCopyResult,
         Self::CmFutureWriteResult,
         Self::CmCopyCount,
         Self::CmBufferBytes,
-        Self::CmPackedCount,
         Self::CmStreamReadU8,
+        Self::CmStreamLiftU8,
         Self::CmStreamWriteU8,
         Self::CmStreamWriteRawAllU8,
         Self::CmErrorContextNew,
@@ -1032,9 +1033,9 @@ impl CompilerItem {
             Self::Ordering => "ordering",
             Self::CopyResult => "copy_result",
             Self::FutureWriteResult => "future_write_result",
-            Self::StreamChunk => "stream_chunk",
-            Self::StreamWrite => "stream_write",
             Self::FutureWrite => "future_write",
+            Self::StartedRead => "started_read",
+            Self::StartedWrite => "started_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
             Self::Drop => "drop",
@@ -1050,6 +1051,7 @@ impl CompilerItem {
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::ResultBuffer => "result_buffer",
+            Self::CopyBuffer => "copy_buffer",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1177,12 +1179,11 @@ impl CompilerItem {
             Self::CmCallbackKey => "cm_callback_key",
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
-            Self::CmCopyResult => "cm_copy_result",
             Self::CmFutureWriteResult => "cm_future_write_result",
             Self::CmCopyCount => "cm_copy_count",
             Self::CmBufferBytes => "cm_buffer_bytes",
-            Self::CmPackedCount => "cm_packed_count",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
+            Self::CmStreamLiftU8 => "cm_stream_lift_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
             Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
             Self::CmErrorContextNew => "cm_error_context_new",
@@ -1291,12 +1292,11 @@ impl CompilerItem {
             | Self::CmCallbackKey
             | Self::CmCallback
             | Self::CmAwaitBlocked
-            | Self::CmCopyResult
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
-            | Self::CmPackedCount
             | Self::CmStreamReadU8
+            | Self::CmStreamLiftU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
@@ -1335,9 +1335,9 @@ impl CompilerItem {
             | Self::Ordering
             | Self::CopyResult
             | Self::FutureWriteResult
-            | Self::StreamChunk
-            | Self::StreamWrite
             | Self::FutureWrite
+            | Self::StartedRead
+            | Self::StartedWrite
             | Self::CaseStyle
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
@@ -1360,6 +1360,7 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
+            | Self::CopyBuffer
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
@@ -1585,12 +1586,11 @@ impl CompilerItem {
             | Self::CmCallbackKey
             | Self::CmCallback
             | Self::CmAwaitBlocked
-            | Self::CmCopyResult
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
-            | Self::CmPackedCount
             | Self::CmStreamReadU8
+            | Self::CmStreamLiftU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
@@ -1623,7 +1623,8 @@ impl CompilerItem {
             | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall
-            | Self::ResultBuffer => CompilerItemKind::Struct,
+            | Self::ResultBuffer
+            | Self::CopyBuffer => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream
@@ -1636,7 +1637,7 @@ impl CompilerItem {
             | Self::CaseStyle
             | Self::CopyResult
             | Self::FutureWriteResult => CompilerItemKind::Enum,
-            Self::StreamChunk | Self::StreamWrite | Self::FutureWrite => CompilerItemKind::Struct,
+            Self::FutureWrite | Self::StartedRead | Self::StartedWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,

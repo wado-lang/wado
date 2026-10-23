@@ -328,9 +328,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope: Vec<TypeId> = self
             .annotate_ctx
             .trait_ctx
-            .type_params
-            .values()
-            .map(|b| b.type_id)
+            .binders()
+            .map(|(_, b)| b.type_id)
             .collect();
         self.tysys
             .type_table
@@ -614,6 +613,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         sub_map(tt, &mut types.fn_return_types, subst);
         sub_map(tt, &mut types.function_task_returns, subst);
         sub_vec_map(tt, &mut types.fn_param_types, subst);
+        sub_vec_map(tt, &mut types.fn_affine_params, subst);
         sub_vec_map(tt, &mut types.struct_field_types, subst);
         for i in types.impl_facts.values_mut() {
             sub_vec(tt, &mut i.trait_type_args, subst);

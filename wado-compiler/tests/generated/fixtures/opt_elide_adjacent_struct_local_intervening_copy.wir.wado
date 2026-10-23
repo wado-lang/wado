@@ -43,7 +43,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
@@ -61,10 +61,10 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(32);
+global global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
@@ -96,7 +96,7 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"() w
     }
     new_used_144 = $local_1.used;
     $local_1.used = start_145;
-    builtin::array_copy<u8>($local_1.repr, new_used_144, global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_7, 0, 1);
+    builtin::array_copy<u8>($local_1.repr, new_used_144, global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_1, 0, 1);
     if @unlikely(local.tee new_used_144(local.tee $sroa_$f_buf_60($local_1).used + 3) > builtin::array_len($sroa_$f_buf_60.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_60, new_used_144);
@@ -110,7 +110,7 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"() w
     start_145 = new_used_144;
     new_used_144 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_144 = start_145; start_145 = 0; new_used_144, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_144 = $moved_4; $moved_4 = 0; new_used_144);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_144 = $moved_4; $moved_4 = 0; new_used_144);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -194,8 +194,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;

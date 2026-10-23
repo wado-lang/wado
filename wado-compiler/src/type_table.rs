@@ -92,6 +92,17 @@ pub struct TypeTable {
     /// live redirect, an absent slot means "no redirect". `get` consults it
     /// on every call, so the hash-free index matters here too.
     redirects: TypeMap<TypeId>,
+    /// Each type whose spelling names an instance as its `GenericInstance`
+    /// where monomorphization made a `Struct` of it, mapped to the spelling
+    /// naming the struct: two spellings of one type, which [`Self::type_key`]
+    /// answers alike. Sparse, as `redirects` is.
+    settled_spellings: TypeMap<TypeId>,
+    /// Whether monomorphization is done, so a type interned from here on is
+    /// settled as it arrives.
+    instances_settled: bool,
+    /// The settled spellings minted as keys that nothing has interned as a
+    /// type yet, which the name indexes leave out until something does.
+    unindexed: IndexSet<TypeId>,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
     /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
@@ -289,6 +300,9 @@ impl TypeTable {
             trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
+            settled_spellings: TypeMap::default(),
+            instances_settled: false,
+            unindexed: IndexSet::default(),
             box_payload_types: TypeMap::default(),
             slot_boxes: IndexMap::default(),
             struct_name_index: IndexMap::default(),
@@ -327,29 +341,136 @@ impl TypeTable {
 
     pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
         if let Some(&id) = self.intern_map.get(&ty) {
+            if self.unindexed.swap_remove(&id) {
+                self.index_type(id, &ty);
+            }
             return id;
         }
         let id = self.types.next_id();
+        self.index_type(id, &ty);
+        self.types.push(ty.clone());
+        self.intern_map.insert(ty, id);
+        if self.instances_settled {
+            self.settle_spelling(id);
+        }
+        id
+    }
+
+    fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
         // Update struct name index for O(1) lookups by (name, module_source).
         // Keyed on the *rendered* spelling: every instantiation of a generic
         // struct is a distinct type, and keying on the declaration would
         // collapse them all onto one entry.
-        if let ResolvedType::Struct {
-            ref def,
-            ref type_args,
-        } = ty
-        {
+        if let ResolvedType::Struct { def, type_args } = ty {
             let rendered = self.struct_rendered_name(*def, type_args);
             let module_source = self.struct_head_module(*def).clone();
             self.struct_name_index.insert((rendered, module_source), id);
         }
-        if let Some(def) = Self::nominal_key(&ty) {
+        if let Some(def) = Self::nominal_key(ty) {
             let key = (self.def_name(def).to_string(), self.def_module(def).clone());
             self.decl_name_index.insert(key, id);
         }
-        self.types.push(ty.clone());
-        self.intern_map.insert(ty, id);
+    }
+
+    /// The spelling of `id` with each instance of a struct named as the
+    /// `Struct` monomorphization makes of it, whether or not it has yet.
+    fn settle_spelling(&mut self, id: TypeId) -> TypeId {
+        if let Some(&settled) = self.settled_spellings.get(id) {
+            return settled;
+        }
+        let spelling = self.types.get(id).expect("an interned type").clone();
+        let rebuilt = match &spelling {
+            ResolvedType::GenericInstance { def, type_args }
+                if self.defs.kind(*def) == DefKind::Struct && !self.is_tuple_def(*def) =>
+            {
+                ResolvedType::Struct {
+                    def: StructDef::Decl(*def),
+                    type_args: self.settle_struct_args(type_args),
+                }
+            }
+            ResolvedType::GenericInstance { def, type_args } => ResolvedType::GenericInstance {
+                def: *def,
+                type_args: self.settle_spellings(type_args),
+            },
+            ResolvedType::Struct { def, type_args } => ResolvedType::Struct {
+                def: *def,
+                type_args: self.settle_struct_args(type_args),
+            },
+            ResolvedType::GenericResource { def, type_args } => ResolvedType::GenericResource {
+                def: *def,
+                type_args: self.settle_spellings(type_args),
+            },
+            ResolvedType::Ref(inner) => ResolvedType::Ref(self.settle_spelling(*inner)),
+            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.settle_spelling(*inner)),
+            ResolvedType::BuiltinArray(elem) => {
+                ResolvedType::BuiltinArray(self.settle_spelling(*elem))
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => ResolvedType::Function {
+                is_mut: *is_mut,
+                params: self.settle_spellings(params),
+                return_type: self.settle_spelling(*return_type),
+                effects: effects.clone(),
+            },
+            // A newtype keeps its identity until erasure redirects it, and the
+            // rest name no other type.
+            ResolvedType::Newtype { .. }
+            | ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => spelling.clone(),
+        };
+        let settled = if rebuilt == spelling {
+            id
+        } else {
+            self.intern_settled(rebuilt)
+        };
+        self.settled_spellings.set_growing(id, settled);
+        settled
+    }
+
+    /// The id `spelling` interns to, minted where no type spells it yet. A
+    /// minted one enters the name indexes only once something interns it as a
+    /// type: until then the type it settles is there under its own spelling.
+    fn intern_settled(&mut self, spelling: ResolvedType) -> TypeId {
+        if let Some(&id) = self.intern_map.get(&spelling) {
+            return id;
+        }
+        let id = self.types.next_id();
+        self.types.push(spelling.clone());
+        self.intern_map.insert(spelling, id);
+        self.unindexed.insert(id);
+        self.settled_spellings.set_growing(id, id);
         id
+    }
+
+    fn settle_spellings(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
+        ids.iter().map(|&id| self.settle_spelling(id)).collect()
+    }
+
+    /// A struct instance's arguments as monomorphization keys it: settled, and
+    /// rowless as [`Self::make_monomorphized_struct_from_args`] makes them.
+    fn settle_struct_args(&mut self, ids: &[TypeId]) -> Vec<TypeId> {
+        ids.iter()
+            .map(|&id| {
+                let rowless = self.without_rows(id);
+                self.settle_spelling(rowless)
+            })
+            .collect()
     }
 
     /// The slot holding `id`'s value: itself, or what a redirect points it at.
@@ -412,11 +533,16 @@ impl TypeTable {
     #[must_use]
     pub fn type_key(&self, id: TypeId) -> TypeKey {
         let resolved = self.resolved_id(id);
+        let interned = self
+            .types
+            .get(resolved)
+            .and_then(|ty| self.intern_map.get(ty).copied())
+            .unwrap_or(resolved);
         TypeKey(
-            self.types
-                .get(resolved)
-                .and_then(|ty| self.intern_map.get(ty).copied())
-                .unwrap_or(resolved),
+            self.settled_spellings
+                .get(interned)
+                .copied()
+                .unwrap_or(interned),
         )
     }
 
@@ -449,10 +575,8 @@ impl TypeTable {
             ResolvedType::Struct { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Variant { .. }
-            | ResolvedType::Function { .. } => Some(self.type_key(ty)),
-            ResolvedType::GenericInstance { .. } => {
-                Some(self.type_key(self.monomorphized_or_self(ty)))
-            }
+            | ResolvedType::Function { .. }
+            | ResolvedType::GenericInstance { .. } => Some(self.type_key(ty)),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -989,16 +1113,22 @@ impl TypeTable {
     }
 
     /// The fields a struct of shape `id` holds: a literal's as written, a
-    /// template's one per hole typed by [`Self::hole_field_type`].
+    /// template's one per hole typed by [`Self::hole_field_type`], then each
+    /// segment as a `String`, cooked and raw.
     pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {
         match self.anon_structs[id.0 as usize].shape.clone() {
             AnonShape::Fields(fields) => fields,
-            AnonShape::Template(shape) => shape
-                .holes
-                .iter()
-                .enumerate()
-                .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)))
-                .collect(),
+            AnonShape::Template(shape) => {
+                let string_type = self.make_compiler_struct(CompilerItem::String);
+                let holes =
+                    shape.holes.iter().enumerate().map(|(k, hole)| {
+                        (TemplateShape::field_name(k), self.hole_field_type(hole.ty))
+                    });
+                let segments = shape
+                    .segment_keys()
+                    .map(|key| (shape.segment_field(key).0, string_type));
+                holes.chain(segments).collect()
+            }
             AnonShape::Synthetic(name) => {
                 unreachable!("synthetic shape `{name}` carries its fields itself")
             }
@@ -1107,7 +1237,6 @@ impl TypeTable {
                         ..hole
                     })
                     .collect(),
-                ..shape
             }),
         };
         if shape == self.anon_structs[id.0 as usize].shape {
@@ -1200,8 +1329,8 @@ impl TypeTable {
         }
     }
 
-    /// A template shape as its text, each hole spelled as its type and
-    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    /// A template shape as its holes, each spelled as its type and specifier,
+    /// cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
     fn template_shape_name(
         &self,
         shape: &TemplateShape,
@@ -1225,15 +1354,12 @@ impl TypeTable {
             }
             true
         };
-        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
-            push(segment)
-                && shape.holes.get(k).is_none_or(|hole| {
-                    let spec = hole
-                        .spec
-                        .as_ref()
-                        .map_or(String::new(), |s| format!(":{s}"));
-                    push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
-                })
+        let complete = shape.holes.iter().all(|hole| {
+            let spec = hole
+                .spec
+                .as_ref()
+                .map_or(String::new(), |s| format!(":{s}"));
+            push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
         });
         if !complete {
             name.push_str("...");
@@ -1273,16 +1399,12 @@ impl TypeTable {
                     .collect();
                 format!("$anon_{{{}}}", parts.join(","))
             }
-            // The literal text is arbitrary, so the name is a digest of the
+            // A specifier is arbitrary text, so the name is a digest of the
             // shape, its hole types rendered through `field_type`. It names a
             // compiled artifact, so no Rust release may move it, and every
             // piece goes in length-prefixed so no two shapes encode alike.
             AnonShape::Template(shape) => {
                 let mut h = sha2::Sha256::new();
-                digest_len(&mut h, shape.segments.len());
-                for segment in &shape.segments {
-                    digest_str(&mut h, segment);
-                }
                 digest_len(&mut h, shape.holes.len());
                 for hole in &shape.holes {
                     digest_str(&mut h, &field_type(self, hole.ty));
@@ -1627,6 +1749,9 @@ impl TypeTable {
             if let Some(wrapper) = self.slot_box(id) {
                 components.push(wrapper);
             }
+            if let Some(&settled) = self.settled_spellings.get(id) {
+                components.push(settled);
+            }
             if let Some(ty) = self.types.get(id) {
                 match ty {
                     ResolvedType::Struct {
@@ -1722,6 +1847,9 @@ impl TypeTable {
         });
         self.slot_boxes
             .retain(|_, wrapper| effective_keep.contains(wrapper));
+        self.settled_spellings
+            .retain(|id, _| effective_keep.contains(&id));
+        self.unindexed.retain(|id| effective_keep.contains(id));
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1738,32 +1866,16 @@ impl TypeTable {
             if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
-            if let Some(def) = Self::nominal_key(ty) {
-                let key = (self.def_name(def).to_string(), self.def_module(def).clone());
-                self.decl_name_index.insert(key, id);
-            }
         }
-        // Structs index under the spelling they render to, the way `intern`
-        // enters them — `Box` for the declaration, `Box<i32>` for that
-        // instantiation. Keying the rebuild on `decl_name` alone would put
-        // every instantiation of `Box` on one entry, and whichever survived
-        // last would answer for the declaration and for its siblings.
-        // Rendered up front because deriving one reads the arguments' types.
-        let rendered: Vec<((String, ModuleSource), TypeId)> = self
+        let indexed: Vec<(TypeId, ResolvedType)> = self
             .types
             .iter()
-            .filter_map(|(id, ty)| match ty {
-                ResolvedType::Struct { def, type_args } => Some((
-                    (
-                        self.struct_rendered_name(*def, type_args),
-                        self.struct_head_module(*def).clone(),
-                    ),
-                    id,
-                )),
-                _ => None,
-            })
+            .filter(|(id, _)| !self.unindexed.contains(id))
+            .map(|(id, ty)| (id, ty.clone()))
             .collect();
-        self.struct_name_index.extend(rendered);
+        for (id, ty) in indexed {
+            self.index_type(id, &ty);
+        }
     }
 
     /// The declaration a non-struct nominal type interns under.
@@ -2080,14 +2192,13 @@ impl TypeTable {
         })
     }
 
-    /// The `StreamChunk<T>` a `Stream<T>::read` returns.
-    pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(CompilerItem::StreamChunk);
+    pub fn make_started_read(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StartedRead);
         self.make_generic_instance(def, vec![elem])
     }
 
-    pub fn make_stream_write(&mut self, elem: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(CompilerItem::StreamWrite);
+    pub fn make_started_write(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StartedWrite);
         self.make_generic_instance(def, vec![elem])
     }
 
@@ -2114,6 +2225,11 @@ impl TypeTable {
 
     pub fn make_result_buffer(&mut self) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::ResultBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
+    pub fn make_copy_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::CopyBuffer);
         self.make_struct(StructDef::Decl(def))
     }
 
@@ -4711,7 +4827,7 @@ impl TypeTable {
     /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
     ///
     /// Must be called after monomorphize, whose dispatch reads the identities
-    /// this replaces.
+    /// this replaces, and settles the instance spellings it leaves.
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
@@ -4725,6 +4841,19 @@ impl TypeTable {
             if let Some(target) = redirect {
                 self.redirects.set_growing(id, target);
             }
+        }
+        self.settle_instance_spellings();
+    }
+
+    /// Settle every spelling, and each one interned from here on, now that
+    /// monomorphization is done. A site it never reached still spells an
+    /// instance as its `GenericInstance`, and a type argument holding that
+    /// spelling would otherwise key apart from the same type holding the struct.
+    fn settle_instance_spellings(&mut self) {
+        let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        self.instances_settled = true;
+        for id in ids {
+            self.settle_spelling(id);
         }
     }
 

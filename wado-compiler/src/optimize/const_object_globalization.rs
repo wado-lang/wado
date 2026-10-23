@@ -1946,7 +1946,9 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                     let (receiver, _) = args.split();
                     // Handing the storage on as a `&` reference is not an
                     // escape when the callee keeps it one — the same question
-                    // this walk answers, asked of the callee. A Wasm
+                    // this walk answers, asked of the callee. Nor is a handle
+                    // the callee takes by value and only reads, as a field
+                    // `sroa_param` split out of a `&` arrives. A Wasm
                     // instruction has no way to keep it at all.
                     for (pos, a) in args.rest_positioned() {
                         if !escapes(a.expr) {
@@ -1955,6 +1957,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                         let arg_ty = body.operand_type(a.expr);
                         if !a.is_mut
                             && (gate.callee_only_refs_arg(*func_id, pos)
+                                || gate.callee_param_readonly(*func_id, pos)
                                 || !gate.instruction_arg_captures(*func_id, arg_ty))
                         {
                             continue;

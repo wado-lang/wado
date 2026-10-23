@@ -67,11 +67,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
@@ -91,7 +91,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -146,7 +146,7 @@ fn "wir_reuse_struct_load.wado/run"() with Stdout {
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_17 = local.tee self_11("wir_reuse_struct_load.wado/width_and_offset"(c)) < 0;
     self_11 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_21(x_21 = builtin::i64_extend_i32_s(self_11); select i64(x_21 < 0_i64, 0_i64 - x_21, x_21)));
-    is_negative_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_17, self_11);
+    is_negative_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_17, self_11);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_17, x_21, self_11);
     self_11 = builtin::i32_wrap_i64(local.tee x_21("wasi/stream-new"()));
     is_negative_17 = builtin::i32_wrap_i64(x_21 >> 32_i64);
@@ -154,11 +154,11 @@ fn "wir_reuse_struct_load.wado/run"() with Stdout {
     self_11 = is_negative_17;
     is_negative_17 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_17 = self_11; self_11 = 0; is_negative_17, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_17 = $moved_4_69; $moved_4_69 = 0; is_negative_17);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_17 = $moved_4_69; $moved_4_69 = 0; is_negative_17);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $moved_4_69 = local.tee is_negative_17("wir_reuse_struct_load.wado/shift"(c)) < 0;
     is_negative_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_21(x_21 = builtin::i64_extend_i32_s(is_negative_17); select i64(x_21 < 0_i64, 0_i64 - x_21, x_21)));
-    $moved_4_69 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, $moved_4_69, is_negative_17);
+    $moved_4_69 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, $moved_4_69, is_negative_17);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, $moved_4_69, x_21, is_negative_17);
     is_negative_17 = builtin::i32_wrap_i64(local.tee x_21("wasi/stream-new"()));
     $moved_4_69 = builtin::i32_wrap_i64(x_21 >> 32_i64);
@@ -166,11 +166,11 @@ fn "wir_reuse_struct_load.wado/run"() with Stdout {
     is_negative_17 = $moved_4_69;
     $moved_4_69 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_69 = is_negative_17; is_negative_17 = 0; $moved_4_69, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_69 = self_11; self_11 = 0; $moved_4_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_69 = self_11; self_11 = 0; $moved_4_69);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     self_11 = local.tee $moved_4_69("wir_reuse_struct_load.wado/around_call"(c)) < 0;
     $moved_4_69 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_21(x_21 = builtin::i64_extend_i32_s($moved_4_69); select i64(x_21 < 0_i64, 0_i64 - x_21, x_21)));
-    self_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, self_11, $moved_4_69);
+    self_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, self_11, $moved_4_69);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, self_11, x_21, $moved_4_69);
     $moved_4_69 = builtin::i32_wrap_i64(local.tee x_21("wasi/stream-new"()));
     self_11 = builtin::i32_wrap_i64(x_21 >> 32_i64);
@@ -178,11 +178,11 @@ fn "wir_reuse_struct_load.wado/run"() with Stdout {
     $moved_4_69 = self_11;
     self_11 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_11 = $moved_4_69; $moved_4_69 = 0; self_11, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_11 = is_negative_17; is_negative_17 = 0; self_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_11 = is_negative_17; is_negative_17 = 0; self_11);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_17 = local.tee self_11("wir_reuse_struct_load.wado/guarded"(c, black_box(1))) < 0;
     self_11 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_21(x_21 = builtin::i64_extend_i32_s(self_11); select i64(x_21 < 0_i64, 0_i64 - x_21, x_21)));
-    is_negative_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_17, self_11);
+    is_negative_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_17, self_11);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_17, x_21, self_11);
     self_11 = builtin::i32_wrap_i64(local.tee x_21("wasi/stream-new"()));
     is_negative_17 = builtin::i32_wrap_i64(x_21 >> 32_i64);
@@ -190,7 +190,7 @@ fn "wir_reuse_struct_load.wado/run"() with Stdout {
     self_11 = is_negative_17;
     is_negative_17 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_17 = self_11; self_11 = 0; is_negative_17, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_17 = $moved_4_69; $moved_4_69 = 0; is_negative_17);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_17 = $moved_4_69; $moved_4_69 = 0; is_negative_17);
 }
 
 fn "wir_reuse_struct_load.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -307,7 +307,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -362,8 +362,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             }) >>u 4;
             ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if @likely(ptr_24 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
+            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+                2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
@@ -393,7 +395,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

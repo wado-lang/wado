@@ -1,0 +1,48 @@
+// A handler may answer `begin_read` on one stream by starting the copy on
+// another. The copy belongs to the end it was started on, so settling it, and
+// a set waiting on it, follow that end rather than the one the program read.
+//
+// The read starts before any write, so it blocks, and the set must wait on
+// the inner end for the write to wake it.
+
+use { println, Stdout } from "core:cli";
+
+affine struct Proxy {
+    inner: Option<Stream<u8>>,
+}
+
+impl Stream<u8> for Proxy {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+        let _ = this;
+        let Some(inner) = &self.inner else {
+            resume StartedRead::settled(StreamChunk { items: [], result: CopyResult::Dropped });
+        };
+        resume inner.begin_read(max);
+    }
+    ..forward
+}
+
+export fn run() with Stdout {
+    let [inner_rx, inner_tx] = Stream::<u8>::new();
+    let [outer_rx, outer_tx] = Stream::<u8>::new();
+    let mut proxy = Proxy { inner: Option::Some(inner_rx) };
+    let got = with Stream<u8> => &mut proxy do {
+        let mut set = WaitableSet::<ReadCopy<u8>>::new();
+        set.join(outer_rx.start_read(8));
+        let writing = inner_tx.start_write([4, 5, 6]);
+        let ready = set.wait();
+        let [rx, chunk] = ready.member.finish();
+        rx.drop();
+        let [tx, written] = writing.finish();
+        tx.drop();
+        `${chunk.items:?} ${ready.event:?} written ${written.result:?}`
+    };
+    println(got);
+    outer_tx.drop();
+    if let Some(inner) = proxy.inner.take() {
+        inner.drop();
+    }
+}
+
+__DATA__
+{"stdout": "[4, 5, 6] ReadyEvent::Copied(CopyResult::Completed) written CopyResult::Completed\n"}

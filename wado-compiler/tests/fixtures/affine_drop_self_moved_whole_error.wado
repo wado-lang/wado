@@ -1,0 +1,21 @@
+// A `drop` body may move fields out of `self`, but not `self` as a whole:
+// wherever it went, it would drop there and run `drop` once more.
+
+affine struct Guard {
+    id: i32,
+}
+
+impl Drop for Guard {
+    fn drop(self) {
+        let whole = self;
+        let _ = whole.id;
+    }
+}
+
+test {
+    let g = Guard { id: 1 };
+    assert g.id == 1;
+}
+
+__DATA__
+{"compile_error": ":10:21: analysis error: the `drop` of `Guard` cannot move `self` as a whole: wherever it went, it would drop and run `drop` again"}

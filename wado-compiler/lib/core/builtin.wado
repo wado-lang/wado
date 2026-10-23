@@ -20,6 +20,7 @@
 use { Formatter } from "core:prelude/format.wado";
 use { i128 } from "core:prelude/int128.wado";
 use { ByteList } from "core:prelude/bytes.wado";
+use { String } from "core:prelude/string.wado";
 use { Future, Stream } from "core:prelude/types.wado";
 
 /// Completes the current task with a `result<>`, flattened to its one
@@ -115,6 +116,14 @@ pub fn struct_field_ref<affine T, affine F>(v: &T, index: i32) -> &F;
 #[storage(part_of_args)]
 #[side_effect(none)]
 pub fn hole_get<T, V>(t: &T, index: i32) -> V;
+
+/// Reads the literal segment `key` numbers out of template `t`: segment `k`
+/// cooked at `2 * k`, raw at `2 * k + 1`. Rewritten by lowering to the
+/// per-shape helper synthesized alongside `ReflectTemplate` (WEP 2026-01-10).
+/// Used by `TemplateHole::lit` and `TemplateHole::raw`.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn template_segment<T>(t: &T, key: i32) -> String;
 
 /// Renders hole `index` of template `t` through its specifier into `f`.
 /// Rewritten by lowering to the per-shape helper synthesized alongside
@@ -492,6 +501,12 @@ internal fn is_moved<affine T>(value: T) -> bool;
 #[side_effect(none)]
 pub fn drop<affine T>(value: T);
 
+/// End `value` without its drop, for what the host has taken over: the
+/// elements a stream write delivered belong to the reader.
+#[storage(none)]
+#[side_effect(none)]
+internal fn forget<affine T>(value: T);
+
 /// Store `value` where `r` points and return what was there, the one way
 /// `core` moves a value out through a reference (WEP: Affine Types). Resource
 /// drop synthesis expands the call, and the move check trusts it.
@@ -668,11 +683,12 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask, blocking until it resolves.
+/// Cancel an in-progress subtask, blocking until it resolves. Returns the
+/// status it resolved with.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn subtask_cancel(handle: i32);
+pub fn subtask_cancel(handle: i32) -> i32;
 
 /// Join a waitable (subtask/stream/future) to a waitable set, or leave its
 /// set where `ws` is 0.

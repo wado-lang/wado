@@ -699,6 +699,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` method leaving unmarked a type parameter its trait declares
+    /// `affine`: a call through the trait moves in what the body may copy.
+    AffineImplParamUnmarked {
+        trait_name: String,
+        method_name: String,
+        param_name: String,
+        declared_name: String,
+        span: Span,
+    },
+
     /// An impl binding an affine type to an associated type not declared
     /// `affine type`, which a generic body may copy (WEP: Affine Types).
     AffineAssocBinding {
@@ -1230,6 +1240,14 @@ pub enum TypeError {
     /// written with a body is a default and is not required.
     ImplMissingMethod {
         trait_name: String,
+        method_name: String,
+        span: Span,
+    },
+
+    /// A handler `impl` defines a method its effect does not declare. No
+    /// dispatch reaches it, so it is most likely a misspelled operation.
+    HandlerMethodNotAnOperation {
+        effect_name: String,
         method_name: String,
         span: Span,
     },
@@ -1994,6 +2012,19 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::AffineImplParamUnmarked {
+                trait_name,
+                method_name,
+                param_name,
+                declared_name,
+                span,
+            } => (
+                Code::AffineArgument,
+                format!(
+                    "method `{method_name}` declares `{param_name}` unmarked, but `{trait_name}` declares `affine {declared_name}`: its body may copy an argument the trait admits as move-only"
+                ),
+                *span,
+            ),
             TypeError::AffineAssocBinding {
                 type_name,
                 assoc_name,
@@ -2680,6 +2711,17 @@ impl TypeError {
             } => (
                 Code::TraitDeclInvalid,
                 format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
+                *span,
+            ),
+            TypeError::HandlerMethodNotAnOperation {
+                effect_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "`{method_name}` is not an operation of `{effect_name}`, so a handler for it cannot answer it"
+                ),
                 *span,
             ),
             TypeError::ImplContractUnderTraitContract { span } => (

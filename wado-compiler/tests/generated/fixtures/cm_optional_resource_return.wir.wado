@@ -26,9 +26,9 @@ type "functype//cm_optional_resource_return.wado/run" = fn();  // TypeId(6)
 
 type "functype//cm_optional_resource_return.wado/$cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wasi/resource-drop:cm_optional_resource_return.wado#adapter" = fn(i32);  // TypeId(8)
+type "functype//wasi/resource-drop:cm_optional_resource_return.wado#Adapter" = fn(i32);  // TypeId(8)
 
-type "functype//wasi/resource-drop:cm_optional_resource_return.wado#device" = fn(i32);  // TypeId(9)
+type "functype//wasi/resource-drop:cm_optional_resource_return.wado#Device" = fn(i32);  // TypeId(9)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
@@ -40,8 +40,8 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
 import fn wasi/wasi:demo/Device::adapter from "wasi/wasi:demo/Device::adapter";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:cm_optional_resource_return.wado#adapter from "wasi/resource-drop:cm_optional_resource_return.wado#adapter";
-import fn wasi/resource-drop:cm_optional_resource_return.wado#device from "wasi/resource-drop:cm_optional_resource_return.wado#device";
+import fn wasi/resource-drop:cm_optional_resource_return.wado#Adapter from "wasi/resource-drop:cm_optional_resource_return.wado#Adapter";
+import fn wasi/resource-drop:cm_optional_resource_return.wado#Device from "wasi/resource-drop:cm_optional_resource_return.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
@@ -56,12 +56,12 @@ fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
         let $cm_handle_2: i32;
         $cm_handle_2 = $drop_v_2.value;
         $drop_v_2.value = 0;
-        "wasi/resource-drop:cm_optional_resource_return.wado#adapter"($cm_handle_2);
+        "wasi/resource-drop:cm_optional_resource_return.wado#Adapter"($cm_handle_2);
     }
     if (device == 0) == 0 {
         $cm_handle_2 = device;
         device = 0;
-        "wasi/resource-drop:cm_optional_resource_return.wado#device"($cm_handle_2);
+        "wasi/resource-drop:cm_optional_resource_return.wado#Device"($cm_handle_2);
     }
 }
 

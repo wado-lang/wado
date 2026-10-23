@@ -4,10 +4,10 @@ impl Sql {
     pub fn q<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
         let mut out = "";
         for let h of ReflectTemplate::<T>::members() {
-            out.push_str(&h.lit());
+            out.push_str(&h.lit(&t));
             out.push_str(&"?");
         }
-        out.push_str(&ReflectTemplate::<T>::tail());
+        out.push_str(&ReflectTemplate::<T>::tail(&t));
         return out;
     }
 

@@ -501,10 +501,10 @@ impl String {
     pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
         let mut out = "";
         for let h of ReflectTemplate::<T>::members() {
-            out.push_str(&h.raw());
+            out.push_str(&h.raw(&t));
             h.fmt(&t, &mut Formatter::new(&mut out));
         }
-        out.push_str(&ReflectTemplate::<T>::raw_tail());
+        out.push_str(&ReflectTemplate::<T>::raw_tail(&t));
         return out;
     }
 

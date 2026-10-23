@@ -9,7 +9,7 @@ test {
     let [rx2, tx2] = Stream::<u8>::new();
     let mut held = rx;
     replace(&mut held, rx2);
-    assert tx.write([1]).result == CopyResult::Dropped;
+    assert tx.write_all([1]) == CopyResult::Dropped;
     held.drop();
-    assert tx2.write([1]).result == CopyResult::Dropped;
+    assert tx2.write_all([1]) == CopyResult::Dropped;
 }

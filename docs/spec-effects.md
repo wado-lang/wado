@@ -665,6 +665,22 @@ A handler answers an effect's operations in place of the host or the operation's
 
 A handler method implements one operation. It takes the operation's parameters and return type, after a receiver the operation does not have: `&self` or `&mut self` to reach the handler's state, or none when the method needs no state. A resource's instance method receives the handle as an explicit parameter after that receiver. A resource's `drop` is one of its operations, so a handler answers each drop, the one scope exit writes included, and the method takes the handle by value.
 
+Every method of a handler `impl` names an operation of its effect, and a method naming none is an error. No dispatch could reach it, so it is far more likely a misspelled operation than a helper, and the operation it meant would fall to the rest clause unnoticed. A helper goes in an inherent `impl` of the handler's type. For a resource, the operations are the methods its `resource` block declares, not those of an `impl` on the resource.
+
+<!-- {"fixture":"effect_handler_method_not_an_operation.wado"} -->
+
+```wado
+impl Counter for C {
+    fn next(&mut self) -> i32 {
+        self.v += 1;
+        resume self.v
+    }
+    fn nxet(&mut self) -> i32 {
+        resume 0
+    }
+}
+```
+
 <!-- {"fixture":"spec_effects_handler_impl.wado"} -->
 
 ```wado

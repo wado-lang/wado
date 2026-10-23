@@ -1,0 +1,25 @@
+// Test: two routes to one specialization, through callees of different
+// arity, do not share a clone.
+//
+// param_spec specializes `encode_impl` on its table, and `dae` drops `pad`
+// from a clone. A later round reaches the same bindings both from
+// `encode_impl` and from that narrower clone, and mints both in one
+// invocation. The second call was retargeted to the first clone though their
+// parameter counts differ: at O1 the module failed validation, and under
+// coverage the next round found one callee called with two arities.
+
+use { println, Stdout } from "core:cli";
+use { encode, encode_url, encode_with, Encoding } from "core:base64";
+
+export fn run() with Stdout {
+    let d: ByteList = b"ab";
+    println(encode(&d));
+    println(encode_url(&d));
+    println(encode_with(&d, Encoding::UrlSafe));
+    println(encode_with(&d, Encoding::NoPadding));
+}
+
+__DATA__
+{
+    "stdout": "YWI=\nYWI\nYWI=\nYWI\n"
+}

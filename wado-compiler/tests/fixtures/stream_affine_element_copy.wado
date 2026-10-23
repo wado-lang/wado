@@ -1,0 +1,30 @@
+// A stream of resources starts and finishes copies as any stream does: the copy
+// types take an affine element. `TcpSocket::listen` hands accepted sockets
+// over one.
+//
+// A stream of resources within one component traps in wasmtime, so the
+// functions are checked and not run.
+
+use { println, Stdout } from "core:cli";
+use { TcpSocket } from "wasi:sockets";
+
+fn accept(sockets: Stream<TcpSocket>) -> List<TcpSocket> {
+    let [sockets, chunk] = sockets.start_read(4).finish();
+    sockets.drop();
+    return chunk.items;
+}
+
+fn hand_over(writer: StreamWritable<TcpSocket>, sockets: List<TcpSocket>) -> List<TcpSocket> {
+    let [writer, written] = writer.start_write(sockets).finish();
+    writer.drop();
+    return written.rest;
+}
+
+export fn run() with Stdout {
+    let _ = accept;
+    let _ = hand_over;
+    println("checked");
+}
+
+__DATA__
+{"stdout": "checked\n"}

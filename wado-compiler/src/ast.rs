@@ -4105,6 +4105,22 @@ impl TemplateStringExpr {
         })
     }
 
+    /// The literal segments as written — one more than the holes.
+    #[must_use]
+    pub fn raw_segments(&self) -> Vec<String> {
+        let mut segments = vec![String::new()];
+        for part in &self.parts {
+            match part {
+                TemplatePart::Interpolation { .. } => segments.push(String::new()),
+                TemplatePart::String(raw) => segments
+                    .last_mut()
+                    .expect("starts with one segment")
+                    .push_str(raw),
+            }
+        }
+        segments
+    }
+
     pub fn interpolations_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
         self.parts.iter_mut().filter_map(|part| match part {
             TemplatePart::Interpolation { expr, .. } => Some(expr.as_mut()),

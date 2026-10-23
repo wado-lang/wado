@@ -770,13 +770,7 @@ impl<'a> Emitter<'a> {
         let cm_name = self
             .cm_interface_registry
             .zip(source.as_deref())
-            .and_then(|(reg, src)| {
-                reg.get_struct_cm_name_by_source(src, &named.name)
-                    .or_else(|| reg.get_variant_cm_name_by_source(src, &named.name))
-                    .or_else(|| reg.get_enum_cm_name_by_source(src, &named.name))
-                    .or_else(|| reg.get_flags_cm_name_by_source(src, &named.name))
-                    .or_else(|| reg.get_resource_cm_name_by_source(src, &named.name))
-            })
+            .and_then(|(reg, src)| reg.cm_type_name(src, &named.name))
             .map(str::to_string)
             .unwrap_or_else(|| to_cm_name(&named.name));
         if let Some(src) = source

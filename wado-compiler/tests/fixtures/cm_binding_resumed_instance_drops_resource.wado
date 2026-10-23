@@ -1,0 +1,22 @@
+// A binding minted after monomorphization calls generics of its own: the lift
+// of a stream of resources builds its list with `List<TcpSocket>::push`, whose
+// body drops a `TcpSocket`. That instance exists only once the binding does,
+// and its drop is a `#[cm]` call bound like any other.
+//
+// A stream of resources within one component traps in wasmtime, so the
+// function is checked and not run.
+
+use { println, Stdout } from "core:cli";
+use { TcpSocket } from "wasi:sockets";
+
+fn abandon(sockets: Stream<TcpSocket>) {
+    builtin::drop(sockets.start_read(4));
+}
+
+export fn run() with Stdout {
+    let _ = abandon;
+    println("checked");
+}
+
+__DATA__
+{"stdout": "checked\n"}

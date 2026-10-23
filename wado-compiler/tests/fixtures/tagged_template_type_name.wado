@@ -1,5 +1,6 @@
-// A template's type is named by its text, each hole spelled as its type and
-// specifier, and cut to 50 characters (WEP 2026-01-10). The name is the one
+// A template's type is named by its holes, each spelled as its type and
+// specifier, and cut to 50 characters (WEP 2026-01-10). The literal text is the
+// value's, not the type's, so it is not in the name. The name is the one
 // `Reflect::type_name()` answers and a diagnostic shows.
 use { println, Stdout } from "core:cli";
 
@@ -12,13 +13,12 @@ export fn run() with Stdout {
     let x = 1;
     println(type_name_of`a ${list}`);
     println(type_name_of`a ${x:04} b`);
-    println(type_name_of`line\n${x}`);
+    println(type_name_of`plain`);
     println(type_name_of`SELECT * FROM users WHERE id = ${x} AND name = ${list} ORDER BY id`);
-    println(type_name_of`01234567890123456789012345678901234567890123456
-${x}`);
+    println(type_name_of`${x}${x}${x}${x}${x}${x}${x}${x}${x}`);
 }
 
 __DATA__
 {
-    "stdout": "`a ${List<i32>}`\n`a ${i32:04} b`\n`line\\n${i32}`\n`SELECT * FROM users WHERE id = ${i32} AND name = $...`\n`01234567890123456789012345678901234567890123456\\n$...`\n"
+    "stdout": "`${List<i32>}`\n`${i32:04}`\n``\n`${i32}${List<i32>}`\n`${i32}${i32}${i32}${i32}${i32}${i32}${i32}${i32}${...`\n"
 }

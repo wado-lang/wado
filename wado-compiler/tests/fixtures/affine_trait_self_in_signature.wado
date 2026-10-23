@@ -1,0 +1,12 @@
+// An `affine trait`'s `Self` may be move-only in its signatures as in its
+// bodies, so it cannot fill a parameter that may copy it.
+use { TreeMap } from "core:collections";
+
+affine trait Keyed {
+    fn index(&self) -> TreeMap<Self, i32>;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:24: analysis error: affine type 'Self' given for 'K', which may be copied; `affine K` would admit it"}

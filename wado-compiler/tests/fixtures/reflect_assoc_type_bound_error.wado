@@ -8,11 +8,11 @@ struct P {
 }
 
 fn no_holes<T: ReflectTemplate<Holes = []>>(t: T) -> String {
-    return ReflectTemplate::<T>::tail();
+    return ReflectTemplate::<T>::tail(&t);
 }
 
 fn unit_holes<T: ReflectTemplate<Holes = ()>>(t: T) -> String {
-    return ReflectTemplate::<T>::tail();
+    return ReflectTemplate::<T>::tail(&t);
 }
 
 fn int_fields<T: ReflectStruct<FieldTypes = [i32]>>(t: T) -> i32 {
@@ -34,5 +34,5 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": ":29:13: analysis error: type '`a ${i32}`' does not satisfy the associated type 'ReflectTemplate::Holes = []': it is '[i32]'; 30:13: type '`plain`' does not satisfy the associated type 'ReflectTemplate::Holes = ()': it is '[]'; 31:13: type 'P' does not satisfy the associated type 'ReflectStruct::FieldTypes = [i32]': it is '[String]'; 32:13: type 'P' does not satisfy the associated type 'Shape::FieldTypes = [i32]': it is '[String]'"
+    "compile_error": ":29:13: analysis error: type '`${i32}`' does not satisfy the associated type 'ReflectTemplate::Holes = []': it is '[i32]'; 30:13: type '``' does not satisfy the associated type 'ReflectTemplate::Holes = ()': it is '[]'; 31:13: type 'P' does not satisfy the associated type 'ReflectStruct::FieldTypes = [i32]': it is '[String]'; 32:13: type 'P' does not satisfy the associated type 'Shape::FieldTypes = [i32]': it is '[String]'"
 }

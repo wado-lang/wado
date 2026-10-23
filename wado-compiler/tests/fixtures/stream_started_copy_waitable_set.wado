@@ -1,0 +1,61 @@
+// Started stream copies wait together in one `WaitableSet` (WEP: Concurrent
+// Stream Copies). Both reads block at the start; the second one's writer moves
+// first, so the set reports them out of order. A copy dropped while it is in
+// flight is cancelled, inside a set or out of one, and its end drops with it,
+// so the writer on the other side sees the reader gone.
+use { println, Stdout } from "core:cli";
+
+affine variant Pipe {
+    Bytes(ReadCopy<u8>),
+    Words(ReadCopy<i32>),
+}
+impl Waitable for Pipe;
+
+fn report(ready: Ready<Pipe>) with Stdout {
+    match ready.member {
+        Bytes(copy) => {
+            let [end, chunk] = copy.finish();
+            println(`bytes ${chunk.items:?} ${ready.event:?}`);
+            end.drop();
+        },
+        Words(copy) => {
+            let [end, chunk] = copy.finish();
+            println(`words ${chunk.items:?} ${ready.event:?}`);
+            end.drop();
+        },
+    }
+}
+
+export fn run() with Stdout {
+    let [bytes_rx, bytes_tx] = Stream::<u8>::new();
+    let [words_rx, words_tx] = Stream::<i32>::new();
+    let mut set = WaitableSet::<Pipe>::new();
+    set.join(Pipe::Bytes(bytes_rx.start_read(16)));
+    set.join(Pipe::Words(words_rx.start_read(16)));
+
+    let words = words_tx.start_write([7, 8]);
+    report(set.wait());
+    let [words_end, written] = words.finish();
+    println(`words written ${written.result:?}`);
+    words_end.drop();
+
+    let bytes = bytes_tx.start_write([1]);
+    report(set.wait());
+    let [bytes_end, _] = bytes.finish();
+    bytes_end.drop();
+
+    let [rx, tx] = Stream::<u8>::new();
+    builtin::drop(rx.start_read(4));
+    println(`after a dropped copy ${tx.write_all([1])}`);
+    tx.drop();
+
+    let [joined_rx, joined_tx] = Stream::<u8>::new();
+    let mut joined = WaitableSet::<ReadCopy<u8>>::new();
+    joined.join(joined_rx.start_read(4));
+    builtin::drop(joined);
+    println(`after a dropped set ${joined_tx.write_all([1])}`);
+    joined_tx.drop();
+}
+
+__DATA__
+{"stdout": "words [7, 8] ReadyEvent::Copied(CopyResult::Completed)\nwords written CopyResult::Completed\nbytes [1] ReadyEvent::Copied(CopyResult::Completed)\nafter a dropped copy Dropped\nafter a dropped set Dropped\n"}

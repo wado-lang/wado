@@ -1,0 +1,56 @@
+// A handler answers the copies a program starts (WEP: Concurrent Stream
+// Copies): `begin_read` / `begin_write` return a copy already settled, so
+// `start_read`, a `WaitableSet`, `finish` and the loops all reach the handler
+// and none waits on the host.
+use { println, Stdout } from "core:cli";
+
+struct Scripted {
+    input: List<u8>,
+    output: List<u8> = [],
+}
+
+impl Stream<u8> for Scripted {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+        let _ = this;
+        let taken = i32::min(max, self.input.len());
+        let items = self.input.slice(0, taken).to_list();
+        self.input = self.input.slice(taken, self.input.len()).to_list();
+        let result = if items.is_empty() { CopyResult::Dropped } else { CopyResult::Completed };
+        resume StartedRead::settled(StreamChunk { items, result });
+    }
+
+    ..forward
+}
+
+impl StreamWritable<u8> for Scripted {
+    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
+        let _ = this;
+        self.output.extend(&data);
+        resume StartedWrite::settled(StreamWrite { rest: [], result: CopyResult::Completed });
+    }
+
+    ..forward
+}
+
+export fn run() with Stdout {
+    let mut scripted = Scripted { input: [1, 2, 3, 4, 5] };
+    with &mut scripted do {
+        let [rx, tx] = Stream::<u8>::new();
+        let mut set = WaitableSet::<ReadCopy<u8>>::new();
+        set.join(rx.start_read(2));
+        let ready = set.wait();
+        let [reader, chunk] = ready.member.finish();
+        println(`first ${chunk.items:?} ${ready.event:?}`);
+        println(`rest ${reader.read_to_end():?}`);
+        reader.drop();
+
+        let [tx, written] = tx.start_write([9]).finish();
+        println(`written ${written.result:?}`);
+        println(`write_all ${tx.write_all([10, 11])}`);
+        tx.drop();
+    }
+    println(`output ${scripted.output:?}`);
+}
+
+__DATA__
+{"stdout": "first [1, 2] ReadyEvent::Copied(CopyResult::Completed)\nrest [3, 4, 5]\nwritten CopyResult::Completed\nwrite_all Completed\noutput [9, 10, 11]\n"}

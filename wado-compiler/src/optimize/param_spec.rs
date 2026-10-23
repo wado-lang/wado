@@ -2,19 +2,26 @@
 //! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
+use std::sync::Arc;
+
 use cranelift_entity::EntityRef;
 
+use crate::const_eval::MAX_SEQ_ELEMENTS;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncCell, FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp,
 };
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind, Tracked};
+use crate::nir_arena::{
+    ArenaStructField, Body, ExprId, ExprKind, NodeRef, Operand, PackedData, PatKind, StmtKind,
+    Tracked,
+};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::TypeTable;
+use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
 use super::body_memo::BodyMemo;
@@ -40,24 +47,85 @@ const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
 /// costs more in duplicated code than its folded branches can return.
 const MAX_CLONE_EXPRS: usize = 2000;
 
-/// A scalar constant known for a parameter or field. Portable across functions,
+/// A constant known for a parameter or field. Portable across functions,
 /// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
-/// `Int` / `Float` carry their `TypeId` so a width mismatch is rejected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// `Int` / `Float` carry their type so a width mismatch is rejected.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FieldConst {
-    Int(u64, TypeId),
-    Float(u64, TypeId),
+    Int(u64, ConstType),
+    Float(u64, ConstType),
     Bool(bool),
     Char(char),
+    /// A literal built of constants alone, such as a `String` literal. The
+    /// clone builds it once and its reads name that one object, as the
+    /// caller's reads named the one it passed.
+    Literal(Arc<ConstLiteral>),
+}
+
+/// The type of a constant: its key says which constants are one, and its id
+/// types a node rebuilt from it.
+#[derive(Debug, Clone, Copy)]
+struct ConstType {
+    key: TypeKey,
+    id: TypeId,
+}
+
+impl ConstType {
+    fn of(types: &TypeTable, id: TypeId) -> Self {
+        ConstType {
+            key: types.type_key(id),
+            id,
+        }
+    }
+
+    fn admits(&self, types: &TypeTable, at: TypeId) -> bool {
+        self.key == types.type_key(at)
+    }
+}
+
+impl PartialEq for ConstType {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for ConstType {}
+
+impl std::hash::Hash for ConstType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+    }
+}
+
+/// A closed literal tree, held outside any body so a clone can rebuild it.
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum ConstLiteral {
+    Packed(PackedData, ConstType),
+    Struct {
+        struct_type: ConstType,
+        struct_name: String,
+        /// Index, name, value and type of each field.
+        fields: Vec<(u32, String, FieldConst, ConstType)>,
+    },
 }
 
 impl FieldConst {
-    /// The scalar constant an operand holds, or `None` otherwise.
-    fn of_operand(body: &Body, op: Operand) -> Option<Self> {
+    /// The constant an operand holds, or `None` otherwise.
+    fn of_operand(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
+        match op {
+            Operand::Value(_) => Self::of_scalar(body, types, op),
+            Operand::Expr(expr) => Self::of_literal(body, types, expr),
+        }
+    }
+
+    /// The scalar constant an operand holds. Only a scalar may stand for a
+    /// whole parameter: a literal there would name a new object, and the
+    /// body's writes to the parameter's fields would reach none of its reads.
+    fn of_scalar(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
-            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, *ty)),
-            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, *ty)),
+            ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, ConstType::of(types, *ty))),
+            ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, ConstType::of(types, *ty))),
             ValueKind::Bool(b) => Some(FieldConst::Bool(*b)),
             ValueKind::Char(c) => Some(FieldConst::Char(*c)),
             ValueKind::Null
@@ -73,27 +141,103 @@ impl FieldConst {
         }
     }
 
-    /// A total order over constants, so a binding list has one canonical form
-    /// and two call sites agreeing on the constants hit the same clone.
-    fn sort_key(self) -> (u8, u64, u32) {
+    fn of_literal(body: &Body, types: &TypeTable, expr: ExprId) -> Option<Self> {
+        let node = &body.exprs[expr];
+        let literal = match &node.kind {
+            ExprKind::PackedArray(data) if data.len() <= MAX_SEQ_ELEMENTS => {
+                ConstLiteral::Packed(data.clone(), ConstType::of(types, node.type_id))
+            }
+            ExprKind::StructLiteral {
+                struct_type,
+                struct_name,
+                fields,
+            } => ConstLiteral::Struct {
+                struct_type: ConstType::of(types, *struct_type),
+                struct_name: struct_name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|f| {
+                        let value = Self::of_operand(body, types, f.value)?;
+                        let ty = ConstType::of(types, body.operand_type(f.value));
+                        Some((f.field_index, f.name.clone(), value, ty))
+                    })
+                    .collect::<Option<_>>()?,
+            },
+            _ => return None,
+        };
+        Some(FieldConst::Literal(Arc::new(literal)))
+    }
+
+    /// The operand to put at a read of type `at`, or `None` when the read's
+    /// type does not match the constant's (a width or representation mismatch
+    /// the substitution must not paper over).
+    fn operand_at(
+        &self,
+        engine: &mut Engine,
+        types: &TypeTable,
+        at: TypeId,
+        span: Span,
+    ) -> Option<Operand> {
+        let kind = match self {
+            FieldConst::Int(n, ty) => ty.admits(types, at).then_some(ValueKind::Int(*n, at))?,
+            FieldConst::Float(bits, ty) => ty
+                .admits(types, at)
+                .then_some(ValueKind::Float(*bits, at))?,
+            FieldConst::Bool(b) => ValueKind::Bool(*b),
+            FieldConst::Char(c) => ValueKind::Char(*c),
+            FieldConst::Literal(literal) => {
+                return literal.build(engine, types, at, span).map(Operand::Expr);
+            }
+        };
+        Some(Operand::Value(engine.body.values.alloc_unshared(kind, at)))
+    }
+}
+
+impl ConstLiteral {
+    fn ty(&self) -> ConstType {
         match self {
-            FieldConst::Int(n, ty) => (0, n, ty.0),
-            FieldConst::Float(bits, ty) => (1, bits, ty.0),
-            FieldConst::Bool(b) => (2, u64::from(b), 0),
-            FieldConst::Char(c) => (3, u64::from(c), 0),
+            ConstLiteral::Packed(_, ty)
+            | ConstLiteral::Struct {
+                struct_type: ty, ..
+            } => *ty,
         }
     }
 
-    /// The pool kind to intern at a read of type `at`, or `None` when the read's
-    /// type does not match the constant's (a width or representation mismatch
-    /// the substitution must not paper over).
-    fn value_kind_at(self, at: TypeId) -> Option<ValueKind> {
-        match self {
-            FieldConst::Int(n, ty) => (ty == at).then_some(ValueKind::Int(n, at)),
-            FieldConst::Float(bits, ty) => (ty == at).then_some(ValueKind::Float(bits, at)),
-            FieldConst::Bool(b) => Some(ValueKind::Bool(b)),
-            FieldConst::Char(c) => Some(ValueKind::Char(c)),
+    fn build(
+        &self,
+        engine: &mut Engine,
+        types: &TypeTable,
+        at: TypeId,
+        span: Span,
+    ) -> Option<ExprId> {
+        if !self.ty().admits(types, at) {
+            return None;
         }
+        let kind = match self {
+            ConstLiteral::Packed(data, _) => ExprKind::PackedArray(data.clone()),
+            ConstLiteral::Struct {
+                struct_type,
+                struct_name,
+                fields,
+            } => {
+                let fields = fields
+                    .iter()
+                    .map(|(field_index, name, value, ty)| {
+                        Some(ArenaStructField {
+                            name: name.clone(),
+                            value: value.operand_at(engine, types, ty.id, span)?,
+                            field_index: *field_index,
+                        })
+                    })
+                    .collect::<Option<_>>()?;
+                ExprKind::StructLiteral {
+                    struct_type: struct_type.id,
+                    struct_name: struct_name.clone(),
+                    fields,
+                }
+            }
+        };
+        Some(engine.alloc_expr(kind, at, span))
     }
 }
 
@@ -112,13 +256,17 @@ enum Slot {
 /// slot it replaces, and the constant.
 type Binding = (u32, Slot, FieldConst);
 
-/// Identity of a clone: the original callee plus the bindings substituted into
-/// it, sorted for a stable key. Two call sites agreeing on the bindings share
-/// one clone.
+/// One substitution by the parameter's name, which `dae` leaves alone while it
+/// renumbers locals.
+type NamedBinding = (String, Slot, FieldConst);
+
+/// Identity of a clone: the function no clone came from, and every binding
+/// substituted on the way down, sorted for a stable key. Two call sites
+/// agreeing on them share one clone, by however many steps each got there.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SpecKey {
-    callee: FuncId,
-    bindings: Vec<Binding>,
+    root: FuncId,
+    bindings: Vec<NamedBinding>,
 }
 
 /// Cross-iteration state, so a clone minted in one iteration is reused by the
@@ -128,11 +276,13 @@ struct SpecKey {
 pub(super) struct ParamSpecState {
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
+    /// Each clone's identity, which a clone of it extends.
+    specs: IndexMap<FuncId, SpecKey>,
     /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
-    /// set of clones, which are never specialized again.
+    /// set of clones.
     param_consts: IndexMap<FuncId, IndexMap<String, ParamSeed>>,
     /// The call graph whose cycles a clone must not split.
     callees: BodyMemo<Vec<usize>>,
@@ -144,7 +294,7 @@ struct ParamSeed {
     /// The struct the parameter referenced when the clone was minted,
     /// re-checked before the constants are believed — `sroa_param` reshapes
     /// parameters.
-    pointee: TypeId,
+    pointee: TypeKey,
     consts: FieldConsts,
 }
 
@@ -153,9 +303,7 @@ impl ParamSpecState {
         self.clones.len() >= MAX_TOTAL_SPECIALIZATIONS
     }
 
-    /// Whether `func` is itself a clone this pass minted. Such a function has
-    /// its constants already substituted, and specializing it again would key
-    /// the cache on an identity that keeps moving.
+    /// Whether `func` is itself a clone this pass minted.
     fn is_clone(&self, func: FuncId) -> bool {
         self.param_consts.contains_key(&func)
     }
@@ -196,10 +344,12 @@ impl LocalUses {
 struct Signatures {
     /// Parameter local indices per function index; empty for a bodyless record.
     param_locals: Vec<Vec<u32>>,
+    /// Parameter names per function index, beside `param_locals`.
+    param_names: Vec<Vec<String>>,
     /// The struct type each parameter's reference points at, when it is one.
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
-    param_struct: Vec<Vec<Option<TypeId>>>,
+    param_struct: Vec<Vec<Option<TypeKey>>>,
     /// Whether the function has a body the summary can walk.
     has_body: Vec<bool>,
     /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
@@ -221,6 +371,7 @@ struct Signatures {
 impl Signatures {
     fn build(project: &NirPackage, types: &TypeTable, recursive: &IndexSet<FuncId>) -> Self {
         let mut param_locals = Vec::with_capacity(project.functions.len());
+        let mut param_names = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
         let mut specializable = Vec::with_capacity(project.functions.len());
@@ -229,6 +380,7 @@ impl Signatures {
         for (index, func) in project.functions.iter().enumerate() {
             let func = func.borrow();
             param_locals.push(func.params.iter().map(|p| p.local_index).collect());
+            param_names.push(func.params.iter().map(|p| p.name.clone()).collect());
             scalar_specializable.push(
                 !func.params.iter().any(|p| p.is_mut_ref)
                     && !recursive.contains(&FuncId::new(index)),
@@ -246,7 +398,10 @@ impl Signatures {
                         if func.retains.contains(&p.name) {
                             None
                         } else {
-                            reference_struct(p.type_id, types)
+                            is_param_fixed(&func, p)
+                                .then(|| held_struct(p.type_id, types))
+                                .flatten()
+                                .or_else(|| reference_struct(p.type_id, types))
                         }
                     })
                     .collect(),
@@ -257,6 +412,7 @@ impl Signatures {
         }
         Signatures {
             param_locals,
+            param_names,
             param_struct,
             has_body,
             specializable,
@@ -285,7 +441,7 @@ fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.
 /// `None` for a non-reference type or a reference to a non-struct.
-fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
+fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let inner = *inner;
@@ -295,12 +451,22 @@ fn reference_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
     }
 }
 
+/// The struct a parameter holds, by value or through one reference, looking
+/// through newtypes. A by-value one is the callee's own copy, so only a slot
+/// the body never rebinds holds the caller's fields throughout.
+fn held_struct(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
+    match types.get_pruned(type_id)? {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => reference_struct(type_id, types),
+        _ => struct_base(type_id, types),
+    }
+}
+
 /// The struct type behind a type, looking through references and newtypes.
-fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
+fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeKey> {
     match types.get_pruned(type_id)? {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_base(*inner, types),
         ResolvedType::Newtype { base_type, .. } => struct_base(*base_type, types),
-        ResolvedType::Struct { .. } => Some(type_id),
+        ResolvedType::Struct { .. } => Some(types.type_key(type_id)),
         _ => None,
     }
 }
@@ -310,6 +476,7 @@ fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
 /// accounted by that pairing rather than by this walk.
 fn collect_local_uses(
     body: &Body,
+    types: &TypeTable,
     tracked: &IndexSet<u32>,
     alias_reads: &IndexSet<ExprId>,
     signatures: &Signatures,
@@ -337,7 +504,7 @@ fn collect_local_uses(
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
                     uses.writes
-                        .push((*field_index, FieldConst::of_operand(body, *value)));
+                        .push((*field_index, FieldConst::of_operand(body, types, *value)));
                 } else {
                     uses.reads.insert(*field_index);
                 }
@@ -377,6 +544,7 @@ fn collect_local_uses(
 fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
     let mut referenced: IndexSet<ExprId> = IndexSet::default();
+    let mut mut_referenced: Vec<ExprId> = Vec::new();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
@@ -386,16 +554,39 @@ fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<E
                 assigned.insert(*target, *value);
             }
             ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                op: op @ (NirUnaryOp::Ref | NirUnaryOp::MutRef),
                 expr,
             } => {
                 if let Some(referent) = expr.as_expr() {
                     referenced.insert(referent);
+                    if *op == NirUnaryOp::MutRef {
+                        mut_referenced.push(referent);
+                    }
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    if let Some(place) = arg.expr.as_expr() {
+                        referenced.insert(place);
+                        mut_referenced.push(place);
+                    }
                 }
             }
             _ => {}
         }
     });
+    // A write through `p.s.used`, or a `&mut` to it, writes the field `s` too,
+    // which matters once a field's constant is an aggregate.
+    for place in assigned.keys().copied().chain(mut_referenced) {
+        let mut place = place;
+        while let ExprKind::FieldAccess { expr, .. } | ExprKind::Index { expr, .. } =
+            &body.exprs[place].kind
+            && let Some(receiver) = expr.as_expr()
+        {
+            referenced.insert(receiver);
+            place = receiver;
+        }
+    }
     (assigned, referenced)
 }
 
@@ -489,6 +680,8 @@ fn summarize_params(
     exec: &Executor,
 ) -> IndexMap<(FuncId, u32), ParamFacts> {
     let functions = &project.functions;
+    let types = project.type_table.borrow();
+    let types: &TypeTable = &types;
     let per_function = exec.map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
@@ -502,20 +695,35 @@ fn summarize_params(
                 pointee.map(|_| signatures.param_locals[index][position])
             })
             .collect();
-        let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-        if !tracked.is_empty() {
-            collect_local_uses(body, &tracked, &IndexSet::default(), signatures, &mut uses);
+        if tracked.is_empty() {
+            return Vec::new();
         }
+        let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
+        let (alias_of, alias_reads) = param_aliases(body, &tracked);
+        let with_aliases = tracked.iter().chain(alias_of.keys()).copied().collect();
+        collect_local_uses(
+            body,
+            types,
+            &with_aliases,
+            &alias_reads,
+            signatures,
+            &mut uses,
+        );
         tracked
             .into_iter()
             .map(|local| {
-                let use_facts = uses.swap_remove(&local).unwrap_or_default();
-                let facts = ParamFacts {
-                    writes: use_facts.written_fields(),
-                    reads: use_facts.reads,
-                    opaque: use_facts.opaque || !use_facts.rebinds.is_empty(),
-                    forwards: use_facts.forwards,
-                };
+                let mut facts = ParamFacts::default();
+                let names = alias_of
+                    .iter()
+                    .filter(|(_, base)| **base == local)
+                    .map(|(alias, _)| *alias);
+                for name in std::iter::once(local).chain(names) {
+                    let use_facts = uses.swap_remove(&name).unwrap_or_default();
+                    facts.writes.extend(use_facts.written_fields());
+                    facts.reads.extend(use_facts.reads);
+                    facts.opaque |= use_facts.opaque || !use_facts.rebinds.is_empty();
+                    facts.forwards.extend(use_facts.forwards);
+                }
                 ((id, local), facts)
             })
             .collect()
@@ -566,7 +774,7 @@ fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
     value: Operand,
-    expected: Option<TypeId>,
+    expected: Option<TypeKey>,
 ) -> Option<FieldConsts> {
     let mut expr = body.strip_casts(value.as_expr()?);
     if let ExprKind::Unary {
@@ -584,14 +792,14 @@ fn struct_literal_consts(
     else {
         return None;
     };
-    if struct_base(*struct_type, types) != expected.and_then(|ty| struct_base(ty, types)) {
+    if struct_base(*struct_type, types) != expected {
         return None;
     }
     Some(
         fields
             .iter()
             .filter_map(|field| {
-                FieldConst::of_operand(body, field.value).map(|c| (field.field_index, c))
+                FieldConst::of_operand(body, types, field.value).map(|c| (field.field_index, c))
             })
             .collect(),
     )
@@ -615,7 +823,7 @@ fn collect_roots(
         let Some(entry) = seed.and_then(|seed| seed.get(&param.name)) else {
             continue;
         };
-        if reference_struct(param.type_id, types) == Some(entry.pointee) {
+        if held_struct(param.type_id, types) == Some(entry.pointee) {
             roots.insert(param.local_index, entry.consts.clone());
         }
     }
@@ -626,7 +834,9 @@ fn collect_roots(
     let mut defined: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut invalid: IndexSet<u32> = IndexSet::default();
     let mut note_def = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
-        let expected = locals.get(local as usize).map(|l| l.type_id);
+        let expected = locals
+            .get(local as usize)
+            .and_then(|l| struct_base(l.type_id, types));
         let Some(consts) = struct_literal_consts(body, types, value, expected) else {
             invalid.insert(local);
             return;
@@ -699,7 +909,7 @@ fn collect_roots(
 
     let tracked: IndexSet<u32> = roots.keys().copied().collect();
     let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-    collect_local_uses(body, &tracked, &alias_reads, signatures, &mut uses);
+    collect_local_uses(body, types, &tracked, &alias_reads, signatures, &mut uses);
 
     for (local, use_facts) in &uses {
         let Some(consts) = roots.get_mut(local) else {
@@ -721,7 +931,9 @@ fn collect_roots(
             {
                 continue;
             }
-            let expected = locals.get(*local as usize).map(|l| l.type_id);
+            let expected = locals
+                .get(*local as usize)
+                .and_then(|l| struct_base(l.type_id, types));
             let Some(assigned) = struct_literal_consts(body, types, *rebind, expected) else {
                 consts.clear();
                 break;
@@ -740,6 +952,44 @@ fn collect_roots(
     merge_aliases(&mut roots, &alias_of);
     roots.retain(|_, consts| !consts.is_empty());
     roots
+}
+
+/// The locals bound once as `let r = &p;` to one of `params`, which inlining a
+/// callee taking `&self` mints, mapped to the parameter, and the reads of `p`
+/// those bindings make. A use of `r` is a use of `p`.
+fn param_aliases(body: &Body, params: &IndexSet<u32>) -> (IndexMap<u32, u32>, IndexSet<ExprId>) {
+    let mut defs: Vec<AliasDef> = Vec::new();
+    let mut defined: IndexSet<u32> = params.clone();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(id) => {
+            if let StmtKind::Let {
+                local_index, value, ..
+            } = &body.stmts[id].kind
+            {
+                match body.referenced_local(*value) {
+                    Some((base, read)) if params.contains(&base) && base != *local_index => {
+                        defs.push(AliasDef {
+                            local: *local_index,
+                            base,
+                            read,
+                        });
+                    }
+                    _ => {
+                        defined.insert(*local_index);
+                    }
+                }
+            }
+        }
+        NodeRef::Expr(id) => {
+            if let ExprKind::Assign { target, .. } = &body.exprs[id].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+            {
+                defined.insert(*index);
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    });
+    settle_aliases(&defs, &defined, &IndexSet::default())
 }
 
 /// One `let r = &base;` or `r = &base;`: the referencing local, the local it
@@ -865,9 +1115,6 @@ fn select_sites(
             ),
             _ => return,
         };
-        if state.is_clone(callee) {
-            return;
-        }
         let index = callee.index();
         if !signatures.specializable[index] {
             return;
@@ -902,18 +1149,35 @@ fn select_sites(
                         && signatures.scalar_specializable[index]
                         && signatures.param_fixed[index][position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = FieldConst::of_operand(body, arg)
+                        && let Some(value) = FieldConst::of_scalar(body, types, arg)
                     {
                         bindings.push((param_local, Slot::Whole, value));
                     }
                 }
             }
         }
+        // A clone is specialized further on the slots it left open, so a
+        // constant that settles a round after another still reaches it. A
+        // bound slot stays bound: its parameter is still passed the constant.
+        if let Some(spec) = state.specs.get(&callee) {
+            let locals = &signatures.param_locals[index];
+            let names = &signatures.param_names[index];
+            bindings.retain(|(param, slot, _)| {
+                let position = locals.iter().position(|p| p == param);
+                let name = &names[position.expect("a binding names a parameter")];
+                !spec.bindings.iter().any(|(n, s, _)| n == name && s == slot)
+            });
+        }
         if bindings.is_empty() {
             return;
         }
-        bindings.sort_unstable_by_key(|(param, slot, value)| (*param, *slot, value.sort_key()));
-        bindings.dedup();
+        bindings.sort_unstable_by_key(|(param, slot, _)| (*param, *slot));
+        assert!(
+            bindings
+                .windows(2)
+                .all(|w| (w[0].0, w[0].1) != (w[1].0, w[1].1)),
+            "a call binds each slot once"
+        );
         sites.push(Site {
             call: id,
             callee,
@@ -938,23 +1202,31 @@ struct SelectField<'a> {
 /// each field the callee reads and never writes.
 fn select_field_bindings(
     caller: SelectField,
-    (callee, param_local, pointee): (FuncId, u32, TypeId),
+    (callee, param_local, pointee): (FuncId, u32, TypeKey),
     arg: Operand,
     bindings: &mut Vec<Binding>,
 ) {
-    let Some((local, _)) = argument_local(caller.body, arg) else {
-        return;
+    let literal;
+    let consts = match argument_local(caller.body, arg) {
+        Some((local, _)) => {
+            let local_struct = caller
+                .locals
+                .get(local as usize)
+                .and_then(|l| struct_base(l.type_id, caller.types));
+            match caller.roots.get(&local) {
+                Some(consts) if local_struct == Some(pointee) => consts,
+                Some(_) | None => return,
+            }
+        }
+        // A literal written at the call is the only name its object has.
+        None => match struct_literal_consts(caller.body, caller.types, arg, Some(pointee)) {
+            Some(consts) => {
+                literal = consts;
+                &literal
+            }
+            None => return,
+        },
     };
-    let Some(consts) = caller.roots.get(&local) else {
-        return;
-    };
-    let local_struct = caller
-        .locals
-        .get(local as usize)
-        .and_then(|l| struct_base(l.type_id, caller.types));
-    if local_struct != Some(pointee) {
-        return;
-    }
     let Some(param) = caller.facts.get(&(callee, param_local)) else {
         return;
     };
@@ -965,7 +1237,7 @@ fn select_field_bindings(
         if param.writes.contains(field) || !param.reads.contains(field) {
             continue;
         }
-        bindings.push((param_local, Slot::Field(*field), *value));
+        bindings.push((param_local, Slot::Field(*field), value.clone()));
     }
 }
 
@@ -1066,6 +1338,8 @@ fn collect_call_constants(
     exec: &Executor,
 ) -> CallConsts {
     let functions = &project.functions;
+    let types = project.type_table.borrow();
+    let types: &TypeTable = &types;
     let positions: Vec<usize> = reachable.iter().copied().collect();
     let per_function = exec.map(&positions, |&pos| {
         let func = functions[pos].borrow();
@@ -1073,7 +1347,7 @@ fn collect_call_constants(
         if !func.is_dead
             && let Some(body) = &func.body
         {
-            collect_body_call_constants(body, &mut constants);
+            collect_body_call_constants(body, types, &mut constants);
         }
         constants
     });
@@ -1082,7 +1356,7 @@ fn collect_call_constants(
         join_call(&mut constants, callee, here);
     }
     for global in &project.globals {
-        collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
+        collect_body_call_constants(global.init.slot_expr().body(), types, &mut constants);
     }
     constants
 }
@@ -1101,7 +1375,7 @@ fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>
     }
 }
 
-fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
+fn collect_body_call_constants(body: &Body, types: &TypeTable, constants: &mut CallConsts) {
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(e) = node else { return };
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
@@ -1111,7 +1385,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
             .iter()
             .map(|arg| {
                 (!arg.is_mut)
-                    .then(|| FieldConst::of_operand(body, arg.expr))
+                    .then(|| FieldConst::of_scalar(body, types, arg.expr))
                     .flatten()
             })
             .collect();
@@ -1129,6 +1403,7 @@ fn propagate_scalar_constants(
 ) -> bool {
     let mut changed = false;
     let mut buffers = EngineBuffers::default();
+    let types = project.type_table.borrow();
     for (id, values) in constants {
         let (id, mut func) = (*id, project.functions[id.index()].borrow_mut());
         // Cached clones and compiler items can gain callers in a later round;
@@ -1146,7 +1421,7 @@ fn propagate_scalar_constants(
             .zip(values)
             .filter_map(|(p, value)| {
                 is_param_fixed(&func, p)
-                    .then_some(*value)
+                    .then(|| value.clone())
                     .flatten()
                     .map(|v| (p.local_index, v))
             })
@@ -1156,7 +1431,7 @@ fn propagate_scalar_constants(
         }
         let FuncParts { body, locals, .. } = func.parts();
         let body = body.expect("eligible function has a body");
-        if substitute_locals(body, locals, &mut buffers, &bindings) {
+        if substitute_locals(body, locals, &mut buffers, &types, &bindings) {
             gate.mark_changed(id);
             changed = true;
         }
@@ -1222,6 +1497,9 @@ fn plan_clones<'s>(
     let mut retarget: Vec<Retarget> = Vec::new();
     let mut planned: Vec<Planned<'s>> = Vec::new();
     let mut next_id = project.next_func_id().index();
+    // A clone minted here is not in the store yet; it presents its source's
+    // signature, which a key reached through a callee of another arity lacks.
+    let mut minted_from: IndexMap<FuncId, FuncId> = IndexMap::default();
     let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
         per_caller.iter().flat_map(move |(caller, sites)| {
             sites
@@ -1231,14 +1509,16 @@ fn plan_clones<'s>(
         })
     });
     for (caller, site) in hot_then_cold {
-        let key = SpecKey {
-            callee: site.callee,
-            bindings: site.bindings.clone(),
-        };
-        if let Some(&existing) = state.clones.get(&key) {
-            if signatures_match(project, site.callee, existing) {
-                retarget.push((*caller, site.call, existing));
-            }
+        let key = spec_key(project, state, site);
+        let cached = state.clones.get(&key).copied();
+        if let Some(existing) = cached
+            && signatures_match(
+                project,
+                site.callee,
+                minted_from.get(&existing).copied().unwrap_or(existing),
+            )
+        {
+            retarget.push((*caller, site.call, existing));
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
@@ -1256,12 +1536,37 @@ fn plan_clones<'s>(
         );
         let id = FuncId::new(next_id);
         next_id += 1;
-        state.clones.insert(key, id);
+        // A clone reached by another path whose signature has since moved
+        // keeps the key; this one is minted beside it.
+        if cached.is_none() {
+            state.clones.insert(key.clone(), id);
+        }
+        state.specs.insert(id, key);
+        minted_from.insert(id, site.callee);
         state.per_callee.insert(site.callee, ordinal + 1);
         retarget.push((*caller, site.call, id));
         planned.push((site, id, ordinal));
     }
     (retarget, planned)
+}
+
+/// The identity of the clone `site` asks for: its callee's own, extended by
+/// the site's bindings.
+fn spec_key(project: &NirPackage, state: &ParamSpecState, site: &Site) -> SpecKey {
+    let mut key = state.specs.get(&site.callee).cloned().unwrap_or(SpecKey {
+        root: site.callee,
+        bindings: Vec::new(),
+    });
+    let callee = project.functions[site.callee.index()].borrow();
+    for (param_local, slot, value) in &site.bindings {
+        let param = callee.params.iter().find(|p| p.local_index == *param_local);
+        let param = param.expect("a binding names a parameter");
+        key.bindings
+            .push((param.name.clone(), *slot, value.clone()));
+    }
+    key.bindings
+        .sort_unstable_by(|(a, x, _), (b, y, _)| (a, x).cmp(&(b, y)));
+    key
 }
 
 /// Build the planned clones, in id order, to append to the store.
@@ -1279,7 +1584,23 @@ fn build_clones(
         .iter()
         .map(|&(site, id, ordinal)| {
             let clone = build_clone(project, site, id, ordinal, &settler);
-            state.param_consts.insert(id, clone.param_consts);
+            // A clone of a clone knows what its source did, and what it adds.
+            let mut seeds = state
+                .param_consts
+                .get(&site.callee)
+                .cloned()
+                .unwrap_or_default();
+            for (name, seed) in clone.param_consts {
+                match seeds.get_mut(&name) {
+                    Some(known) if known.pointee == seed.pointee => {
+                        known.consts.extend(seed.consts);
+                    }
+                    Some(_) | None => {
+                        seeds.insert(name, seed);
+                    }
+                }
+            }
+            state.param_consts.insert(id, seeds);
             clone.function
         })
         .collect()
@@ -1384,13 +1705,13 @@ fn build_clone(
     for (param_local, slot, value) in &site.bindings {
         match slot {
             Slot::Whole => {
-                whole.insert(*param_local, *value);
+                whole.insert(*param_local, value.clone());
             }
             Slot::Field(field) => {
                 bound
                     .entry(*param_local)
                     .or_default()
-                    .insert(*field, *value);
+                    .insert(*field, value.clone());
             }
         }
     }
@@ -1398,8 +1719,13 @@ fn build_clone(
     let types = project.type_table.borrow();
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
-    substitute_fields(body, &mut clone.locals, &mut buffers, &bound);
-    substitute_locals(body, &mut clone.locals, &mut buffers, &whole);
+    let params = bound.keys().copied().collect();
+    let mut read_through = bound.clone();
+    for (alias, base) in param_aliases(body, &params).0 {
+        read_through.insert(alias, bound[&base].clone());
+    }
+    substitute_fields(body, &mut clone.locals, &mut buffers, &types, &read_through);
+    substitute_locals(body, &mut clone.locals, &mut buffers, &types, &whole);
     settler.settle(body, &mut clone.locals, &mut buffers, &types);
 
     let param_consts: IndexMap<String, ParamSeed> = clone
@@ -1407,7 +1733,7 @@ fn build_clone(
         .iter()
         .filter_map(|param| {
             let consts = bound.get(&param.local_index)?.clone();
-            let pointee = reference_struct(param.type_id, &types)?;
+            let pointee = held_struct(param.type_id, &types)?;
             Some((param.name.clone(), ParamSeed { pointee, consts }))
         })
         .collect();
@@ -1453,11 +1779,6 @@ fn body_exprs(project: &NirPackage, func: FuncId) -> usize {
 /// Whether `clone` still presents the same signature as `original`, so a call
 /// written against the original can be retargeted to it unchanged.
 fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bool {
-    // A clone minted earlier in this same invocation is not in the store yet;
-    // nothing has had a chance to reshape it, so it matches by construction.
-    if clone.index() >= project.functions.len() {
-        return true;
-    }
     let original = project.functions[original.index()].borrow();
     let clone = project.functions[clone.index()].borrow();
     !clone.is_dead
@@ -1477,6 +1798,7 @@ fn substitute_fields(
     body: &mut Body,
     locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
+    types: &TypeTable,
     bindings: &IndexMap<u32, FieldConsts>,
 ) -> bool {
     let mut engine = Engine::new(body, buffers, locals);
@@ -1498,10 +1820,10 @@ fn substitute_fields(
             return;
         };
         if let Some(value) = bindings.get(index).and_then(|f| f.get(field_index)) {
-            reads.push((id, *value));
+            reads.push((id, value.clone()));
         }
     });
-    redirect_const_reads(&mut engine, reads)
+    redirect_const_reads(&mut engine, types, reads)
 }
 
 /// Replace every read of a bound local with its constant.
@@ -1509,6 +1831,7 @@ fn substitute_locals(
     body: &mut Body,
     locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
+    types: &TypeTable,
     bindings: &IndexMap<u32, FieldConst>,
 ) -> bool {
     let mut engine = Engine::new(body, buffers, locals);
@@ -1518,27 +1841,100 @@ fn substitute_locals(
             && let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind
             && let Some(value) = bindings.get(index)
         {
-            reads.push((id, *value));
+            reads.push((id, value.clone()));
         }
     });
-    redirect_const_reads(&mut engine, reads)
+    redirect_const_reads(&mut engine, types, reads)
 }
 
 /// Point each read at its constant, leaving a place read — a read that names
 /// storage rather than a value — alone. Returns whether anything moved.
-fn redirect_const_reads(engine: &mut Engine, reads: Vec<(ExprId, FieldConst)>) -> bool {
+///
+/// A literal is built once, by a `let` opening the body, and its reads name
+/// that local: the caller handed over one object, and a copy per read would
+/// allocate where the original only loaded, a loop's every iteration included.
+fn redirect_const_reads(
+    engine: &mut Engine,
+    types: &TypeTable,
+    reads: Vec<(ExprId, FieldConst)>,
+) -> bool {
+    let mut built: IndexMap<*const ConstLiteral, u32> = IndexMap::default();
+    let mut lets = Vec::new();
     let mut rewritten = false;
     for (read, value) in reads {
-        if is_place_read(engine, read) {
+        if is_place_read(engine, read) && !reads_fresh_literal(engine, read, &value) {
             continue;
         }
-        let type_id = engine.body.exprs[read].type_id;
-        let Some(kind) = value.value_kind_at(type_id) else {
-            continue;
+        let node = &engine.body.exprs[read];
+        let (type_id, span) = (node.type_id, node.span);
+        let operand = match &value {
+            FieldConst::Literal(literal) => {
+                if !literal.ty().admits(types, type_id) {
+                    continue;
+                }
+                let key = Arc::as_ptr(literal);
+                let local = if let Some(&local) = built.get(&key) {
+                    local
+                } else {
+                    let Some(init) = literal.build(engine, types, type_id, span) else {
+                        continue;
+                    };
+                    let local = engine.alloc_minted_local("bound", type_id, false);
+                    lets.push(engine.alloc_stmt(
+                        StmtKind::Let {
+                            name: engine.local_name(local),
+                            local_index: local,
+                            is_mut: false,
+                            type_id,
+                            value: Operand::Expr(init),
+                            skip_value_copy: true,
+                        },
+                        span,
+                    ));
+                    built.insert(key, local);
+                    local
+                };
+                let name = engine.local_name(local);
+                Operand::Expr(engine.alloc_expr(
+                    ExprKind::Local { index: local, name },
+                    type_id,
+                    span,
+                ))
+            }
+            FieldConst::Int(..)
+            | FieldConst::Float(..)
+            | FieldConst::Bool(_)
+            | FieldConst::Char(_) => match value.operand_at(engine, types, type_id, span) {
+                Some(operand) => operand,
+                None => continue,
+            },
         };
-        let interned = engine.body.values.alloc_unshared(kind, type_id);
-        engine.redirect_expr(read, Operand::Value(interned));
+        engine.redirect_expr(read, operand);
         rewritten = true;
     }
+    if !lets.is_empty() {
+        let root = engine.body.root();
+        lets.extend(engine.body.blocks[root].stmts.iter().copied());
+        engine.set_block_stmts(root, lets);
+    }
     rewritten
+}
+
+/// Whether a place read may name a fresh copy of the literal instead: one that
+/// only reads through it, `&s` or `s.used`, sees what the copy holds.
+fn reads_fresh_literal(engine: &Engine, read: ExprId, value: &FieldConst) -> bool {
+    if !matches!(value, FieldConst::Literal(_)) {
+        return false;
+    }
+    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(read)) else {
+        return false;
+    };
+    match engine.body.exprs[parent].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            ..
+        } => true,
+        ExprKind::FieldAccess { .. } => !is_place_read(engine, parent),
+        _ => false,
+    }
 }

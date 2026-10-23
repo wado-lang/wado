@@ -1,0 +1,30 @@
+// A closure drops what it owns even where the body around it owns nothing
+// affine: the closure's body is elaborated on its own, not skipped with the
+// enclosing function's.
+
+use { log_stdout } from "core:rt";
+
+affine struct Part {
+    weight: i32,
+}
+
+impl Drop for Part {
+    fn drop(self) {
+        log_stdout(`drop ${self.weight}`);
+    }
+}
+
+export fn run() {
+    let dropping = || {
+        builtin::drop(Part { weight: 7 });
+    };
+    dropping();
+    let scoped = || {
+        let held = Part { weight: 8 };
+    };
+    scoped();
+    log_stdout("end");
+}
+
+__DATA__
+{"stdout": "drop 7\ndrop 8\nend\n"}

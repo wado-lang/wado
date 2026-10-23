@@ -10,7 +10,7 @@ type "functype//wasi/wasi:demo/Device::id" = fn(i32) -> i32;  // TypeId(2)
 
 type "functype//cm_interface_plain_func.wado/$cm_export__run" = fn();  // TypeId(3)
 
-type "functype//wasi/resource-drop:cm_interface_plain_func.wado#device" = fn(i32);  // TypeId(4)
+type "functype//wasi/resource-drop:cm_interface_plain_func.wado#Device" = fn(i32);  // TypeId(4)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
@@ -22,7 +22,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
 import fn wasi/wasi:demo/Device::id from "wasi/wasi:demo/Device::id";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:cm_interface_plain_func.wado#device from "wasi/resource-drop:cm_interface_plain_func.wado#device";
+import fn wasi/resource-drop:cm_interface_plain_func.wado#Device from "wasi/resource-drop:cm_interface_plain_func.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_interface_plain_func.wado/$cm_binding__Gfx_get_device"() with Gfx {
@@ -40,7 +40,7 @@ fn "cm_interface_plain_func.wado/$cm_export__run"() {
         let $cm_handle_2: i32;
         $cm_handle_2 = device;
         device = 0;
-        "wasi/resource-drop:cm_interface_plain_func.wado#device"($cm_handle_2);
+        "wasi/resource-drop:cm_interface_plain_func.wado#Device"($cm_handle_2);
     }
     "wasi/task-return"(0);
 }

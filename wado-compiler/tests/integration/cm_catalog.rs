@@ -1308,11 +1308,12 @@ export struct Point {
     pub x: f64,
     pub y: f64,
 }
-export async fn id_stream_point(v: Stream<Point>) -> Stream<Point> {
+export async fn id_stream_point(mut v: Stream<Point>) -> Stream<Point> {
     let [rx, tx] = Stream::<Point>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         tx.write_all(chunk.items);
         if chunk.result != CopyResult::Completed {
             break;
@@ -1460,11 +1461,12 @@ export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> {
         tx.write(x);
     }
 }
-export async fn id_stream_color(v: Stream<Color>) -> Stream<Color> {
+export async fn id_stream_color(mut v: Stream<Color>) -> Stream<Color> {
     let [rx, tx] = Stream::<Color>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         tx.write_all(chunk.items);
         if chunk.result != CopyResult::Completed {
             break;
@@ -1473,11 +1475,12 @@ export async fn id_stream_color(v: Stream<Color>) -> Stream<Color> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_shape(v: Stream<Shape>) -> Stream<Shape> {
+export async fn id_stream_shape(mut v: Stream<Shape>) -> Stream<Shape> {
     let [rx, tx] = Stream::<Shape>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         tx.write_all(chunk.items);
         if chunk.result != CopyResult::Completed {
             break;
@@ -1486,11 +1489,12 @@ export async fn id_stream_shape(v: Stream<Shape>) -> Stream<Shape> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_perms(v: Stream<Perms>) -> Stream<Perms> {
+export async fn id_stream_perms(mut v: Stream<Perms>) -> Stream<Perms> {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;
     loop {
-        let chunk = v.read(16);
+        let [end, chunk] = v.start_read(16).finish();
+        v = end;
         tx.write_all(chunk.items);
         if chunk.result != CopyResult::Completed {
             break;
@@ -1663,11 +1667,12 @@ fn cm_stream_named_identity_o2() {
 /// payloads. `async` because both halves block until the peer makes progress.
 fn stream_identity_source(ty: &str, name: &str) -> String {
     format!(
-        "export async fn {name}(v: Stream<{ty}>) -> Stream<{ty}> {{\n\
+        "export async fn {name}(mut v: Stream<{ty}>) -> Stream<{ty}> {{\n\
          \x20   let [rx, tx] = Stream::<{ty}>::new();\n\
          \x20   task return rx;\n\
          \x20   loop {{\n\
-         \x20       let chunk = v.read(16);\n\
+         \x20       let [end, chunk] = v.start_read(16).finish();\n\
+         \x20       v = end;\n\
          \x20       tx.write_all(chunk.items);\n\
          \x20       if chunk.result != CopyResult::Completed {{\n\
          \x20           break;\n\

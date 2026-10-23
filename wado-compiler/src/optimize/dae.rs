@@ -150,18 +150,14 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     // the skeleton — count those so a param read only through a promoted value
     // is not seen as dead.
     arena_query::promoted_local_reads(body, &mut reads);
-    let kept_locals = &func.address_taken_locals;
-    let stores_aliased = &func.stores_aliased_locals;
-
-    // `retains` is not consulted: keeping a parameter takes a read of it.
-    let mut dead = Vec::with_capacity(func.params.len());
-    for p in &func.params {
-        let is_read = reads.contains(&p.local_index);
-        let is_kept = kept_locals.contains(&p.local_index);
-        let is_aliased = stores_aliased.contains(&p.local_index);
-        dead.push(!(is_read || is_kept || is_aliased));
-    }
-    dead
+    // Neither `retains` nor `address_taken_locals` / `stores_aliased_locals` is
+    // consulted: keeping a parameter, or a reference to it, takes a read of
+    // it. The sets are carried through rewrites that can delete that read,
+    // such as a specialization substituting every field read.
+    func.params
+        .iter()
+        .map(|p| !reads.contains(&p.local_index))
+        .collect()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
