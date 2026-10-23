@@ -1,4 +1,5 @@
-use { EmitError, NameCollision, UnmappedDtype, emit, expr_source } from "./emit.wado";
+use { TreeMap } from "core:collections";
+use { EmitError, NameCollision, Placement, UnmappedDtype, emit, expr_source } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -333,6 +334,30 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     assert out.contains(
         "W1: backend.keep_rhs(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
+}
+
+test "a sharded checkpoint's weights are read each from the shard the index places it in" {
+    let graph = read(&MLP).unwrap();
+    let mut placed = TreeMap::<String, String>::new();
+    for let [i, name] of ["W1", "B1", "W2", "B2"].enumerate() {
+        placed[name] = if i < 2 { "m-00001-of-00002.safetensors" } else { "m-00002-of-00002.safetensors" };
+    }
+    let out = emit(&graph, &infer(&graph, &Schema { layout: mlp_layout() }).unwrap(), &RUNTIME, true, Placement::Shards(
+        placed,
+    )).unwrap();
+
+    assert out.contains("use { TreeMap } from \"core:collections\";\n");
+    assert out.contains(
+        "pub fn load(backend: &mut Bk, shards: &TreeMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError> with _ {",
+    );
+    assert out.contains("let header = read_shards(shards)?;");
+    assert out.contains(
+        "W2: backend.keep_rhs(&Tensor::<f32, [Hidden, Out]> { data: List::<f32>::from_le_bytes(header.payload(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
+    );
+}
+
+test "a single file's module imports no map" {
+    assert !generate(MLP, mlp_layout()).unwrap().contains("core:collections");
 }
 
 test "a graph carrying some weights embeds those and loads the rest" {

@@ -18,6 +18,13 @@ tool, the graph with its weights left out and the checkpoint holding them:
     cd package-loam/tests/models/tiny-gpt2
     wado run ../../../tools/onnx_split.wado -- model.onnx model
 
+`sharded/` holds the same checkpoint in three shards, beside the index that
+places each tensor in one, as Hugging Face publishes a large model. The same
+tool writes them. It also writes `sharded/model.onnxtext`, which is
+`model.onnxtext` again and is not kept:
+
+    wado run ../../../tools/onnx_split.wado -- --max-shard-bytes 200000 model.onnx sharded/model
+
 The repository ships no expected outputs, so `test_data_set_0/` and
 `test_data_set_1/` are onnxruntime's. `oracle.mjs` writes them with
 onnxruntime-node 1.30.0. Each holds token ids, a mask of ones, and the logits the

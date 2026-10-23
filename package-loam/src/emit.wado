@@ -111,10 +111,24 @@ impl Error for NameCollision {
 impl Error for EmitError {
 }
 
+/// Where the checkpoint `Prepared::load` reads holds the weights the graph
+/// leaves to it: in one file, or each in the shard named beside it, as an
+/// index places it.
+pub variant Placement {
+    File,
+    Shards(TreeMap<String, String>),
+}
+
 /// The generated module's source, importing the runtime from the package spec
 /// `runtime`. Every axis the graph mentions becomes a marker type, so two
 /// tensors sharing an axis share one type.
-pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = true) -> Result<String, EmitError> {
+pub fn emit(
+    graph: &Graph,
+    checked: &Checked,
+    runtime: &String,
+    fuse: bool = true,
+    placement: Placement = Placement::File,
+) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     if graph.outputs.is_empty() {
         builtin::cold_path();
@@ -132,6 +146,9 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
         w.line(`    ${name},`);
     }
     w.line(wado`} from "${*runtime}";`);
+    if placement matches { Shards(_) } {
+        w.line("use { TreeMap } from \"core:collections\";");
+    }
     w.blank();
 
     let axes = axis_names(graph, checked);
@@ -151,7 +168,7 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
 
     let kept = kept_literals(&literals, checked);
     let rhs = rhs_weights(graph, checked, fuse);
-    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs);
+    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &placement);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
         values: TreeMap::<String, String>::new(),
@@ -319,7 +336,7 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 global RUNTIME_NAMES: List<String> = [
     "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor",
     "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end", "input_mismatch", "narrow",
-    "read_checkpoint", "refuse", "to_extent", "unmet",
+    "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -333,6 +350,8 @@ fn module_idents() -> TreeSet<String> {
     for let name of RUNTIME_NAMES {
         reserved.insert(name);
     }
+    // A sharded checkpoint's module imports it.
+    reserved.insert("TreeMap");
     reserved.insert("forward");
     reserved.insert("pass");
     reserved.insert("Outputs");
@@ -402,6 +421,7 @@ fn emit_weights(
     held: &TreeMap<String, String>,
     kept: &List<String>,
     rhs: &TreeMap<String, bool>,
+    placement: &Placement,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
@@ -438,7 +458,7 @@ fn emit_weights(
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, rhs, kept);
+    emit_constructor(w, graph, checked, names, held, rhs, kept, placement);
     if !kept.is_empty() {
         emit_kept(w, checked, names, kept);
     }
@@ -671,6 +691,7 @@ fn emit_constructor(
     held: &TreeMap<String, String>,
     rhs: &TreeMap<String, bool>,
     kept: &List<String>,
+    placement: &Placement,
 ) {
     let loads = loads_weights(graph);
     w.blank();
@@ -678,12 +699,18 @@ fn emit_constructor(
     block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
-        w.line("/// The weights, those the graph does not carry read from a safetensors checkpoint.");
-        FnSpec::new("load", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-            "checkpoint",
-            "&ByteList",
-        ).set_return_type(`Result<${PREPARED_TYPE}, LoadError>`).add_effect("_").emit_begin(w);
-        w.line("let header = read_checkpoint(checkpoint)?;");
+        let [doc, param, ty, read] = match *placement {
+            File => ["a safetensors checkpoint", "checkpoint", "&ByteList", "read_checkpoint"],
+            Shards(_) => [
+                "the shards of a safetensors checkpoint, by the file name its index gives each", "shards",
+                "&TreeMap<String, ByteList>", "read_shards",
+            ],
+        };
+        w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
+        FnSpec::new("load", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
+            `Result<${PREPARED_TYPE}, LoadError>`,
+        ).add_effect("_").emit_begin(w);
+        w.line(`let header = ${read}(${param})?;`);
         emit_kept_binding(w, kept);
         w.begin(`return Result::Ok(${PREPARED}`);
     } else {
@@ -700,7 +727,7 @@ fn emit_constructor(
         let e = expected(vi, &shape);
         let data = match vi.data {
             Some(bytes) => byte_string_literal(&bytes),
-            None => checkpoint_payload(&e),
+            None => checkpoint_payload(&e, placement),
         };
         let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
         let holding = weight_holding(rhs, &vi.name);
@@ -714,9 +741,13 @@ fn emit_constructor(
 
 /// The call reading a tensor's bytes out of the checkpoint `load` was given,
 /// checked against what the build compiled it as.
-fn checkpoint_payload(e: &Expected) -> String {
+fn checkpoint_payload(e: &Expected, placement: &Placement) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
-    return wado`header.payload(checkpoint, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
+    let within = match *placement {
+        File => "checkpoint",
+        Shards(placed) => wado`shards, "${placed[e.tensor]}"`,
+    };
+    return wado`header.payload(${within}, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
         ", ",
     )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }

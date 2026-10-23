@@ -1,10 +1,11 @@
 //! A safetensors file: a length-prefixed JSON header naming each tensor's
 //! element type, shape and byte range, then the payloads back to back.
 
-use { to_string } from "core:json";
+use { from_string, to_string, to_string_pretty } from "core:json";
 use { TreeMap } from "core:collections";
+use { Deserialize } from "core:serde";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
-use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY } from "./runtime/checkpoint.wado";
+use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, Shards } from "./runtime/checkpoint.wado";
 use { element_count } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
@@ -31,13 +32,119 @@ pub fn check_checkpoint(
     shapes: &TreeMap<String, Shape>,
     checkpoint: &Checkpoint,
 ) -> Result<(), LoadError> {
-    for let vi of &graph.initializers {
-        if vi.data matches { Some(_) } {
-            continue;
-        }
-        checkpoint.range(&expected(vi, &shapes.get(vi.name).unwrap()))?;
+    return check_each_left(graph, shapes, |e| checkpoint.range(e));
+}
+
+/// The shard `index` places each initializer the graph carries no data for in.
+pub fn placement(graph: &Graph, index: &TreeMap<String, String>) -> Result<TreeMap<String, String>, LoadError> {
+    let mut placed = TreeMap::<String, String>::new();
+    for let vi of left_to_checkpoint(graph) {
+        let Some(shard) = index.get(vi.name) else {
+            return Result::Err(LoadError { reason: `${vi.name}: the index places it in no shard` });
+        };
+        placed[vi.name] = shard;
+    }
+    return Result::Ok(placed);
+}
+
+/// Whether `shards` holds every initializer the graph carries no data for, each
+/// in the shard `placed` names, as the build compiles it. `placed` is what
+/// `placement` answers for the graph.
+pub fn check_shards(
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    placed: &TreeMap<String, String>,
+    shards: &Shards,
+) -> Result<(), LoadError> {
+    return check_each_left(graph, shapes, |e| shards.range(placed[e.tensor], e));
+}
+
+/// `locate` for each initializer the graph leaves to a checkpoint.
+fn check_each_left(
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    locate: fn(&Expected) -> Result<[i32, i32], LoadError>,
+) -> Result<(), LoadError> {
+    for let vi of left_to_checkpoint(graph) {
+        locate(&expected(&vi, &shapes.get(vi.name).unwrap()))?;
     }
     return Result::Ok(());
+}
+
+/// The initializers the graph carries no data for, which a checkpoint supplies.
+fn left_to_checkpoint(graph: &Graph) -> List<ValueInfo> {
+    return graph.initializers.iter_ref().filter(|vi| vi.data matches { None }).map(|vi| *vi).collect();
+}
+
+/// A sharded checkpoint's index, `model.safetensors.index.json` as Hugging Face
+/// writes it: the file name of the shard holding each tensor.
+struct Index {
+    weight_map: TreeMap<String, String>,
+}
+
+impl Deserialize for Index;
+
+/// The shard holding each tensor, by name, as the index `text` places it.
+pub fn read_index(text: &String) -> Result<TreeMap<String, String>, String> {
+    return match from_string::<Index>(text) {
+        Ok(index) => Result::Ok(index.weight_map),
+        Err(e) => Result::Err(`not a safetensors index: ${e}`),
+    };
+}
+
+/// `tensors` in shards of at most `max_bytes` of payload each, as Hugging
+/// Face's `max_shard_size` splits a checkpoint: in order, a shard closing
+/// before the tensor that would take it past the size, and a tensor larger than
+/// a shard alone in one of its own.
+pub fn shard_tensors(tensors: List<StoredTensor>, max_bytes: i64) -> List<List<StoredTensor>> {
+    let mut shards: List<List<StoredTensor>> = [];
+    let mut open: List<StoredTensor> = [];
+    let mut held: i64 = 0;
+    for let t of tensors {
+        let size = t.data.len() as i64;
+        if !open.is_empty() && held + size > max_bytes {
+            shards.push(open);
+            open = [];
+            held = 0;
+        }
+        open.push(t);
+        held += size;
+    }
+    if !open.is_empty() {
+        shards.push(open);
+    }
+    return shards;
+}
+
+/// The file name of shard `i`, counted from 0, of `count`, after `stem`.
+pub fn shard_name(stem: &String, i: i32, count: i32) -> String {
+    return `${*stem}-${i + 1:05}-of-${count:05}.safetensors`;
+}
+
+/// The index Hugging Face writes beside a sharded checkpoint.
+struct WrittenIndex {
+    metadata: IndexMetadata,
+    weight_map: TreeMap<String, String>,
+}
+
+struct IndexMetadata {
+    total_size: i64,
+}
+
+/// The index of `shards`, each a file name and the tensors it holds, as
+/// Hugging Face writes one.
+pub fn write_index(shards: &List<[String, List<StoredTensor>]>) -> String {
+    let mut index = WrittenIndex {
+        metadata: IndexMetadata { total_size: 0 },
+        weight_map: TreeMap::new(),
+    };
+    for let [name, tensors] of *shards {
+        for let t of tensors {
+            index.metadata.total_size += t.data.len() as i64;
+            index.weight_map[t.name] = name;
+        }
+    }
+    return to_string_pretty(&index, Option::Some('\n')).unwrap();
 }
 
 /// One tensor to write, its elements already little-endian.

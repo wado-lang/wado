@@ -1,6 +1,7 @@
 //! Split an `.onnx` into the two files Loam reads: a textual graph whose
-//! weights carry no values, and a safetensors checkpoint holding them. A
-//! model keeping its weights in external data files reads them from beside it.
+//! weights carry no values, and a safetensors checkpoint holding them, whole or
+//! in shards beside their index. A model keeping its weights in external data
+//! files reads them from beside it.
 
 use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
@@ -9,7 +10,14 @@ use { TreeMap } from "core:collections";
 use { Graph } from "../src/graph.wado";
 use { external_locations, read_with_external } from "../src/onnx_proto.wado";
 use { print } from "../src/onnx_print.wado";
-use { split_weights, write_safetensors } from "../src/safetensors.wado";
+use {
+    StoredTensor,
+    shard_name,
+    shard_tensors,
+    split_weights,
+    write_index,
+    write_safetensors,
+} from "../src/safetensors.wado";
 
 /// The value, or the failure after `prefix` on stderr and exit status 1.
 fn or_exit<T, E: Display>(result: Result<T, E>, prefix: String) -> T with (Stderr, Exit) {
@@ -35,17 +43,50 @@ fn read_model(source: &String) -> Graph with (Stderr, Exit, Preopens) {
     return or_exit(read_with_external(&bytes, &files), `${*source}: `);
 }
 
+global USAGE: String = "usage: onnx_split [--max-shard-bytes <n>] <model.onnx> <stem>
+writes <stem>.onnxtext and <stem>.safetensors, or with --max-shard-bytes the
+shards <stem>-00001-of-0000N.safetensors and on, at most n payload bytes each
+but where one tensor is larger, beside <stem>.safetensors.index.json";
+
+fn usage() -> ! with (Stderr, Exit) {
+    eprintln(USAGE);
+    exit(2);
+}
+
 export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
-    let given = args();
+    let mut given = args();
+    let mut max_shard_bytes: Option<i64> = null;
+    if given.len() == 4 && given[0] == "--max-shard-bytes" {
+        let Ok(n) = i64::from_str(&given[1]) else {
+            usage();
+        };
+        max_shard_bytes = Option::Some(n);
+        given = given.into_iter().skip(2).collect();
+    }
     if given.len() != 2 {
-        eprintln("usage: onnx_split <model.onnx> <stem>, writing <stem>.onnxtext and <stem>.safetensors");
-        exit(2);
+        usage();
     }
     let [source, stem] = [given[0], given[1]];
     // A filesystem error names its path; a read or print error does not.
     let [kept, stored] = split_weights(read_model(&source));
     let text = or_exit(print(&kept), `${source}: `);
     or_exit(fs::write(`${stem}.onnxtext`, &text), "");
-    or_exit(fs::write(`${stem}.safetensors`, &write_safetensors(&stored)), "");
-    println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
+    let Some(max) = max_shard_bytes else {
+        or_exit(fs::write(`${stem}.safetensors`, &write_safetensors(&stored)), "");
+        println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
+        return;
+    };
+    let count = stored.len();
+    let tensors = shard_tensors(stored, max);
+    let total = tensors.len();
+    let base = fs::file_name(&stem).unwrap().to_string();
+    let dir = fs::parent(&stem).map(|p| p.to_string()).unwrap_or("");
+    let mut shards: List<[String, List<StoredTensor>]> = [];
+    for let [i, shard] of tensors.into_iter().enumerate() {
+        let name = shard_name(&base, i, total);
+        or_exit(fs::write(fs::join(&dir, &name), &write_safetensors(&shard)), "");
+        shards.push([name, shard]);
+    }
+    or_exit(fs::write(`${stem}.safetensors.index.json`, &write_index(&shards)), "");
+    println(`${stem}.onnxtext and ${shards.len()} shards beside ${stem}.safetensors.index.json: ${count} weights`);
 }

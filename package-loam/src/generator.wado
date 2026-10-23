@@ -14,6 +14,7 @@ use {
     read_all,
 } from "core:kiln";
 use {
+    Header,
     Spelling,
     check,
     generate_model,
@@ -21,6 +22,7 @@ use {
     header_extent,
     read_header,
     spelling_of,
+    weights_of,
 } from "./compile.wado";
 
 pub use { Options } from "./compile.wado";
@@ -95,23 +97,27 @@ fn generate_graph(
     spelling: Spelling,
     runtime: &String,
 ) -> Result<Response, KilnError> with KilnHost {
-    if req.inputs.len() > 1 {
-        let reason = `loam: ${req.inputs.len()} inputs, and a checkpoint is one file`;
-        return refused(req, KilnError::InvalidSchema(reason));
-    }
-    if let Some(input) = req.inputs.iter_ref().find(|input| !input.type matches { Some("safetensors") }) {
-        let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\``;
+    if let Some(input) = req.inputs.iter_ref().find(
+        |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
+    ) {
+        let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\`, and the index of a sharded one \`type: "safetensors-index"\``;
         return refused(req, KilnError::Unsupported(reason));
     }
-    let mut headers: List<[String, ByteList]> = [];
+    let mut indexes: List<[String, ByteList]> = [];
+    let mut files: List<Header> = [];
     for let input of req.inputs {
-        headers.push([input.path, read_header(input.content)]);
+        if input.type matches { Some("safetensors-index") } {
+            indexes.push([input.path, read_all(input.content)]);
+        } else {
+            files.push(Header { path: input.path, header: read_header(input.content) });
+        }
     }
     let path = req.primary.path;
+    let weights = weights_of(indexes, files).map_err(|e| KilnError::InvalidSchema(e));
     let model = check(&path, spelling, read_all(req.primary.content), &req.options).map_err(
         |e| KilnError::InvalidSchema(e),
     )?;
-    let source = generate_model(&model, &path, headers, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
+    let source = generate_model(&model, &path, weights?, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,

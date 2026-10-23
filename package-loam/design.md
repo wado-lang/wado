@@ -51,3 +51,52 @@ download.
 initializers `gpt2.onnxtext` declares without values, in the order the graph
 lists them, which is the order `tools/onnx_split.wado` writes the checkpoint
 in. Its output is byte for byte the checkpoint `fetch.sh` writes.
+
+## Sharded Checkpoints
+
+A large model is published as several safetensors files beside an index, in
+Hugging Face's format: `model.safetensors.index.json` holds a `weight_map` from
+each tensor's name to the file holding it. A use site gives the index and the
+shards as inputs, the index under `type: "safetensors-index"`:
+
+```wado
+use { Prepared, forward } from "./model.onnxtext" with {
+    type: "onnxtext",
+    generator: {
+        module: "lib:loam",
+        inputs: [
+            { path: "./model.safetensors.index.json", type: "safetensors-index" },
+            { path: "./model-00001-of-00002.safetensors", type: "safetensors" },
+            { path: "./model-00002-of-00002.safetensors", type: "safetensors" },
+        ],
+    },
+};
+```
+
+The index decides where each tensor is, so a tensor is looked up in its own
+shard alone. Its probe extent is the whole file, as for a graph, and each
+shard's is its header. A build refuses:
+
+- two indexes, or several checkpoints with no index;
+- a tensor the graph leaves to the checkpoint that the index places in no
+  shard;
+- a shard whose file name the index never names, or two shards of one name;
+- a tensor whose shard is not given, naming the shard.
+
+Each tensor is then checked against its shard's header as against a single
+file's. The WEP's The Graph Is the Schema, the Checkpoint Is Data gives the
+loader one `ByteList`. A sharded module's loader takes the shards keyed by the
+file names the index uses instead:
+
+```wado
+Prepared::load(backend: &mut Bk, shards: &TreeMap<String, ByteList>) -> Result<Prepared<Bk>, LoadError>
+```
+
+The generated module carries the placement, so the loader reads no index. A
+shard absent from the map is a `LoadError` naming a tensor the shard holds and
+the shard. A single file's use site and loader are unchanged.
+
+`tools/onnx_split.wado --max-shard-bytes <n>` writes the shards and the index.
+It fills each shard in the graph's order up to `n` payload bytes, and a tensor
+larger than that goes alone. `conformance/tiny_gpt2_sharded_test.wado` loads
+the tiny GPT-2 from three shards and reproduces the logits of its single file.

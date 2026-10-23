@@ -1,10 +1,22 @@
 //! The build's check of a checkpoint's header against the graph it supplies.
 
+use { TreeMap } from "core:collections";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
-use { read_checkpoint } from "./runtime/checkpoint.wado";
+use { read_checkpoint, read_shards } from "./runtime/checkpoint.wado";
 use { LayoutRule, Schema } from "./schema.wado";
-use { StoredTensor, check_checkpoint, split_weights, write_safetensors } from "./safetensors.wado";
+use {
+    StoredTensor,
+    check_checkpoint,
+    check_shards,
+    placement,
+    read_index,
+    shard_name,
+    shard_tensors,
+    split_weights,
+    write_index,
+    write_safetensors,
+} from "./safetensors.wado";
 
 global GRAPH: String = `
 g (float[N, 2] X) => (float[N, 3] Y)
@@ -79,6 +91,126 @@ test "a weight named as the format's metadata stays in the graph, which can name
     let [kept, stored] = split_weights(graph);
     assert kept.initializers[0].data matches { Some(_) };
     assert stored.is_empty();
+}
+
+/// The check of `GRAPH` against the shards in `given`, which `index` places its
+/// weights in.
+fn check_sharded(index: String, given: List<[String, List<StoredTensor>]>) -> Result<(), String> {
+    let graph = read(&GRAPH).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("W", ["In", "Out"]),
+            rule("B", ["Out"]),
+        ],
+    }).unwrap();
+    let mut shards = TreeMap::<String, ByteList>::new();
+    for let [name, stored] of given {
+        shards[name] = write_safetensors(&stored);
+    }
+    let placed = placement(&graph, &read_index(&index)?).map_err(|e| `${e}`)?;
+    return check_shards(&graph, &checked.shapes, &placed, &read_shards(&shards).unwrap()).map_err(|e| `${e}`);
+}
+
+fn rule(pattern: String, axes: List<String>) -> LayoutRule {
+    return LayoutRule { pattern, axes };
+}
+
+global INDEX: String = `{"metadata": {"total_size": 24}, "weight_map": {"W": "m-00002-of-00002.safetensors"}}`;
+
+test "a sharded checkpoint checks each weight in the shard its index places it in" {
+    assert check_sharded(INDEX, [
+        [
+            "m-00002-of-00002.safetensors",
+            [weight([2, 3])],
+        ],
+    ]) == Result::<(), String>::Ok(());
+}
+
+test "a weight in a shard not given names the shard" {
+    let refused = check_sharded(INDEX, [
+        ["m-00001-of-00002.safetensors", []],
+    ]).unwrap_err();
+    assert refused == "W: the index places it in m-00002-of-00002.safetensors, which is not given";
+}
+
+test "a weight the index places in no shard names itself" {
+    let refused = check_sharded(`{"weight_map": {}}`, []).unwrap_err();
+    assert refused == "W: the index places it in no shard";
+}
+
+test "a weight is looked for in its own shard alone" {
+    let refused = check_sharded(INDEX, [
+        [
+            "m-00001-of-00002.safetensors",
+            [weight([2, 3])],
+        ],
+        ["m-00002-of-00002.safetensors", []],
+    ]).unwrap_err();
+    assert refused == "W: the checkpoint has no such tensor";
+}
+
+test "an index that is not one is refused" {
+    assert read_index(&"{\"weight_map\": []}").unwrap_err().starts_with("not a safetensors index: ");
+}
+
+fn sized(name: String, bytes: i32) -> StoredTensor {
+    return StoredTensor {
+        name,
+        dtype: "U8",
+        shape: [bytes as i64],
+        data: ByteList::filled(bytes, 0),
+    };
+}
+
+fn names(shard: &List<StoredTensor>) -> List<String> {
+    return shard.iter_ref().map(|t| t.name).collect();
+}
+
+test "tensors fill a shard in order until the next would pass its size" {
+    let shards = shard_tensors([
+        sized("a", 10),
+        sized("b", 10),
+        sized("c", 10),
+    ], 25);
+    assert shards.len() == 2;
+    assert names(&shards[0]) == ["a", "b"];
+    assert names(&shards[1]) == ["c"];
+}
+
+test "a tensor larger than a shard has one of its own" {
+    let shards = shard_tensors([
+        sized("a", 10),
+        sized("big", 40),
+        sized("c", 10),
+    ], 25);
+    assert shards.len() == 3;
+    assert names(&shards[1]) == ["big"];
+}
+
+test "a shard is named as Hugging Face names one" {
+    assert shard_name(&"model", 0, 3) == "model-00001-of-00003.safetensors";
+}
+
+test "the index written places each tensor in its shard, and reads back" {
+    let shards: List<[String, List<StoredTensor>]> = [
+        [
+            "m-00001-of-00002.safetensors",
+            [sized("a", 10)],
+        ],
+        [
+            "m-00002-of-00002.safetensors",
+            [
+                sized("b", 4),
+                sized("c", 2),
+            ],
+        ],
+    ];
+    let text = write_index(&shards);
+    assert text.contains("\"total_size\": 16");
+    let index = read_index(&text).unwrap();
+    assert index["a"] == "m-00001-of-00002.safetensors";
+    assert index["c"] == "m-00002-of-00002.safetensors";
 }
 
 test "splitting moves every carried weight into the checkpoint, under its name" {
