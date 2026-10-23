@@ -106,8 +106,8 @@ internal tag. No untagged representation exists. In JSON:
 `#[wire(tag = "key")]` on a `variant` tags it internally: each case is written
 as a struct whose first field is `key`, holding the case's wire name, followed
 by the fields of its payload. A reader finds the tag wherever it stands among
-the entries. A case carries no payload or a struct, and a
-payload field whose wire name is `key` is a compile error. Reading, a tag that
+the entries. A case carries no payload or a struct, or a newtype over one, and
+a payload field whose wire name is `key` is a compile error. Reading, a tag that
 names no case is `UnknownVariant`, and a missing tag is `MissingField`.
 
 The standard library's own impls:

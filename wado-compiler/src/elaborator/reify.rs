@@ -1314,10 +1314,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The struct declaration `ty` instantiates, or `None` where `ty` is not a
-    /// declared struct.
+    /// The struct declaration `ty` instantiates, through any newtype over it,
+    /// or `None` where `ty` is not a declared struct.
     fn struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
-        let def = self.tysys.type_table.borrow().nominal_def(ty)?;
+        let def = {
+            let type_table = self.tysys.type_table.borrow();
+            let head = type_table.newtype_representation(ty).unwrap_or(ty);
+            type_table.nominal_def(head)?
+        };
         let defs = self.tysys.resolutions.defs();
         let target = defs.ast_id(def);
         self.loaded_modules
