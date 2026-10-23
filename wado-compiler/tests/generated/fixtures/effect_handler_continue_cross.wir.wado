@@ -57,35 +57,31 @@ type "functype//effect_handler_continue_cross.wado/run" = fn();  // TypeId(19)
 
 type "functype//effect_handler_continue_cross.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(22)
+type "functype//core:rt/unreachable" = fn();  // TypeId(22)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(25)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
+type "functype//effect_handler_continue_cross.wado/effect_handler_continue_cross.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
+type "functype//effect_handler_continue_cross.wado/effect_handler_continue_cross.wado/$Closure_1::$call$dae[self]" = fn() -> i32;  // TypeId(27)
 
-type "functype//effect_handler_continue_cross.wado/effect_handler_continue_cross.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//effect_handler_continue_cross.wado/effect_handler_continue_cross.wado/$Closure_1::$call$dae[self]" = fn() -> i32;  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
+type "functype//effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -170,6 +166,8 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     let new_used_18: i32;
     let start_19: i32;
     let x: i64;
+    let q: u64;
+    let tens: i32;
     outer = struct.new "effect_handler_continue_cross.wado//Outer" {  };
     global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = struct.new "effect_handler_continue_cross.wado//$Dispatch_effect_handler_continue_cross.wado/Counter" { outer: local.tee $save_effect_handler_continue_cross.wado/Counter(global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//$Closure_1" { $capture_0: outer }, func: ref.func "closure/effect_handler_continue_cross.wado/$closure_wrapper_1" } };
     r = "effect_handler_continue_cross.wado/helper"();
@@ -182,7 +180,68 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     $local_2.used = new_used_18;
     builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_19, global:effect_handler_continue_cross.wado::$const_obj_2, 0, 2);
     start_19 = r < 0;
-    r = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(r); select i64(x < 0_i64, 0_i64 - x, x)));
+    x = builtin::i64_extend_i32_s(r);
+    x = select i64(x < 0_i64, 0_i64 - x, x);
+    r = $inline_count_digits_u64_2: block -> i32 {
+        if x <u 100000_i64 {
+            if x <u 100_i64 {
+                if x <u 10_i64 {
+                    break $inline_count_digits_u64_2: 1;
+                }
+                break $inline_count_digits_u64_2: 2;
+            }
+            if x <u 1000_i64 {
+                break $inline_count_digits_u64_2: 3;
+            }
+            if x <u 10000_i64 {
+                break $inline_count_digits_u64_2: 4;
+            }
+            break $inline_count_digits_u64_2: 5;
+        }
+        if x <u 10000000000_i64 {
+            if x <u 10000000_i64 {
+                if x <u 1000000_i64 {
+                    break $inline_count_digits_u64_2: 6;
+                }
+                break $inline_count_digits_u64_2: 7;
+            }
+            if x <u 100000000_i64 {
+                break $inline_count_digits_u64_2: 8;
+            }
+            if x <u 1000000000_i64 {
+                break $inline_count_digits_u64_2: 9;
+            }
+            break $inline_count_digits_u64_2: 10;
+        }
+        if x <u 1000000000000000_i64 {
+            if x <u 1000000000000_i64 {
+                if x <u 100000000000_i64 {
+                    break $inline_count_digits_u64_2: 11;
+                }
+                break $inline_count_digits_u64_2: 12;
+            }
+            if x <u 10000000000000_i64 {
+                break $inline_count_digits_u64_2: 13;
+            }
+            if x <u 100000000000000_i64 {
+                break $inline_count_digits_u64_2: 14;
+            }
+            break $inline_count_digits_u64_2: 15;
+        }
+        if x <u 100000000000000000_i64 {
+            if x <u 10000000000000000_i64 {
+                break $inline_count_digits_u64_2: 16;
+            }
+            break $inline_count_digits_u64_2: 17;
+        }
+        if x <u 1000000000000000000_i64 {
+            break $inline_count_digits_u64_2: 18;
+        }
+        if x <u -8446744073709551616_i64 {
+            break $inline_count_digits_u64_2: 19;
+        }
+        break $inline_count_digits_u64_2: 20;
+    };
     if start_19 {
         if @unlikely(local.tee start_19($local_2.used + 1) > builtin::array_len($load_2)) {
             cold_path;
@@ -199,13 +258,29 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_19 = $local_2.used;
     $local_2.used = new_used_18;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_19, x, r);
-    r = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream"(new_used_18 = r; r = 0; new_used_18);
-    r = start_19;
-    start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = r; r = 0; start_19, $local_2.repr, $local_2.used);
+    $load_2 = $local_2.repr;
+    r = start_19 + r;
+    b30: block {
+        l31: loop {
+            break_if b30 (r - start_19) < 2;
+            q = x /u 100_i64;
+            tens = local.tee new_used_18(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_2, r - 1, ((48 + new_used_18) - (tens * 10)) & 255);
+            builtin::array_set_u8($load_2, r - 2, (48 + tens) & 255);
+            r = r - 2;
+            x = q;
+            continue l31;
+        };
+    };
+    if r > start_19 {
+        builtin::array_set_u8($load_2, start_19, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+    }
+    start_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    r = builtin::i32_wrap_i64(x >> 32_i64);
+    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream"(new_used_18 = start_19; start_19 = 0; new_used_18);
+    start_19 = r;
+    r = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_19, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_19 = new_used_18; new_used_18 = 0; start_19);
     global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = $save_effect_handler_continue_cross.wado/Counter;
 }
@@ -217,89 +292,6 @@ fn "effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream"(dat
 fn "effect_handler_continue_cross.wado/$cm_export__run"() {
     "effect_handler_continue_cross.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b11: block {
-        l12: loop {
-            break_if b11 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l12;
-        };
-    };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
-    }
-}
-
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
-    }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

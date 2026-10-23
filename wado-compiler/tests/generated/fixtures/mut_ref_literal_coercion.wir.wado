@@ -67,7 +67,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:mut_ref_literal_coercion.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 117, 116, 32, 114, 101, 102, 32, 108, 105, 116, 101, 114, 97, 108, 32, 99, 111, 101, 114, 99, 105, 111, 110, 58, 32, 111, 107), used: 28 };
+global global:mut_ref_literal_coercion.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 117, 116, 32, 114, 101, 102, 32, 108, 105, 116, 101, 114, 97, 108, 32, 99, 111, 101, 114, 99, 105, 111, 110, 58, 32, 111, 107), used: 28 };
 
 fn "mut_ref_literal_coercion.wado/run"() with Stdout {
     let xs_74: ref "core:prelude//List<i32>";
@@ -87,12 +87,10 @@ fn "mut_ref_literal_coercion.wado/run"() with Stdout {
     $moved_4 = "mut_ref_literal_coercion.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
-    $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;
-    $sroa_$pattern_temp_0_0_13 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:mut_ref_literal_coercion.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+    $mv_arg_2 = global:mut_ref_literal_coercion.wado::$const_obj_1;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_13, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_13);
 }
 
 fn "mut_ref_literal_coercion.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -173,7 +171,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(29)), 0, $mv$message$repr, 0, 28);
     builtin::array_set_u8(new_repr, 28, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 29);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 29);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
