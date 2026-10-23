@@ -2307,12 +2307,12 @@ pub enum UseItem {
 }
 
 /// How a `use` item spells the name it imports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum UseNameSpelling {
     Ident,
     /// A full interface name as a string (`"wasi:cli/stdout"`), which always
     /// takes `as`, since a string is no identifier to bind.
-    InterfaceName,
+    InterfaceName(CmImport),
 }
 
 /// Simple use item (used within effect function imports)

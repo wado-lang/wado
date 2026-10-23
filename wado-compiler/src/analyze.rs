@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes,
     InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
     cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
@@ -1205,7 +1205,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             let Some(name) =
                                 &self
                                     .symbols
-                                    .use_item_member(&source_module, name, *spelling)
+                                    .use_item_member(&source_module, name, spelling)
                             else {
                                 continue;
                             };
@@ -1404,14 +1404,16 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         from: &ModuleSource,
         module_source: &ModuleSource,
         name: &str,
-        spelling: UseNameSpelling,
+        spelling: &UseNameSpelling,
         span: Span,
     ) -> Result<Option<String>, Bail> {
         if let Some(member) = self.symbols.use_item_member(module_source, name, spelling) {
             return Ok(Some(member));
         }
-        let wanted = CmImport::parse(name).expect("the parser admits only an interface name");
-        let found = self.symbols.interfaces_named(module_source, &wanted);
+        let UseNameSpelling::InterfaceName(wanted) = spelling else {
+            unreachable!("an identifier names its own member");
+        };
+        let found = self.symbols.interfaces_named(module_source, wanted);
         let error = match found.as_slice() {
             [] => AnalyzeError::ImportNotFound {
                 module_source: module_source.clone(),
@@ -1532,7 +1534,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 from_module_source,
                                 &module_source,
                                 name,
-                                *spelling,
+                                spelling,
                                 *name_span,
                             )?
                             else {

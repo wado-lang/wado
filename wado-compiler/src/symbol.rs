@@ -434,15 +434,12 @@ impl SymbolTable {
         &self,
         target: &ModuleSource,
         name: &str,
-        spelling: UseNameSpelling,
+        spelling: &UseNameSpelling,
     ) -> Option<String> {
         match spelling {
             UseNameSpelling::Ident => Some(name.to_owned()),
-            UseNameSpelling::InterfaceName => {
-                match self
-                    .interfaces_named(target, &CmImport::parse(name)?)
-                    .as_slice()
-                {
+            UseNameSpelling::InterfaceName(interface) => {
+                match self.interfaces_named(target, interface).as_slice() {
                     [(member, _)] => Some(member.clone()),
                     _ => None,
                 }

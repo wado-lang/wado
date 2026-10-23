@@ -37,12 +37,10 @@ struct ProvidedInterface<'a> {
 
 impl ProvidedInterface<'_> {
     /// Whether `name`, as a `use` of `package` spells it, names this interface.
-    fn is_named_by(&self, package: CmPackage<'_>, name: &str, spelling: UseNameSpelling) -> bool {
+    fn is_named_by(&self, package: CmPackage<'_>, name: &str, spelling: &UseNameSpelling) -> bool {
         match spelling {
             UseNameSpelling::Ident => self.package == package && self.name == name,
-            UseNameSpelling::InterfaceName => {
-                CmImport::parse(name).is_some_and(|wanted| self.full_name.is_named_by(&wanted))
-            }
+            UseNameSpelling::InterfaceName(wanted) => self.full_name.is_named_by(wanted),
         }
     }
 }
@@ -526,18 +524,18 @@ fn forbidden_sites<'a>(
                 spelling,
                 name_span,
                 ..
-            } => Some((name, *spelling, name_span)),
+            } => Some((name, spelling, name_span)),
             UseItem::InterfaceFunctions {
                 interface_name,
                 name_span,
                 ..
-            } => Some((interface_name, UseNameSpelling::Ident, name_span)),
+            } => Some((interface_name, &UseNameSpelling::Ident, name_span)),
             UseItem::Wildcard | UseItem::Namespace { .. } => None,
         })
         .filter(|(name, spelling, _)| {
             !provided_wasi
                 .iter()
-                .any(|provided| provided.is_named_by(package, name, *spelling))
+                .any(|provided| provided.is_named_by(package, name, spelling))
         })
         .map(|(name, _, span)| {
             (
@@ -588,24 +586,16 @@ mod tests {
     fn provided_interface_is_named_by_either_spelling() {
         let seed = &provided()[1];
         let random = (CmNamespace::Wasi, "random");
-        assert!(seed.is_named_by(random, "InsecureSeed", UseNameSpelling::Ident));
-        assert!(!seed.is_named_by(random, "Insecure", UseNameSpelling::Ident));
-        assert!(seed.is_named_by(
-            random,
-            "wasi:random/insecure-seed",
-            UseNameSpelling::InterfaceName
-        ));
-        assert!(seed.is_named_by(
-            random,
-            "wasi:random/insecure-seed@0.3.0",
-            UseNameSpelling::InterfaceName
-        ));
-        assert!(!seed.is_named_by(
-            random,
-            "wasi:random/insecure-seed@0.2.0",
-            UseNameSpelling::InterfaceName
-        ));
-        assert!(!seed.is_named_by(random, "wasi:random/random", UseNameSpelling::InterfaceName));
+        assert!(seed.is_named_by(random, "InsecureSeed", &UseNameSpelling::Ident));
+        assert!(!seed.is_named_by(random, "Insecure", &UseNameSpelling::Ident));
+        let named_by_full_name = |name: &str| {
+            let spelling = UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap());
+            seed.is_named_by(random, name, &spelling)
+        };
+        assert!(named_by_full_name("wasi:random/insecure-seed"));
+        assert!(named_by_full_name("wasi:random/insecure-seed@0.3.0"));
+        assert!(!named_by_full_name("wasi:random/insecure-seed@0.2.0"));
+        assert!(!named_by_full_name("wasi:random/random"));
     }
 
     #[test]

@@ -796,7 +796,7 @@ impl<'a> Unparser<'a> {
             } => {
                 match spelling {
                     UseNameSpelling::Ident => self.output.push_str(name),
-                    UseNameSpelling::InterfaceName => {
+                    UseNameSpelling::InterfaceName(_) => {
                         self.output
                             .push_str(&StrLit::new(name.as_str()).as_written());
                     }

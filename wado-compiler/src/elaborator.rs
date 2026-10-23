@@ -1616,7 +1616,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     ast::UseItem::Simple {
                         id, name, spelling, ..
                     } => {
-                        if let Some(member) = self.symbols.use_item_member(&source, name, *spelling)
+                        if let Some(member) = self.symbols.use_item_member(&source, name, spelling)
                         {
                             self.record_use_reference(&source, *id, &member);
                         }
