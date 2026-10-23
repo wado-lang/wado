@@ -444,27 +444,30 @@ any name.
 A component is consumed through the type it carries. No Wado declaration file
 or side-car `.wit` is involved.
 
-- A `use` of a component imports one of its packages as a module. The `package`
-  key of the `with` clause names it (`package: "b:y"`). The packages a
-  component offers are those of the interfaces it exports and of the non-WASI
-  interfaces it imports. The key may be left out where the component offers
-  one package. Where it offers more, leaving the key out is an error that names
-  them. A version may be left out the same way.
-- An interface of the package becomes a Wado `interface`. Its named types are
-  members of that interface, named `Iface::Type` or imported with
-  `use { Iface::{Type} }`. A record becomes a `struct`, a variant a `variant`,
-  an enum an `enum`, flags a `flags`, and a type alias a newtype.
+- A component file is one module, as the ES module integration of WebAssembly
+  reads one. Its items are its exports, under the names the component gives
+  them. An exported interface is named by its interface name as a string, which
+  takes `as`: `use { "a:x/trip" as Trip } from "./dup.wasm"`. A module generated
+  from WIT, such as `wasi:cli`, offers each of its interfaces and worlds by full
+  name the same way.
+- An exported interface becomes a Wado `interface`, also offered under its
+  short name: its last label in `PascalCase` (`Trip`). Where two exports share
+  a short name, importing it is an error that names their full names, and only
+  a full-name import reaches either. Its named types become Wado items of the
+  corresponding kind: a record a `struct`, a variant a `variant`, an enum an
+  `enum`, flags a `flags`, and a type alias a newtype.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
-  Its functions and types are also members of the module, imported by bare
+  Each of its functions is also a free function of the module, imported by bare
   name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. A world-level function keeps its name over an interface
-  function of the same name. Any other interface, an imported one included, is
-  reached only through its name.
+  or a component. A name two exported default interfaces share is left out,
+  and a world-level function keeps its name over an interface function of the
+  same name. Any other interface, an imported one included, is reached only
+  through its name.
 
-> Not yet implemented: the `package` key, and an interface's types as its
-> members ([WEP](./wep-2026-10-22-component-packages.md)).
+> Not yet implemented: a full-name import, and the error for a shared short
+> name ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
