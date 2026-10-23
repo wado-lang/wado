@@ -634,18 +634,20 @@ impl Semantics {
     }
 
     /// The `affine` binders the body of the function declared at `func` sees.
-    pub(crate) fn affine_params(&self, func: AstId) -> &[TypeId] {
+    /// `None` for a body no walk reached, as in the partial semantics the
+    /// language service reads after an analysis phase bailed.
+    pub(crate) fn affine_params(&self, func: AstId) -> Option<&[TypeId]> {
         let module = self
             .module_of_id(func)
             .expect("a function is declared in a module");
         self.state
-            .as_ref()
-            .expect("the move check runs on annotated semantics")
-            .module_semantics[module]
+            .as_ref()?
+            .module_semantics
+            .get(module)?
             .types
             .fn_affine_params
             .get(&func)
-            .expect("a walked body records its affine parameters")
+            .map(Vec::as_slice)
     }
 
     /// The index of the first field or case of the struct or variant declared

@@ -289,15 +289,17 @@ impl Checker<'_> {
     }
 
     fn check_function(&mut self, func: &Function, drop_impl: bool) {
-        let Some(body) = &func.body else {
+        // A body no walk reached records no types, so nothing in it is known
+        // to be affine.
+        let (Some(body), Some(scope)) = (&func.body, self.sem.affine_params(func.id)) else {
             return;
         };
+        let scope = scope.to_vec();
         let drop_self = func
             .params
             .iter()
             .find(|p| drop_impl && matches!(p.self_kind, SelfKind::Value))
             .map(|p| p.id);
-        let scope = self.sem.affine_params(func.id).to_vec();
         let outside = func
             .params
             .iter()
