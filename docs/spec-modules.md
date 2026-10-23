@@ -458,8 +458,9 @@ or side-car `.wit` is involved.
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
   and a type alias a newtype. Each is named through its interface
-  (`Geo::Point`), and also by its own name at module level, where a name two
-  interfaces' types share is an error to import.
+  (`Geo::Point`), and also by its own name at module level, as if the module
+  held `pub use { Geo::{Point} };`. A name two interfaces' types share is an
+  error to import.
 - A non-WASI interface the component imports is an item of its module too,
   named by the same rules as an export. An interface name has one declaration
   in the whole program, so two components importing it name one Wado
@@ -584,7 +585,8 @@ by name instead.
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - No `use * as name` and no default imports
 - All imports must be explicit, except [the prelude](#the-prelude) and the [`builtin` namespace](#the-builtin-namespace)
-- `Effect::{op1, op2}` imports an effect's operations ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
+- `Effect::{op1, op2}` imports an effect's operations and types ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
+- Without `from`, `use { … };` selects from the module it is written in ([Re-exports](#re-exports-pub-use))
 
 <!-- {"fixture":"spec_modules_import_rules.wado"} -->
 
@@ -681,10 +683,16 @@ Re-export rules:
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a nameless import (`pub use _ from "..."`) are compile errors.
+- A `use` without `from` re-exports this module's own items under another
+  path: `pub use { Geo::{Point} };` makes the type `Geo::Point` an item
+  `Point` of the module, as ES's `export { x as y }` does
 - `export use` names types only, and publishes each one in the importing
   package's Component Model interface
   ([Published Types](./spec-components.md#published-types)). Naming anything
   else is a compile error
+
+> Not yet implemented: a `use` without `from`
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 

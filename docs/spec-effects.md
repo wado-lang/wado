@@ -59,6 +59,14 @@ test {
 }
 ```
 
+An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
+newtypes), named through it as `Geo::Point`. A
+[`use` without `from`](./spec-modules.md#re-exports-pub-use) brings one to
+module level.
+
+> Not yet implemented: a type declared in an interface
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
+
 ### Default Implementations
 
 An `interface` dispatches differently from a trait, but writes its members exactly as a trait does. An operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation. What answers an operation dispatched with no handler installed is in [With No Handler Installed](#with-no-handler-installed).
@@ -222,7 +230,7 @@ test {
 
 ### Import Rules
 
-- `use {Effect::{op1, op2}} from "..."` imports operations by name. A wildcard, `use {Effect::{*}}`, is not allowed.
+- `use {Effect::{op1, op2}} from "..."` imports operations by name, and the types the interface declares the same way. A wildcard, `use {Effect::{*}}`, is not allowed.
 - An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation)).
 - An operation may be renamed as any import may ([Renaming Imports](./spec-modules.md#renaming-imports)). Two effects' operations of the same name are told apart by renaming one, or by calling it as `Effect::op()`:
 

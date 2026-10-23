@@ -98,10 +98,45 @@ that rejected two same-named interfaces declaring one operation.
 
 A type an interface declares is named through that interface, as the ES module
 integration exports a type inside its instance: `Geo::Point`. Two interfaces of
-one component may then each declare a `Point`. A type is also offered under its
-own name at module level, as the `wasi:*` modules offer theirs, and a name two
-interfaces' types share follows the short-name rule: importing it is an error,
-and only the path through an interface reaches either.
+one component may then each declare a `Point`. Since each WIT scope is one Wado
+scope, a Wado `interface` declares types as WIT's does:
+
+```wado
+interface Geo {
+    struct Point { x: f64, y: f64 }
+    fn distance(a: Point, b: Point) -> f64;
+}
+```
+
+A type is also offered under its own name at module level, as the `wasi:*`
+modules offer theirs: the module behaves as if it held
+`pub use { Geo::{Point} };` for each interface type. A name two interfaces'
+types share is left out by the short-name rule: importing it is an error, and
+only the path through an interface reaches either.
+
+### A `use` without `from` names this module's items
+
+`use { … }` without `from` selects from the module it is written in. It is
+otherwise the `use` it already was: the same `Iface::{…}` selection, the same
+`as`, and a visibility modifier re-exports at that reach. This is how a type an
+interface declares reaches module level:
+
+```wado
+pub use { Geo::{Point} };          // Point, the same type as Geo::Point
+internal use { Geo::{Point as P} };
+export use { Geo::{Point} };       // also published in the package's interface
+```
+
+The ES module integration draws the same line: `export { x } from "m"`
+re-exports another module's binding and `export { x as y }` this one's, as
+`pub use { … } from "M"` and `pub use { … }` do. `Iface::{…}` already selects
+an interface's operations, so selecting its types adds no new syntax.
+
+Three alternatives were weighed. `pub S from I::S;` gives `from` a path where
+it takes a module specifier. `pub S = I::S;` reads as a type alias, which Wado
+does not have: `type S = T` declares a distinct newtype. `pub I::S as S;` is a
+second re-export form beside `pub use`, and without a modifier it reads as an
+expression statement.
 
 ### The version may be left out
 
@@ -144,8 +179,12 @@ is an error naming both files.
 - [ ] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib_todo.wado` passes.
-- [ ] An interface's types are named through it, and a type name two
-  interfaces share is an error at module level.
+- [ ] A Wado `interface` declares types, named through it, and
+  `use { Iface::{T} };` without `from` brings one to module level at any
+  visibility.
+- [ ] A component's and a `wasi:*` module's interface types are named through
+  their interface, and a type name two interfaces share is an error at module
+  level.
 - [ ] A component's imported interface is named as an export is, and two
   components importing one interface name one declaration, whose shapes must
   agree.
