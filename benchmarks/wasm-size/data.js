@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792761136933,
+  "lastUpdate": 1792769694809,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69861,6 +69861,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295356,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "502070f25ca9d3738d8913ced0c943689d35990c",
+          "message": "Merge pull request #2430 from wado-lang/claude/gracious-faraday-rjp97k\n\nrefactor(template)!: a tag is instantiated once per hole shape, not per text",
+          "timestamp": "2026-10-24T00:18:28+09:00",
+          "tree_id": "8b7788179afb72f184b80a0b69014a65612bacbf",
+          "url": "https://github.com/wado-lang/wado/commit/502070f25ca9d3738d8913ced0c943689d35990c"
+        },
+        "date": 1792769693931,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7383,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19756,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294133,
             "unit": "bytes"
           }
         ]
