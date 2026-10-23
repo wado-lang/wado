@@ -419,6 +419,9 @@ impl<affine T> Drop for ReadCopy<T> {
         if started.buffer.ready_cancel_on(&end) {
             started.buffer.packed = end.cancel_read() as i32;
         }
+        // Lifting what the copy moved is what frees the memory and handles the
+        // host lowered for it; the chunk then drops them.
+        let _ = started.settle(&end);
     }
 }
 
