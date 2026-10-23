@@ -76,10 +76,17 @@ enum ConstLiteral {
 impl FieldConst {
     /// The constant an operand holds, or `None` otherwise.
     fn of_operand(body: &Body, op: Operand) -> Option<Self> {
-        let value = match op {
-            Operand::Value(value) => value,
-            Operand::Expr(expr) => return Self::of_literal(body, expr),
-        };
+        match op {
+            Operand::Value(_) => Self::of_scalar(body, op),
+            Operand::Expr(expr) => Self::of_literal(body, expr),
+        }
+    }
+
+    /// The scalar constant an operand holds. Only a scalar may stand for a
+    /// whole parameter: a literal there would be a fresh object at every read,
+    /// and the body's writes to its fields would reach none of them.
+    fn of_scalar(body: &Body, op: Operand) -> Option<Self> {
+        let value = op.as_value()?;
         match body.values.kind(value) {
             ValueKind::Int(n, ty) => Some(FieldConst::Int(*n, *ty)),
             ValueKind::Float(bits, ty) => Some(FieldConst::Float(*bits, *ty)),
@@ -1084,7 +1091,7 @@ fn select_sites(
                         && signatures.scalar_specializable[index]
                         && signatures.param_fixed[index][position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = FieldConst::of_operand(body, arg)
+                        && let Some(value) = FieldConst::of_scalar(body, arg)
                     {
                         bindings.push((param_local, Slot::Whole, value));
                     }
@@ -1319,7 +1326,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
             .iter()
             .map(|arg| {
                 (!arg.is_mut)
-                    .then(|| FieldConst::of_operand(body, arg.expr))
+                    .then(|| FieldConst::of_scalar(body, arg.expr))
                     .flatten()
             })
             .collect();

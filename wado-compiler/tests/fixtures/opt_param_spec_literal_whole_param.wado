@@ -1,0 +1,44 @@
+// A struct literal passed by value is no constant for the whole parameter: a
+// read of the parameter would rebuild the literal, so the drop's move out of
+// `self.inner`, which nulls the field, would reach none of the reads after it.
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+global mut GIVEN: i32 = 0;
+
+affine struct Guard {
+    id: i32,
+}
+
+impl Drop for Guard {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+affine struct Giver {
+    inner: Guard,
+}
+
+impl Drop for Giver {
+    fn drop(self) {
+        give(self.inner);
+    }
+}
+
+fn give(g: Guard) {
+    GIVEN += g.id;
+}
+
+fn giver() {
+    let _g = Giver { inner: Guard { id: 1000 } };
+}
+
+export fn run() with Stdout {
+    giver();
+    println(`drops=${DROPS} given=${GIVEN}`);
+}
+
+__DATA__
+{"stdout": "drops=1000 given=1000\n"}
