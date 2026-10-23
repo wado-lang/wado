@@ -367,25 +367,30 @@ pub fn cm_payload_type_from_ast(
                 return Some(CmPayloadType::Scalar(scalar));
             }
             let src = registry.resolve_cm_source_for(n)?;
+            let declares = |kinds: &[CmTypeKind]| {
+                kinds
+                    .iter()
+                    .any(|&kind| registry.declares_kind(kind, &src, &n.name))
+            };
             let declared = || {
                 let def = cm_decl_in_interface(type_table, registry, &src, &n.name)?;
                 Some(CmDecl::new(type_table.defs(), def))
             };
             // Before the CM-owned bail below: a WASI resource counts.
-            if registry
-                .get_resource_cm_name_by_source(&src, &n.name)
-                .is_some()
-            {
+            if declares(&[CmTypeKind::Resource]) {
                 return Some(CmPayloadType::Resource(declared()?));
             }
             if src.starts_with("wasi:") || stdlib::is_wit_core_interface(&src) {
                 return None;
             }
-            registry
-                .get_struct_cm_name_by_source(&src, &n.name)
-                .or_else(|| registry.get_variant_cm_name_by_source(&src, &n.name))
-                .or_else(|| registry.get_enum_cm_name_by_source(&src, &n.name))
-                .or_else(|| registry.get_flags_cm_name_by_source(&src, &n.name))?;
+            if !declares(&[
+                CmTypeKind::Struct,
+                CmTypeKind::Variant,
+                CmTypeKind::Enum,
+                CmTypeKind::Flags,
+            ]) {
+                return None;
+            }
             Some(CmPayloadType::Named(declared()?))
         }
         Type::Tuple(elems) => elems
@@ -488,9 +493,12 @@ fn wasi_error_code_decl_from_ast(
     if !source.starts_with("wasi:") {
         return None;
     }
-    registry
-        .get_enum_cm_name_by_source(&source, &n.name)
-        .or_else(|| registry.get_variant_cm_name_by_source(&source, &n.name))?;
+    if ![CmTypeKind::Enum, CmTypeKind::Variant]
+        .into_iter()
+        .any(|kind| registry.declares_kind(kind, &source, &n.name))
+    {
+        return None;
+    }
     let def = cm_decl_in_interface(type_table, registry, &source, &n.name)?;
     Some(CmDecl::new(type_table.defs(), def))
 }
@@ -514,12 +522,7 @@ fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegi
     };
     registry
         .resolve_cm_source_for(inner)
-        .and_then(|source| {
-            registry
-                .get_resource_cm_name_by_source(&source, &inner.name)
-                .map(str::to_string)
-        })
-        .is_some()
+        .is_some_and(|source| registry.declares_kind(CmTypeKind::Resource, &source, &inner.name))
 }
 
 /// For a diagnostic or a panic message — the `Debug` form dumps spans and ids.
@@ -3303,7 +3306,8 @@ impl CmInterfaceRegistry {
             .find_map(|fq| Some((fq, self.cm_type_name(fq, decl.name())?)))
     }
 
-    fn cm_type_name(&self, interface_fq: &str, name: &str) -> Option<&str> {
+    /// The CM name `interface_fq` exports its type `name` under.
+    pub fn cm_type_name(&self, interface_fq: &str, name: &str) -> Option<&str> {
         // A newtype is peeled before it reaches the boundary, so these are the
         // kinds the ABI spells.
         self.get_resource_cm_name_by_source(interface_fq, name)
