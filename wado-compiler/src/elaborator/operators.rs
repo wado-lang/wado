@@ -1052,11 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|target| self.resolve_expr(target, ctx, None))
             .collect();
-        let expected = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_tuple(target_types);
+        let expected = self.tysys.type_table.borrow_mut().make_tuple(target_types);
         let value_type = self.resolve_expr(&assign.value, ctx, Some(expected));
         if value_type == TypeTable::ERROR {
             return TypeTable::ERROR;
@@ -1076,6 +1072,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         };
+        // Reserve reify's `$daN` locals, so both walks allocate the same frame.
         let ctx = &mut ctx.enter_scope();
         for (idx, &type_id) in element_types.iter().enumerate() {
             let _local_index = ctx.add_local(format!("$da{idx}"), type_id, false, None);

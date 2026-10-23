@@ -2875,7 +2875,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Assign(assign) => match assign.destructuring_targets() {
                 Some(targets) => self.reify_destructuring_assign(assign, targets, ctx),
-                None => self.reify_write(&assign.target, WrittenValue::Ast(&assign.value), span, ctx),
+                None => {
+                    self.reify_write(&assign.target, WrittenValue::Ast(&assign.value), span, ctx)
+                }
             },
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`

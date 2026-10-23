@@ -140,7 +140,9 @@ impl AstVisitor for Finder<'_> {
             _ => None,
         };
         if let Some((places, value)) = assignment
-            && places.iter().any(|place| unchecked_subscript(place).is_some())
+            && places
+                .iter()
+                .any(|place| unchecked_subscript(place).is_some())
         {
             for place in places {
                 match unchecked_subscript(place) {
