@@ -538,7 +538,7 @@ test "router: deserialize fails on a bool or char param it cannot parse" {
     let long_char = r.match_path(Method::Get, &"/flags/true/AB").unwrap();
     let f: Result<FlagParams, DeserializeError> = long_char.params.deserialize();
     assert `${f.unwrap_err()}`.starts_with(
-        "path param 'grade' is not a valid char: 'AB' (too many characters in string)",
+        "grade: path param 'grade' is not a valid char: 'AB' (too many characters in string)",
     );
 }
 
