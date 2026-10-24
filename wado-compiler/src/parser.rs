@@ -5452,7 +5452,6 @@ impl Parser {
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
-        let pos_before = self.pos;
         let args = self.parse_comma_separated_recovering(
             &TokenKind::RParen,
             Self::parse_expr,
@@ -5462,7 +5461,6 @@ impl Parser {
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
             && self.previous().kind == TokenKind::Comma;
-        let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
 

@@ -254,7 +254,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 WirType::Unit => vec![],
                 wir_type => vec![wir_type],
             };
-        let _ = type_table;
 
         // Decide vtable schema for this functor by looking the canonical
         // return type up in the inspectable gate computed at WirContext
@@ -277,7 +276,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // Get functor struct type ID
         let type_table = &*ctx.package.type_table.borrow();
         let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
-        let _ = type_table;
         let WirType::Ref {
             type_id: functor_struct_type_id,
             ..
@@ -894,7 +892,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 .first()
                 .and_then(|p| type_table.box_payload_of(p.type_id).map(|_| p.type_id));
             drop(tir_func);
-            let _ = type_table;
             let body = build_fn_canonical_dispatch_body(
                 ctx,
                 self_param_name,
@@ -956,7 +953,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 translator.translate_block(body.root())
             };
             apply_cold_path_hints(&mut wir_body);
-            let _ = type_table;
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }

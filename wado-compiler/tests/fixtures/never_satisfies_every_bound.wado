@@ -72,3 +72,39 @@ test "a written impl for `!` answers" {
     assert name_of::<!>() == "never";
     assert name_of::<Never>() == "never";
 }
+
+trait Shown with () {
+    fn shown() -> String;
+}
+
+impl<T: Display> Shown for T {
+    fn shown() -> String {
+        return "blanket";
+    }
+}
+
+impl Shown for ! {
+    fn shown() -> String {
+        return "written";
+    }
+}
+
+fn shown_of<T: Shown>() -> String {
+    return T::shown();
+}
+
+test "a written impl for `!` answers before a blanket `!` now meets" {
+    assert shown_of::<!>() == "written";
+    assert shown_of::<i32>() == "blanket";
+}
+
+fn inspected<T: Inspect>(x: T) -> String {
+    return `${x:?}`;
+}
+
+test "`Inspect` on `!` is the written impl" {
+    if builtin::black_box(false) {
+        let _ = `${panic("inspect"):?}`;
+        let _ = inspected(fail());
+    }
+}
