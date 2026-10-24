@@ -305,7 +305,7 @@ This enables **pure unit testing** of effectful code without WASI runtime involv
 ### 4.2 Structured Concurrency
 
 Specification background: [Concurrency Model](./spec-components.md#concurrency-model).
-The `join` below is research syntax, not the specified `AsyncCall` `.join(&set)`
+The `join` below is research syntax, not the specified `WaitableSet::insert`
 form.
 
 ```wado
