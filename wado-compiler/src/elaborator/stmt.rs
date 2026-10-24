@@ -2560,10 +2560,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if self.tysys.type_table.borrow().is_never(iterable_type_id) {
             self.record_desugar(for_of.id, DesugarKind::ForOfNever);
+            let binding_type = if is_enumerate {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_tuple(vec![TypeTable::I32, TypeTable::NEVER])
+            } else {
+                TypeTable::NEVER
+            };
             let mut scope = ctx.enter_scope();
             self.resolve_let_pattern(
                 &for_of.binding,
-                TypeTable::NEVER,
+                binding_type,
                 for_of.is_mut,
                 for_of.span,
                 BindingSite::ForOf,
