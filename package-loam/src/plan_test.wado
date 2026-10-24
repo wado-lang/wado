@@ -501,7 +501,7 @@ g (float[N, 4] X, float[4] B) => (float[N, 4] Y)
     assert p.of(&"R") == written(Reason::Stretched);
 }
 
-test "a kernel takes in one contraction, and the second is written" {
+test "two products of one left operand pair in one kernel" {
     let source = `
 g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
 {
@@ -513,6 +513,38 @@ g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
     let p = plan_of(source, [
         [
             "X",
+            ["Batch", "In"],
+        ],
+        [
+            "W",
+            ["In", "Out"],
+        ],
+        [
+            "V",
+            ["In", "Out"],
+        ],
+    ]);
+    assert p.of(&"Q") == fused("Y");
+    assert p.of(&"P") == fused("Y");
+    assert p.pairs == [["P", "Q"]];
+}
+
+test "a kernel takes in one contraction, and the second is written" {
+    let source = `
+g (float[N, 4] X, float[N, 4] Z, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
+{
+    P = MatMul(X, W)
+    Q = MatMul(Z, V)
+    Y = Add(P, Q)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "In"],
+        ],
+        [
+            "Z",
             ["Batch", "In"],
         ],
         [

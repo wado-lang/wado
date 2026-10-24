@@ -16,6 +16,7 @@ use {
     Element,
     Epilogue,
     Expr,
+    Paired,
     Read,
     Tensor,
     UnaryOp,
@@ -24,6 +25,7 @@ use {
     element_count,
     group_query_attention,
     operand,
+    paired_by_parts,
     reduced_count,
     row_extents,
     slices_within,
@@ -1108,6 +1110,21 @@ impl WebGpuBackend {
         b: &Placed<f32, B>,
         then: &Option<Epilogue<PlacedRead<Out>>>,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.product_kernel(a, b, then, false).unwrap();
+    }
+
+    /// [`product`], or where `paired`, the products by the two matrices `b`
+    /// interleaves as `Paired` says, joined by `then` as
+    /// [`Backend::matmul_rhs_paired`] joins them. A paired product runs as
+    /// one narrow dispatch reading `b` along its inner axis, or not at all:
+    /// `None` where it cannot.
+    fn product_kernel<A, B, Out>(
+        &mut self,
+        a: &Placed<f32, A>,
+        b: &Placed<f32, B>,
+        then: &Option<Epilogue<PlacedRead<Out>>>,
+        paired: bool,
+    ) -> Option<Placed<f32, Out>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let av = self.device_view(a);
         let bv = self.device_view(b);
         assert !av.half, "a product reads half elements on its right only";
@@ -1118,18 +1135,20 @@ impl WebGpuBackend {
         let [rows, inner, cols] = [lhs.extents[ra - 2], lhs.extents[ra - 1], rhs.extents[rb - 1]];
         assert inner == rhs.extents[rb - 2];
         let batch = broadcast_extents(&lhs.extents[0..<ra - 2].to_list(), &rhs.extents[0..<rb - 2].to_list()).unwrap();
+        assert !paired || ra == av.extents.len() && rb == 2 && cols % 2 == 0, "a paired product is of matrices";
+        // The columns written: one of each pair where paired.
+        let written = if paired { cols / 2 } else { cols };
         // The result's extents drop the axis a rank-1 operand stands in for.
         let mut extents = batch;
         if av.extents.len() > 1 {
             extents.push(rows);
         }
         if bv.extents.len() > 1 {
-            extents.push(cols);
+            extents.push(written);
         }
         let count = element_count(&batch);
         let narrow = rows <= NARROW_ROWS;
-        let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;
-        // The fewest columns a workgroup takes, which a wider read only raises.
+        let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;        // The fewest columns a workgroup takes, which a wider read only raises.
         let per_group = if narrow { narrow_columns(across, 1, cols) } else { TILE };
         let fits = count <= MAX_GROUPS
             && rows.div_ceil(TILE) <= MAX_GROUPS
@@ -1140,12 +1159,15 @@ impl WebGpuBackend {
             None => [],
         };
         let chunk = if fits { self.inner_chunk(&lhs, &rhs) } else { null };
+        if paired && !(narrow && across && chunk == Option::Some(inner)) {
+            return null;
+        }
         let Some(chunk) = chunk else {
-            return self.product_on_cpu(a, b, then);
+            return Option::Some(self.product_on_cpu(a, b, then));
         };
         let mut matrices = batch;
         matrices.push(rows);
-        matrices.push(cols);
+        matrices.push(written);
         let br = batch.len();
         // What the chunk from `start` reads: the two slices, `then`'s operands
         // where it is the last, and the sums the chunk before left.
@@ -1168,7 +1190,7 @@ impl WebGpuBackend {
         let last_start = (inner.div_ceil(i32::max(chunk, 1)) - 1) * chunk;
         let pending = if last_start > 0 { Option::Some(contiguous(PENDING, 0, matrices)) } else { null };
         if !self.binds(&chunk_operands(0, pending)) || !self.binds(&chunk_operands(last_start, pending)) {
-            return self.product_on_cpu(a, b, then);
+            return if paired { null } else { Option::Some(self.product_on_cpu(a, b, then)) };
         }
         // Each chunk of the inner axis continues the sums the one before left,
         // tile by tile as one dispatch would add them, and the last applies
@@ -1181,7 +1203,7 @@ impl WebGpuBackend {
             let Some(bound) = self.bindable(&chunk_operands(start, partial)) else {
                 unreachable();
             };
-            let out = contiguous(self.allocated(count * rows * cols, false), 0, matrices);
+            let out = contiguous(self.allocated(count * rows * written, false), 0, matrices);
             let mut params: List<u32> = [rows as u32, length as u32, cols as u32];
             push_all(&mut params, &batch);
             for let m of [bound.views[0], bound.views[1]] as List<DeviceTensor> {
@@ -1214,7 +1236,7 @@ impl WebGpuBackend {
             let [key, row_groups, group_columns] = if narrow {
                 let width = word_width(&bound.views[1], across);
                 [
-                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, per_group]),
+                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, per_group, paired]),
                     1,
                     narrow_columns(across, width, cols),
                 ];
@@ -1229,7 +1251,7 @@ impl WebGpuBackend {
             spans.push(fresh(&out));
             self.dispatch(key, spans, params, [cols.div_ceil(group_columns), row_groups, count]);
             if last {
-                return Placed::Device(contiguous(out.slot, 0, extents));
+                return Option::Some(Placed::Device(contiguous(out.slot, 0, extents)));
             }
             partial = Option::Some(out);
             start += length;
@@ -1792,6 +1814,19 @@ impl Backend for WebGpuBackend {
         then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
     ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return self.matmul_shared(a, b, then);
+    }
+
+    fn matmul_rhs_paired<..Bs, M, K, N>(
+        &mut self,
+        a: &Placed<f32, [..Bs, M, K]>,
+        bc: &Placed<f32, [K, Paired<N>]>,
+        then: Epilogue<PlacedRead<[..Bs, M, N]>>,
+    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let joined = Option::Some(then);
+        if let Some(out) = self.product_kernel::<[..Bs, M, K], [K, Paired<N>], [..Bs, M, N]>(a, bc, &joined, true) {
+            return out;
+        }
+        return paired_by_parts::<WebGpuBackend, [..Bs], M, K, N>(self, a, bc, joined.unwrap());
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -2605,7 +2640,7 @@ variant ShaderKey {
     /// [`product_shader`]'s arguments.
     Product([Expr, List<i32>, i32, bool, bool, bool]),
     /// [`narrow_product_shader`]'s arguments.
-    NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32, i32]),
+    NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32, i32, bool]),
     /// [`gather_shader`]'s arguments.
     Gather([i32, i32, bool]),
     /// [`append_shader`]'s arguments.
@@ -2633,7 +2668,7 @@ impl ShaderKey {
                 *half,
                 *across,
             ),
-            NarrowProduct([op, bindings, batch, continued, across, half, width, lanes]) => narrow_product_shader(
+            NarrowProduct([op, bindings, batch, continued, across, half, width, lanes, paired]) => narrow_product_shader(
                 op,
                 bindings,
                 *batch,
@@ -2642,6 +2677,7 @@ impl ShaderKey {
                 *half,
                 *width,
                 *lanes,
+                *paired,
             ),
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
             Append([bindings, rotary]) => append_shader(bindings, *rotary),
@@ -3233,7 +3269,7 @@ ${start}    for (var t = 0u; t < (inner + 15u) / 16u; t++) {
         workgroupBarrier();
     }
     if row < rows && col < cols {
-${product_epilogue(op, bindings, batch, continued)}    }
+${product_epilogue(op, bindings, batch, continued, false)}    }
 }
 ${ELEMENTWISE_OPERATORS}`;
 }
@@ -3249,7 +3285,9 @@ ${ELEMENTWISE_OPERATORS}`;
 /// reading one element. The parameters and `half` are the tiled shader's.
 /// Where `width` is 2, the right matrix is bf16 and each lane reads a word,
 /// two elements of it: two steps of the inner axis where `across`, two
-/// columns otherwise.
+/// columns otherwise. Where `paired`, the right matrix interleaves two, and
+/// each even column's lane writes through `op` what its column and the next
+/// one sum, as `product_epilogue` says.
 fn narrow_product_shader(
     op: &Expr,
     bindings: &List<i32>,
@@ -3259,8 +3297,10 @@ fn narrow_product_shader(
     half: bool,
     width: i32,
     lanes: i32,
+    paired: bool,
 ) -> String {
     assert width == 1 || half && width == 2;
+    assert !paired || across && !continued && lanes % 2 == 0, "a pair's sums meet in one workgroup";
     let splits = NARROW_LANES / lanes;
     assert splits * lanes == NARROW_LANES && splits & splits - 1 == 0, "the parts add in halves";
     // The columns a lane sums, and the steps of the inner axis it reads at once.
@@ -3300,6 +3340,12 @@ fn narrow_product_shader(
         }
     };
     let start = if continued { product_partial(bindings, batch) } else { "0.0" };
+    // Where `across`, the next column's sum is a column's lanes further on.
+    let pair_sum = if paired {
+        `                        let acc_pair = partial[b * ${NARROW_LANES}u + lid + ${splits}u];\n`;
+    } else {
+        "";
+    };
     return `${buffers_wgsl(1 + max_of(bindings), right_binding(bindings, half))}
 var<workgroup> partial: array<f32, ${NARROW * lane_cols * NARROW_LANES}>;
 
@@ -3327,7 +3373,7 @@ ${sum}            }
             }
             workgroupBarrier();
         }
-        if split == 0u && col < cols {
+        if split == 0u && col < cols${if paired { " && col % 2u == 0u" } else { "" }} {
             let first = col;
             for (var b = 0u; b < block; b++) {
                 let row = r0 + b;
@@ -3335,7 +3381,7 @@ ${sum}            }
                     let col = first + j;
                     if col < cols {
                         let acc = ${start} + partial[(b * ${lane_cols}u + j) * ${NARROW_LANES}u + lid];
-${product_epilogue(op, bindings, batch, continued)}                    }
+${pair_sum}${product_epilogue(op, bindings, batch, continued, paired)}                    }
                 }
             }
         }
@@ -3439,20 +3485,26 @@ fn product_partial(bindings: &List<i32>, batch: i32) -> String {
 }
 
 /// Lines writing a product's element at `row` and `col` from its sum `acc`,
-/// through `op` over the epilogue's operands.
-fn product_epilogue(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool) -> String {
+/// through `op` over the epilogue's operands. Where `paired`, `col` is even
+/// and `acc_pair` is the next column's sum: the two are `op`'s first two
+/// operands, and the element written is the pair's, at `col / 2`.
+fn product_epilogue(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool, paired: bool) -> String {
     let rank = batch + 2;
     let first = 3 + batch + batch + 3 + batch + 3;
     let read = bindings.len() - if continued { 1 } else { 0 };
-    let mut out = `        let c${batch} = row;\n        let c${batch + 1} = col;\n`;
+    let [written, column, sums] = if paired { ["(cols / 2u)", "col / 2u", 2] } else { ["cols", "col", 1] };
+    let mut out = `        let c${batch} = row;\n        let c${batch + 1} = ${column};\n`;
     for let k of 2..<read {
         let at = first + (k - 2) * (rank + 1);
         let index = index_wgsl(at, 0, rank, "c", `bitcast<i32>(p[${at}])`);
-        out.push_str(`        let x${k - 1} = o${bindings[k]}[u32(${index})];\n`);
+        out.push_str(`        let x${k - 2 + sums} = o${bindings[k]}[u32(${index})];\n`);
     }
     out.push_str("        let x0 = acc;\n");
+    if paired {
+        out.push_str("        let x1 = acc_pair;\n");
+    }
     out.push_str(&steps_wgsl(op, op.steps.len() - 1, "        "));
-    out.push_str(`        out[group.z * rows * cols + row * cols + col] = s${op.steps.len() - 1};\n`);
+    out.push_str(`        out[group.z * rows * ${written} + row * ${written} + ${column}] = s${op.steps.len() - 1};\n`);
     return out;
 }
 

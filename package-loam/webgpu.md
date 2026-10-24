@@ -230,6 +230,23 @@ them.
 Whether a node computes anything now depends on its neighbours, so lowering is
 the plan's answer, `Plan::lowering`, which emission and `loam dump` both read.
 
+#### Two products of one input pair
+
+A gated layer multiplies one input by a gate matrix and by a value matrix, and
+meets the two elementwise. A kernel otherwise follows one contraction, so the
+second product would write its output and the kernel would read it back. The
+plan pairs two matrix products of one left operand over one iteration space
+instead, and `forward` calls `matmul_rhs_paired` with the operators after them
+as its epilogue, which reads the two products as `operand(0)` and `operand(1)`.
+
+Each right matrix must be a weight its product alone reads. The backend then
+keeps the two as one matrix of twice the columns, a column of the first, then
+the same column of the second (`Paired<N>`). On a device, a product of a few
+rows reading that matrix along its inner axis runs as one dispatch: a
+workgroup's lanes sum an even column and the one after it, and the lane
+holding the even one applies the epilogue to both sums. Any other product runs
+as the product by the whole matrix, then the epilogue over its two halves.
+
 #### What a layer costs
 
 | Dispatch            | Nodes it covers                           |

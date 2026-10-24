@@ -171,8 +171,8 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     // smaller than a weight, which splits the kernels reading it, then three
     // `arg_max`es, then four products of a few rows from each limit, then two
     // across weights of few columns and of many, then six reads of a weight
-    // kept in bf16 or f32 from each limit.
-    assert_eq!(lines.len(), 51, "stdout: {stdout}");
+    // kept in bf16 or f32 from each limit, then three paired products.
+    assert_eq!(lines.len(), 54, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')

@@ -22,7 +22,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Backend, Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Backend, BinaryOp, Cpu, Epilogue, Tensor, UnaryOp, WebGpuBackend, element_count, operand } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 use { Pick, Picked, Weights, forward } from "./webgpu.onnxtext"
     with {
@@ -220,6 +220,45 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     narrow_products();
     narrow_column_counts();
     half_weights();
+    paired_products();
+}
+
+/// A gated layer's two products of one input, joined with a third operand, as
+/// a step's one row and a prompt's tile of rows make them: in one dispatch
+/// where the right matrices are bf16 or f32, and in two kernels for the tile.
+fn paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let one = tensor::<[Row, Inner, Long]>([1, 1, 640], 35);
+    let tile = tensor::<[Row, Inner, Long]>([1, 20, 640], 36);
+    // silu(operand(0)) * operand(1) + operand(2)
+    let op = operand(0)
+        .binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid))
+        .binary(BinaryOp::Mul, &operand(1))
+        .binary(BinaryOp::Add, &operand(2));
+    let exact = [halved(tensor::<[Long, Col]>([640, 256], 37)), halved(tensor::<[Long, Col]>([640, 256], 38))];
+    let inexact = [tensor::<[Long, Col]>([640, 256], 39), tensor::<[Long, Col]>([640, 256], 40)];
+    let cases = [["step", one, exact], ["f32", one, inexact], ["tile", tile, exact]] as List<[
+        String,
+        Tensor<f32, [Row, Inner, Long]>,
+        [Tensor<f32, [Long, Col]>, Tensor<f32, [Long, Col]>],
+    ]>;
+    for let [name, a, [b, c]] of cases {
+        let rows = a.extents[1];
+        let bias = tensor::<[Row, Inner, Col]>([1, rows, 256], 41);
+        let mut cpu = Cpu {};
+        let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [cpu.read(&bias)],
+            op,
+        });
+        let bc = gpu.keep_rhs_paired(&b, &c);
+        let on_gpu = gpu.matmul_rhs_paired(&gpu.upload(&a), &bc, Epilogue {
+            operands: [gpu.read(&gpu.upload(&bias))],
+            op,
+        });
+        println(`paired ${name} ${deviation(&gpu.download(&on_gpu).data, &on_cpu.data)}`);
+    }
 }
 
 /// `t` with each element's low 16 bits cleared, so bf16 holds it exactly.
