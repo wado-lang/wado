@@ -2201,6 +2201,8 @@ impl EffectIndex<'_> {
                 filled |= rows_written_as(written, arg, effect, &mut out);
             }
             for bound in bounds {
+                // The empty path is a blanket impl's receiver, the type
+                // itself, which `blanket_for` answers.
                 let Some(arg) = bound
                     .path
                     .as_deref()
