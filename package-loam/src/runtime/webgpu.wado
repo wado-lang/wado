@@ -3741,10 +3741,8 @@ fn stage_wgsl(s: &Staged, bindings: &List<i32>, batch: i32) -> String {
     // The steps up to `last` at row `r0 + b` and inner index `k`, the row's
     // folds so far read from `staged_folds`.
     let element = |last: i32, indent: String| {
-        let mut code = `${indent}var folds = array<f32, ${folds}>();
-${indent}for (var f = 0u; f < ${folds}u; f++) {
-${indent}    folds[f] = staged_folds[b * ${folds}u + f];
-${indent}}
+        let row_folds: List<String> = (0..<folds).into_iter().map(|f| `staged_folds[b * ${folds}u + ${f}u]`).collect();
+        let mut code = `${indent}let folds = array<f32, ${folds}>(${row_folds.join(", ")});
 ${indent}let c${batch} = r0 + b;
 ${indent}let c${batch + 1} = k;
 `;
