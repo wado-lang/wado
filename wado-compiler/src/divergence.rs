@@ -9,9 +9,7 @@
 //! block it names, never right after the loop.
 
 use crate::ast;
-use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart};
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
 
@@ -448,7 +446,7 @@ fn tir_expr_always_exits(tt: &TypeTable, expr: &TirExpr) -> bool {
             iterable: inner, ..
         } => exits(inner),
         TirExprKind::Binary { left, op, right } => {
-            exits(left) || (!matches!(op, TirBinaryOp::And | TirBinaryOp::Or) && exits(right))
+            exits(left) || (!op.is_short_circuit() && exits(right))
         }
         TirExprKind::Assign {
             target: left,

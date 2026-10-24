@@ -1682,7 +1682,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         // Every operator takes its operands by reference.
         TirExprKind::Binary { op, left, right } => {
             elab_expr(left, false, cx);
-            if matches!(op, TirBinaryOp::And | TirBinaryOp::Or) {
+            if op.is_short_circuit() {
                 elab_expr_scope(right, cx);
             } else {
                 elab_expr(right, false, cx);
