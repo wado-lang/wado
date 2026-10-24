@@ -1,0 +1,31 @@
+// An interface that `use`s an `error-code` from a sibling interface of its own
+// package: `core:process/process` returns `core:process/types`'s, not the
+// `wasi:cli/types` one `println` imports. The `spawn` result aliases the one
+// `core:process/types` put in outer scope.
+use { println, Stdout } from "core:cli";
+use { Process } from "core:process/process.wado";
+use { Command, Input, Output } from "core:process/types.wado";
+
+export fn run() with (Stdout, Process) {
+    let spawned = Process::spawn(Command {
+        program: "true",
+        args: [],
+        env: [],
+        stdin: Input::Null,
+        stdout: Output::Null,
+        stderr: Output::Null,
+        timeout: null,
+    }, null);
+    println(`${spawned matches { Ok(_) }}`);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(enum \"not-found\" \"not-permitted\" \"resource-exhausted\" \"io\")"] },
+    { "contains": ["(alias export $core:process/types@0.1.0 \"error-code\" (type $\"#type6 error-code\""] },
+    { "contains": ["(alias outer 1 $\"#type6 error-code\""], "count": 1 }
+  ]
+}

@@ -13,9 +13,9 @@ use crate::canonical::{
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
-    CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
-    CmInterfaceRegistry, CmTypeGen, CmTypeKind, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
-    FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
+    CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeKind,
+    CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME, FIELDS_WADO_NAME, InstanceSink,
+    RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
     wado_primitive_name_to_cm,
@@ -474,7 +474,6 @@ fn emit_cm_val_type(
     ty: &Type,
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
-    has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     resource_handles: &IndexMap<String, ResourceTypeIndices>,
     type_gen: &mut CmTypeGen,
@@ -490,7 +489,6 @@ fn emit_cm_val_type(
             ty,
             instance_type,
             local_type_idx,
-            has_local_error_code,
             enum_export_indices,
             resource_handles,
             type_gen,
@@ -517,21 +515,21 @@ fn emit_cm_val_type(
             let [ok, err] = g.args.as_slice() else {
                 panic!("`Result` takes two type arguments, not {}", g.args.len())
             };
-            // A WASI package spells `error-code` once and the others alias it,
-            // so it is the one error this walk does not define in place.
             let err_type = if err.is_unit() {
                 None
             } else if let Type::Named(named) = err
                 && named.name == ERROR_CODE_WADO_NAME
-            {
-                Some(ComponentValType::Type(resolve_error_code_idx(
+                && let Some(idx) = error_code_idx(
                     instance_type,
                     local_type_idx,
-                    has_local_error_code,
+                    named,
                     enum_export_indices,
+                    type_gen,
                     project,
                     ctx,
-                )))
+                )
+            {
+                Some(ComponentValType::Type(idx))
             } else {
                 Some(emit(err, instance_type, local_type_idx, type_gen, ctx))
             };
@@ -568,8 +566,10 @@ fn emit_cm_val_type(
                 .collect();
             instance_type.ty().defined_type().tuple(elements);
         }
-        Type::Named(named) if enum_export_indices.contains_key(&named.name) => {
-            return ComponentValType::Type(enum_export_indices[&named.name]);
+        Type::Named(named)
+            if let Some(idx) = own_export_idx(named, enum_export_indices, type_gen, project) =>
+        {
+            return ComponentValType::Type(idx);
         }
         Type::Named(named) if resource_handles.contains_key(&named.name) => {
             return ComponentValType::Type(resource_handles[&named.name].own);
@@ -608,33 +608,54 @@ fn shared_cm_val_type(
     type_gen.ast_type_to_cm(&mut sink, ty, registry, &resource_exports)
 }
 
-/// Resolve or create the error-code type index within an instance type.
-fn resolve_error_code_idx(
+/// The index the instance exports `named` under, where the emitting interface
+/// declares it. `enum_export_indices` holds that interface's own types by
+/// name, so a same-named type another interface declares is never read there.
+fn own_export_idx(
+    named: &NamedType,
+    enum_export_indices: &IndexMap<String, u32>,
+    type_gen: &CmTypeGen,
+    project: &NirPackage,
+) -> Option<u32> {
+    let emitting = type_gen.interface_hint()?;
+    let source = project
+        .cm_interface_registry
+        .cm_source_of_named_type(named, Some(emitting))?;
+    if source != emitting {
+        return None;
+    }
+    enum_export_indices.get(&named.name).copied()
+}
+
+/// The index of the `error-code` `named` refers to, where the instance already
+/// has it: its own export, or an alias of the one its declaring interface put in
+/// outer scope. A WASI package spells `error-code` once and the others `use`
+/// it, so the declaration decides which one, never the name. `None` leaves it
+/// to be spelled in place.
+fn error_code_idx(
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
-    has_local_error_code: bool,
+    named: &NamedType,
     enum_export_indices: &IndexMap<String, u32>,
+    type_gen: &CmTypeGen,
     project: &NirPackage,
-    ctx: &mut ComponentModelContext,
-) -> u32 {
-    if has_local_error_code && enum_export_indices.contains_key(ERROR_CODE_WADO_NAME) {
-        enum_export_indices[ERROR_CODE_WADO_NAME]
-    } else {
-        let outer_ec = cm_decl_type_idx(
-            ctx,
-            project,
-            CANONICAL_ERROR_CODE_INTERFACE,
-            ERROR_CODE_WADO_NAME,
-        );
-        instance_type.alias(Alias::Outer {
-            kind: ComponentOuterAliasKind::Type,
-            count: 1,
-            index: outer_ec,
-        });
-        let idx = *local_type_idx;
-        *local_type_idx += 1;
-        idx
+    ctx: &ComponentModelContext,
+) -> Option<u32> {
+    if let Some(idx) = own_export_idx(named, enum_export_indices, type_gen, project) {
+        return Some(idx);
     }
+    let source = project
+        .cm_interface_registry
+        .cm_source_of_named_type(named, type_gen.interface_hint())?;
+    let outer = error_code_def(project, &source).and_then(|def| ctx.decl_type_idx(def))?;
+    instance_type.alias(Alias::Outer {
+        kind: ComponentOuterAliasKind::Type,
+        count: 1,
+        index: outer,
+    });
+    let idx = *local_type_idx;
+    *local_type_idx += 1;
+    Some(idx)
 }
 
 /// The type indices one resource holds in an instance type: the resource and
@@ -2301,13 +2322,6 @@ fn generate_cm_imports(
                 }
             }
 
-            // Determine if this interface defines its own ErrorCode (e.g. wasi:filesystem/types,
-            // wasi:sockets/types) vs. using the shared wasi:cli/types error-code via outer alias.
-            // ErrorCode may be an enum (cli/types) or a variant (filesystem/types, sockets/types).
-            let has_local_error_code = project
-                .cm_interface_registry
-                .declares_own_error_code(&interface_info.path);
-
             let signature_types = cm_functions.iter().flat_map(|func| {
                 func.params
                     .iter()
@@ -2339,7 +2353,6 @@ fn generate_cm_imports(
                         .cm_interface_registry
                         .get_variant_cases_by_source(iface, name)
                         .is_some()
-                        && (name.as_str() != ERROR_CODE_WADO_NAME || has_local_error_code)
                 })
                 .cloned()
                 .collect();
@@ -2353,7 +2366,6 @@ fn generate_cm_imports(
                         .get_enum_variants_by_source(iface, name)
                         .is_some()
                         && !needed_variants.contains(name)
-                        && (name.as_str() != ERROR_CODE_WADO_NAME || has_local_error_code)
                 })
                 .cloned()
                 .collect();
@@ -2430,7 +2442,6 @@ fn generate_cm_imports(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
-                                    has_local_error_code,
                                     &enum_export_indices,
                                     &resource_handles,
                                     &mut shared_type_gen,
@@ -2458,7 +2469,7 @@ fn generate_cm_imports(
             }
 
             // Merge variant export indices into enum_export_indices so that
-            // resolve_error_code_idx can find ErrorCode regardless of enum/variant.
+            // error_code_idx can find ErrorCode regardless of enum/variant.
             for (name, idx) in &variant_export_indices {
                 enum_export_indices.insert(name.clone(), *idx);
             }
@@ -2617,7 +2628,6 @@ fn generate_cm_imports(
                             &resolved_ty,
                             &mut instance_type,
                             &mut local_type_idx,
-                            has_local_error_code,
                             &enum_export_indices,
                             &resource_handles,
                             &mut shared_type_gen,
@@ -3783,7 +3793,6 @@ fn import_resource_using_interfaces(
                                 &resolved,
                                 &mut instance_type,
                                 &mut local_type_idx,
-                                false,
                                 &IndexMap::default(),
                                 &resource_handles,
                                 &mut type_gen,
@@ -3801,7 +3810,6 @@ fn import_resource_using_interfaces(
                         &resolved_ty,
                         &mut instance_type,
                         &mut local_type_idx,
-                        false,
                         &IndexMap::default(),
                         &resource_handles,
                         &mut type_gen,

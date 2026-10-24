@@ -260,6 +260,28 @@ jobs:
 
       - run: mise run test-gale-o2
 
+  # The sandbox's escape tests, on the backend no other job runs: Seatbelt.
+  # See docs/wep-2026-10-21-core-process.md.
+  test-sandbox-macos:
+    name: Test (sandbox, macOS)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # rustup installs the toolchain rust-toolchain.toml names; no mise tool
+      # is needed. Only main saves, as cargo-cache.yml does for Linux.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: sandbox-macos
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked -p wado-host --lib sandbox::
+
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
   # tests it. See `wado-run-webgpu/AGENTS.md`.
   test-webgpu:
@@ -302,7 +324,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu]
+    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
