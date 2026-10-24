@@ -193,37 +193,40 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
             read_at(&mut readers, &vi.name, -1);
         }
     }
-    // A node computes one position where every value it writes is read only by
-    // nodes that do, or is the output itself. Readers come later, so a walk
-    // from the end decides them first.
-    let mut cut = HashSet::<i32>::new();
+    // A node computes one position where every value it writes is read only at
+    // that position by nodes that do, or is the output itself. Readers come
+    // later, so a walk from the end decides them first. Each cut node maps to
+    // which of its operands it reads at that position.
+    let mut cut = HashMap::<i32, List<bool>>::new();
     for let mut i = graph.nodes.len() - 1; i >= 0; i -= 1 {
         let node = &graph.nodes[i];
-        if !by_position(node, shapes, axis) {
+        let Some(positional) = positional_reads(node, shapes, axis) else {
             continue;
-        }
+        };
         let kept = node.outputs.into_iter().all(|o| {
             if o == *output {
                 return true;
             }
             let read = readers.get(o).unwrap_or([]);
-            return !read.is_empty() && read.into_iter().all(|r| cut.contains(r));
+            return !read.is_empty() && read.into_iter().all(|r| cut.get(r) matches {
+                Some(p) && reads_only_at_position(&graph.nodes[r], &p, &o)
+            });
         });
         if kept {
-            cut.insert(i);
+            cut[i] = positional;
         }
     }
-    // A cut of another output along the same axis made these already, and the
-    // slices of the operands it shares with this one.
+    // A cut of another output along the same axis made these already, ahead
+    // of the slices it made, so they go first again, ahead of this cut's.
     let starts = `loam.last${axis}.starts`;
     let ends = `loam.last${axis}.ends`;
     let axes = `loam.last${axis}.axes`;
-    let mut nodes: List<Node> = [];
-    if !producer.contains_key(starts) {
-        nodes.push(ints(&starts, -1));
-        nodes.push(ints(&ends, i64::MAX));
-        nodes.push(ints(&axes, axis as i64));
-    }
+    let bounds = [starts, ends, axes] as List<String>;
+    let mut nodes: List<Node> = [
+        ints(&starts, -1),
+        ints(&ends, i64::MAX),
+        ints(&axes, axis as i64),
+    ];
     let sliced_name = |input: &String| `${*input}/last${axis}`;
     let slice = |input: &String, sliced: String| Node {
         op: "Slice",
@@ -235,12 +238,12 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
     // slice follows what writes its operand, so it precedes every reader.
     let mut wanted = HashSet::<String>::new();
     let mut written = graph.nodes;
-    for let i of cut {
-        let node = &mut written[i];
+    for let [i, positional] of cut.entries() {
+        let node = &mut written[*i];
         for let j of 0..<node.inputs.len() {
             let input = node.inputs[j];
-            let from_cut = producer.get(input) matches { Some(p) && cut.contains(p) };
-            if input == "" || from_cut || !cuts_operand(node, j) || !spans(&shapes.get(input).unwrap(), axis) {
+            let from_cut = producer.get(input) matches { Some(p) && cut.contains_key(p) };
+            if input == "" || from_cut || !positional[j] || !spans(&shapes.get(input).unwrap(), axis) {
                 continue;
             }
             node.inputs[j] = sliced_name(&input);
@@ -261,7 +264,10 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
         slice_written(&mut nodes, &names);
     }
     for let [i, node] of written.into_iter().enumerate() {
-        if !cut.contains(i) && node.outputs.contains_str(output) {
+        if node.op == "Constant" && bounds.contains_str(&node.outputs[0]) {
+            continue;
+        }
+        if !cut.contains_key(i) && node.outputs.contains_str(output) {
             // The output's producer reads more than one position, so its
             // output is cut where it is written.
             let whole = `${*output}/whole`;
@@ -278,32 +284,44 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
     graph.nodes = nodes;
 }
 
-/// Whether `node` computes each position along `axis`, counted from the end,
-/// from that position of its operands alone.
-fn by_position(node: &Node, shapes: &HashMap<String, Shape>, axis: i32) -> bool {
+/// Where `node` computes each position along `axis`, counted from the end,
+/// from its operands at that position and others read whole: whether it reads
+/// each operand at that position. A product reads its right matrix whole, as
+/// its rows are the inner axis, and a reduction its axes.
+fn positional_reads(node: &Node, shapes: &HashMap<String, Shape>, axis: i32) -> Option<List<bool>> {
     let Some(out) = shapes.get(node.outputs[0]) else {
-        return false;
+        return null;
     };
     if node.outputs.len() != 1 || out.rank() < -axis {
-        return false;
+        return null;
     }
+    let first_alone = || -> List<bool> { (0..<node.inputs.len()).map(|j| j == 0).collect() };
     if is_unary_elementwise(&node.op) || is_binary_elementwise(&node.op) {
-        return true;
+        return Option::Some(node.inputs.into_iter().map(|_| true).collect());
     }
     if is_reduction(&node.op) {
         let x = shapes.get(node.inputs[0]).unwrap();
-        return x.rank() == out.rank() && x.axes[x.rank() + axis].extent == out.axes[out.rank() + axis].extent;
+        if x.rank() == out.rank() && x.axes[x.rank() + axis].extent == out.axes[out.rank() + axis].extent {
+            return Option::Some(first_alone());
+        }
+        return null;
     }
-    if node.op == "MatMul" {
-        return axis == -2 && shapes.get(node.inputs[0]).unwrap().rank() >= 2;
+    let ranks = |j: i32| shapes.get(node.inputs[j]).unwrap().rank();
+    if node.op == "MatMul" && axis == -2 && ranks(0) >= 2 && ranks(1) >= 2 {
+        return Option::Some(first_alone());
     }
-    return false;
+    return null;
 }
 
-/// Whether operand `index` of a node `by_position` keeps is cut with it: all
-/// but a product's right matrix, whose rows are the inner axis.
-fn cuts_operand(node: &Node, index: i32) -> bool {
-    return node.op != "MatMul" || index == 0;
+/// Whether `node` reads `value` only as operands it reads at the cut
+/// position, as `positional` says.
+fn reads_only_at_position(node: &Node, positional: &List<bool>, value: &String) -> bool {
+    for let [j, input] of node.inputs.into_iter().enumerate() {
+        if input == *value && !positional[j] {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether `shape` has `axis`, counted from the end, at more than one

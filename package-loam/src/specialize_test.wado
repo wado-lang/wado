@@ -151,11 +151,20 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
                 pattern: "W",
                 axes: ["Embed", "Vocab"],
             },
+            LayoutRule {
+                pattern: "U",
+                axes: ["Batch", "Seq", "Embed"],
+            },
+            LayoutRule {
+                pattern: "B",
+                axes: ["Batch", "Embed", "Vocab"],
+            },
         ],
     };
     let mut checked = infer(graph, &schema).unwrap();
     for let [output, axis] of last.entries() {
         keep_last(graph, &checked.shapes, output, *axis)?;
+        assert defined_before_read(graph);
         checked = infer(graph, &schema).unwrap();
     }
     let nodes: List<String> = graph.nodes.into_iter().filter(|n| n.op != "Constant").map(
@@ -164,6 +173,24 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
     let out = checked.shapes.get("Y").unwrap();
     let axes: List<String> = out.axes.into_iter().map(|a| a.name).collect();
     return Result::Ok(`${nodes.join(" ")} | Y ${axes.join(",")}`);
+}
+
+/// Whether each node reads only what the graph is given or an earlier node
+/// wrote.
+fn defined_before_read(graph: &Graph) -> bool {
+    let mut defined: List<String> = [];
+    for let given of [&graph.inputs, &graph.initializers] {
+        for let vi of *given {
+            defined.push(vi.name);
+        }
+    }
+    for let node of &graph.nodes {
+        if node.inputs.into_iter().any(|input| input != "" && !defined.contains_str(&input)) {
+            return false;
+        }
+        defined.extend(&node.outputs);
+    }
+    return true;
 }
 
 test "a cut moves back through a norm and a product's rows" {
@@ -180,6 +207,47 @@ test "two outputs cut along one axis share the slices of what both read" {
         }`,
     ).unwrap();
     assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=MatMul(H,W) P=Relu(X/last-2) | Y Batch,Seq,Vocab";
+}
+
+test "a second cut along one axis slices what the first did not after the bounds" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[N, S, 4] U, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {
+            Y = MatMul(X, W)
+            P = Relu(U)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "U/last-2=Slice(U,loam.last-2.starts) X/last-2=Slice(X,loam.last-2.starts) Y=MatMul(X/last-2,W) P=Relu(U/last-2) | Y Batch,Seq,Vocab";
+}
+
+test "what a product reads as its right operand stays whole" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[N, 4, 3] B) => (float[N, S, 3] Y) {
+            V = Relu(B)
+            Y = MatMul(X, V)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) V=Relu(B) Y=MatMul(X/last-2,V) | Y Batch,Seq,Vocab";
+}
+
+test "a reduction's axes stay whole" {
+    let mut graph = read(
+        `<ir_version: 8, opset_import: [ "" : 13 ]>
+        g (float[N, S, 4] X, float[4, 3] W) => (float[N, S, 3] Y, float[1, 1, 4] P) {
+            Y = MatMul(X, W)
+            A = Constant <value_ints = [0, 1]> ()
+            P = ReduceSum <keepdims = 1> (X, A)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { P: 2 }).unwrap() == "X/last-1=Slice(X,loam.last-1.starts) Y=MatMul(X,W) P=ReduceSum(X/last-1,A) | Y Batch,Seq,Vocab";
+}
+
+test "a product by a vector computes no position of its batch alone" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[4] G) => (float[N, S] Y) {
+            Y = MatMul(X, G)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 0 }).unwrap() == "Y/whole=MatMul(X,G) Y=Slice(Y/whole,loam.last-2.starts) | Y Batch,Seq";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {
