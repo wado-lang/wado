@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use predicates::prelude::*;
+#[cfg(unix)]
 use wado_host::sandbox;
 
 use crate::common::{custom_sections, wado, wado_in, wado_test};
@@ -1592,6 +1593,7 @@ fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
 
 /// A test blocked on a host future runs no wasm, so no epoch interrupts it; the
 /// timeout still ends it.
+#[cfg(unix)]
 #[test]
 fn test_test_times_out_a_guest_blocked_on_the_host() {
     if sandbox::availability() != sandbox::Availability::Available {

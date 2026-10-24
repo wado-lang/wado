@@ -349,8 +349,9 @@ fn capture(child: &mut Child, limit: i32) -> Captured {
             Err(copy) => {
                 let [end, chunk] = copy.finish();
                 captured.stderr.extend(&(chunk.items as ByteList));
-                if captured.stderr.len() > limit {
-                    captured.stderr = captured.stderr.split_off(captured.stderr.len() - limit);
+                // Trimming copies the tail, so it waits for a second limit's worth.
+                if captured.stderr.len() - limit > limit {
+                    keep_tail(&mut captured.stderr, limit);
                 }
                 if chunk.result == CopyResult::Completed {
                     set.insert(Pipe::Err(end.start_read(CAPTURE_CHUNK)));
@@ -358,7 +359,14 @@ fn capture(child: &mut Child, limit: i32) -> Captured {
             },
         }
     }
+    keep_tail(&mut captured.stderr, limit);
     return captured;
+}
+
+fn keep_tail(bytes: &mut ByteList, limit: i32) {
+    if bytes.len() > limit {
+        *bytes = bytes.split_off(bytes.len() - limit);
+    }
 }
 
 global CAPTURE_CHUNK: i32 = 65536;

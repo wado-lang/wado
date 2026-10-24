@@ -130,9 +130,10 @@ test "stderr past the capture limit keeps its tail" {
     if availability() != Availability::Available {
         return;
     }
-    let script = "printf 0123456789 >&2";
-    let out = cmd`sh -c ${script}`.capture_limit(4).output().unwrap();
-    assert out.stderr == b"6789";
+    // Past twice the limit the read loop trims; short of it, only the end does.
+    let stderr = |script: String| cmd`sh -c ${script}`.capture_limit(4).output().unwrap().stderr;
+    assert stderr("printf 0123456789 >&2") == b"6789";
+    assert stderr("printf 0123456 >&2") == b"3456";
 }
 
 test "a piped child reads what the guest writes" {

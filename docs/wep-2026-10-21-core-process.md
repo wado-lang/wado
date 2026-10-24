@@ -438,7 +438,7 @@ cannot be taken back.
   the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
   `close_range` in `pre_exec`. Done when the escape tests pass in CI on
   Linux.
-- [x] The macOS backend: the fixed profile, its parameters, and the
+- [ ] The macOS backend: the fixed profile, its parameters, and the
   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
   macOS.
 - [x] `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
@@ -459,7 +459,7 @@ cannot be taken back.
   option that sets the grace period, which stays at 3 seconds until it is.
 - The compiler's e2e harness does not link `core:process`, so a fixture cannot
   spawn; the stdlib's own tests cover it under `wado test`.
-- A component that spawns imports `core:process`, which no world WASI defines,
+- A component that spawns imports `core:process`, which no WASI world defines,
   so only the `wado` host instantiates it. Nothing at compile time says so: an
   effect the selected world does not import is imported all the same
   ([Worlds](./spec-worlds.md)).
