@@ -374,7 +374,7 @@ impl Assembler {
             match insn {
                 Insn::Label(label) => positions.push((*label, index)),
                 Insn::Load(_) | Insn::JumpIfEq(..) | Insn::JumpIfGe(..) | Insn::Ret(_) => {
-                    index += 1
+                    index += 1;
                 }
             }
         }
