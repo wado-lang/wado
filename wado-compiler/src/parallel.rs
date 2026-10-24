@@ -131,6 +131,26 @@ impl Executor {
         (0..len).filter_map(f).collect()
     }
 
+    /// `f` on each item, for what it does to the state the items reach.
+    pub fn for_each<T: Sync>(&self, items: &[T], f: impl Fn(&T) + Sync + Send) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            pool.install(|| items.par_iter().for_each(f));
+            return;
+        }
+        items.iter().for_each(f);
+    }
+
+    /// [`Self::for_each`] over the indices below `len`.
+    pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(len) {
+            pool.install(|| (0..len).into_par_iter().for_each(f));
+            return;
+        }
+        (0..len).for_each(f);
+    }
+
     /// Drop `items` on the pool. A table the visits built, such as copies of
     /// whole functions, takes as long to free as to build, and the calling
     /// thread would free it alone.

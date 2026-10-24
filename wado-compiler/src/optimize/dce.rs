@@ -176,7 +176,7 @@ pub(super) fn analyze_dce(
     let mut analysis = DceAnalysis::empty();
     let reachable = compute_function_reachability(project, &mut graph);
     resolve_imports(project, &graph, &reachable);
-    analysis.functions = reached_positions(&reachable);
+    analysis.functions = stored_positions(&reachable).collect();
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
     populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
@@ -184,7 +184,7 @@ pub(super) fn analyze_dce(
 
 /// Callers relevant to interprocedural facts, including cached rewrite targets.
 pub(super) fn reachable_function_positions(
-    project: &mut NirPackage,
+    project: &NirPackage,
     cache: &mut DescriptorCache,
     walks: &mut ReachabilityCache,
     exec: &Executor,
@@ -197,7 +197,7 @@ pub(super) fn reachable_function_positions(
     let mut reachable = compute_function_reachability(project, &mut graph);
     let roots = cached.into_iter().map(|id| Target::Stored(id.index()));
     reachable.extend(compute_reachable(&graph, roots));
-    reached_positions(&reachable)
+    stored_positions(&reachable).collect()
 }
 
 /// `NirPackage::callee_descriptors_from` held across the whole of optimization,
@@ -292,14 +292,11 @@ fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph
 }
 
 /// The positions in `project.functions` among `reachable`, in its order.
-fn reached_positions(reachable: &Reached) -> IndexSet<usize> {
-    reachable
-        .iter()
-        .filter_map(|target| match target {
-            Target::Stored(pos) => Some(*pos),
-            Target::Extern(_) => None,
-        })
-        .collect()
+fn stored_positions(reachable: &Reached) -> impl Iterator<Item = usize> + '_ {
+    reachable.iter().filter_map(|target| match target {
+        Target::Stored(pos) => Some(*pos),
+        Target::Extern(_) => None,
+    })
 }
 
 /// Add functions the NIR optimizer's rewrites reach without a call edge:
@@ -394,15 +391,19 @@ fn extend_reachable_for_optimizer_passes(
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
 fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -> Reached {
-    let roots = project.functions.iter().filter_map(|func_rc| {
-        let func = func_rc.borrow();
-        let is_root = func.is_cm_export
-            || (func.is_export
-                && project
-                    .wasm_module_sources
-                    .contains_key(&func.module_source));
-        is_root.then(|| graph.target(FunctionId::free(&func.module_source, &func.name)))
-    });
+    let roots = project
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(pos, func_rc)| {
+            let func = func_rc.borrow();
+            let is_root = func.is_cm_export
+                || (func.is_export
+                    && project
+                        .wasm_module_sources
+                        .contains_key(&func.module_source));
+            is_root.then_some(Target::Stored(pos))
+        });
     compute_reachable(graph, roots)
 }
 
@@ -411,22 +412,21 @@ fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -
 fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &Reached) {
     // Collect used WASI functions from reachable functions
     let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for target in reachable {
-        if let Target::Stored(pos) = target {
-            for (interface_name, op_name) in &graph.analyses[*pos].effect_calls {
-                used_wasi_functions.insert(operation_key(interface_name, op_name));
-            }
+    for pos in stored_positions(reachable) {
+        for (interface_name, op_name) in &graph.analyses[pos].effect_calls {
+            used_wasi_functions.insert(operation_key(interface_name, op_name));
         }
     }
 
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.
-    let reached_intrinsics: Vec<String> = project
-        .functions
-        .iter()
-        .enumerate()
-        .filter(|(pos, _)| reachable.contains(&Target::Stored(*pos)))
-        .filter_map(|(_, func)| func.borrow().intrinsic().map(str::to_string))
+    let reached_intrinsics: Vec<String> = stored_positions(reachable)
+        .filter_map(|pos| {
+            project.functions[pos]
+                .borrow()
+                .intrinsic()
+                .map(str::to_string)
+        })
         .collect();
     let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 
@@ -590,13 +590,6 @@ struct AnalysisGraph<'a> {
 }
 
 impl AnalysisGraph<'_> {
-    fn target(&self, id: FunctionId) -> Target {
-        match self.func_positions.get(&id) {
-            Some(&pos) => Target::Stored(pos),
-            None => Target::Extern(id),
-        }
-    }
-
     fn function_id<'s>(&'s self, target: &'s Target) -> &'s FunctionId {
         match target {
             Target::Stored(pos) => {
@@ -748,8 +741,7 @@ type InspectableSignatures = IndexSet<(usize, TypeId)>;
 /// per-functor inspect impls to stay alive for an unrelated reachable closure of
 /// the same signature.
 fn inspectable_signatures(graph: &AnalysisGraph, reachable: &Reached) -> InspectableSignatures {
-    reached_positions(reachable)
-        .into_iter()
+    stored_positions(reachable)
         .flat_map(|pos| graph.analyses[pos].inspect_signatures.iter().copied())
         .collect()
 }
@@ -2097,6 +2089,9 @@ impl GlobalGuards<'_> {
         deletable_value(body, *value, self.types, calls).then_some(expr)
     }
 
+    /// Whether every root statement is inert. The only answer the set can
+    /// change is a call's, made by the statement's value itself: see
+    /// [`root_callees`].
     fn inert_body(&self, body: &Body, calls: CallFacts) -> bool {
         body.blocks[body.root()]
             .stmts
@@ -2192,6 +2187,25 @@ impl GlobalGuards<'_> {
     }
 }
 
+/// The callees `GlobalGuards::inert_body` asks the inert set about: each root
+/// statement whose value is a call.
+fn root_callees(body: &Body) -> Vec<FuncId> {
+    body.blocks[body.root()]
+        .stmts
+        .iter()
+        .filter_map(|s| match body.stmts[*s].kind {
+            StmtKind::Expr(value)
+            | StmtKind::Let { value, .. }
+            | StmtKind::Return { value: Some(value) } => value.as_expr(),
+            _ => None,
+        })
+        .filter_map(|e| match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => Some(*func_id),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
 /// after globalization can take every reader with them, leaving a global that
 /// holds its whole initializer in the binary for no observer. The
@@ -2217,8 +2231,25 @@ pub(super) fn unhoist_unobserved_globals(
     };
     // `inert_body` only gains answers as the set grows, so adding a round's
     // findings together reaches the same fixed point as adding them one by one.
+    // A body's answer waits only on what its root statements call, so a round
+    // asks again just the callers of what the last one found.
+    let waits_on = exec.map_indices(functions.len(), |i| {
+        functions[i]
+            .borrow()
+            .body
+            .as_ref()
+            .map(root_callees)
+            .unwrap_or_default()
+    });
+    let mut waiters: IndexMap<FuncId, Vec<usize>> = IndexMap::default();
+    for (i, callees) in waits_on.into_iter().enumerate() {
+        for callee in callees {
+            waiters.entry(callee).or_default().push(i);
+        }
+    }
+    let mut asked: Vec<usize> = (0..functions.len()).collect();
     loop {
-        let fresh = exec.filter_map_indices(functions.len(), |i| {
+        let fresh = exec.filter_map(&asked, |&i| {
             let func = functions[i].borrow();
             let (Some(id), Some(body)) = (func.id, &func.body) else {
                 return None;
@@ -2229,6 +2260,14 @@ pub(super) fn unhoist_unobserved_globals(
         if fresh.is_empty() {
             break;
         }
+        asked = fresh
+            .iter()
+            .filter_map(|id| waiters.get(id))
+            .flatten()
+            .copied()
+            .collect();
+        asked.sort_unstable();
+        asked.dedup();
         guards.inert_functions.extend(fresh);
     }
     let census = exec.map_indices(functions.len(), |i| {
@@ -2272,7 +2311,7 @@ pub(super) fn unhoist_unobserved_globals(
     if unobserved.is_empty() {
         return false;
     }
-    exec.map_indices(functions.len(), |i| {
+    exec.for_each_index(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         if let Some(body) = func.body.as_mut() {
@@ -2695,7 +2734,7 @@ pub(super) fn remove_unreachable_globals(
 
     let type_table = &*project.type_table.borrow();
     let functions = &project.functions;
-    exec.map_indices(functions.len(), |i| {
+    exec.for_each_index(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         let is_module_init = func.name == MODULE_INIT_FUNCTION;

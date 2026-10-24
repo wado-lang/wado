@@ -387,10 +387,14 @@ function main(): void {
       if (callers != null) {
         let chain: string[] | null = null;
         for (let node: number | null = leaf; node != null; node = stPrefix[node]) {
-          if (callers.test(name(node))) chain = [];
-          else if (chain != null && chain.length < 3) chain.push(name(node).replace(` ${inBin}`, ""));
+          const n = name(node);
+          if (callers.test(n)) chain = [];
+          else if (chain != null && chain.length < 3) chain.push(n);
         }
-        if (chain != null) add(callersBy, chain.join("  <  ") || "[root]", w);
+        if (chain != null) {
+          const label = chain.map((n) => n.replace(` ${inBin}`, "")).join("  <  ");
+          add(callersBy, label || "[root]", w);
+        }
       }
       // attribute non-main-binary leaf CPU to nearest main-binary caller
       if (libName(leaf) !== binary) {

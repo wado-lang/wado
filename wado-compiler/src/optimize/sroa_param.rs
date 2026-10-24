@@ -253,8 +253,9 @@ fn collect_and_validate(
     // Phase 2: resolve each param to the one field it reads, dropping the ones
     // that escape or disagree — one fixpoint, since a param forwarded to another
     // candidate position takes its answer from there.
-    let keys: IndexSet<FnKey> = candidates.keys().map(|&(key, _)| key).collect();
-    let keys: Vec<FnKey> = keys.into_iter().collect();
+    // A function's positions sit together, as `per_function` collected them.
+    let mut keys: Vec<FnKey> = candidates.keys().map(|&(key, _)| key).collect();
+    keys.dedup();
     let forwards: IndexMap<FnKey, IndexMap<u32, Vec<(FnKey, usize)>>> = keys
         .iter()
         .copied()
