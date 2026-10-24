@@ -1,0 +1,70 @@
+// A generic impl's bound that a blanket impl answers still brings its effects,
+// beside another bound a direct pure impl answers: `Pair<Quiet, Clock>` steps
+// with `Stdout` because `Clock: Tick` does, so a pure caller is rejected.
+use { println, Stdout } from "core:cli";
+
+trait Backend with _ {
+    fn go(&self) -> i32;
+}
+
+trait Tick with _ {
+    fn tick(&self) -> i32;
+}
+
+impl<T: Tick> Backend for T {
+    fn go(&self) -> i32 with _ {
+        return self.tick();
+    }
+}
+
+struct Clock {
+}
+
+impl Tick for Clock {
+    fn tick(&self) -> i32 with Stdout {
+        println("tick");
+        return 2;
+    }
+}
+
+struct Quiet {
+}
+
+impl Backend for Quiet {
+    fn go(&self) -> i32 {
+        return 0;
+    }
+}
+
+struct Pair<A: Backend, C: Backend> {
+    a: A,
+    c: C,
+}
+
+trait Gen with _ {
+    fn step(&self) -> i32;
+}
+
+impl<A: Backend, C: Backend> Gen for Pair<A, C> {
+    fn step(&self) -> i32 with _ {
+        return self.a.go() + self.c.go();
+    }
+}
+
+fn timed<G: Gen>(g: &G) -> i32 with _ {
+    return g.step();
+}
+
+fn pure_call() -> i32 {
+    return timed(&Pair { a: Quiet {}, c: Clock {} });
+}
+
+export fn run() with Stdout {
+    println(`${pure_call()}`);
+}
+
+__DATA__
+{
+    "compile_error": ":59:12: analysis error: missing effect 'Stdout' required by 'timed'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

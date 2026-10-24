@@ -1,0 +1,22 @@
+//! Gemma 3 (270M) on Loam's `Cpu` backend. Run with the model's directory as
+//! the one grant, under the collector the weights need, as
+//! `mise run gemma3-270m` does:
+//!
+//!     wado run --collector drc --dir ../example/gemma3-270m gemma3_270m/gemma3_270m.wado
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use { Cpu } from "lib:loam";
+use { Model } from "../../example/gemma3-270m/model.wado";
+use { timed } from "./generate.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock) {
+    let Ok(checkpoint) = fs::read("build/gemma3.safetensors") else {
+        eprintln("build/gemma3.safetensors is missing; run package-loam/example/gemma3-270m/fetch.sh");
+        return;
+    };
+    let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
+    timed("Gemma 3 (270M), Loam Cpu", &mut model);
+}
