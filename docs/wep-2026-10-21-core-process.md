@@ -364,6 +364,10 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 - `Child` is `affine`, and dropping it kills the process. `wait(self)` returns
   `Result<ExitStatus, ProcessError>`, and `kill(&self)` ends it early. There is
   no `detach`: the host kills every child when the guest exits anyway.
+- A pipe nothing can reach would block the child, so none is left open.
+  `wait` closes every stream still in the `Child`, and `output` and `status`,
+  which hand out no `Child`, give the child `/dev/null` for a stream piped
+  there.
 - A pipeline passes one child's `stdout` stream to the next one's `stdin`.
 - `Command::timeout(d: Duration)` sets the timeout, in `wasi:clocks`'s
   `Duration`, the nanoseconds the WIT carries. There is no default. A child

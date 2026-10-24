@@ -17,7 +17,10 @@ fn dot_names_the_childs_directory_only_as_the_first_grant() {
     let second = tempfile::tempdir().unwrap();
     let same = first.path().to_str().unwrap();
     assert!(matches!(
-        grants(&[(first.path(), "."), (second.path(), second.path().to_str().unwrap())]),
+        grants(&[
+            (first.path(), "."),
+            (second.path(), second.path().to_str().unwrap())
+        ]),
         Answer::Available(_)
     ));
     assert!(matches!(

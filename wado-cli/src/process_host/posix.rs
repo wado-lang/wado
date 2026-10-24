@@ -297,7 +297,10 @@ fn route<T: 'static>(
             Ok(Some(StreamReader::new(&mut store, producer)?))
         }
         Route::Captured(sink) => {
-            copies.push(copy_into(fd.expect("a captured stream has a host end"), sink)?);
+            copies.push(copy_into(
+                fd.expect("a captured stream has a host end"),
+                sink,
+            )?);
             Ok(None)
         }
     }
