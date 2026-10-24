@@ -189,7 +189,8 @@ Measure peak RSS first, per phase second, per allocation site last.
 ### Per phase: the span trace
 
 The span trace that times the phases also samples the process's resident set
-(Linux only), and `analyze_spans.ts` shows each row's peak. An end line adds
+(Linux only). `analyze_spans.ts` shows the peak a row's spans raised the
+process to, and `-` for one that stayed under an earlier peak. An end line adds
 the net change in current RSS since the span began:
 
 ```sh

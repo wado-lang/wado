@@ -6,7 +6,9 @@
  * Spans of one name are summed under their parent: a name is grouped by its
  * first word, so `nir/iteration 3` counts toward `nir/iteration` and
  * `load ./ir.wado` toward `load`. Each row shows the summed wall time, its
- * share of the run, the number of spans, and the peak RSS they reached.
+ * share of the run, the number of spans, and the highest new peak RSS they
+ * set. The trace's peak is the process high-water mark (`VmHWM`), so a span
+ * that stays under an earlier phase's peak sets none and shows `-`.
  *
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
  *   ./analyze_spans.ts TRACE.log [--min SECONDS] [--each RE]
@@ -43,7 +45,7 @@ const each = values.each === undefined ? null : new RegExp(values.each);
 const line = /^\[(\d+):(\d+):(\d+\.\d+)\] (>>|<<) (.*?)(?: · rss (\d+)\/(\d+) MiB.*)?$/;
 const newNode = (): Node => ({ wall: 0, count: 0, peakMiB: 0, children: new Map() });
 const root = newNode();
-const open: { name: string; start: number; node: Node }[] = [];
+const open: { name: string; start: number; startPeakMiB: number; node: Node }[] = [];
 const listed: string[] = [];
 let end = 0;
 
@@ -61,7 +63,7 @@ for (const text of readFileSync(positionals[0], "utf8").split("\n")) {
       node = newNode();
       parent.children.set(key, node);
     }
-    open.push({ name, start: at, node });
+    open.push({ name, start: at, startPeakMiB: Number(m[7] ?? 0), node });
     continue;
   }
   // One compile's spans nest strictly; several compiles sharing stderr, as
@@ -75,7 +77,9 @@ for (const text of readFileSync(positionals[0], "utf8").split("\n")) {
   }
   span.node.wall += at - span.start;
   span.node.count += 1;
-  if (m[7] !== undefined) span.node.peakMiB = Math.max(span.node.peakMiB, Number(m[7]));
+  if (m[7] !== undefined && Number(m[7]) > span.startPeakMiB) {
+    span.node.peakMiB = Math.max(span.node.peakMiB, Number(m[7]));
+  }
   if (each?.test(name)) {
     listed.push(`${span.start.toFixed(2).padStart(8)}s  ${(at - span.start).toFixed(2).padStart(7)}s  ${name}`);
   }
@@ -88,7 +92,7 @@ const print = (node: Node, depth: number): void => {
   for (const [key, child] of rows) {
     if (child.wall < min) continue;
     console.log(
-      `${child.wall.toFixed(2).padStart(7)}s ${((100 * child.wall) / end).toFixed(1).padStart(6)}% ${String(child.count).padStart(6)} ${String(child.peakMiB).padStart(6)}  ${"  ".repeat(depth)}${key}`,
+      `${child.wall.toFixed(2).padStart(7)}s ${((100 * child.wall) / end).toFixed(1).padStart(6)}% ${String(child.count).padStart(6)} ${(child.peakMiB === 0 ? "-" : String(child.peakMiB)).padStart(6)}  ${"  ".repeat(depth)}${key}`,
     );
     print(child, depth + 1);
   }
