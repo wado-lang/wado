@@ -190,8 +190,9 @@ Where `Command::stderr_piped` asked for it.
 
 #### `pub fn wait(self) -> Result<ExitStatus, ProcessError>`
 
-Wait for the child to end. Its streams stay where they are, so read a
-piped stdout first: a child blocked writing to a full pipe never ends.
+Wait for the child to end. Nothing can reach a stream still left in the
+`Child` once it is waited on, so `wait` closes each first: take a piped
+stream out to use it.
 
 #### `pub fn kill(&self)`
 
