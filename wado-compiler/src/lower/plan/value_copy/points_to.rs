@@ -468,8 +468,8 @@ struct Graph {
     pts: Vec<LocSet>,
     /// The node of each location.
     locations: Vec<u32>,
-    /// The index in `locations` of each node that is one.
-    location_index: IndexMap<u32, Loc>,
+    /// Each node's index in `locations`, where it is one.
+    location_of: Vec<Option<Loc>>,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
     rep: DisjointSets,
@@ -509,6 +509,7 @@ impl Graph {
         self.stores.push(Vec::new());
         self.sites.push(Vec::new());
         self.delta.push(LocSet::default());
+        self.location_of.push(None);
         id
     }
 
@@ -575,10 +576,9 @@ impl Graph {
         if self.inert.contains(&node) {
             return;
         }
-        let next = Loc(u32::try_from(self.locations.len()).expect("location count fits u32"));
-        let loc = *self.location_index.entry(loc).or_insert_with(|| {
+        let loc = *self.location_of[loc as usize].get_or_insert_with(|| {
             self.locations.push(loc);
-            next
+            Loc(u32::try_from(self.locations.len() - 1).expect("location count fits u32"))
         });
         if self.pts[node as usize].insert(loc) {
             if self.delta[node as usize].is_empty() {
@@ -813,23 +813,24 @@ impl Graph {
     /// Renumber the locations in the order of their nodes, so each set lists
     /// its locations in node order however the build met them.
     fn number_locations_in_node_order(&mut self) {
-        let mut by_node: Vec<u32> = (0..).take(self.locations.len()).collect();
-        by_node.sort_unstable_by_key(|&index| self.locations[index as usize]);
-        let mut renumbered = vec![Loc(0); by_node.len()];
-        for (new, &old) in (0..).zip(&by_node) {
-            renumbered[old as usize] = Loc(new);
+        self.locations.sort_unstable();
+        let mut renumbered = vec![Loc(0); self.locations.len()];
+        for (index, &node) in (0..).zip(&self.locations) {
+            let at = &mut self.location_of[node as usize];
+            let Loc(old) = at.expect("each location has an index");
+            renumbered[old as usize] = Loc(index);
+            *at = Some(Loc(index));
         }
         for set in self.pts.iter_mut().chain(&mut self.delta) {
+            if set.is_empty() {
+                continue;
+            }
             let mut locs: Vec<Loc> = set
                 .iter()
                 .map(|Loc(old)| renumbered[old as usize])
                 .collect();
             locs.sort_unstable();
             *set = locs.into_iter().collect();
-        }
-        self.locations.sort_unstable();
-        for (index, &node) in (0..).zip(&self.locations) {
-            self.location_index.insert(node, Loc(index));
         }
     }
 
