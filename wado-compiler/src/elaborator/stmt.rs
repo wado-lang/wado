@@ -2560,14 +2560,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if self.tysys.type_table.borrow().is_never(iterable_type_id) {
             self.record_desugar(for_of.id, DesugarKind::ForOfNever);
-            let binding_type = if is_enumerate {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_tuple(vec![TypeTable::I32, TypeTable::NEVER])
-            } else {
-                TypeTable::NEVER
-            };
+            let binding_type = self.for_of_binding_type(is_enumerate, TypeTable::NEVER);
             let mut scope = ctx.enter_scope();
             self.resolve_let_pattern(
                 &for_of.binding,
@@ -2684,6 +2677,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The body is resolved once with the loop variable having the `TypePack` type.
     /// The monomorphizer will expand this after type substitution resolves the
     /// `TypePack` to a concrete tuple.
+    /// What a for-of binds per element: the element, or `[i32, element]` under
+    /// `.enumerate()`.
+    fn for_of_binding_type(&mut self, is_enumerate: bool, element: TypeId) -> TypeId {
+        if is_enumerate {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_tuple(vec![TypeTable::I32, element])
+        } else {
+            element
+        }
+    }
+
     fn resolve_variadic_for_of(
         &mut self,
         for_of: &ForOfStmt,
@@ -2731,14 +2737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 inner
             };
             // Expansion supplies the index literal per unrolled element.
-            if is_enumerate {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_tuple(vec![TypeTable::I32, bound])
-            } else {
-                bound
-            }
+            self.for_of_binding_type(is_enumerate, bound)
         };
 
         if !self.check_pack_binding(&for_of.binding, binding_type, for_of.span) {
@@ -2828,16 +2827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
             // element's facts are captured.
-            // For enumerate the binding is `[idx, val]`, resolved against the
-            // synthetic `[i32, elem_type]` tuple type.
-            let binding_type = if is_enumerate {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_tuple(vec![TypeTable::I32, bind_elem_type])
-            } else {
-                bind_elem_type
-            };
+            let binding_type = self.for_of_binding_type(is_enumerate, bind_elem_type);
             self.resolve_let_pattern(
                 &for_of.binding,
                 binding_type,
