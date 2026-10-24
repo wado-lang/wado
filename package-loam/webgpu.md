@@ -73,12 +73,17 @@ runs.
   binds what the step before bound. A step whose past is not the cache's last,
   as a branch from an earlier past is, or that outgrows the cache, copies the
   past to a cache of its own first. The next attends each query row over each
-  part of `LANES` positions in a workgroup of its own: the turned query, its scores,
-  their weights against the part's greatest, and the values they weigh. The
-  last joins a row's parts, rescaling each to the row's greatest score. Gemma's
-  step over one token has 4 query rows, so a workgroup a row left the device idle
-  and grew slower with the sequence: at 600 positions a token took 1.9 times
-  as long as with the parts. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+  part of 4 positions in a workgroup of its own: the turned query, its scores,
+  their weights against the part's greatest, and the values they weigh. Sixteen
+  lanes split each position's dot, as a lane a position summed Gemma's 256
+  elements alone. The cache's parts are held for every position it holds, so
+  they too bind as the step before's did. The last joins a row's parts,
+  rescaling each to the row's greatest score. Gemma's step over one token has 4
+  query rows, so a workgroup a row left the device idle and grew slower with
+  the sequence: at 600 positions a token took 1.9 times as long as with parts
+  of 64 positions. Parts of 4 with the dot split took Gemma's 8 tokens from a
+  short prompt in 0.94 times the time of parts of 64.
+  `conformance/webgpu_attention.wado` holds it to `Cpu`.
 - A product of at most six rows, as a step over one token or a short prompt
   makes, does not run in 16 by 16 tiles, which would leave most lanes idle.
   Each workgroup computes a run of columns, its lanes splitting the inner
