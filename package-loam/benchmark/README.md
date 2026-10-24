@@ -1,8 +1,8 @@
 # Loam Benchmarks
 
-Loam's backends against onnxruntime, in the format of
-[`benchmark/`](../../benchmark/README.md): each arm prints a throughput line, so
-`benchmark/pick.ts` and `benchmark/ab.ts` read the logs.
+Loam's backends against onnxruntime, and on Gemma 3 against llama.cpp, in the
+format of [`benchmark/`](../../benchmark/README.md): each arm prints a
+throughput line, so `benchmark/pick.ts` and `benchmark/ab.ts` read the logs.
 
 ## Setup
 
@@ -10,51 +10,87 @@ The models are not in the repository. Fetch them:
 
 ```sh
 package-loam/example/gpt2-124m/fetch.sh
+package-loam/example/gemma3-270m/fetch.sh
 ```
 
-The task fetches Microsoft's onnxruntime release itself
-(`gpt2_124m/fetch_onnxruntime.sh`, cached under `~/.cache/loam`).
+The tasks fetch the rest themselves, each pinned by version and SHA-256 and
+cached under `~/.cache/loam`:
+
+- `fetch_onnxruntime.sh`: Microsoft's onnxruntime release.
+- `fetch_llama_cpp.sh`: llama.cpp's release, as the CPU and the Vulkan build.
+- `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp.
 
 ## Tasks
 
 ```sh
 cd package-loam/benchmark
-mise run gpt2-124m   # GPT-2 (124M) greedy generation
+mise run gpt2-124m     # GPT-2 (124M) greedy generation
+mise run gemma3-270m   # Gemma 3 (270M) greedy generation
 mise run all
 ```
 
+Each arm continues "Hello, my name is" by 8 tokens, greedily, after one warmup
+run, three times, and prints the tokens it generated, so a divergence between
+arms is a bug rather than noise. The throughput counts generated tokens, and
+`ms/iter` is one run of 8. The programs other than Loam's are the timing
+`generate.wado` does, on each runtime's own API, linked against its release as
+shipped.
+
+## Environment
+
+Wado 2026-10-24 (`-O2`), wasmtime 50.0.0, wgpu-core 29, onnxruntime 1.30.0,
+llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
+NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. Each
+figure is the best of three runs.
+
 ## GPT-2 (124M)
 
-`gpt2_124m/` continues "Hello, my name is" by 8 tokens, greedily, after one
-warmup run, three times. Each arm prints the tokens it generated, so a
-divergence between them is a bug rather than noise. The throughput counts
-generated tokens.
+Every arm recomputes the whole sequence at each token, since the graph takes no
+key-value cache.
 
 | Arm                              | Program                                    |
 | -------------------------------- | ------------------------------------------ |
-| onnxruntime, its own thread pool | `onnxruntime.cpp`                          |
-| onnxruntime, 1 thread            | `onnxruntime.cpp 1`                        |
+| onnxruntime, its own thread pool | `gpt2_124m/onnxruntime.cpp`                |
+| onnxruntime, 1 thread            | `gpt2_124m/onnxruntime.cpp 1`              |
 | Loam `WebGpuBackend`             | `gpt2_124m_webgpu.wado`, `wado run-webgpu` |
 | Loam `Cpu`                       | `gpt2_124m.wado`, `wado run`               |
 
-`generate.wado` is the timing both Loam arms share, and `onnxruntime.cpp` the
-same program on onnxruntime's own C++ API, linked against Microsoft's release
-as shipped. Every arm recomputes the whole sequence at each token, since the
-graph takes no key-value cache.
-
-### Results
-
-Environment: Wado 2026-10-24 (`-O2`), wasmtime 50.0.0, wgpu-core 29,
-onnxruntime 1.30.0 (Microsoft's release), gcc 15.2.0 (`-O2`), AMD Ryzen 7
-5700X (8 cores, 16 threads), NVIDIA GeForce RTX 4060 Ti (driver 595.99.02),
-Linux x86_64. Best of three runs. Every arm generated the same 8 tokens, "John.
-I'm a writer, and".
+Every arm generated "John. I'm a writer, and".
 
 | Implementation                   |      Throughput |     ms/iter | vs best |
 | -------------------------------- | --------------: | ----------: | ------- |
-| **Loam** `WebGpuBackend`         | 128.81 tokens/s |   62.106 ms | 1.00x   |
-| onnxruntime, its own thread pool |  66.61 tokens/s |  120.106 ms | 1.93x   |
-| onnxruntime, 1 thread            |  37.40 tokens/s |  213.895 ms | 3.44x   |
-| **Loam** `Cpu`                   |   3.66 tokens/s | 2185.415 ms | 35.19x  |
+| **Loam** `WebGpuBackend`         | 128.72 tokens/s |   62.150 ms | 1.00x   |
+| onnxruntime, its own thread pool |  66.48 tokens/s |  120.339 ms | 1.94x   |
+| onnxruntime, 1 thread            |  37.57 tokens/s |  212.931 ms | 3.43x   |
+| **Loam** `Cpu`                   |   3.66 tokens/s | 2188.210 ms | 35.21x  |
 
-`ms/iter` is one run: 8 tokens generated after the prompt.
+## Gemma 3 (270M)
+
+Each run starts from an empty attention cache: the first token reads the
+prompt, and each one after it only itself against the cache. The Loam and
+onnxruntime arms read `example/gemma3-270m`'s checkpoint, in f32. llama.cpp
+reads GGUF in F16, the precision nearest it. Google ships no F16 GGUF and
+ggml-org only Q8_0, so it is unsloth's conversion.
+
+| Arm                              | Program                                        |
+| -------------------------------- | ---------------------------------------------- |
+| onnxruntime, its own thread pool | `gemma3_270m/onnxruntime.cpp`                  |
+| onnxruntime, 1 thread            | `gemma3_270m/onnxruntime.cpp 1`                |
+| llama.cpp CPU, a thread per core | `gemma3_270m/llama_cpp.cpp`, CPU build         |
+| llama.cpp CPU, 1 thread          | `gemma3_270m/llama_cpp.cpp`, CPU build         |
+| llama.cpp Vulkan                 | `gemma3_270m/llama_cpp.cpp`, Vulkan build      |
+| Loam `WebGpuBackend`             | `gemma3_270m_webgpu.wado`, `wado run-webgpu`   |
+| Loam `Cpu`                       | `gemma3_270m.wado`, `wado run --collector drc` |
+
+Every arm generated "[Your Name] and I am a", the tokens the example's
+`generate.json` records.
+
+| Implementation                   |      Throughput |     ms/iter | vs best |
+| -------------------------------- | --------------: | ----------: | ------- |
+| llama.cpp Vulkan                 | 269.10 tokens/s |   29.729 ms | 1.00x   |
+| **Loam** `WebGpuBackend`         | 164.13 tokens/s |   48.743 ms | 1.64x   |
+| llama.cpp CPU, a thread per core |  70.39 tokens/s |  113.647 ms | 3.82x   |
+| llama.cpp CPU, 1 thread          |  41.03 tokens/s |  194.967 ms | 6.56x   |
+| onnxruntime, its own thread pool |  35.85 tokens/s |  223.173 ms | 7.51x   |
+| onnxruntime, 1 thread            |  24.15 tokens/s |  331.234 ms | 11.14x  |
+| **Loam** `Cpu`                   |   4.89 tokens/s | 1636.169 ms | 55.04x  |
