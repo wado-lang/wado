@@ -12,9 +12,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver,
-    cm_wrap_async_func_name, dispatch_field_name, dispatch_global_name, dispatch_struct_name,
-    dispatch_wrapper_name, effect_default_impl_name, effect_namespace, mangle_generic_name,
+    DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver, cm_wrap_async_func_name,
+    dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
+    effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
 use crate::package::Package;
 use crate::synthesis::common::{

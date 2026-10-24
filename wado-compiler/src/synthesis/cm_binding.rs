@@ -33,8 +33,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    cm_export_func_name, cm_name_key, cm_post_return_func_name,
-    is_test_function, to_cm_name,
+    cm_export_func_name, cm_name_key, cm_post_return_func_name, is_test_function, to_cm_name,
 };
 use crate::package::{Package, test_selected};
 use crate::synthesis::SynthesisError;

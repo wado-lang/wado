@@ -10,6 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
@@ -19,7 +20,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
-use crate::ast::cm_function_path;
 use crate::name::{
     FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
     to_cm_name,

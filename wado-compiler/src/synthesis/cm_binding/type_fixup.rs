@@ -175,7 +175,6 @@ pub(super) fn rewrite_calls_in_block(
         adapters,
         entry_source,
         call_sites,
-        cm_interface_registry: call_sites.registry,
         type_table,
         applied_returns,
         callbacks,
@@ -190,7 +189,6 @@ struct CallRewriteWalker<'a> {
     adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
     call_sites: &'a CmCallSites<'a>,
-    cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
     applied_returns: &'a mut IndexMap<usize, TypeId>,
     /// The type of every closure an import takes, which the host calls back.
@@ -330,7 +328,8 @@ impl CallRewriteWalker<'_> {
         };
         let adapter = &self.adapters[&key];
         let func_info = self
-            .cm_interface_registry
+            .call_sites
+            .registry
             .get_function(&key)
             .expect("an adapter exists only for a registered CM function");
         let mut args = take_call_args(expr);
@@ -402,7 +401,7 @@ impl CallRewriteWalker<'_> {
         args: Vec<CallArg>,
         param_offset: usize,
     ) -> Vec<CallArg> {
-        let registry = self.cm_interface_registry;
+        let registry = self.call_sites.registry;
         adapter_params_of(
             func_info,
             args.into_iter(),
@@ -493,7 +492,8 @@ impl<'a> CmCallSites<'a> {
         });
         for (head, operations) in declarations {
             for op in operations {
-                let Some(key) = registry.operation_key(head.name(), op.cm_name.as_deref(), &op.name)
+                let Some(key) =
+                    registry.operation_key(head.name(), op.cm_name.as_deref(), &op.name)
                 else {
                     continue;
                 };
@@ -531,7 +531,9 @@ impl<'a> CmCallSites<'a> {
             return Some((key.to_string(), CmCallKind::Function));
         }
         if let Some(head) = func.module_source.effect_interface() {
-            let key = self.operation_keys.get(&(head.clone(), func.name.clone()))?;
+            let key = self
+                .operation_keys
+                .get(&(head.clone(), func.name.clone()))?;
             return Some((key.clone(), CmCallKind::Function));
         }
         let info = func.method_info.as_ref()?;

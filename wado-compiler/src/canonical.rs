@@ -428,7 +428,10 @@ pub enum CmCallTarget {
     /// A lowered import, by its local alias name
     /// (`"wasi:cli/Stdout::write_via_stream"`), and the
     /// `CmFunctionInfo::cm_identifier` of the function it is.
-    Import { alias: String, function: String },
+    Import {
+        alias: String,
+        function: String,
+    },
     Canonical(CanonicalIntrinsic),
 }
 

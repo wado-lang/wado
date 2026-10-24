@@ -1238,7 +1238,10 @@ fn register_unique<V>(
 /// operation's own name in kebab case.
 #[must_use]
 pub fn cm_function_key(cm_import: &CmImport, operation: &str) -> String {
-    cm_function_path(&cm_import.interface_path(), &cm_function_name(cm_import, operation))
+    cm_function_path(
+        &cm_import.interface_path(),
+        &cm_function_name(cm_import, operation),
+    )
 }
 
 fn cm_function_name(cm_import: &CmImport, operation: &str) -> String {
