@@ -1,0 +1,35 @@
+// A reference taken before an affine local moved names the object that moved,
+// so refilling the local does not make it readable again (WEP: Affine Types),
+// for a plain assignment and for a destructuring one.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+export fn run() {
+    let mut a = Tok { id: 1 };
+    let r = &a;
+    eat(a);
+    a = Tok { id: 2 };
+    let n = r.id;
+
+    let mut b = Tok { id: 3 };
+    let mut c = Tok { id: 4 };
+    let s = &b;
+    [b, c] = [c, b];
+    let m = s.id;
+}
+
+__DATA__
+{
+    "compile_error": ":22:13: analysis error: `r` refers into `a`, which moved at 20:9",
+    "compile_errors_contains": ["`s` refers into `b`, which moved at 27:18"]
+}

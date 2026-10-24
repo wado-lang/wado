@@ -1,0 +1,34 @@
+// A reference taken after an affine local was refilled names the new object,
+// and one taken where no path moved the local stays readable.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let mut a = Tok { id: 1 };
+    eat(a);
+    a = Tok { id: 2 };
+    let r = &a;
+    assert r.id == 2;
+
+    let mut b = Tok { id: 3 };
+    let s = &b;
+    if builtin::black_box(false) {
+        eat(b);
+        b = Tok { id: 4 };
+    } else {
+        assert s.id == 3;
+    }
+}
+
+__DATA__
+{"test": {}}
