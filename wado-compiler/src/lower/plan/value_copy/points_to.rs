@@ -916,13 +916,13 @@ impl Graph {
                     .iter()
                     .rposition(|&w| w == v)
                     .expect("a node leaves the stack only with its component");
-                let cycle: Vec<u32> = stack.drain(at..).collect();
-                for &w in &cycle {
+                for &w in &stack[at..] {
                     self.marks[w as usize].on_stack = false;
                 }
-                if cycle.len() > 1 {
-                    cycles.push(cycle);
+                if stack.len() - at > 1 {
+                    cycles.push(stack[at..].to_vec());
                 }
+                stack.truncate(at);
             }
         }
         for cycle in cycles {
