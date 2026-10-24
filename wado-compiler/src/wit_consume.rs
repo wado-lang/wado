@@ -31,9 +31,6 @@ pub struct ComponentBindings {
     pub module: Module,
     /// FQ names of every exported interface (drives import-plan classification).
     pub interface_fqs: Vec<String>,
-    /// Bare names of every exported world-level function (Phase 9); composition
-    /// wires these by name.
-    pub world_func_names: Vec<String>,
     /// FQ names of the interfaces the component itself imports — its host-leaf
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
@@ -89,7 +86,6 @@ pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceD
 pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
     let mut b = Builder::new();
     let mut interface_fqs = Vec::new();
-    let mut world_func_names = Vec::new();
 
     for (_, item) in &resolve.worlds[world].exports {
         match item {
@@ -98,10 +94,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
                 b.emit_interface(resolve, *id, &fq);
                 interface_fqs.push(fq);
             }
-            WorldItem::Function(f) => {
-                b.emit_world_function(resolve, f);
-                world_func_names.push(f.name.clone());
-            }
+            WorldItem::Function(f) => b.emit_world_function(resolve, f),
             WorldItem::Type { .. } => {
                 return Err(
                     "importing a component that exports a world-level type is not yet supported"
@@ -181,7 +174,6 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     Ok(ComponentBindings {
         module,
         interface_fqs,
-        world_func_names,
         host_leaf_imports,
         source_interfaces,
     })

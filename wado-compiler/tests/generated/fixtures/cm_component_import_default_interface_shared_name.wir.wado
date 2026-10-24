@@ -53,7 +53,7 @@ type "functype//wasi/$wado:right/right@0.1.0#pick" = fn() -> i32;  // TypeId(15)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/$twin" = fn() -> i32;  // TypeId(17)
+type "functype//wasi/$dependency0-twin" = fn() -> i32;  // TypeId(17)
 
 type "functype//cm_component_import_default_interface_shared_name.wado/$test_0" = fn();  // TypeId(18)
 
@@ -63,7 +63,7 @@ type "functype//cm_component_import_default_interface_shared_name.wado/$cm_bindi
 
 type "functype//cm_component_import_default_interface_shared_name.wado/$cm_binding__wado:right/right@0.1.0#pick" = fn() -> u32;  // TypeId(21)
 
-type "functype//cm_component_import_default_interface_shared_name.wado/$cm_binding__twin" = fn() -> u32;  // TypeId(22)
+type "functype//cm_component_import_default_interface_shared_name.wado/$cm_binding__dependency0-twin" = fn() -> u32;  // TypeId(22)
 
 type "functype//cm_component_import_default_interface_shared_name.wado/$cm_binding__wado:left/left@0.1.0#twin" = fn() -> u32;  // TypeId(23)
 
@@ -158,7 +158,7 @@ import fn wasi/$wado:left/left@0.1.0#only-left from "wasi/$wado:left/left@0.1.0#
 import fn wasi/$wado:left/left@0.1.0#twin from "wasi/$wado:left/left@0.1.0#twin";
 import fn wasi/$wado:right/right@0.1.0#pick from "wasi/$wado:right/right@0.1.0#pick";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
-import fn wasi/$twin from "wasi/$twin";
+import fn wasi/$dependency0-twin from "wasi/$dependency0-twin";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -184,7 +184,7 @@ fn "cm_component_import_default_interface_shared_name.wado/$test_0"() {
         "cm_component_import_default_interface_shared_name.wado/$test_0$cold2"($v0_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0("cm_component_import_default_interface_shared_name.wado/$cm_binding__twin"()) != 10) {
+    if @unlikely(local.tee $v0_0("cm_component_import_default_interface_shared_name.wado/$cm_binding__dependency0-twin"()) != 10) {
         cold_path;
         "cm_component_import_default_interface_shared_name.wado/$test_0$cold1"($v0_0);
         unreachable;
@@ -208,8 +208,8 @@ fn "cm_component_import_default_interface_shared_name.wado/$cm_binding__wado:rig
     return "wasi/$wado:right/right@0.1.0#pick"();
 }
 
-fn "cm_component_import_default_interface_shared_name.wado/$cm_binding__twin"() {
-    return "wasi/$twin"();
+fn "cm_component_import_default_interface_shared_name.wado/$cm_binding__dependency0-twin"() {
+    return "wasi/$dependency0-twin"();
 }
 
 fn "cm_component_import_default_interface_shared_name.wado/$cm_binding__wado:left/left@0.1.0#twin"() with Left {

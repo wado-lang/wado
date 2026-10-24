@@ -30,7 +30,7 @@ use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_import_alias,
-    cm_lift_func_name, cm_wrap_async_func_name, ref_type_name, to_cm_name,
+    cm_lift_func_name, cm_world_import_label, cm_wrap_async_func_name, ref_type_name, to_cm_name,
 };
 use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
@@ -698,6 +698,17 @@ pub struct CmFunctionInfo {
     pub callbacks: Vec<(usize, Type)>,
     /// Return type
     pub return_type: Option<Type>,
+    /// Where a world function comes from; `None` for an interface function.
+    pub world: Option<WorldFunctionSite>,
+}
+
+/// The dependency component exporting a world function, and the label the
+/// program imports it under: a world function's name is the component's own,
+/// so two dependencies may each export one of a name.
+#[derive(Debug, Clone)]
+pub struct WorldFunctionSite {
+    pub component: ModuleSource,
+    pub label: String,
 }
 
 impl CmFunctionInfo {
@@ -734,18 +745,18 @@ impl CmFunctionInfo {
     /// Whether the component's world imports it directly, under no interface.
     #[must_use]
     pub fn is_world_function(&self) -> bool {
-        self.interface_path.is_empty()
+        self.world.is_some()
     }
 
     /// The CM function this binds, as [`CmImport::full_path`] spells it (a world
-    /// import: the bare function). What identifies the function: its key in the
-    /// registry and in `NirPackage::used_wasi_functions`.
+    /// function: the label the program imports it under). What identifies the
+    /// function: its key in the registry and in `NirPackage::used_wasi_functions`.
     #[must_use]
     pub fn cm_identifier(&self) -> String {
-        if self.is_world_function() {
-            return self.wasi_func_name.clone();
+        match &self.world {
+            Some(site) => site.label.clone(),
+            None => cm_function_path(&self.interface_path, &self.wasi_func_name),
         }
-        cm_function_path(&self.interface_path, &self.wasi_func_name)
     }
 
     /// The declared closure type of parameter `i`, when it takes one.
@@ -1047,6 +1058,10 @@ pub struct CmInterfaceRegistry {
     /// World-level function imports (Phase 9), by the bodyless function
     /// declaring each -> its key in `functions`.
     world_imports: IndexMap<AstId, String>,
+
+    /// The components exporting a world function, each by its ordinal in
+    /// [`cm_world_import_label`].
+    world_components: IndexSet<ModuleSource>,
 
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
@@ -2283,44 +2298,6 @@ impl CmInterfaceRegistry {
 
         self.register_interface_cm_methods(module, scope)?;
 
-        // World-level function imports (Phase 9): a bodyless free function
-        // carrying a `#[cm]` world-import boundary.
-        for item in &module.items {
-            if let Item::Function(func) = item
-                && let Some(cm_func_name) = world_import_of(&func.attrs)
-            {
-                let cm_param_names = extract_cm_params_attr(&func.attrs);
-                let params: Vec<(String, String, Type)> = func
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        let cm_name = cm_param_names
-                            .get(i)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "missing #[cm_params] for param '{}' in world import {}",
-                                    p.name, func.name
-                                )
-                            })
-                            .clone();
-                        (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
-                    })
-                    .collect();
-                // As for an interface method, the CM-ABI return type drops the
-                // `AsyncCall<T>` wrapper user code keeps seeing.
-                let return_type = unwrap_async_call_if_async(func.is_async, &func.return_type);
-                self.register_world_import(
-                    func.id,
-                    &func.name,
-                    cm_func_name,
-                    func.is_async,
-                    params,
-                    return_type,
-                )?;
-            }
-        }
-
         // Register resource methods with resolved types for params but NOT for return type
         for item in &module.items {
             if let Item::Resource(resource) = item {
@@ -2538,6 +2515,7 @@ impl CmInterfaceRegistry {
         module_source: &ModuleSource,
     ) -> Result<(), String> {
         self.register_module_decls(module, &CmDeclScope::Module)?;
+        self.register_world_imports(module, module_source)?;
         for fq in interface_fqs {
             self.component_interfaces.insert(fq.clone());
             self.cm_interface_module_sources
@@ -3519,6 +3497,7 @@ impl CmInterfaceRegistry {
             params,
             callbacks,
             return_type,
+            world: None,
         };
 
         if self.bind(&func_info)? {
@@ -3576,34 +3555,65 @@ impl CmInterfaceRegistry {
         Ok(true)
     }
 
-    /// Register the world-level function import (Phase 9) the bodyless function
-    /// `decl` declares. Stored like an interface method so the adapter pipeline
-    /// reuses the interface-method path.
-    pub fn register_world_import(
+    /// Register the world-level function imports (Phase 9) of `component`'s
+    /// binding `module`: each a bodyless free function carrying a `#[cm]`
+    /// world-import boundary. Stored like an interface method so the adapter
+    /// pipeline reuses the interface-method path.
+    fn register_world_imports(
         &mut self,
-        decl: AstId,
-        func_name: &str,
-        cm_func_name: &str,
-        is_async: bool,
-        params: Vec<(String, String, Type)>,
-        return_type: Option<Type>,
+        module: &ast::Module,
+        component: &ModuleSource,
     ) -> Result<(), String> {
-        let (params, callbacks) = self.value_params(params);
-        let func_info = CmFunctionInfo {
-            // A world import sits above any interface, so it has no package
-            // or interface path to name: its identifier is its bare name.
-            interface_name: String::new(),
-            method_name: func_name.to_string(),
-            wasi_func_name: cm_func_name.to_string(),
-            interface_path: String::new(),
-            package: String::new(),
-            is_async,
-            params,
-            callbacks,
-            return_type,
-        };
-        self.bind(&func_info)?;
-        self.world_imports.insert(decl, func_info.cm_identifier());
+        for item in &module.items {
+            let Item::Function(func) = item else {
+                continue;
+            };
+            let Some(cm_func_name) = world_import_of(&func.attrs) else {
+                continue;
+            };
+            let cm_param_names = extract_cm_params_attr(&func.attrs);
+            let params: Vec<(String, String, Type)> = func
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let cm_name = cm_param_names
+                        .get(i)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "missing #[cm_params] for param '{}' in world import {}",
+                                p.name, func.name
+                            )
+                        })
+                        .clone();
+                    (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
+                })
+                .collect();
+            let (params, callbacks) = self.value_params(params);
+            let (ordinal, _) = self.world_components.insert_full(component.clone());
+            let func_info = CmFunctionInfo {
+                // A world import sits above any interface, so it has no
+                // package or interface path to name.
+                interface_name: String::new(),
+                method_name: func.name.clone(),
+                wasi_func_name: cm_func_name.to_string(),
+                interface_path: String::new(),
+                package: String::new(),
+                is_async: func.is_async,
+                params,
+                callbacks,
+                // As for an interface method, the CM-ABI return type drops the
+                // `AsyncCall<T>` wrapper user code keeps seeing.
+                return_type: unwrap_async_call_if_async(func.is_async, &func.return_type),
+                world: Some(WorldFunctionSite {
+                    component: component.clone(),
+                    label: cm_world_import_label(ordinal, cm_func_name),
+                }),
+            };
+            self.bind(&func_info)?;
+            self.world_imports
+                .insert(func.id, func_info.cm_identifier());
+        }
         Ok(())
     }
 
@@ -5439,6 +5449,7 @@ mod tests {
             params: vec![],
             callbacks: vec![],
             return_type: None,
+            world: None,
         };
         assert_eq!(
             func_info.local_alias_name(),

@@ -486,6 +486,14 @@ pub fn cm_lift_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
 }
 
+/// The label the program imports the world function `function` of its
+/// `component`-th dependency under. Two dependencies may each export a world
+/// function of one name, and composition wires each label to its own; the
+/// label is a CM plain name, so it carries no `$`.
+pub fn cm_world_import_label(component: usize, function: &str) -> String {
+    format!("dependency{component}-{function}")
+}
+
 /// The function packaging a handler's result of an async CM import as the
 /// `AsyncCall<T>` its call site reads.
 pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
