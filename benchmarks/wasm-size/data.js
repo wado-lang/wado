@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792878494422,
+  "lastUpdate": 1792880097221,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70281,6 +70281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/59ffce44171ceb1473702ab2376d292302d48600"
         },
         "date": 1792878493532,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b0344c1144dbe522f83e6b701507f131bd9a8280",
+          "message": "Merge pull request #2440 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfeat(types): `!` and its newtypes implement every trait, and a diverging operand ends its path",
+          "timestamp": "2026-10-25T06:30:18+09:00",
+          "tree_id": "71bf224192d3a4b57cec66feb50dac5d4e699b29",
+          "url": "https://github.com/wado-lang/wado/commit/b0344c1144dbe522f83e6b701507f131bd9a8280"
+        },
+        "date": 1792880096085,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
