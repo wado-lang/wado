@@ -1,8 +1,8 @@
 //! The predicates the fold consults at each `$value_copy$T(...)` wrap site, and
 //! [`collect_seed_types`], which names the types those wraps can land on.
 
-use super::needs_value_copy;
 use super::ownership::OwnedCalls;
+use super::{CopyNeeds, needs_value_copy};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
@@ -20,7 +20,7 @@ use crate::type_table::TypeTable;
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {
-        type_table: &type_table,
+        needs: CopyNeeds::new(&type_table),
         out: IndexSet::default(),
     };
     for global in &project.globals {
@@ -43,7 +43,7 @@ pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
 }
 
 struct SeedWalker<'a> {
-    type_table: &'a TypeTable,
+    needs: CopyNeeds<'a>,
     out: IndexSet<TypeId>,
 }
 
@@ -51,8 +51,8 @@ impl SeedWalker<'_> {
     /// Record `type_id` and its references peeled, the type a pattern temp lands
     /// on: `let { x, y } = &p` writes a `Point` temp out of a `&Point`.
     fn record(&mut self, type_id: TypeId) {
-        for candidate in [type_id, self.type_table.peel_refs(type_id)] {
-            if value_copy::needs_value_copy(candidate, self.type_table) {
+        for candidate in [type_id, self.needs.type_table.peel_refs(type_id)] {
+            if self.needs.of(candidate) {
                 self.out.insert(candidate);
             }
         }

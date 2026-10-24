@@ -1,0 +1,46 @@
+// `pick` mints `stash` as a function value before `stash`'s own walk has found
+// that it keeps its argument. Taking a function by name is no call, yet the
+// minting body reads the target's facts, so the target growing must walk
+// `pick` again: a mint row left with the early facts says `stash` keeps
+// nothing, and the write-back `&mut b.item` needs would be allowed.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+global mut HELD: Option<Keep> = null;
+
+fn pick() -> fn(&mut Payload) -> i32 {
+    return stash;
+}
+
+fn stash(p: &mut Payload) -> i32 {
+    HELD = Option::Some(Keep { held: p });
+    return 0;
+}
+
+#[inline("never")]
+fn hand_over_a_field(b: &mut Bag) -> i32 {
+    let f = pick();
+    return f(&mut b.item);
+}
+
+test {
+    let mut b = Bag { item: Payload::Empty };
+    assert hand_over_a_field(&mut b) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "retains it, so it outlives the call"
+}

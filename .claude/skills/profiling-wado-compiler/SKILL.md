@@ -1,6 +1,6 @@
 ---
 name: profiling-wado-compiler
-description: Profile the native Rust `wado` binary (compile/serve/run) for host-side bottlenecks — CPU with a sampling profiler, memory with the span trace's RSS and valgrind DHAT. Use for native CPU or memory profiling, not guest wasm (see wado-performance for that).
+description: Profile the native Rust `wado` binary (compile/serve/run) for host-side bottlenecks — wall time per phase with the span trace, CPU with a sampling profiler (samply, or perf where samply cannot run), memory with the span trace's RSS and valgrind DHAT. Use for native CPU or memory profiling, not guest wasm (see wado-performance for that).
 ---
 
 # Profiling the native `wado` binary
@@ -22,7 +22,27 @@ If unsure: pick `profiling` for "users complain it's slow", pick `dev`
 for "rebuild → run → tweak feels slow during development." The
 analyzer script and recording flow below are identical for both.
 
-## Workflow
+## Wall time per phase: the span trace
+
+Start here: the trace says which phase owns the wall time, and only the profile
+below says why. `--log-level debug` prints every compiler span, and
+`analyze_spans.ts` sums them into a tree.
+
+```sh
+wado compile --log-level debug app.wado -o scratchpad/app.wasm > scratchpad/span.log 2>&1
+node .claude/skills/profiling-wado-compiler/scripts/analyze_spans.ts scratchpad/span.log
+```
+
+A row sums every span of one name under its parent. A name is grouped by its
+first word, so `nir/iteration 3` counts toward `nir/iteration`. `--min SECONDS`
+hides the small rows (default 0.1). `--each RE` also lists each matching span
+with its start and duration, so `--each '^nir/iteration'` shows how the NIR
+fixed point converges round by round.
+
+The trace is wall time. A phase that runs on the `wado-opt-*` workers spends
+more CPU than its row shows; a serial phase spends the same.
+
+## CPU: the sampling profile
 
 ```sh
 # 1. Build with the chosen profile (see table above)
@@ -70,12 +90,42 @@ needed; `node analyze_native_profile.ts ...` just works.
 ## Linux setup
 
 ```sh
-# samply needs perf_event_paranoid <= 1 for a non-root user
+# samply reads perf_event_paranoid itself and refuses above 1, even as root
+# with CAP_PERFMON. The setting is host-wide: put it back after profiling.
+old=$(cat /proc/sys/kernel/perf_event_paranoid)
 echo '1' | sudo tee /proc/sys/kernel/perf_event_paranoid
+# ... profile ...
+echo "$old" | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 # `addr2line` is part of binutils — usually already installed
 addr2line --version >/dev/null || sudo apt-get install -y binutils
 ```
+
+### When `perf_event_paranoid` stays at 2
+
+A sandbox (Claude Code on the web among them) may refuse to lower it. Level 2
+still lets a process profile its own children in user space. `record_perf.sh`
+records with `perf` in user space and converts the result with
+`samply import`, for the same analyzer:
+
+```sh
+sudo apt-get install -y linux-tools-generic   # perf, once
+.claude/skills/profiling-wado-compiler/scripts/record_perf.sh scratchpad/prof.json -- \
+  scratchpad/wado-base compile app.wado -o scratchpad/app.wasm
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
+  scratchpad/prof.json --binary wado-base
+```
+
+The kernel half of a syscall is missing from such a profile. A sample whose
+stack outgrew the DWARF copy ends in an unknown frame and loses its callers, so
+inclusive figures for deep recursion read low.
+
+Analyze through `samply import`, not `perf report`. `perf report` names a
+sample by the symbol its address falls in, so a function inlined into a large
+caller is credited to the caller: it showed `Engine::new` where the code that
+ran was the inlined `Engine::build_indices`. `analyze_native_profile.ts`
+resolves each address through the line table with `addr2line` instead.
+`perf report --children` is also slow enough on a DWARF profile to look hung.
 
 ## How `analyze_native_profile.ts` works
 
@@ -142,9 +192,10 @@ Measure peak RSS first, per phase second, per allocation site last.
 
 ### Per phase: the span trace
 
-`--log-level debug` prints every compiler span with the process's resident set
-(Linux only). An end line adds the net change in current RSS since the span
-began:
+The span trace that times the phases also samples the process's resident set
+(Linux only). `analyze_spans.ts` shows the peak a row's spans raised the
+process to, and `-` for one that stayed under an earlier peak. An end line adds
+the net change in current RSS since the span began:
 
 ```sh
 wado compile --log-level debug hello.wado 2>&1 | grep '<< '
