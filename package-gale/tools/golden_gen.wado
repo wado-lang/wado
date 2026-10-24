@@ -1,0 +1,71 @@
+//! Records what `gale gen` prints for every grammar in `tests/grammars/`, so a
+//! refactor of `parser_gen.wado` or `lexer_gen.wado` can be shown to leave the
+//! generated parsers byte for byte as they were. A `*Lexer.g4` with a
+//! `*Parser.g4` sibling is generated with it, as one grammar.
+//!
+//! Each grammar's stdout and stderr land in `<out>/<name>.out` and
+//! `<out>/<name>.err`. Run it before and after the edit, then compare:
+//!
+//! ```sh
+//! cargo build --bin wado
+//! wado run package-gale/tools/golden_gen.wado -- package-gale/target/gold-before
+//! # ... edit ...
+//! wado run package-gale/tools/golden_gen.wado -- package-gale/target/gold-after
+//! diff -r package-gale/target/gold-before package-gale/target/gold-after
+//! ```
+//!
+//! It runs from the repository root, and spawns the `wado` the build left in
+//! `target/debug` unless a second argument names another.
+
+use { println, eprintln, args, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Command, Process } from "core:process";
+
+global GRAMMARS: String = "package-gale/tests/grammars";
+
+/// The grammar files one `gale gen` reads, and the name its output is filed
+/// under, or `None` for a lexer its parser sibling already brings along.
+fn job(base: String, names: &List<String>) -> Option<[String, List<String>]> {
+    let path = fs::join(GRAMMARS, `${base}.g4`);
+    if let Some(stem) = base.strip_suffix("Parser") {
+        let lexer = `${stem}Lexer.g4`;
+        if names.contains_str(lexer.as_str_slice()) {
+            return Some([stem.to_string(), [fs::join(GRAMMARS, lexer), path]]);
+        }
+    } else if let Some(stem) = base.strip_suffix("Lexer") {
+        if names.contains_str(`${stem}Parser.g4`.as_str_slice()) {
+            return null;
+        }
+    }
+    return Some([base, [path]]);
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process) {
+    let argv = args();
+    if argv.is_empty() || argv.len() > 2 {
+        eprintln("usage: golden_gen.wado <output-dir> [wado]");
+        exit(2);
+    }
+    let out = argv[0];
+    let wado = if argv.len() == 2 { argv[1] } else { "target/debug/wado" };
+    fs::create_dir_all(&out).unwrap();
+
+    let mut names: List<String> = [];
+    for let entry of fs::read_dir(GRAMMARS).unwrap() {
+        if fs::extension(&entry.name) matches { Some("g4") } {
+            names.push(entry.name);
+        }
+    }
+    names.sort();
+
+    for let file of &names {
+        let Some([name, grammars]) = job(fs::file_stem(file).unwrap().to_string(), &names) else {
+            continue;
+        };
+        let gen = Command::new(wado).args(["run", "package-gale", "gen"]).args(grammars).output().unwrap();
+        fs::write(fs::join(&out, `${name}.out`), &gen.stdout).unwrap();
+        fs::write(fs::join(&out, `${name}.err`), &gen.stderr).unwrap();
+        println(`gen ${name} (${gen.status:?})`);
+    }
+}
