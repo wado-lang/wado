@@ -865,11 +865,10 @@ pub(super) fn coerce_flat_lift(
     if have == want {
         return value;
     }
-    let (as_int, int_ty) = flat_to_int_bits(value, have);
+    let (as_int, _) = flat_to_int_bits(value, have);
     let sized = if cmval_size(have) > cmval_size(want) {
         cast(as_int, TypeTable::I32)
     } else {
-        let _ = int_ty;
         as_int
     };
     flat_from_int_bits(sized, want)
@@ -887,7 +886,7 @@ pub(super) fn coerce_flat_lower(
     if have == want {
         return value;
     }
-    let (as_int, _int_ty) = flat_to_int_bits(value, want);
+    let (as_int, _) = flat_to_int_bits(value, want);
     let sized = if cmval_size(have) > cmval_size(want) {
         cast(as_int, TypeTable::I64)
     } else {

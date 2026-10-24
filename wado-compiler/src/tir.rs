@@ -1439,6 +1439,14 @@ pub enum TirBinaryOp {
     RefNotEq,
 }
 
+impl TirBinaryOp {
+    /// Whether this is `&&` or `||`, whose right operand may not run.
+    #[must_use]
+    pub fn is_short_circuit(self) -> bool {
+        matches!(self, Self::And | Self::Or)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TirUnaryOp {
     Neg,

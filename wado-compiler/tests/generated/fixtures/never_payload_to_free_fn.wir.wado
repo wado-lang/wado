@@ -218,10 +218,10 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
 global global:core:prelude/format.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
-global global:core:prelude/traits.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
-global global:core:prelude/traits.wado::$const_obj_10: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
-global global:core:prelude/traits.wado::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
-global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
+global global:core:prelude/traits.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
+global global:core:prelude/traits.wado::$const_obj_10: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
+global global:core:prelude/traits.wado::$const_obj_11: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
+global global:core:prelude/primitive.wado::$const_obj_15: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "never_payload_to_free_fn.wado/$cm_export__$test_0_an_uninhabited_payload_erases_from_the_callee_it_reaches"() {
     let $local_4: ref "core:prelude/format.wado//Formatter";
@@ -233,49 +233,49 @@ fn "never_payload_to_free_fn.wado/$cm_export__$test_0_an_uninhabited_payload_era
     let $local_1_95: ref "core:prelude/string.wado//String";
     let is_negative_109: bool;
     let x: i64;
-    let $sroa_payload_value_44: i32;
-    let start_165: i32;
+    let $sroa_payload_value_42: i32;
+    let start_163: i32;
     $sroa_ok_value_65 = struct.new "core:prelude/types.wado//Result<i32,!>::Ok" { discriminant: 0, payload_0: 5 };
     out_85 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_payload_value_44 = ref.cast "core:prelude/types.wado//Result<i32,!>::Ok"($sroa_ok_value_65).payload_0;
+    $sroa_payload_value_42 = ref.cast "core:prelude/types.wado//Result<i32,!>::Ok"($sroa_ok_value_65).payload_0;
     $local_1_95 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_109 = $sroa_payload_value_44 < 0;
-    $sroa_payload_value_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($sroa_payload_value_44); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative_109 = $sroa_payload_value_42 < 0;
+    $sroa_payload_value_42 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($sroa_payload_value_42); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_109 {
         if @unlikely(local.tee is_negative_109(0 + 1) > builtin::array_len($local_1_95.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_95, is_negative_109);
         }
-        start_165 = $local_1_95.used;
+        start_163 = $local_1_95.used;
         $local_1_95.used = is_negative_109;
         is_negative_109 = $local_1_95.used;
-        if @unlikely(start_165 >=u is_negative_109) {
+        if @unlikely(start_163 >=u is_negative_109) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_165, is_negative_109, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_163, is_negative_109, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
             unreachable;
         }
-        builtin::array_set_u8($local_1_95.repr, start_165, 45);
+        builtin::array_set_u8($local_1_95.repr, start_163, 45);
     } else {
     }
-    if @unlikely(local.tee start_165($local_1_95.used + $sroa_payload_value_44) > builtin::array_len($local_1_95.repr)) {
+    if @unlikely(local.tee start_163($local_1_95.used + $sroa_payload_value_42) > builtin::array_len($local_1_95.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_95, start_165);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_95, start_163);
     }
     is_negative_109 = $local_1_95.used;
-    $local_1_95.used = start_165;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_95.repr, is_negative_109, x, $sroa_payload_value_44);
+    $local_1_95.used = start_163;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1_95.repr, is_negative_109, x, $sroa_payload_value_42);
     out_85 = $local_1_95;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
         a = out_85.repr;
-        $sroa_payload_value_44 = out_85.used;
+        $sroa_payload_value_42 = out_85.used;
         b = array.new_fixed<u8>(53);
-        if $sroa_payload_value_44 != 1 {
+        if $sroa_payload_value_42 != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
         is_negative_109 = 0;
         b6: block {
             l7: loop {
-                break_if b6 is_negative_109 >= $sroa_payload_value_44;
+                break_if b6 is_negative_109 >= $sroa_payload_value_42;
                 if builtin::array_get_value<u8>(a, is_negative_109) != builtin::array_get_value<u8>(b, is_negative_109) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
@@ -290,15 +290,15 @@ fn "never_payload_to_free_fn.wado/$cm_export__$test_0_an_uninhabited_payload_era
         b = $local_1_95.repr;
         a = array.new_data<u8>("Assertion failed in ");
         builtin::array_copy<u8>(b, is_negative_109, a, 0, 20);
-        $sroa_payload_value_44 = is_negative_109 + 20;
+        $sroa_payload_value_42 = is_negative_109 + 20;
         a = array.new_data<u8>("$test_0_an_uninhabited_payload_erases_from_the_callee_it_reaches");
-        builtin::array_copy<u8>(b, $sroa_payload_value_44, a, 0, 64);
-        $sroa_payload_value_44 = is_negative_109 + 84;
+        builtin::array_copy<u8>(b, $sroa_payload_value_42, a, 0, 64);
+        $sroa_payload_value_42 = is_negative_109 + 84;
         a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, $sroa_payload_value_44, a, 0, 4);
-        $sroa_payload_value_44 = is_negative_109 + 88;
+        builtin::array_copy<u8>(b, $sroa_payload_value_42, a, 0, 4);
+        $sroa_payload_value_42 = is_negative_109 + 88;
         a = array.new_data<u8>("never_payload_to_free_fn.wado");
-        builtin::array_copy<u8>(b, $sroa_payload_value_44, a, 0, 29);
+        builtin::array_copy<u8>(b, $sroa_payload_value_42, a, 0, 29);
         is_negative_109 = is_negative_109 + 117;
         a = array.new_fixed<u8>(58);
         builtin::array_copy<u8>(b, is_negative_109, a, 0, 1);
@@ -672,26 +672,13 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<!>"(f) {
-    let self_4: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
     if @unlikely(f.alternate) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 });
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        cold_path;
-        "core:rt/unreachable"();
         unreachable;
-        self_4 = f.buf;
-        other_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(self_4, other_7);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 });
-        return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee other_7(f.buf), global:core:prelude/traits.wado::$const_obj_9);
-    cold_path;
-    "core:rt/unreachable"();
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_10);
     unreachable;
-    self_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(other_7, self_4);
 }
 
 fn "core:prelude/primitive.wado/char::from_u32$contract_report0"(value, $site) {
@@ -788,13 +775,13 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 });
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(payload, f);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_11);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 });
         return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_9);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(payload, f);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_10);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(payload, f);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_9);
 }
 
 fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,!>$!$sroa[v.value]"(v, index) {
@@ -1071,7 +1058,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower
     let $arg_spill_1: u64;
     $arg_spill_1 = builtin::i64_extend_i32_u(self);
     let $mv_arg_5: ref "core:prelude/string.wado//String";
-    $mv_arg_5 = global:core:prelude/primitive.wado::$const_obj_13;
+    $mv_arg_5 = global:core:prelude/primitive.wado::$const_obj_15;
     "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0"($arg_spill_1, f, 16, 0, $mv_arg_5.repr, $mv_arg_5.used);
 }
 

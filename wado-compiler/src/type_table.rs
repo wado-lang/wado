@@ -3728,6 +3728,7 @@ impl TypeTable {
                 })?
                 .at(self, trait_args)
         })
+        .or_else(|| self.is_never(concrete_id).then_some(Self::NEVER))
     }
 
     /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.

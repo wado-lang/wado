@@ -1317,7 +1317,7 @@ impl Returns<'_> {
         let Some(expr) = op.as_expr() else {
             return null_return_case(body, op, cand).is_some();
         };
-        if body.exprs[expr].type_id == TypeTable::NEVER {
+        if self.type_table.is_never(body.exprs[expr].type_id) {
             return true;
         }
         if let Some(b) = body.unbroken_block(expr) {
@@ -1894,7 +1894,7 @@ impl ReturnRewrite<'_> {
         let Some(expr) = op.as_expr() else {
             return null_tuple(body, op, cand, span);
         };
-        if body.exprs[expr].type_id == TypeTable::NEVER {
+        if self.type_table.is_never(body.exprs[expr].type_id) {
             return None;
         }
         if let Some(b) = body.unbroken_block(expr) {

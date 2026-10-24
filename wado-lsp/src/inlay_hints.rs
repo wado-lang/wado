@@ -276,7 +276,7 @@ fn path_form_param_names(func: &Function) -> Vec<&str> {
     func.params.iter().map(|p| p.name.as_str()).collect()
 }
 
-impl AstVisitor for HintCollector<'_> {
+impl AstVisitor<'_> for HintCollector<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Let(LetStmt {

@@ -1602,7 +1602,7 @@ impl FunctionTranslator<'_, '_> {
     ) -> WirInstr {
         // A call with a value is held in a `Block` with everything it
         // evaluates, so a break out of the callee or an argument counts it.
-        let in_block = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
+        let in_block = result_type != TypeTable::UNIT && !self.type_table.is_never(result_type);
         if in_block {
             self.label_stack.push(LabelEntry::ANONYMOUS);
         }
@@ -1630,12 +1630,7 @@ impl FunctionTranslator<'_, '_> {
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect();
-        let result_wirs: Vec<WirType> =
-            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
-                vec![]
-            } else {
-                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
-            };
+        let result_wirs = self.result_wir_types(return_type);
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
         let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
             self.ctx.canonical_closure_types.get(&key)
@@ -1753,12 +1748,7 @@ impl FunctionTranslator<'_, '_> {
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect();
-        let result_wirs: Vec<WirType> =
-            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
-                vec![]
-            } else {
-                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
-            };
+        let result_wirs = self.result_wir_types(return_type);
 
         // Get canonical closure type and its inspectable schema flag.
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);

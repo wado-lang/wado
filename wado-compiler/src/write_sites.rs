@@ -102,7 +102,7 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
     }
 }
 
-impl<F: FnMut(WriteSite<'_>)> AstVisitor for Sites<'_, F> {
+impl<F: FnMut(WriteSite<'_>)> AstVisitor<'_> for Sites<'_, F> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Assign(assign) => {

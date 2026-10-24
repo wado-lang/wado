@@ -1765,7 +1765,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut stmts: Vec<TirStmt> = Vec::with_capacity(prelude.len() + body.stmts.len() + 2);
     stmts.extend(prelude);
 
-    if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+    if result_type == TypeTable::UNIT || env.type_table.borrow().is_never(result_type) {
         // Statement form (or a diverging body): the body produces no value to
         // preserve, so the restore simply runs after it.
         stmts.extend(body.stmts);

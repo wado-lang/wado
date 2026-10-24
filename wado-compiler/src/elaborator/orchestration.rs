@@ -83,7 +83,7 @@ struct BoundBindingsChecked<'a> {
     errors: Vec<TypeError>,
 }
 
-impl AstVisitor for BoundBindingsChecked<'_> {
+impl AstVisitor<'_> for BoundBindingsChecked<'_> {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
             let Some(trait_) = self.resolutions.bound_decl(bound) else {
@@ -2751,7 +2751,7 @@ pub(crate) fn fold_component_interfaces(
 /// The first `_` placeholder `ty` writes, at any depth.
 pub(super) fn first_infer_span(ty: &Type) -> Option<Span> {
     struct FirstInfer(Option<Span>);
-    impl AstVisitor for FirstInfer {
+    impl AstVisitor<'_> for FirstInfer {
         fn visit_type(&mut self, ty: &Type) {
             match ty {
                 Type::Infer(span) => {
@@ -2773,7 +2773,7 @@ fn param_names(params: &[GenericParam]) -> Vec<&str> {
 /// The type names every local item in `body` declares, whatever block it sits in.
 fn local_item_names(body: &Block) -> IndexSet<String> {
     struct LocalItems(IndexSet<String>);
-    impl AstVisitor for LocalItems {
+    impl AstVisitor<'_> for LocalItems {
         fn visit_item(&mut self, item: &Item) {
             let name = match item {
                 Item::Struct(d) => &d.name,
@@ -2863,7 +2863,7 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
     }
 }
 
-impl<H: CompilerHost> AstVisitor for TypeNameCheck<'_, '_, '_, H> {
+impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
     // A local item's own types are checked when elaboration resolves it.
     fn visit_item(&mut self, _item: &Item) {}
 
