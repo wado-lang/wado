@@ -89,8 +89,7 @@ value in both, and exchanging values cannot produce that result.
 
 A target is _owned_ when it is a local, or a field path from a local, reached
 through no reference and no subscript. Two owned targets that differ as paths
-are never one slot. A by-value `self` is a local, so `self.f` under a
-`fn f(self)` receiver is owned. Any other target may be one slot: `*r`, `r.f`,
+are never one slot. Any other target may be one slot: `*r`, `r.f`,
 and `self.f` under a `&self` or `&mut self` receiver reach through a reference,
 two `&mut` to one value are legal, and two subscripts may name one element.
 
@@ -102,9 +101,10 @@ over fields (`[s.x, s.y] = [s.y, s.x]`). A permutation is a product of
 transpositions, and each transposition is lowered one of two ways.
 
 Where no reference to either target is readable after the statement, the
-existing ownership analysis moves the values. The temporaries the desugaring
-introduces are dead after their one read, and each source is overwritten before
-it is read again.
+ownership analysis moves the values. The temporaries the desugaring introduces
+are dead after their one read, and each source is overwritten before it is read
+again. A field's liveness is its own: a read of `s.y` or of `s` after `s.x` is
+overwritten reads no value `s.x` held, so `s.x` moves while `s` stays live.
 
 Where one is readable, an assignment to that target writes in place
 ([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
@@ -240,7 +240,7 @@ well.
 - [x] Parse and type a destructuring assignment, desugar it, and state its
   evaluation order and arity error in fixtures. Write the assignment into
   `spec-expressions.md` and the cheatsheet.
-- [ ] Show that a permutation of owned targets with no readable reference
+- [x] Show that a permutation of owned targets with no readable reference
   moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
 - [ ] Lower a transposition of owned targets with a readable reference as a
   leaf exchange. Fixtures show a reference to each target, and to one of the
