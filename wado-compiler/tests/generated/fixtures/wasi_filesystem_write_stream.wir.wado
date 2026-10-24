@@ -558,23 +558,11 @@ type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(179)
 
 type "functype//wasi/stream-cancel-read" = fn(i32) -> u32;  // TypeId(180)
 
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(181)
+type "functype//wasi_filesystem_write_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(181)
 
-<<<<<<< HEAD
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__Descriptor_write_via_stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(182)
-||||||| 902f57dd159
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(182)
-=======
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(182)
->>>>>>> origin/main
+type "functype//wasi_filesystem_write_stream.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(182)
 
-<<<<<<< HEAD
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(183)
-||||||| 902f57dd159
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__Descriptor_write_via_stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(183)
-=======
-type "functype//wasi_filesystem_write_stream.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(183)
->>>>>>> origin/main
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all" = fn(i32, ref "core:prelude//List<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(184)
 
@@ -757,16 +745,8 @@ fn "wasi_filesystem_write_stream.wado/run"() with Stdout, Stderr, Preopens {
         "wasi/stream-drop-readable"($moved_3 = file_rx; file_rx = ref.null none; $moved_3.value);
         "wasi/stream-drop-writable"(ptr = $moved_17; $moved_17 = 0; ptr);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr = $sroa_$pattern_temp_0_1_51; $sroa_$pattern_temp_0_1_51 = 0; ptr);
-<<<<<<< HEAD
         "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode"($moved_3 = read_done; read_done = ref.null none; $moved_3.value);
-        drop((if ref.is_null(local.tee v_46("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_write_stream.wado/$cm_binding__Descriptor_unlink_file_at$spec0"($moved_16, global:wasi_filesystem_write_stream.wado::$const_obj_1)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
-||||||| 902f57dd159
-        "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode"($load_8 = read_done; read_done = ref.null none; $load_8.value);
-        drop((if ref.is_null(local.tee v_46("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_write_stream.wado/$cm_binding__Descriptor_unlink_file_at$spec0"($moved_16, global:wasi_filesystem_write_stream.wado::$const_obj_1)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
-=======
-        "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#ErrorCode"($load_8 = read_done; read_done = ref.null none; $load_8.value);
         drop((if ref.is_null(local.tee v_46("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_write_stream.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.unlink-file-at$spec0"($moved_16, global:wasi_filesystem_write_stream.wado::$const_obj_1)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
->>>>>>> origin/main
             v_46;
         } else {
             ref.as_non_null("wasi_filesystem_write_stream.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_46)));
