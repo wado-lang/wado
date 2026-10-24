@@ -561,6 +561,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         for let part of parts[1..<parts.len()].to_list() {
             decisions[part] = Decision::Concatenated(*first);
             heads[part] = *first;
+            groups.remove(part);
         }
     }
     let mut rows = HashMap::<String, Shape>::new();
@@ -569,8 +570,14 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             rows[*head] = space;
         }
         // Only a whole kernel shows whether it takes a contraction in, which a
-        // prologue does not, so a prologue is found once every kernel is.
-        if group.contracted matches { None } && decisions[*head] matches { Written(Reader(Contraction)) } {
+        // prologue does not, so a prologue is found once every kernel is. A
+        // product computes its prologue over the rows it reads, so a kernel
+        // folding rows is one only where it writes them whole.
+        let writes_rows = match group.rows {
+            Some(space) => same_space(&space, &group.out),
+            None => true,
+        };
+        if group.contracted matches { None } && writes_rows && decisions[*head] matches { Written(Reader(Contraction)) } {
             let reads = readers.get(*head).unwrap_or([]);
             if let Some(product) = prologue_head(graph, head, &reads, &by_rhs, &heads) {
                 decisions[*head] = Decision::Prologue(product);

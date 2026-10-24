@@ -638,6 +638,35 @@ test "a row kernel products by inputs read is written" {
     assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
 }
 
+test "a row kernel writing one value per row is no prologue" {
+    let source = `
+g (float[N, 4] X) => (float[N, 3] Y)
+<int64[1] Axes = {1}, float[1, 3] W>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    Y = MatMul(M, W)
+}
+`;
+    let layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "Y",
+            ["Batch", "Out"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ];
+    let p = plan_of(source, layout);
+    assert p.of(&"S") == fused("M");
+    assert p.of(&"M") == written(Reason::Reader(Kind::Contraction));
+}
+
 /// The plan of three products of one normalized input by weights of 3, 2 and
 /// 3 columns, each returned, the first read through `first`.
 fn concatenated_plan(first: String) -> Plan {
