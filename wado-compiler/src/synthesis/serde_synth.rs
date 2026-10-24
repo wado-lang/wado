@@ -66,30 +66,11 @@ use super::common::{
 /// `"userId"`). Used by both the serialize and deserialize synthesisers so the
 /// two never disagree.
 fn serialized_field_name(f: &TirField, struct_def: &TirStruct) -> String {
-    f.wire_name_override.clone().unwrap_or_else(|| {
-        if let Some(strategy) = struct_def.wire_name_policy {
-            apply_name_policy(&f.name, strategy)
-        } else {
-            f.name.clone()
-        }
-    })
-}
-
-/// Apply a `name_policy` strategy. Source-casing-agnostic, since Wado casing is
-/// convention, not a rule.
-fn apply_name_policy(s: &str, strategy: NamePolicy) -> String {
-    use heck::{
-        ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
-        ToUpperCamelCase,
-    };
-    match strategy {
-        NamePolicy::Camel => s.to_lower_camel_case(),
-        NamePolicy::Snake => s.to_snake_case(),
-        NamePolicy::Pascal => s.to_upper_camel_case(),
-        NamePolicy::ScreamingSnake => s.to_shouty_snake_case(),
-        NamePolicy::Kebab => s.to_kebab_case(),
-        NamePolicy::ScreamingKebab => s.to_shouty_kebab_case(),
-    }
+    NamePolicy::wire_name(
+        f.wire_name_override.as_deref(),
+        struct_def.wire_name_policy,
+        &f.name,
+    )
 }
 
 pub fn synthesize_serde(project: &mut Package) {
@@ -116,15 +97,16 @@ pub fn synthesize_serde(project: &mut Package) {
                 // there is nothing here left to generate for it.
                 SynthTrait::Serialize => {}
                 SynthTrait::Deserialize => {
-                    let key = MethodName::format_local(
-                        &module
-                            .type_table
-                            .borrow()
-                            .fq_base_type_name(req.target_type_id),
-                        Some(&names.deserialize),
-                        "deserialize",
-                    );
-                    if existing.contains(&key) {
+                    let target = module
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(req.target_type_id);
+                    let written = |trait_: &FqTraitName, method| {
+                        existing.contains(&MethodName::format_local(&target, Some(trait_), method))
+                    };
+                    if written(&names.deserialize, "deserialize")
+                        || written(&names.field_schema, "lookup")
+                    {
                         continue;
                     }
                     for schema_func in generate_field_schema(module, req, &names) {
@@ -153,12 +135,13 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         return;
     };
 
-    let (serialize_key, deserialize_key) = {
+    let (serialize_key, deserialize_key, schema_key) = {
         let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
             items.trait_def(CompilerItem::Serialize),
             items.trait_def(CompilerItem::Deserialize),
+            items.trait_def(CompilerItem::FieldSchema),
         )
     };
 
@@ -166,7 +149,9 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     // `synthesize_traits`) before the scan below, so a program with no
     // bound-driven serde requests skips it entirely.
     let requests = type_table.borrow().bound_driven_synth_requests(|key| {
-        Some(key) == serialize_key.as_ref() || Some(key) == deserialize_key.as_ref()
+        [&serialize_key, &deserialize_key, &schema_key]
+            .into_iter()
+            .any(|ours| ours.as_ref() == Some(key))
     });
     if requests.is_empty() {
         return;
@@ -189,17 +174,24 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             .collect()
     };
 
+    // A struct's `FieldSchema` is synthesized with its `Deserialize`, so a
+    // request for either asks the same synthesis, once.
+    let mut asked: IndexSet<(TypeHead, ModuleSource, SynthTrait)> = IndexSet::default();
     for (target_head, module_source, trait_key) in requests {
         let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
-            assert_eq!(
-                Some(&trait_key),
-                deserialize_key.as_ref(),
-                "`requests` is filtered to the two serde traits"
+            assert!(
+                [&deserialize_key, &schema_key]
+                    .into_iter()
+                    .any(|ours| ours.as_ref() == Some(&trait_key)),
+                "`requests` is filtered to the serde traits"
             );
             SynthTrait::Deserialize
         };
+        if !asked.insert((target_head.clone(), module_source.clone(), trait_ref)) {
+            continue;
+        }
         let Some(&target_type_id) = by_head.get(&target_head) else {
             continue;
         };
@@ -778,7 +770,7 @@ fn generate_positional_at_function(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::NamePolicy;
 
     /// Ground-truth heck outputs for an edge corpus. `core:serde::apply_case`
     /// (the library port used by reflect-based derivations) must match these
@@ -786,7 +778,7 @@ mod tests {
     /// heck changes, this fails first and the Wado vectors are updated in step.
     #[test]
     fn rename_all_edge_corpus_locks_heck_output() {
-        let snake = |s: &str| apply_name_policy(s, NamePolicy::Snake);
+        let snake = |s: &str| NamePolicy::Snake.apply(s);
         assert_eq!(snake("userID"), "user_id");
         assert_eq!(snake("HTTPStatus"), "http_status");
         assert_eq!(snake("parseHTTP"), "parse_http");
@@ -794,52 +786,25 @@ mod tests {
         assert_eq!(snake("iOS"), "i_os");
         assert_eq!(snake("field2Name"), "field2_name");
         assert_eq!(snake("Apple2Banana"), "apple2_banana");
-        assert_eq!(
-            apply_name_policy("HTTPStatus", NamePolicy::Camel),
-            "httpStatus"
-        );
-        assert_eq!(apply_name_policy("userID", NamePolicy::Pascal), "UserId");
+        assert_eq!(NamePolicy::Camel.apply("HTTPStatus"), "httpStatus");
+        assert_eq!(NamePolicy::Pascal.apply("userID"), "UserId");
     }
 
     #[test]
     fn rename_all_from_snake_field() {
-        assert_eq!(
-            apply_name_policy("user_name", NamePolicy::Camel),
-            "userName"
-        );
-        assert_eq!(
-            apply_name_policy("user_name", NamePolicy::Snake),
-            "user_name"
-        );
-        assert_eq!(
-            apply_name_policy("user_name", NamePolicy::Pascal),
-            "UserName"
-        );
-        assert_eq!(
-            apply_name_policy("user_name", NamePolicy::Kebab),
-            "user-name"
-        );
-        assert_eq!(
-            apply_name_policy("user_name", NamePolicy::ScreamingSnake),
-            "USER_NAME"
-        );
+        assert_eq!(NamePolicy::Camel.apply("user_name"), "userName");
+        assert_eq!(NamePolicy::Snake.apply("user_name"), "user_name");
+        assert_eq!(NamePolicy::Pascal.apply("user_name"), "UserName");
+        assert_eq!(NamePolicy::Kebab.apply("user_name"), "user-name");
+        assert_eq!(NamePolicy::ScreamingSnake.apply("user_name"), "USER_NAME");
     }
 
     #[test]
     fn rename_all_from_pascal_case() {
         // PascalCase source, not the snake_case of struct fields.
-        assert_eq!(
-            apply_name_policy("AddRemote", NamePolicy::Kebab),
-            "add-remote"
-        );
-        assert_eq!(
-            apply_name_policy("AddRemote", NamePolicy::Snake),
-            "add_remote"
-        );
-        assert_eq!(
-            apply_name_policy("AddRemote", NamePolicy::Camel),
-            "addRemote"
-        );
-        assert_eq!(apply_name_policy("List", NamePolicy::Kebab), "list");
+        assert_eq!(NamePolicy::Kebab.apply("AddRemote"), "add-remote");
+        assert_eq!(NamePolicy::Snake.apply("AddRemote"), "add_remote");
+        assert_eq!(NamePolicy::Camel.apply("AddRemote"), "addRemote");
+        assert_eq!(NamePolicy::Kebab.apply("List"), "list");
     }
 }

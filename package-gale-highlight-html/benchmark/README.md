@@ -37,14 +37,14 @@ bodies. `tree_sitter.rs` adds JSON for a JSON `type` and JavaScript for an
 
 ## Results
 
-Environment: Wado 2026-10-03 (`-O2`), wasmtime 49.0.0, rustc 1.98.1,
-Node.js v26.7.0, Linux x86_64. Best of three runs.
+Environment: Wado 2026-10-24 (`-O2`), wasmtime 50.0.0, rustc 1.98.1,
+Node.js v26.10.0, Linux x86_64. Best of three runs.
 
 | Implementation            | Throughput |   ms/iter | vs best |
 | ------------------------- | ---------: | --------: | ------- |
-| Prism.js                  |  4.17 MB/s |  9.518 ms | 1.00x   |
-| tree-sitter (Rust native) |  3.51 MB/s | 11.300 ms | 1.19x   |
-| **Gale** (Wado)           |  2.45 MB/s | 16.178 ms | 1.70x   |
+| Prism.js                  |  6.31 MB/s |  6.297 ms | 1.00x   |
+| **Gale** (Wado)           |  4.28 MB/s |  9.271 ms | 1.47x   |
+| tree-sitter (Rust native) |  3.85 MB/s | 10.302 ms | 1.64x   |
 
 ## Files
 

@@ -59,11 +59,16 @@ fn pipeline(stage: String, json: String) -> String {
     return `{${fields.join(", ")}}`;
 }
 
-fn refusal(stage: String, json: String) -> String {
-    return match read(&pipeline(stage, json)) {
+/// Why `json` is refused, or nothing where it reads.
+fn read_error(json: String) -> String {
+    return match read(&json) {
         Ok(_) => "",
         Err(e) => `${e}`,
     };
+}
+
+fn refusal(stage: String, json: String) -> String {
+    return read_error(pipeline(stage, json));
 }
 
 test "GPT-2's pipeline reads as byte-level BPE" {
@@ -98,10 +103,12 @@ test "a model with no type is BPE, as the older files write it" {
 }
 
 test "a stage Loam does not generate names itself" {
-    assert refusal("normalizer", "{\"type\": \"NFKC\"}") == "normalizer: NFKC is not supported";
-    assert refusal("pre_tokenizer", "{\"type\": \"Metaspace\"}") == "pre_tokenizer: Metaspace is not supported";
-    assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder: WordPiece is not supported";
+    assert refusal("normalizer", "{\"type\": \"NFKC\"}") == "normalizer.type: unknown variant: NFKC";
+    assert refusal("pre_tokenizer", "{\"type\": \"Metaspace\"}") == "pre_tokenizer.type: unknown variant: Metaspace";
+    assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder.type: unknown variant: WordPiece";
     assert refusal("model", "{\"type\": \"Unigram\"}") == "model: Unigram is not supported";
+    let unigram = "{\"type\": \"Unigram\", \"vocab\": [[\"<unk>\", 0.0]], \"unk_id\": 0}";
+    assert refusal("model", unigram) == "model: Unigram is not supported";
     assert refusal("post_processor", "{\"type\": \"TemplateProcessing\"}") == "post_processor: TemplateProcessing is not supported";
     assert refusal("normalizer", "{\"type\": \"Replace\", \"pattern\": {\"String\": \" \"}, \"content\": \"_\"}") == "normalizer: Replace is not supported";
 }
@@ -191,23 +198,24 @@ test "Gemma's pipeline reads as SentencePiece's spelling, with its prefix" {
 }
 
 test "SentencePiece's spelling without byte tokens names itself" {
-    assert match read(&gemma("false")) {
-        Ok(_) => "",
-        Err(e) => `${e}`,
-    } == "model: SentencePiece's spelling without byte_fallback is not supported";
+    assert read_error(gemma("false")) == "model: SentencePiece's spelling without byte_fallback is not supported";
 }
 
 test "an added token matched only after the normalizer names itself" {
     let json = gemma("true").replace("\"content\": \"<eot>\"", "\"content\": \"<eot>\", \"normalized\": true");
-    assert match read(&json) {
-        Ok(_) => "",
-        Err(e) => `${e}`,
-    } == "added_tokens: <eot>: normalized true is not supported";
+    assert read_error(json) == "added_tokens: <eot>: normalized true is not supported";
 }
 
 test "text that is not JSON is malformed" {
-    assert (match read(&"{") {
-        Ok(_) => "",
-        Err(e) => `${e}`,
-    }).starts_with("not JSON: ");
+    assert read_error("{") == "unexpected end of input at offset 1";
+}
+
+test "a value of the wrong shape names where it stands" {
+    assert read_error("{}") == "missing field: model";
+    assert read_error("{\"model\": {\"vocab\": {\"a\": 1.5}}}") == "model.vocab[\"a\"]: expected integer, got float at offset 26";
+    assert read_error("{\"model\": {\"merges\": [1]}}") == "model.merges[0]: a merge is a string or a pair";
+    assert read_error("{\"model\": {\"merges\": [\"a b\", \"ab\"]}}") == "model.merges[1]: merge ab is not two tokens";
+    assert read_error("{\"model\": {\"merges\": [[\"a\", \"b\", \"c\"]]}}") == "model.merges[0]: a merge is a string or a pair";
+    assert read_error("{\"model\": {}, \"truncation\": {\"max_length\": 8}}") == "truncation is not supported";
+    assert read_error("{\"model\": {}, \"padding\": {}}") == "padding is not supported";
 }

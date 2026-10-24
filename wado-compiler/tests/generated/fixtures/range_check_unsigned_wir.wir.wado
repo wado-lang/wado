@@ -135,7 +135,6 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
     let xs_0: ref "core:prelude//List<i32>";
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $iter_1: ref "core:prelude/slice.wado//SliceValueIter<i64>";
-    let elements_24: ref Array<i32>;
     let item_30: i32;
     let is_negative_39: bool;
     let digit_count_41: i32;
@@ -144,9 +143,10 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
     let pair_52: i32;
     let tens_53: i32;
     let text_76: ref "core:prelude/string.wado//String";
-    let elements_100: ref Array<i64>;
     let abs_val_117: u64;
+    let $licm_repr_180: ref Array<i32>;
     let $licm_used_181: i32;
+    let $licm_repr_183: ref Array<i64>;
     let $moved_4_188: i32;
     let $moved_6_190: i32;
     let $cm_pair_7_191: i64;
@@ -158,7 +158,7 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
     let start_1009: i32;
     let $hfs_index_1702: i32;
     xs_0 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 });
-    elements_24 = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_24(array.new_fixed<i32>(-2147483648, -1, 0, 2, 3, 2147483647)), index: 0, end: 6 }).repr;
+    $licm_repr_180 = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(-2147483648, -1, 0, 2, 3, 2147483647), index: 0, end: 6 }).repr;
     $licm_used_181 = xs_0.used;
     $tmpl_buf_235 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
     $hfs_index_1702 = 0;
@@ -168,7 +168,7 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
                 $iter_0.index = $hfs_index_1702;
                 break b0;
             }
-            item_30 = builtin::array_get_value<i32>(elements_24, $hfs_index_1702);
+            item_30 = builtin::array_get_value<i32>($licm_repr_180, $hfs_index_1702);
             $hfs_index_1702 = $hfs_index_1702 + 1;
             item_30 = black_box(item_30);
             $tmpl_buf_235.used = 0;
@@ -299,12 +299,12 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
             item_30 = "range_check_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"($moved_4_188 = item_30; item_30 = 0; $moved_4_188);
             digit_count_41 = start_621;
             start_621 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_196 = digit_count_41; digit_count_41 = 0; $moved_3_196, $tmpl_buf_235.repr, $tmpl_buf_235.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_3_196(digit_count_41), $tmpl_buf_235.repr, $tmpl_buf_235.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_190 = item_30; item_30 = 0; $moved_6_190);
             continue l1;
         };
     };
-    elements_100 = local.tee $iter_1(struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: local.tee elements_100(array.new_fixed<i64>(-1_i64, 0_i64, 9_i64, 10_i64)), index: 0, end: 4 }).repr;
+    $licm_repr_183 = local.tee $iter_1(struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: array.new_fixed<i64>(-1_i64, 0_i64, 9_i64, 10_i64), index: 0, end: 4 }).repr;
     $tmpl_buf_235 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
     $moved_6_190 = 0;
     b32: block {
@@ -313,7 +313,7 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
                 $iter_1.index = $moved_6_190;
                 break b32;
             }
-            x_43 = builtin::array_get_value<i64>(elements_100, $moved_6_190);
+            x_43 = builtin::array_get_value<i64>($licm_repr_183, $moved_6_190);
             $moved_6_190 = $moved_6_190 + 1;
             $tmpl_buf_235.used = 0;
             start_621 = x_43 < 0_i64;
@@ -418,7 +418,7 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
             is_negative_39 = $tmpl_buf_235.used;
             $tmpl_buf_235.used = start_1009;
             builtin::array_copy<u8>(local.tee $load_9($tmpl_buf_235.repr), is_negative_39, global:range_check_unsigned_wir.wado::$const_obj_0, 0, 2);
-            text_76 = (if local.tee x_43(black_box(x_43)) <=u 9_i64 -> ref "core:prelude/string.wado//String" {
+            text_76 = (if black_box(x_43) <=u 9_i64 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -441,7 +441,7 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
             is_negative_39 = "range_check_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"($licm_used_181 = is_negative_39; is_negative_39 = 0; $licm_used_181);
             start_621 = start_1009;
             start_1009 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"(item_30 = start_621; start_621 = 0; item_30, $tmpl_buf_235.repr, $tmpl_buf_235.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee item_30(start_621), $tmpl_buf_235.repr, $tmpl_buf_235.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(digit_count_41 = is_negative_39; is_negative_39 = 0; digit_count_41);
             continue l33;
         };
@@ -478,8 +478,8 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
     $moved_6_190 = "range_check_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"($moved_6_190 = digit_count_41; digit_count_41 = 0; $moved_6_190);
     digit_count_41 = item_30;
     item_30 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(item_30 = digit_count_41; digit_count_41 = 0; item_30, $tmpl_buf_235.repr, $tmpl_buf_235.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(item_30 = $moved_6_190; $moved_6_190 = 0; item_30);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_41, $tmpl_buf_235.repr, $tmpl_buf_235.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(digit_count_41 = $moved_6_190; $moved_6_190 = 0; digit_count_41);
 }
 
 fn "range_check_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -715,7 +715,7 @@ condition: 0 <= index < self.len()
     builtin::array_copy<u8>($load_0, index, $sroa_s_repr_55, 0, 12);
     $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_7);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $site(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_6);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_6);
     "core:rt/panic"($local_6.repr, $local_6.used);
     unreachable;
 }

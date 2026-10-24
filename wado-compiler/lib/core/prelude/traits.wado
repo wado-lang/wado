@@ -193,6 +193,11 @@ pub trait ReflectVariant: Reflect with () {
     /// Returns the per-case members.
     #[compiler_item("reflect_variant_members")]
     fn members() -> Self::Members;
+
+    /// Returns the key `#[wire(tag)]` writes each case under, or `None` where
+    /// the variant declares none.
+    #[compiler_item("reflect_variant_wire_tag")]
+    fn wire_tag() -> Option<String>;
 }
 
 /// Compile-time enum introspection. The compiler synthesizes an impl for

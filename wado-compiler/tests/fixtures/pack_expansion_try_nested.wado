@@ -1,0 +1,48 @@
+// A pack expansion nested in each element of another: every outer element
+// carries its own copy of the inner `[..U::make(n)?]`, whose bindings must
+// stay apart from the other copies'.
+
+trait Make with () {
+    fn make(n: i32) -> Result<Self, String>;
+}
+
+impl Make for i32 {
+    fn make(n: i32) -> Result<i32, String> {
+        if n < 0 {
+            return Result::Err("negative");
+        }
+        return Result::Ok(n);
+    }
+}
+
+impl Make for String {
+    fn make(n: i32) -> Result<String, String> {
+        return Result::Ok(`${n}`);
+    }
+}
+
+fn arity<..U>(t: [..U]) -> i32 {
+    let mut count = 0;
+    for let _ of t {
+        count += 1;
+    }
+    return count;
+}
+
+fn build<..T: Make, ..U: Make>(n: i32) -> Result<[..T], String> {
+    let t = [..T::make(n + arity([..U::make(n)?]))?];
+    return Result::Ok(t);
+}
+
+test "nested in two elements" {
+    assert build::<[i32, String], [i32, String]>(1) matches { Ok([3, s]) && s == "3" };
+    assert build::<[i32, String], [String, i32, i32]>(1) matches { Ok([4, s]) && s == "4" };
+    assert build::<[i32, String], [i32]>(-5) matches { Err(e) && e == "negative" };
+}
+
+test "nested in one element" {
+    assert build::<[i32], [String, i32]>(2) matches { Ok([4]) };
+}
+
+__DATA__
+{"test": {}}
