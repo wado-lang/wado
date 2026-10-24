@@ -713,7 +713,10 @@ fn any_in_expr<'t, P: AstTreeProbe<'t>>(
         ast::Expr::Cast(c) => any_in_expr(ctx, &c.expr, probe),
         ast::Expr::FieldAccess(f) => any_in_expr(ctx, &f.expr, probe),
         ast::Expr::Assign(a) => {
-            any_in_expr(ctx, &a.target, probe) || any_in_expr(ctx, &a.value, probe)
+            a.places()
+                .iter()
+                .any(|place| any_in_expr(ctx, place, probe))
+                || any_in_expr(ctx, &a.value, probe)
         }
         ast::Expr::CompoundAssign(a) => {
             any_in_expr(ctx, &a.target, probe) || any_in_expr(ctx, &a.value, probe)

@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//affine_fresh_drop_guard_folds.wado/run" = fn();  // TypeId(10)
 
@@ -59,7 +59,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -83,7 +83,7 @@ fn "affine_fresh_drop_guard_folds.wado/run"() {
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_11, x_15, self_5);
     self_5 = builtin::i32_wrap_i64(local.tee x_15("wasi/stream-new"()));
     is_negative_11 = builtin::i32_wrap_i64(x_15 >> 32_i64);
-    $moved_4_51 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_51 = self_5; self_5 = 0; $moved_4_51);
+    $moved_4_51 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_51 = self_5; self_5 = 0; $moved_4_51);
     "core:rt/write_string_to_stream$dae[add_newline]"(self_5 = is_negative_11; is_negative_11 = 0; self_5, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_5 = $moved_4_51; $moved_4_51 = 0; self_5);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -100,7 +100,7 @@ fn "affine_fresh_drop_guard_folds.wado/run"() {
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, $moved_4_51, x_15, t);
     t = builtin::i32_wrap_i64(local.tee x_15("wasi/stream-new"()));
     $moved_4_51 = builtin::i32_wrap_i64(x_15 >> 32_i64);
-    self_5 = "wasi/wasi:cli/Stdout::write_via_stream"(self_5 = t; t = 0; self_5);
+    self_5 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(self_5 = t; t = 0; self_5);
     "core:rt/write_string_to_stream$dae[add_newline]"(t = $moved_4_51; $moved_4_51 = 0; t, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(t = self_5; self_5 = 0; t);
 }

@@ -1,0 +1,14 @@
+// A destructuring target is an index assignment like any other, so it takes no
+// `unchecked`.
+
+export fn run() {
+    let mut xs: List<i32> = [1, 2];
+    let mut b = 0;
+    [unchecked xs[0], b] = [b, 1];
+}
+
+__DATA__
+{
+    "compile_error": ":7:6: analysis error: an index assignment takes no `unchecked`: the marker vouches for a read",
+    "compile_error_codes": ["UNCHECKED_INVALID"]
+}

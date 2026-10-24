@@ -67,29 +67,29 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/example:demo/Dom::touch" = fn(i32, f64) -> i32;  // TypeId(18)
+type "functype//wasi/$example:demo/global#touch" = fn(i32, f64) -> i32;  // TypeId(18)
 
-type "functype//wasi/example:demo/Dom::touch_pair" = fn(f64, i32, f64) -> i32;  // TypeId(19)
+type "functype//wasi/$example:demo/global#touch-pair" = fn(f64, i32, f64) -> i32;  // TypeId(19)
 
-type "functype//wasi/example:demo/Dom::make_pair" = fn(i32);  // TypeId(20)
+type "functype//wasi/$example:demo/global#make-pair" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/example:demo/Dom::maybe" = fn(i32);  // TypeId(21)
+type "functype//wasi/$example:demo/global#maybe" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/example:demo/Dom::root" = fn() -> f64;  // TypeId(22)
+type "functype//wasi/$example:demo/global#root" = fn() -> f64;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
 
 type "functype//cm_unrestricted_handle_nested_reference.wado/run" = fn();  // TypeId(24)
 
-type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_root" = fn() -> u64;  // TypeId(25)
+type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#root" = fn() -> u64;  // TypeId(25)
 
-type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch" = fn(ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>") -> i32;  // TypeId(26)
+type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch" = fn(ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>") -> i32;  // TypeId(26)
 
-type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair" = fn(ref "cm_unrestricted_handle_nested_reference.wado//Pair") -> i32;  // TypeId(27)
+type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch-pair" = fn(ref "cm_unrestricted_handle_nested_reference.wado//Pair") -> i32;  // TypeId(27)
 
-type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair" = fn() -> ref "cm_unrestricted_handle_nested_reference.wado//Pair";  // TypeId(28)
+type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#make-pair" = fn() -> ref "cm_unrestricted_handle_nested_reference.wado//Pair";  // TypeId(28)
 
-type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe" = fn() -> ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";  // TypeId(29)
+type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#maybe" = fn() -> ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";  // TypeId(29)
 
 type "functype//cm_unrestricted_handle_nested_reference.wado/$cm_export__run" = fn();  // TypeId(30)
 
@@ -291,12 +291,12 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Dom::touch from "wasi/example:demo/Dom::touch";
-import fn wasi/example:demo/Dom::touch_pair from "wasi/example:demo/Dom::touch_pair";
-import fn wasi/example:demo/Dom::make_pair from "wasi/example:demo/Dom::make_pair";
-import fn wasi/example:demo/Dom::maybe from "wasi/example:demo/Dom::maybe";
-import fn wasi/example:demo/Dom::root from "wasi/example:demo/Dom::root";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$example:demo/global#touch from "wasi/$example:demo/global#touch";
+import fn wasi/$example:demo/global#touch-pair from "wasi/$example:demo/global#touch-pair";
+import fn wasi/$example:demo/global#make-pair from "wasi/$example:demo/global#make-pair";
+import fn wasi/$example:demo/global#maybe from "wasi/$example:demo/global#maybe";
+import fn wasi/$example:demo/global#root from "wasi/$example:demo/global#root";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -329,12 +329,12 @@ fn "cm_unrestricted_handle_nested_reference.wado/run"() with Dom {
     let f_38: ref "core:prelude/format.wado//Formatter";
     let other: ref "core:prelude/string.wado//String";
     let $sroa_s_repr_77: ref Array<u8>;
-    n_0 = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_root"();
-    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n_0 }));
-    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(struct.new "cm_unrestricted_handle_nested_reference.wado//Pair" { a: n_0, b: struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n_0 } }));
-    n_0 = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"().a;
+    n_0 = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#root"();
+    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch"(struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n_0 }));
+    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch-pair"(struct.new "cm_unrestricted_handle_nested_reference.wado//Pair" { a: n_0, b: struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n_0 } }));
+    n_0 = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#make-pair"().a;
     $v2 = $inline_core_prelude_types_wado_Option__cm_unrestricted_handle_nested_reference_wado_Node___unwrap_1: block -> u64 {
-        if @likely(ref.test "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(local.tee self_14("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe"()))) {
+        if @likely(ref.test "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(local.tee self_14("cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#maybe"()))) {
             break $inline_core_prelude_types_wado_Option__cm_unrestricted_handle_nested_reference_wado_Node___unwrap_1: ref.cast "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(self_14).payload_0;
         } else {
         }
@@ -407,11 +407,11 @@ condition: *p.a == *Dom::maybe().unwrap()
     }
 }
 
-fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_root"() with Dom {
-    return builtin::i64_reinterpret_f64("wasi/example:demo/Dom::root"());
+fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#root"() with Dom {
+    return builtin::i64_reinterpret_f64("wasi/$example:demo/global#root"());
 }
 
-fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(n) with Dom {
+fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch"(n) with Dom {
     let $n_disc: i32;
     let $n_inner0: f64;
     $n_disc = ref.test "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(n);
@@ -420,10 +420,10 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(n) with
         $n_inner0 = builtin::f64_reinterpret_i64(ref.cast "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(n).payload_0);
     } else {
     }
-    return "wasi/example:demo/Dom::touch"($n_disc, $n_inner0);
+    return "wasi/$example:demo/global#touch"($n_disc, $n_inner0);
 }
 
-fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(p) with Dom {
+fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#touch-pair"(p) with Dom {
     let $p_f1_optval: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
     let $p_f1_disc: i32;
     let $p_f1_inner0: f64;
@@ -433,16 +433,16 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(p)
         $p_f1_inner0 = builtin::f64_reinterpret_i64(ref.cast "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"($p_f1_optval).payload_0);
     } else {
     }
-    return "wasi/example:demo/Dom::touch_pair"(builtin::f64_reinterpret_i64(p.a), $p_f1_disc, $p_f1_inner0);
+    return "wasi/$example:demo/global#touch-pair"(builtin::f64_reinterpret_i64(p.a), $p_f1_disc, $p_f1_inner0);
 }
 
-fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"() with Dom {
+fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#make-pair"() with Dom {
     let $outptr: i32;
     let $lifted_result_1: u64;
     let $disc: i32;
     let $option_result: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
     let $struct_result: ref "cm_unrestricted_handle_nested_reference.wado//Pair";
-    "wasi/example:demo/Dom::make_pair"(local.tee $outptr("mem/realloc"(0, 0, 8, 24)));
+    "wasi/$example:demo/global#make-pair"(local.tee $outptr("mem/realloc"(0, 0, 8, 24)));
     $lifted_result_1 = builtin::load_i64($outptr);
     $disc = builtin::load_u8($outptr + 4);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>$0;
@@ -454,11 +454,11 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"() w
     return $struct_result;
 }
 
-fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe"() with Dom {
+fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__example:demo/global#maybe"() with Dom {
     let $outptr: i32;
     let $disc: i32;
     let $option_result: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
-    "wasi/example:demo/Dom::maybe"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/$example:demo/global#maybe"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>$0;
     if $disc != 0 {
@@ -1080,7 +1080,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

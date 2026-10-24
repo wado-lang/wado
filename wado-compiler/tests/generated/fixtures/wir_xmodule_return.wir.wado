@@ -249,7 +249,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(51)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(53)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(53)
 
 type "functype//wir_xmodule_return.wado/$test_0_nested_parens_give_nesting_depth" = fn();  // TypeId(54)
 
@@ -431,7 +431,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -1038,7 +1038,7 @@ fn "./sub/wir_xmodule_return_parser.wado/tree_build_node"(events, pos) {
 fn "./sub/wir_xmodule_return_parser.wado/try_INT"(chars, start) {
     let $load_0: i32;
     let $load_1: ref Array<char>;
-    let $m1_4: char;
+    let $m_1_4: char;
     let rep_saved_0: i32;
     if start >= local.tee $load_0(chars.used) {
         return -1;
@@ -1047,7 +1047,7 @@ fn "./sub/wir_xmodule_return_parser.wado/try_INT"(chars, start) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(start, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("./sub/wir_xmodule_return_parser.wado:1091"), used: 41 });
         unreachable;
-    }; $m1_4 = builtin::array_get_value<char>(local.tee $load_1(chars.repr), start); (48 <=u $m1_4) & ($m1_4 <=u 57) == 0 {
+    }; $m_1_4 = builtin::array_get_value<char>(local.tee $load_1(chars.repr), start); (48 <=u $m_1_4) & ($m_1_4 <=u 57) == 0 {
         return -1;
     }
     start = start + 1;
@@ -1060,7 +1060,7 @@ fn "./sub/wir_xmodule_return_parser.wado/try_INT"(chars, start) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(start, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("./sub/wir_xmodule_return_parser.wado:1097"), used: 41 });
                     unreachable;
-                }; $m1_4 = builtin::array_get_value<char>($load_1, start); (48 <=u $m1_4) & ($m1_4 <=u 57) == 0;
+                }; $m_1_4 = builtin::array_get_value<char>($load_1, start); (48 <=u $m_1_4) & ($m_1_4 <=u 57) == 0;
                 start = start + 1;
                 continue l64;
             };
@@ -1680,7 +1680,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

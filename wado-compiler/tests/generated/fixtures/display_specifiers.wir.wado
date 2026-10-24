@@ -65,9 +65,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
 type "functype//display_specifiers.wado/test_format_base" = fn();  // TypeId(19)
 
@@ -279,7 +279,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(122)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(123)
 
-type "functype//display_specifiers.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(124)
+type "functype//display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(124)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(125)
 
@@ -291,8 +291,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -972,7 +972,7 @@ condition: fmt_with(&neg, false, false, 10, Alignment::Left) == \"-42       \"
     }
     i_80 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     offset_68 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i_80; i_80 = 0; $moved_4);
+    $moved_4 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i_80; i_80 = 0; $moved_4);
     i_80 = offset_68;
     offset_68 = 0;
     buf_55 = global:display_specifiers.wado::$const_obj_35;
@@ -1626,7 +1626,7 @@ condition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"
     }
     i_104 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     offset_92 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i_104; i_104 = 0; $moved_4);
+    $moved_4 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i_104; i_104 = 0; $moved_4);
     i_104 = offset_92;
     offset_92 = 0;
     $local_22 = global:display_specifiers.wado::$const_obj_35;
@@ -4597,7 +4597,7 @@ condition: `${neg_i32:#x}` == \"0xffffffd6\"
     }
     start_6402 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     offset_696 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    i_708 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(i_708 = start_6402; start_6402 = 0; i_708);
+    i_708 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_708 = start_6402; start_6402 = 0; i_708);
     start_6402 = offset_696;
     offset_696 = 0;
     $local_151 = global:display_specifiers.wado::$const_obj_35;
@@ -8384,7 +8384,7 @@ condition: `${1.0:.10}` == \"1.0000000000\"
     }
     i_557 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     a_end_552 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i_557; i_557 = 0; $moved_4);
+    $moved_4 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i_557; i_557 = 0; $moved_4);
     i_557 = a_end_552;
     a_end_552 = 0;
     $local_144 = global:display_specifiers.wado::$const_obj_35;
@@ -8412,7 +8412,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8431,7 +8431,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8450,7 +8450,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8469,7 +8469,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8488,7 +8488,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8507,7 +8507,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8526,7 +8526,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8545,7 +8545,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8564,7 +8564,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8583,7 +8583,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8602,7 +8602,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8621,7 +8621,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8640,7 +8640,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8659,7 +8659,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8678,7 +8678,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8697,7 +8697,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8716,7 +8716,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8735,7 +8735,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8754,7 +8754,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8773,7 +8773,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8792,7 +8792,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8811,7 +8811,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8830,7 +8830,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8849,7 +8849,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8868,7 +8868,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8887,7 +8887,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8906,7 +8906,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8925,7 +8925,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -8944,7 +8944,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -8963,7 +8963,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -8982,7 +8982,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9001,7 +9001,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9020,7 +9020,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9039,7 +9039,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9058,7 +9058,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9077,7 +9077,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9096,7 +9096,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9115,7 +9115,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9134,7 +9134,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9153,7 +9153,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9172,7 +9172,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9191,7 +9191,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9210,7 +9210,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9229,7 +9229,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9248,7 +9248,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9267,7 +9267,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9286,7 +9286,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9305,7 +9305,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9324,7 +9324,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9343,7 +9343,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9362,7 +9362,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9381,7 +9381,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9400,7 +9400,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9419,7 +9419,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9438,7 +9438,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9457,7 +9457,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9476,7 +9476,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9495,7 +9495,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9514,7 +9514,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9533,7 +9533,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9552,7 +9552,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9571,7 +9571,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9590,7 +9590,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9609,7 +9609,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9628,7 +9628,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9647,7 +9647,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9666,7 +9666,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9685,7 +9685,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9704,7 +9704,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9723,7 +9723,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9742,7 +9742,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9761,7 +9761,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9780,7 +9780,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9799,7 +9799,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9818,7 +9818,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9837,7 +9837,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9856,7 +9856,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9875,7 +9875,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9894,7 +9894,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9913,7 +9913,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9932,7 +9932,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -9951,7 +9951,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -9970,7 +9970,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -9989,7 +9989,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10008,7 +10008,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -10027,7 +10027,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -10046,7 +10046,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10065,7 +10065,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -10084,7 +10084,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -10103,7 +10103,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10122,7 +10122,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -10141,7 +10141,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -10160,7 +10160,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10179,7 +10179,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -10198,7 +10198,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -10217,7 +10217,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10236,7 +10236,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
@@ -10255,7 +10255,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     $moved_4_1814 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    new_used_221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
+    new_used_221 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_1814; $moved_4_1814 = 0; new_used_221);
     $moved_4_1814 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_1814, $local_10.repr, $local_10.used);
@@ -10274,7 +10274,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     new_used_221 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     $moved_4_1814 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    start_222 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
+    start_222 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = new_used_221; new_used_221 = 0; start_222);
     new_used_221 = $moved_4_1814;
     $moved_4_1814 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_221, $local_10.repr, $local_10.used);
@@ -10293,15 +10293,15 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     };
     start_222 = builtin::i32_wrap_i64(local.tee $cm_pair_7_1817("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64($cm_pair_7_1817 >> 32_i64);
-    $moved_4_1814 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
+    $moved_4_1814 = "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_1814 = start_222; start_222 = 0; $moved_4_1814);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_10.repr, $local_10.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_222 = $moved_4_1814; $moved_4_1814 = 0; start_222);
 }
 
-fn "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "display_specifiers.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "display_specifiers.wado/$cm_export__run"() {
@@ -11253,7 +11253,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

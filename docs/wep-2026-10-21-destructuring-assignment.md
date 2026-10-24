@@ -237,8 +237,9 @@ well.
 
 ## Roadmap
 
-- [ ] Parse and type a destructuring assignment, desugar it, and state its
-  evaluation order and arity error in fixtures.
+- [x] Parse and type a destructuring assignment, desugar it, and state its
+  evaluation order and arity error in fixtures. Write the assignment into
+  `spec-expressions.md` and the cheatsheet.
 - [ ] Show that a permutation of owned targets with no readable reference
   moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
 - [ ] Lower a transposition of owned targets with a readable reference as a
@@ -253,9 +254,8 @@ well.
   destructuring assignment, and report an affine fallback as the compile error
   carrying the same note. Fixtures cover each cause, for the remark and for
   the error.
-- [ ] Write the rules into `spec-expressions.md` (the assignment) and
-  `spec-standard-traits.md` (`IndexSwap` and its dispatch), and add both to
-  the cheatsheet.
+- [ ] Write `IndexSwap` and its dispatch into `spec-standard-traits.md`, and
+  add it to the cheatsheet.
 
 ## Known gaps
 

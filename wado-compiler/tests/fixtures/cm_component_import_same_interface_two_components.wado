@@ -1,0 +1,10 @@
+// Two components each export `a:x/trip`: each module's interface, and the
+// record it declares, is its own, so each call reaches the component it was
+// imported from.
+use { Trip as One } from "./sub/wasm_import_cm_trip_one.wat" with { type: "wat" };
+use { "a:x/trip" as Two } from "./sub/wasm_import_cm_trip_two.wat" with { type: "wat" };
+
+test {
+    assert One::make().n == 1;
+    assert Two::make().n == 2;
+}

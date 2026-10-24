@@ -94,6 +94,7 @@ importList
 importItem
     : name '::' '{' importList? '}'
     | name ('as' name)?
+    | STRING_LITERAL 'as' name
     ;
 
 functionDecl

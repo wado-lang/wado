@@ -1,0 +1,24 @@
+// A write through a shared reference is reported once, not also as a target
+// that is not a place: through `IndexRef`'s `&Output`, and through a `&T`.
+
+struct P { x: i32 }
+struct C { items: List<P> }
+
+impl IndexRef<i32> for C {
+    type Output = P;
+    fn index_ref(&self, i: i32) -> &P { return &self.items[i]; }
+}
+
+export fn run() {
+    let mut c = C { items: [P { x: 1 }] };
+    c[0] = P { x: 2 };
+    let n = 0;
+    let r = &n;
+    *r = 3;
+}
+
+__DATA__
+{
+    "compile_error": ":14:5: analysis error: cannot assign through immutable reference; 17:5: cannot assign through immutable reference",
+    "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]
+}

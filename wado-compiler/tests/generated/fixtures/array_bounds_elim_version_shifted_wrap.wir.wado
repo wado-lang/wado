@@ -45,7 +45,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
 type "functype//array_bounds_elim_version_shifted_wrap.wado/run" = fn();  // TypeId(14)
 
@@ -123,7 +123,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -137,7 +137,7 @@ fn "array_bounds_elim_version_shifted_wrap.wado/run"() with Stdout {
     let ob: i32;
     let n_6: i32;
     let c: i32;
-    let $ca0: i32;
+    let $ca_1: i32;
     let value_17: i32;
     repr = builtin::array_new<i32>(8);
     ob = black_box(2147483647);
@@ -147,9 +147,9 @@ fn "array_bounds_elim_version_shifted_wrap.wado/run"() with Stdout {
         b1: block {
             l2: loop {
                 break_if b1 c >= n_6;
-                $ca0 = ob + c;
-                value_17 = builtin::array_get_value<i32>(repr, $ca0) + 1;
-                builtin::array_set<i32>(repr, $ca0, value_17);
+                $ca_1 = ob + c;
+                value_17 = builtin::array_get_value<i32>(repr, $ca_1) + 1;
+                builtin::array_set<i32>(repr, $ca_1, value_17);
                 c = c + 1;
                 continue l2;
             };
@@ -158,12 +158,12 @@ fn "array_bounds_elim_version_shifted_wrap.wado/run"() with Stdout {
         b3: block {
             l4: loop {
                 break_if b3 c >= n_6;
-                value_17 = if @unlikely(local.tee $ca0(ob + c) >=u 8) {
+                value_17 = if @unlikely(local.tee $ca_1(ob + c) >=u 8) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca0, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_wrap.wado:10"), used: 46 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca_1, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_wrap.wado:10"), used: 46 });
                     unreachable;
-                }; builtin::array_get_value<i32>(repr, $ca0) + 1;
-                builtin::array_set<i32>(repr, $ca0, value_17);
+                }; builtin::array_get_value<i32>(repr, $ca_1) + 1;
+                builtin::array_set<i32>(repr, $ca_1, value_17);
                 c = c + 1;
                 continue l4;
             };
@@ -343,7 +343,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

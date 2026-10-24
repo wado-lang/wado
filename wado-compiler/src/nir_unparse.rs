@@ -747,7 +747,7 @@ impl<'a> NirUnparser<'a> {
                 self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
             ExprKind::CmRawCall { target, args } => {
-                let name = target.import_name().into_owned();
+                let name = target.import_name();
                 let args = args.clone();
                 self.output.push_str("cm_raw_call ");
                 self.output.push_str(&name);

@@ -57,7 +57,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
 type "functype//opt_hfs_loop_exit_no_writeback.wado/$cm_export__run" = fn();  // TypeId(16)
 
@@ -139,7 +139,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -266,7 +266,7 @@ fn "opt_hfs_loop_exit_no_writeback.wado/process$cold0$sroa[state.counter]"(state
 }
 
 fn "opt_hfs_loop_exit_no_writeback.wado/process$spec0"(state) {
-    let $m1_2: i32;
+    let $m_1_2: i32;
     let $licm_data_14: ref "core:prelude//List<i32>";
     let $licm_used_15: i32;
     let $licm_repr_16: ref Array<i32>;
@@ -280,7 +280,7 @@ fn "opt_hfs_loop_exit_no_writeback.wado/process$spec0"(state) {
                 state.counter = $hfs_counter_17;
                 break b2;
             }
-            state.total = state.total + $m1_2 = $hfs_counter_17; if @unlikely(((0 <= $m1_2) & ($m1_2 < $licm_used_15)) == 0) {
+            state.total = state.total + $m_1_2 = $hfs_counter_17; if @unlikely(((0 <= $m_1_2) & ($m_1_2 < $licm_used_15)) == 0) {
                 cold_path;
                 state.counter = $hfs_counter_17;
                 "opt_hfs_loop_exit_no_writeback.wado/process$cold0$sroa[state.counter]"($hfs_counter_17, $licm_used_15);
@@ -459,7 +459,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

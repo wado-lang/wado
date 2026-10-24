@@ -42,19 +42,19 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Environment::get_environment" = fn(i32);  // TypeId(14)
+type "functype//wasi/$wasi:cli/environment@0.3.0#get-environment" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Environment::get_arguments" = fn(i32);  // TypeId(15)
+type "functype//wasi/$wasi:cli/environment@0.3.0#get-arguments" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//wasi_cli.wado/run" = fn();  // TypeId(18)
 
-type "functype//wasi_cli.wado/$cm_binding__Environment_get_environment" = fn() -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";  // TypeId(19)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment" = fn() -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";  // TypeId(19)
 
-type "functype//wasi_cli.wado/$cm_binding__Environment_get_arguments" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(20)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(20)
 
 type "functype//wasi_cli.wado/$cm_export__run" = fn();  // TypeId(21)
 
@@ -84,9 +84,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//wasi_cli.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
-type "functype//wasi_cli.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//wasi_cli.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
 
@@ -100,10 +100,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Environment::get_environment from "wasi/wasi:cli/Environment::get_environment";
-import fn wasi/wasi:cli/Environment::get_arguments from "wasi/wasi:cli/Environment::get_arguments";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/environment@0.3.0#get-environment from "wasi/$wasi:cli/environment@0.3.0#get-environment";
+import fn wasi/$wasi:cli/environment@0.3.0#get-arguments from "wasi/$wasi:cli/environment@0.3.0#get-arguments";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -125,7 +125,7 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     let $sroa_$pattern_temp_0_1_14_76: i32;
     $sroa_$pattern_temp_0_0_13_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_76 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $moved_4_66 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"($moved_4_66 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_4_66);
+    $moved_4_66 = "wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_66 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_4_66);
     $sroa_$pattern_temp_0_0_13_75 = $sroa_$pattern_temp_0_1_14_76;
     $sroa_$pattern_temp_0_1_14_76 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -134,13 +134,13 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_75 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_0_13_75);
     $sroa_$pattern_temp_0_0_13_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $moved_4_66 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_76 = "wasi_cli.wado/$cm_binding__Stderr_write_via_stream"($sroa_$pattern_temp_0_1_14_76 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $sroa_$pattern_temp_0_1_14_76);
+    $sroa_$pattern_temp_0_1_14_76 = "wasi_cli.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_76 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $sroa_$pattern_temp_0_1_14_76);
     $sroa_$pattern_temp_0_0_13_75 = $moved_4_66;
     $moved_4_66 = 0;
     $mv_arg_2 = global:wasi_cli.wado::$const_obj_3;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_13_75, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_75 = $sroa_$pattern_temp_0_1_14_76; $sroa_$pattern_temp_0_1_14_76 = 0; $sroa_$pattern_temp_0_0_13_75);
-    arguments = "wasi_cli.wado/$cm_binding__Environment_get_arguments"();
+    arguments = "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"();
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
     if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_75(0 + 41) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
@@ -155,12 +155,12 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_0_13_75, $cm_pair_7_69, $sroa_$pattern_temp_0_1_14_76);
     $sroa_$pattern_temp_0_1_14_76 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_75 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $moved_4_66 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"($moved_4_66 = $sroa_$pattern_temp_0_1_14_76; $sroa_$pattern_temp_0_1_14_76 = 0; $moved_4_66);
+    $moved_4_66 = "wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_66 = $sroa_$pattern_temp_0_1_14_76; $sroa_$pattern_temp_0_1_14_76 = 0; $moved_4_66);
     $sroa_$pattern_temp_0_1_14_76 = $sroa_$pattern_temp_0_0_13_75;
     $sroa_$pattern_temp_0_0_13_75 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_76, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_76 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_1_14_76);
-    env_vars = "wasi_cli.wado/$cm_binding__Environment_get_environment"();
+    env_vars = "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"();
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 };
     if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_76(0 + 43) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
@@ -175,14 +175,14 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_76, $cm_pair_7_69, $moved_4_66);
     $moved_4_66 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_76 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_75 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_75 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_0_13_75);
+    $sroa_$pattern_temp_0_0_13_75 = "wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_75 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_0_13_75);
     $moved_4_66 = $sroa_$pattern_temp_0_1_14_76;
     $sroa_$pattern_temp_0_1_14_76 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_66, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_66 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_4_66);
     $moved_4_66 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_75 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_76 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_76 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_1_14_76);
+    $sroa_$pattern_temp_0_1_14_76 = "wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_76 = $moved_4_66; $moved_4_66 = 0; $sroa_$pattern_temp_0_1_14_76);
     $moved_4_66 = $sroa_$pattern_temp_0_0_13_75;
     $sroa_$pattern_temp_0_0_13_75 = 0;
     $mv_arg_2 = global:wasi_cli.wado::$const_obj_0;
@@ -190,15 +190,15 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_66 = $sroa_$pattern_temp_0_1_14_76; $sroa_$pattern_temp_0_1_14_76 = 0; $moved_4_66);
 }
 
-fn "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "wasi_cli.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "wasi_cli.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "wasi_cli.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "wasi_cli.wado/$cm_binding__Environment_get_environment"() with Environment {
+fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"() with Environment {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -212,7 +212,7 @@ fn "wasi_cli.wado/$cm_binding__Environment_get_environment"() with Environment {
     let arr_18: ref Array<u8>;
     let i_19: i32;
     let value_32: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
-    "wasi/wasi:cli/Environment::get_environment"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/$wasi:cli/environment@0.3.0#get-environment"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -267,7 +267,7 @@ fn "wasi_cli.wado/$cm_binding__Environment_get_environment"() with Environment {
     return $result;
 }
 
-fn "wasi_cli.wado/$cm_binding__Environment_get_arguments"() with Environment {
+fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with Environment {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -279,7 +279,7 @@ fn "wasi_cli.wado/$cm_binding__Environment_get_arguments"() with Environment {
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_15: ref Array<u8>;
     let i: i32;
-    "wasi/wasi:cli/Environment::get_arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/$wasi:cli/environment@0.3.0#get-arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;

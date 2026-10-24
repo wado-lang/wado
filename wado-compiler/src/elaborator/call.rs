@@ -807,7 +807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// namespace the call wrote.
     fn effect_operation_callee(&self, op: &EffectOperation) -> CalleeRef {
         let defs = self.tysys.resolutions.defs();
-        CalleeRef::effect_operation(defs, op.decl, defs.name(op.op))
+        CalleeRef::effect_operation(defs, op.decl, op.op)
     }
 
     /// The variant a `Variant::name(...)` callee's prefix names: the one the
@@ -2430,9 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: callee.module().clone(),
             name: callee.name().to_string(),
-            template: callee
-                .def()
-                .map(|def| self.tysys.signatures.declared_template(def)),
+            template: callee.template(&self.tysys.signatures),
             monomorph_info: None,
             method_info: None, // Free function call,
         };

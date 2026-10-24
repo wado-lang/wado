@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO,
-    UNAVAILABLE, WASM_MODULE,
+    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
+    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -936,10 +936,18 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&e.right);
         }
         Expr::Unary(e) => v.visit_expr(&e.expr),
-        Expr::Assign(e) => {
-            v.visit_expr(&e.target);
-            v.visit_expr(&e.value);
-        }
+        Expr::Assign(e) => match &e.target {
+            AssignTarget::Place(place) => {
+                v.visit_expr(place);
+                v.visit_expr(&e.value);
+            }
+            AssignTarget::Destructuring { places, .. } => {
+                v.visit_expr(&e.value);
+                for place in places {
+                    v.visit_expr(place);
+                }
+            }
+        },
         Expr::CompoundAssign(e) => {
             v.visit_expr(&e.target);
             v.visit_expr(&e.value);
@@ -1959,6 +1967,21 @@ pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
     attrs.iter().find_map(Attribute::as_cm_import)
 }
 
+/// The interface name a `use` spells the interface carrying `attrs` by: the
+/// one an imported component exports it under (`#[cm_export]`), where that is
+/// not the CM import it binds, else that import.
+#[must_use]
+pub fn cm_interface_name_of(attrs: &[Attribute]) -> Option<CmImport> {
+    let exported = attrs.iter().find(|a| a.name == CM_EXPORT).map(|a| {
+        let name = a
+            .args
+            .first()
+            .expect("`#[cm_export]` takes the interface name");
+        CmImport::parse(name.as_str()).expect("`#[cm_export]` names an interface")
+    });
+    exported.or_else(|| cm_import_of(attrs).cloned())
+}
+
 /// The world-level function import among `attrs`, wherever it sits: the bare
 /// function name the dependency's world exports.
 #[must_use]
@@ -2179,6 +2202,23 @@ impl CmImport {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 
+    /// The interface name as a `use` writes it: `"wasi:cli/stdout@0.3.0"`.
+    pub fn interface_path_as_written(&self) -> String {
+        StrLit::new(self.interface_path()).as_written()
+    }
+
+    /// Whether `name`, an interface name written in a `use`, names this
+    /// interface: a name without a version names it at any version.
+    pub fn is_named_by(&self, name: &CmImport) -> bool {
+        self.namespace == name.namespace
+            && self.package == name.package
+            && self.interface == name.interface
+            && name
+                .version
+                .as_ref()
+                .is_none_or(|v| self.version.as_ref() == Some(v))
+    }
+
     /// Whether this is its package's default interface, the one named after the
     /// package (`acme:geo/geo`): what a Wado library exports.
     pub fn is_package_default(&self) -> bool {
@@ -2293,12 +2333,13 @@ impl WorldExport {
 /// - Namespace: `use name from "..."` (import entire module as namespace)
 #[derive(Debug, Clone)]
 pub enum UseItem {
-    /// Simple import: `name` or `name as alias`
+    /// Simple import: `name`, `name as alias`, or `"ns:pkg/iface" as alias`
     Simple {
         /// `AstId` for the name identifier — used by LSP to record a use→def
         /// edge from the specifier name back to the imported symbol.
         id: AstId,
         name: String,
+        spelling: UseNameSpelling,
         /// Span of just the `name` identifier (narrower than the whole item).
         name_span: Span,
         alias: Option<String>,
@@ -2320,6 +2361,15 @@ pub enum UseItem {
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String, name_span: Span },
+}
+
+/// How a `use` item spells the name it imports.
+#[derive(Debug, Clone)]
+pub enum UseNameSpelling {
+    Ident,
+    /// A full interface name as a string (`"wasi:cli/stdout"`), which always
+    /// takes `as`, since a string is no identifier to bind.
+    InterfaceName(CmImport),
 }
 
 /// Simple use item (used within effect function imports)
@@ -3597,13 +3647,33 @@ pub struct TupleComprehensionExpr {
     pub span: Span,
 }
 
-/// Assignment expression: `x = value` or `x.field = value`
+/// Assignment expression: `x = value`, `x.field = value`, or a destructuring
+/// assignment `[a, b] = value`.
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub id: AstId,
-    pub target: Expr,
+    pub target: AssignTarget,
     pub value: Expr,
     pub span: Span,
+}
+
+/// What an assignment writes.
+#[derive(Debug, Clone)]
+pub enum AssignTarget {
+    /// `place = value`.
+    Place(Expr),
+    /// `[p0, p1, …] = value`: each element of `value` to its own place.
+    Destructuring { places: Vec<Expr>, span: Span },
+}
+
+impl AssignExpr {
+    /// The places this assignment writes, in the order it writes them.
+    pub fn places(&self) -> &[Expr] {
+        match &self.target {
+            AssignTarget::Place(place) => std::slice::from_ref(place),
+            AssignTarget::Destructuring { places, .. } => places,
+        }
+    }
 }
 
 /// Compound assignment operators

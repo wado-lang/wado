@@ -53,7 +53,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//opt_hfs_continue_defer.wado/$cm_export__run" = fn();  // TypeId(15)
 
@@ -137,7 +137,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -442,7 +442,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -610,7 +610,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
 
 fn "opt_hfs_continue_defer.wado/opt_hfs_continue_defer.wado/Cursor::skip_run"(self) {
     let seen: i32;
-    let $m1_4: i32;
+    let $m_1_4: i32;
     let $licm_data_17: ref "core:prelude//List<u8>";
     let $licm_used_18: i32;
     let $licm_repr_19: ref Array<u8>;
@@ -625,18 +625,18 @@ fn "opt_hfs_continue_defer.wado/opt_hfs_continue_defer.wado/Cursor::skip_run"(se
                 self.pos = $hfs_pos_20;
                 break b45;
             }
-            $m1_4 = $hfs_pos_20;
-            if @unlikely(0 > $m1_4) {
+            $m_1_4 = $hfs_pos_20;
+            if @unlikely(0 > $m_1_4) {
                 cold_path;
                 self.pos = $hfs_pos_20;
                 "opt_hfs_continue_defer.wado/opt_hfs_continue_defer.wado/Cursor::skip_run$cold0$sroa[self.pos]"($hfs_pos_20, $licm_used_18);
                 unreachable;
             }
-            if local.tee $m1_4(builtin::array_get_value<u8>($licm_repr_19, $hfs_pos_20)) > 64 {
+            if local.tee $m_1_4(builtin::array_get_value<u8>($licm_repr_19, $hfs_pos_20)) > 64 {
                 self.pos = $hfs_pos_20;
                 break b45;
             }
-            if $m1_4 == 32 {
+            if $m_1_4 == 32 {
                 $hfs_pos_20 = $hfs_pos_20 + 1;
                 continue l46;
             }

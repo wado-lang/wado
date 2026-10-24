@@ -80,6 +80,10 @@ let out = Compress::compress(bytes);
 // The default interface, named after its package (`acme:geo/geo`, what a Wado
 // library exports), also offers its functions by bare name, as source does.
 use { area } from "./geo.wasm" with { type: "wasm" };
+
+// Any interface by its full name; the version may go where only one is offered.
+use { "acme:geo/geo@0.1.0" as Geo } from "./geo.wasm" with { type: "wasm" };
+use { "wasi:cli/stdout" as Out } from "wasi:cli";
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
@@ -289,6 +293,7 @@ See the spec on [tuple literals](./spec-literals.md#tuple-literals) and [list li
 let t = [1, "hello", true];   // [i32, String, bool]
 let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
+[a, b] = [b, a];              // destructuring assignment: the right side first, then each target
 
 // Lists (requires explicit type context)
 let a: List<i32> = [1, 2, 3];           // type annotation

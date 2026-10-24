@@ -47,56 +47,56 @@ struct core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/De
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:demo/Maker::get_device" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:demo/types@0.1.0#get-device" = fn() -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:demo/User::take" = fn(i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:demo/user@0.1.0#take" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:demo/User::peek" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:demo/user@0.1.0#peek" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:demo/User::settle" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:demo/user@0.1.0#settle" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:demo/User::fill" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:demo/user@0.1.0#fill" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//cm_foreign_resource_in_containers.wado/run" = fn();  // TypeId(15)
 
-type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(16)
+type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/types@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(16)
 
-type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__User_peek" = fn(ref "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>") -> u32;  // TypeId(17)
+type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#peek" = fn(ref "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>") -> u32;  // TypeId(17)
 
-type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__User_take" = fn(ref null "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>") -> u32;  // TypeId(18)
+type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#take" = fn(ref null "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>") -> u32;  // TypeId(18)
 
-type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__User_settle" = fn(ref null "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>") -> u32;  // TypeId(19)
+type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#settle" = fn(ref null "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>") -> u32;  // TypeId(19)
 
-type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__User_fill" = fn(ref null "cm_foreign_resource_in_containers.wado//Slot") -> u32;  // TypeId(20)
+type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#fill" = fn(ref null "cm_foreign_resource_in_containers.wado//Slot") -> u32;  // TypeId(20)
 
 type "functype//cm_foreign_resource_in_containers.wado/$cm_export__run" = fn();  // TypeId(21)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Maker::get_device from "wasi/wasi:demo/Maker::get_device";
-import fn wasi/wasi:demo/User::take from "wasi/wasi:demo/User::take";
-import fn wasi/wasi:demo/User::peek from "wasi/wasi:demo/User::peek";
-import fn wasi/wasi:demo/User::settle from "wasi/wasi:demo/User::settle";
-import fn wasi/wasi:demo/User::fill from "wasi/wasi:demo/User::fill";
+import fn wasi/$wasi:demo/types@0.1.0#get-device from "wasi/$wasi:demo/types@0.1.0#get-device";
+import fn wasi/$wasi:demo/user@0.1.0#take from "wasi/$wasi:demo/user@0.1.0#take";
+import fn wasi/$wasi:demo/user@0.1.0#peek from "wasi/$wasi:demo/user@0.1.0#peek";
+import fn wasi/$wasi:demo/user@0.1.0#settle from "wasi/$wasi:demo/user@0.1.0#settle";
+import fn wasi/$wasi:demo/user@0.1.0#fill from "wasi/$wasi:demo/user@0.1.0#fill";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_foreign_resource_in_containers.wado/run"() with Maker, User, Device {
     let d: ref null "core:prelude//$Resource";
     let $moved_1: ref null "core:prelude//$Resource";
-    d = "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"();
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_peek"(struct.new "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: d }));
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(struct.new "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: $moved_1 = d; d = ref.null none; $moved_1 }));
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_settle"(struct.new "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>::Ok" { discriminant: 0, payload_0: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_fill"(struct.new "cm_foreign_resource_in_containers.wado//Slot" { device: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
+    d = "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/types@0.1.0#get-device"();
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#peek"(struct.new "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: d }));
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#take"(struct.new "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: $moved_1 = d; d = ref.null none; $moved_1 }));
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>::Ok" { discriminant: 0, payload_0: "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/types@0.1.0#get-device"() }));
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#fill"(struct.new "cm_foreign_resource_in_containers.wado//Slot" { device: "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/types@0.1.0#get-device"() }));
 }
 
-fn "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() with Maker {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Maker::get_device"() };
+fn "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/types@0.1.0#get-device"() with Maker {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/types@0.1.0#get-device"() };
 }
 
-fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_peek"(d) with User {
+fn "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#peek"(d) with User {
     let $d_disc: i32;
     let $d_inner0: i32;
     $d_disc = ref.test "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some"(d);
@@ -105,10 +105,10 @@ fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_peek"(d) with User 
         $d_inner0 = ref.cast "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some"(d).payload_0.value;
     } else {
     }
-    return "wasi/wasi:demo/User::peek"($d_disc, $d_inner0);
+    return "wasi/$wasi:demo/user@0.1.0#peek"($d_disc, $d_inner0);
 }
 
-fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(d) with User {
+fn "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#take"(d) with User {
     let $d_disc: i32;
     let $d_inner0: i32;
     $d_disc = ref.test "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some"(d);
@@ -117,10 +117,10 @@ fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(d) with User 
         $d_inner0 = ref.cast "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some"(d).payload_0.value;
     } else {
     }
-    return "wasi/wasi:demo/User::take"($d_disc, $d_inner0);
+    return "wasi/$wasi:demo/user@0.1.0#take"($d_disc, $d_inner0);
 }
 
-fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_settle"(d) with User {
+fn "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#settle"(d) with User {
     let $d_disc: i32;
     let $d_p0: i32;
     $d_disc = d.discriminant;
@@ -130,11 +130,11 @@ fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_settle"(d) with Use
     } else {
         $d_p0 = ref.cast "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>::Err"(d).payload_0;
     }
-    return "wasi/wasi:demo/User::settle"($d_disc, $d_p0);
+    return "wasi/$wasi:demo/user@0.1.0#settle"($d_disc, $d_p0);
 }
 
-fn "cm_foreign_resource_in_containers.wado/$cm_binding__User_fill"(s) with User {
-    return "wasi/wasi:demo/User::fill"(s.device.value);
+fn "cm_foreign_resource_in_containers.wado/$cm_binding__wasi:demo/user@0.1.0#fill"(s) with User {
+    return "wasi/$wasi:demo/user@0.1.0#fill"(s.device.value);
 }
 
 fn "cm_foreign_resource_in_containers.wado/$cm_export__run"() {

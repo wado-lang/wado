@@ -268,9 +268,9 @@ struct core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some {  /
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(48)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(49)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(49)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(50)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(50)
 
 type "functype//cm_export_world_type_name_collision.wado/$cm_export__handle" = fn(i32);  // TypeId(51)
 
@@ -290,15 +290,15 @@ type "functype//wasi/future-write:val-result<option<own<wasi/http/types.wado#Fie
 
 type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn(i32);  // TypeId(59)
 
-type "functype//cm_export_world_type_name_collision.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
+type "functype//cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
 
-type "functype//cm_export_world_type_name_collision.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(61)
+type "functype//cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(61)
 
 type "functype//cm_export_world_type_name_collision.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(62)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
@@ -311,7 +311,7 @@ global global:cm_export_world_type_name_collision.wado::$const_obj_0: ref "core:
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 
-fn "cm_export_world_type_name_collision.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $outptr: i32;
@@ -329,15 +329,15 @@ fn "cm_export_world_type_name_collision.wado/$cm_binding__Response_new"(headers,
     headers = 0;
     headers = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: $lifted_result_8, 1: $lifted_result_9 };
 }
 
-fn "cm_export_world_type_name_collision.wado/$cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
+fn "cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]fields"();
 }
 
 fn "cm_export_world_type_name_collision.wado/$cm_export__handle"($p0) {
@@ -356,7 +356,7 @@ fn "cm_export_world_type_name_collision.wado/$cm_task_entry__handle"(request) {
     let $sroa_$task_ret_1_185: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
     $sroa_$pattern_temp_0_0_182 = builtin::i32_wrap_i64(local.tee $cm_pair_179("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_183 = builtin::i32_wrap_i64($cm_pair_179 >> 32_i64);
-    response = local.tee $pattern_temp_1("cm_export_world_type_name_collision.wado/$cm_binding__Response_new"("cm_export_world_type_name_collision.wado/$cm_binding__Fields_new"(), global:cm_export_world_type_name_collision.wado::$const_obj_0, $moved_5 = $sroa_$pattern_temp_0_0_182; $sroa_$pattern_temp_0_0_182 = 0; $moved_5)).0;
+    response = local.tee $pattern_temp_1("cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("cm_export_world_type_name_collision.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:cm_export_world_type_name_collision.wado::$const_obj_0, $moved_5 = $sroa_$pattern_temp_0_0_182; $sroa_$pattern_temp_0_0_182 = 0; $moved_5)).0;
     _tx_future = $pattern_temp_1.1;
     $sroa_$task_ret_1_185 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_6 = response; response = ref.null none; $moved_6 };
     $moved_5 = 0;

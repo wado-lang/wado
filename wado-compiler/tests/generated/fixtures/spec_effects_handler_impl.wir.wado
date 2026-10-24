@@ -272,17 +272,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(68)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(69)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(70)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(70)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(71)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(71)
 
-type "functype//wasi/wasi:http/Fields::has" = fn(i32, i32, i32) -> i32;  // TypeId(72)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.has" = fn(i32, i32, i32) -> i32;  // TypeId(72)
 
 type "functype//spec_effects_handler_impl.wado/$test_0" = fn();  // TypeId(73)
 
-type "functype//spec_effects_handler_impl.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(74)
+type "functype//spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(74)
 
-type "functype//spec_effects_handler_impl.wado/$cm_binding__Fields_has" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> bool;  // TypeId(75)
+type "functype//spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> bool;  // TypeId(75)
 
 type "functype//spec_effects_handler_impl.wado/$cm_export__$test_0" = fn();  // TypeId(76)
 
@@ -448,9 +448,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::has from "wasi/wasi:http/Fields::has";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.has from "wasi/$wasi:http/types@0.3.0#[method]fields.has";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
@@ -648,7 +648,7 @@ condition: Stdin::read_line() == \"b\"
             $local_2_174 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: $moved_3_175;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "spec_effects_handler_impl.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     };
@@ -663,7 +663,7 @@ condition: Stdin::read_line() == \"b\"
             global:spec_effects_handler_impl.wado::$effect_wasi:http/types.wado/Fields = $local_0_172;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_37: i_45;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_37: "spec_effects_handler_impl.wado/$cm_binding__Fields_has"($moved_3_175, v_35);
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_37: "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has"($moved_3_175, v_35);
         }
         unreachable;
     }) == 0) == 0) {
@@ -701,11 +701,11 @@ condition: Stdin::read_line() == \"b\"
     }
 }
 
-fn "spec_effects_handler_impl.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "spec_effects_handler_impl.wado/$cm_binding__Fields_has"(self, name) with Fields {
+fn "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has"(self, name) with Fields {
     let $name_packed: i64;
     let bytes: ref Array<u8>;
     let ptr_6: i32;
@@ -724,7 +724,7 @@ fn "spec_effects_handler_impl.wado/$cm_binding__Fields_has"(self, name) with Fie
         };
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_6) | (builtin::i64_extend_i32_s(self_7) << 32_i64);
-    return "wasi/wasi:http/Fields::has"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64));
+    return "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64));
 }
 
 fn "spec_effects_handler_impl.wado/$cm_export__$test_0"() {
@@ -1020,7 +1020,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
@@ -1929,7 +1929,7 @@ fn "spec_effects_handler_impl.wado/spec_effects_handler_impl.wado/$Closure_1::$c
             $local_2 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: $moved_3;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "spec_effects_handler_impl.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     };
@@ -1959,7 +1959,7 @@ fn "spec_effects_handler_impl.wado/spec_effects_handler_impl.wado/$Closure_4::$c
             global:spec_effects_handler_impl.wado::$effect_wasi:http/types.wado/Fields = $local_2;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_1: $local_4;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_1: "spec_effects_handler_impl.wado/$cm_binding__Fields_has"(self_1, name);
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__has_1: "spec_effects_handler_impl.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has"(self_1, name);
         }
         unreachable;
     };
