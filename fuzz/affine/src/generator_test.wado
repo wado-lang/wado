@@ -1,0 +1,23 @@
+use { Case, program, expected } from "./generator.wado";
+use { eval } from "core:eval";
+
+/// The first case whose part of `actual` differs from what it expects.
+fn first_divergence(cases: &List<Case>, actual: &String) -> String {
+    let mut prefix = String::new();
+    for let i of 0..<cases.len() {
+        let want = cases[i].expected(i);
+        prefix.push_str(&want);
+        if !actual.starts_with(&prefix) {
+            return `${cases[i].label()}\nexpected:\n${want}actual:\n${actual}`;
+        }
+    }
+    return "the outputs differ past the last case";
+}
+
+test "every value drops once, where the model says" {
+    let cases = Case::all();
+    let source = program(&cases);
+    let out = eval(source).unwrap();
+    assert out.status matches { Exited(0) }, `${out.status:?}\n${out.stderr}\n${source}`;
+    assert out.stdout == expected(&cases), first_divergence(&cases, &out.stdout);
+}

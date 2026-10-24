@@ -1,0 +1,223 @@
+//! Programs that move one affine value through every pairing of a consumer and
+//! the context it runs in, with the output each must print.
+//!
+//! The model is one rule: a value drops exactly once, at the end of the block
+//! that holds it last. A consumer either drops what it takes before its
+//! statement ends, or binds it to a local of the block it runs in. The
+//! generated program prints a marker before and after the consuming statement,
+//! so where the drop lands says which of those the compiler did.
+
+use { CodeWriter, FnSpec } from "lib:wadopoet";
+
+/// What the generated statement does with the value `t`.
+pub enum Consumer {
+    /// `eat(t);`, whose parameter drops as `eat` returns.
+    Call,
+    /// `builtin::drop(t);`.
+    Drop,
+    /// `let u = t;`.
+    Bind,
+    /// `let p = [t, 1];`.
+    Tuple,
+    /// `let o = Option::Some(t);`.
+    Wrap,
+    /// `let w = t as Renamed;`, a newtype cast.
+    Cast,
+    /// `look(&t);`, which moves nothing.
+    Borrow,
+}
+
+/// Where the consuming statement sits in the case's body.
+pub enum Context {
+    /// Directly in the body.
+    Straight,
+    /// In `if flag { … }`.
+    If,
+    /// In the `true` arm of `match flag { … }`.
+    Match,
+    /// In `loop { …; break; }`.
+    LoopOnce,
+    /// In `blk: { … }`.
+    Labeled,
+}
+
+pub struct Case {
+    pub consumer: Consumer,
+    pub context: Context,
+    /// The `flag` the case runs with: whether a conditional context runs the
+    /// consumer.
+    pub flag: bool,
+}
+
+impl Consumer {
+    pub fn all() -> List<Consumer> {
+        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow];
+    }
+
+    fn statement(&self) -> String {
+        return match self {
+            Call => "eat(t);",
+            Drop => "builtin::drop(t);",
+            Bind => "let u = t;",
+            Tuple => "let p = [t, 1];",
+            Wrap => "let o = Option::Some(t);",
+            Cast => "let w = t as Renamed;",
+            Borrow => "let _ = look(&t);",
+        };
+    }
+
+    /// Whether the value is gone once the statement ends, rather than held by
+    /// a local of the block the statement runs in.
+    fn drops_in_statement(&self) -> bool {
+        return self matches { Call | Drop };
+    }
+
+    fn moves(&self) -> bool {
+        return !self matches { Borrow };
+    }
+}
+
+impl Context {
+    pub fn all() -> List<Context> {
+        return [Straight, If, Match, LoopOnce, Labeled];
+    }
+
+    /// Whether `flag` decides if the consumer runs.
+    pub fn is_conditional(&self) -> bool {
+        return self matches { If | Match };
+    }
+
+    /// Whether the consumer runs in a block of its own, which ends before the
+    /// marker after it.
+    fn opens_block(&self) -> bool {
+        return !self matches { Straight };
+    }
+}
+
+impl Case {
+    /// Every case: each consumer in each context, and a conditional context
+    /// both taken and skipped.
+    pub fn all() -> List<Case> {
+        let mut cases: List<Case> = [];
+        for let consumer of Consumer::all() {
+            for let context of Context::all() {
+                cases.push(Case { consumer, context, flag: true });
+                if context.is_conditional() {
+                    cases.push(Case { consumer, context, flag: false });
+                }
+            }
+        }
+        return cases;
+    }
+
+    pub fn label(&self) -> String {
+        return `${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+    }
+
+    /// Whether the value drops between the markers around the consumer, rather
+    /// than when the case's body ends.
+    fn drops_at_consumer(&self) -> bool {
+        let runs = !self.context.is_conditional() || self.flag;
+        if !runs || !self.consumer.moves() {
+            return false;
+        }
+        return self.consumer.drops_in_statement() || self.context.opens_block();
+    }
+
+    /// What the case prints, given that it runs as `case_<index>`.
+    pub fn expected(&self, index: i32) -> String {
+        let drop = `drop ${index}\n`;
+        let mut out = `case ${index}\nbefore\n`;
+        if self.drops_at_consumer() {
+            out.push_str(&drop);
+        }
+        out.push_str("after\n");
+        if !self.drops_at_consumer() {
+            out.push_str(&drop);
+        }
+        return out;
+    }
+
+    fn emit(&self, index: i32, w: &mut CodeWriter) {
+        let mut f = FnSpec::new(`case_${index}`);
+        f.add_param("flag", "bool");
+        f.emit_begin(w);
+        w.line(`log_stdout("case ${index}");`);
+        w.line(`let t = Tok { id: ${index} };`);
+        w.line("log_stdout(\"before\");");
+        let statement = self.consumer.statement();
+        match self.context {
+            Straight => w.line(&statement),
+            If => {
+                w.begin("if flag");
+                w.line(&statement);
+                w.end();
+            },
+            Match => {
+                w.begin("match flag");
+                w.begin("true =>");
+                w.line(&statement);
+                w.end_with(",");
+                w.line("false => {},");
+                w.end();
+            },
+            LoopOnce => {
+                w.begin("loop");
+                w.line(&statement);
+                w.line("break;");
+                w.end();
+            },
+            Labeled => {
+                w.begin("blk:");
+                w.line(&statement);
+                w.end();
+            },
+        }
+        w.line("log_stdout(\"after\");");
+        w.end();
+    }
+}
+
+/// One program running every case in `cases`, in order.
+pub fn program(cases: &List<Case>) -> String {
+    let mut w = CodeWriter::new();
+    w.line("use { log_stdout } from \"core:cli\";");
+    w.blank();
+    w.begin("affine struct Tok");
+    w.line("id: i32,");
+    w.end();
+    w.blank();
+    w.begin("impl Drop for Tok");
+    w.begin("fn drop(self)");
+    w.line("log_stdout(`drop ${self.id}`);");
+    w.end();
+    w.end();
+    w.blank();
+    w.line("type Renamed = Tok;");
+    w.blank();
+    w.line("fn eat(t: Tok) {}");
+    w.blank();
+    w.begin("fn look(t: &Tok) -> i32");
+    w.line("return t.id;");
+    w.end();
+    for let i of 0..<cases.len() {
+        w.blank();
+        cases[i].emit(i, &mut w);
+    }
+    w.blank();
+    w.begin("export fn run()");
+    for let i of 0..<cases.len() {
+        w.line(`case_${i}(builtin::black_box(${cases[i].flag}));`);
+    }
+    w.end();
+    return w.to_string();
+}
+
+/// What [`program`] prints for `cases`.
+pub fn expected(cases: &List<Case>) -> String {
+    let mut out = String::new();
+    for let i of 0..<cases.len() {
+        out.push_str(&cases[i].expected(i));
+    }
+    return out;
+}
