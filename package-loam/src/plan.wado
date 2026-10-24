@@ -430,14 +430,12 @@ fn join_of(node: &Node, checked: &Checked, opset: Option<i64>) -> Option<Join> {
 /// what the nodes fused into it ask of it.
 struct Group {
     out: Shape,
-    /// The left operand of the products in it: none, one, or two of one
-    /// left operand, which pair.
     contracted: Contracted,
     /// The whole rows a fold among its nodes reads, where one does.
     rows: Option<Shape>,
 }
 
-/// The products a kernel computes.
+/// The products a kernel computes: two only where they pair.
 variant Contracted {
     None,
     One(FirstProduct),

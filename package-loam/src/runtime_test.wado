@@ -358,7 +358,10 @@ test "a paired product joins the products by both matrices, each operand where t
     let bc = cpu.keep_rhs_paired(&b, &c);
     // operand(0) * operand(1) + operand(2)
     let op = operand(0).binary(BinaryOp::Mul, &operand(1)).binary(BinaryOp::Add, &operand(2));
-    let got = cpu.matmul_rhs_paired(&a, &bc, Epilogue { operands: [cpu.read(&bias)], op });
+    let got = cpu.matmul_rhs_paired(&a, &bc, Epilogue {
+        operands: [cpu.read(&bias)],
+        op,
+    });
     // a·b is [[1, 2], [3, 4]] and a·c is [[4, 7], [10, 15]].
     assert got.extents == [1, 2, 2] as List<i32>;
     assert got.data == [4.5, 14.5, 30.5, 60.5] as List<f32>;

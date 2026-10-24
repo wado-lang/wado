@@ -928,7 +928,10 @@ pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Ten
         data.push(b.data[i]);
         data.push(c.data[i]);
     }
-    return Tensor { data, extents: [k, 2 * n] };
+    return Tensor {
+        data,
+        extents: [k, 2 * n],
+    };
 }
 
 /// [`Backend::matmul_rhs_paired`] as two kernels: the product by both
@@ -945,7 +948,10 @@ pub fn paired_by_parts<affine Bk: Backend, ..Bs, M, K, N>(
     let n = extents[last] / 2;
     let first = backend.slice_axis::<f32, [..Bs, M], Paired<N>, N, []>(&both, last, 0, n, 2);
     let second = backend.slice_axis::<f32, [..Bs, M], Paired<N>, N, []>(&both, last, 1, n, 2);
-    let mut operands = [backend.read(&first), backend.read(&second)] as List<Bk::Operand<[..Bs, M, N]>>;
+    let mut operands = [
+        backend.read(&first),
+        backend.read(&second),
+    ] as List<Bk::Operand<[..Bs, M, N]>>;
     for let o of then.operands {
         operands.push(o);
     }

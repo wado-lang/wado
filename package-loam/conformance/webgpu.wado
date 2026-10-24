@@ -233,17 +233,23 @@ fn paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue,
     let one = tensor::<[Row, Inner, Long]>([1, 1, 640], 35);
     let tile = tensor::<[Row, Inner, Long]>([1, 20, 640], 36);
     // silu(operand(0)) * operand(1) + operand(2)
-    let op = operand(0)
-        .binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid))
-        .binary(BinaryOp::Mul, &operand(1))
-        .binary(BinaryOp::Add, &operand(2));
-    let exact = [halved(tensor::<[Long, Col]>([640, 256], 37)), halved(tensor::<[Long, Col]>([640, 256], 38))];
-    let inexact = [tensor::<[Long, Col]>([640, 256], 39), tensor::<[Long, Col]>([640, 256], 40)];
-    let cases = [["step", one, exact], ["f32", one, inexact], ["tile", tile, exact]] as List<[
-        String,
-        Tensor<f32, [Row, Inner, Long]>,
-        [Tensor<f32, [Long, Col]>, Tensor<f32, [Long, Col]>],
-    ]>;
+    let op = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1)).binary(
+        BinaryOp::Add,
+        &operand(2),
+    );
+    let exact = [
+        halved(tensor::<[Long, Col]>([640, 256], 37)),
+        halved(tensor::<[Long, Col]>([640, 256], 38)),
+    ];
+    let inexact = [
+        tensor::<[Long, Col]>([640, 256], 39),
+        tensor::<[Long, Col]>([640, 256], 40),
+    ];
+    let cases = [
+        ["step", one, exact],
+        ["f32", one, inexact],
+        ["tile", tile, exact],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>, [Tensor<f32, [Long, Col]>, Tensor<f32, [Long, Col]>]]>;
     for let [name, a, [b, c]] of cases {
         let rows = a.extents[1];
         let bias = tensor::<[Row, Inner, Col]>([1, rows, 256], 41);

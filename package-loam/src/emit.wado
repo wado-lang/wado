@@ -19,7 +19,7 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, Spread, branches, is_alias, plan, reduces_rows, row_fold, selects_floats } from "./plan.wado";
+use { IfBranch, Plan, Spread, branches, is_alias, plan, reduces_rows, row_fold, selects_floats } from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
@@ -174,8 +174,9 @@ pub fn emit(
     }
 
     let kept = kept_literals(&literals, checked);
-    let rhs = rhs_weights(graph, checked, fuse);
-    let paired = paired_weights(graph, checked, fuse, &rhs, &held);
+    let decided = plan(graph, checked, fuse);
+    let rhs = rhs_weights(graph, checked, &decided, fuse);
+    let paired = paired_weights(graph, checked, &decided, &rhs, &held);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &paired, &placement);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
@@ -184,7 +185,7 @@ pub fn emit(
         rhs,
         paired,
     };
-    emit_forward(&mut w, graph, checked, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
+    emit_forward(&mut w, graph, checked, &decided, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
     return Result::Ok(w.to_string());
 }
 
@@ -347,9 +348,9 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired", "RowOp", "Step", "Tensor",
-    "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end", "input_mismatch", "narrow",
-    "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
+    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired", "RowOp", "Step",
+    "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end", "input_mismatch",
+    "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -614,7 +615,12 @@ fn weight_holding(rhs: &HashMap<String, bool>, tensor: &String) -> Holding {
 
 /// The weight `tensor` as `Prepared` holds it: with its partner where
 /// `paired` pairs it first.
-fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, paired: &HashMap<String, String>, tensor: &String) -> String {
+fn weight_type(
+    checked: &Checked,
+    rhs: &HashMap<String, bool>,
+    paired: &HashMap<String, String>,
+    tensor: &String,
+) -> String {
     let Some(transposed) = rhs.get(*tensor) else {
         return prepared_type(checked, tensor);
     };
@@ -630,12 +636,12 @@ fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, paired: &HashMap<
 /// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
 /// in the layout the product reads, which only a product, a product by its
 /// viewed transpose, and a row gather read.
-fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, bool> {
+fn rhs_weights(graph: &Graph, checked: &Checked, decided: &Plan, fuse: bool) -> HashMap<String, bool> {
     let mut uses = OperandUses {
         right: HashMap::new(),
         elsewhere: HashSet::new(),
     };
-    uses.note(graph, checked, fuse);
+    uses.note(graph, checked, decided, fuse);
     let mut out = HashMap::<String, bool>::new();
     for let vi of &graph.initializers {
         if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
@@ -652,7 +658,7 @@ fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, 
 fn paired_weights(
     graph: &Graph,
     checked: &Checked,
-    fuse: bool,
+    decided: &Plan,
     rhs: &HashMap<String, bool>,
     held: &HashMap<String, String>,
 ) -> HashMap<String, String> {
@@ -668,10 +674,13 @@ fn paired_weights(
     }
     let alone = |w: &String| rhs.get(*w) == Option::Some(false) && reads.get(*w) == Option::Some(1);
     let mut paired = HashMap::<String, String>::new();
-    for let [x, y] of plan(graph, checked, fuse).pairs {
+    for let [x, y] of decided.pairs {
         let b = weight_of[x];
         let c = weight_of[y];
-        if alone(&b) && alone(&c) && axis_list(&checked.shapes[b]) == axis_list(&checked.shapes[c]) && held[b] == held[c] {
+        if alone(&b)
+            && alone(&c)
+            && axis_list(&checked.shapes[b]) == axis_list(&checked.shapes[c])
+            && held[b] == held[c] {
             paired[b] = c;
         }
     }
@@ -693,11 +702,10 @@ impl OperandUses {
     ///
     /// A product by a viewed transpose reads the weight itself, in the
     /// orientation its rows are stored in, and so does a row gather of it.
-    fn note(&mut self, graph: &Graph, checked: &Checked, fuse: bool) {
+    fn note(&mut self, graph: &Graph, checked: &Checked, decided: &Plan, fuse: bool) {
         for let vi of &graph.outputs {
             self.elsewhere.insert(vi.name);
         }
-        let decided = plan(graph, checked, fuse);
         let mut viewed = HashMap::<String, String>::new();
         for let [at, node] of graph.nodes.into_iter().enumerate() {
             if decided.lowering(at) matches { Transposed } {
@@ -723,7 +731,7 @@ impl OperandUses {
             }
         }
         for let [branch_graph, branch] of branches_of(graph, checked) {
-            self.note(&branch_graph, &branch, fuse);
+            self.note(&branch_graph, &branch, &plan(&branch_graph, &branch, fuse), fuse);
         }
     }
 
@@ -1009,6 +1017,7 @@ fn emit_forward(
     w: &mut CodeWriter,
     graph: &Graph,
     checked: &Checked,
+    decided: &Plan,
     names: &Names,
     held: &HashMap<String, String>,
     mut exprs: Operands,
@@ -1069,7 +1078,7 @@ fn emit_forward(
         w.line(&line);
     }
     // A symbol is bound once something spells it, which the body decides.
-    let body = scope_body(graph, checked, names, &mut exprs, literals, &mut symbols, fuse)?;
+    let body = scope_body(graph, checked, decided, names, &mut exprs, literals, &mut symbols, fuse)?;
     let mut owed: List<String> = [];
     for let spelled of checks.spelled {
         let SpelledAxis { tensor, axis, extent, length } = spelled;
@@ -1146,11 +1155,12 @@ fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>,
 }
 
 /// One scope's statements: the literals it spells that no scope around it
-/// did, then each kernel's call, where `fuse` lets the scope's plan join a
-/// node's kernel to the one after it.
+/// did, then each kernel's call as `decided`, the scope's plan, lowers it.
+/// `fuse` plans the branches inside it.
 fn scope_body(
     graph: &Graph,
     checked: &Checked,
+    decided: &Plan,
     names: &Names,
     exprs: &mut Operands,
     literals: &Literals,
@@ -1171,7 +1181,6 @@ fn scope_body(
             exprs.values[*alias] = exprs.value(spelled);
         }
     }
-    let decided = plan(graph, checked, fuse);
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         match decided.lowering(at) {
             Folded | Flattened => {
@@ -1365,7 +1374,7 @@ fn branch_lines(
     }
     let literals = literal_tensors(graph, branch, &inner.scalars);
     let mut lines = owed_checks(branch, symbols)?;
-    lines.extend(&scope_body(graph, branch, names, &mut inner, &literals, symbols, fuse)?);
+    lines.extend(&scope_body(graph, branch, &plan(graph, branch, fuse), names, &mut inner, &literals, symbols, fuse)?);
     let mut yielded: List<String> = [];
     for let [i, vi] of graph.outputs.into_iter().enumerate() {
         let from = branch.shapes[vi.name];
@@ -2289,19 +2298,19 @@ impl Term {
 }
 
 /// The lanes `i` and `j` of two products in the order their weights pair in,
-/// where `paired` prepares the weights together and both read one left
-/// operand, or `None`.
+/// where `paired` prepares the weights together, or `None`. Only products the
+/// plan pairs have paired weights, and those read one left operand.
 fn pair_order(lanes: &List<Lane>, i: i32, j: i32, paired: &HashMap<String, String>) -> Option<List<i32>> {
     let rhs = |at: i32| match lanes[at].source {
         Contraction(p) => p.rhs,
         _ => null,
     };
-    let [Some(x), Some(y)] = [rhs(i), rhs(j)] else {
+    let [Some(x), Some(y)] = [
+        rhs(i),
+        rhs(j),
+    ] else {
         return null;
     };
-    if x.a != y.a {
-        return null;
-    }
     if paired.get(x.weight) == Option::Some(y.weight) {
         return Option::Some([i, j]);
     }

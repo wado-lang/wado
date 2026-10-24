@@ -1113,7 +1113,7 @@ impl WebGpuBackend {
         return self.product_kernel(a, b, then, false).unwrap();
     }
 
-    /// [`product`], or where `paired`, the products by the two matrices `b`
+    /// [`Self::product`], or where `paired`, the products by the two matrices `b`
     /// interleaves as `Paired` says, joined by `then` as
     /// [`Backend::matmul_rhs_paired`] joins them. A paired product runs as
     /// one narrow dispatch reading `b` along its inner axis, or not at all:
@@ -1148,7 +1148,8 @@ impl WebGpuBackend {
         }
         let count = element_count(&batch);
         let narrow = rows <= NARROW_ROWS;
-        let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;        // The fewest columns a workgroup takes, which a wider read only raises.
+        let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;
+        // The fewest columns a workgroup takes, which a wider read only raises.
         let per_group = if narrow { narrow_columns(across, 1, cols) } else { TILE };
         let fits = count <= MAX_GROUPS
             && rows.div_ceil(TILE) <= MAX_GROUPS
@@ -1236,7 +1237,9 @@ impl WebGpuBackend {
             let [key, row_groups, group_columns] = if narrow {
                 let width = word_width(&bound.views[1], across);
                 [
-                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, per_group, paired]),
+                    ShaderKey::NarrowProduct(
+                        [op, bound.bindings, br, continued, across, half, width, per_group, paired],
+                    ),
                     1,
                     narrow_columns(across, width, cols),
                 ];
