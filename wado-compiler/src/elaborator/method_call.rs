@@ -650,7 +650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            if !self.report_unmet_impl_bound(base_type_id, span, |s, def| {
+            let ref_kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(receiver));
+            if !self.report_unmet_impl_bound(receiver, ref_kind.as_slice(), span, |s, def| {
                 s.impl_offers_method(def, method_name)
             }) {
                 let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
@@ -1690,15 +1691,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose methods both live in the
         // global `ImplMethodIndex`.
-        let (struct_name_for_lookup, struct_key_for_lookup) =
-            match self.own_newtype_static(target_type_id, &static_call.method) {
-                Some(key) => (
-                    key.type_name(self.tysys.resolutions.defs())
-                        .map(str::to_string),
-                    Some(key),
-                ),
-                None => self.tysys.static_receiver_struct_key(target_type_id),
-            };
+        let own_static = self.own_newtype_static(target_type_id, &static_call.method);
+        let inherited = own_static.is_none();
+        let (struct_name_for_lookup, struct_key_for_lookup) = match own_static {
+            Some(key) => (
+                key.type_name(self.tysys.resolutions.defs())
+                    .map(str::to_string),
+                Some(key),
+            ),
+            None => self.tysys.static_receiver_struct_key(target_type_id),
+        };
 
         // `Type::<T>::method()` parses as a static-method call and never
         // reaches `resolve_call`, which checks the bare spelling. The receiver
@@ -1886,6 +1888,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_in_args,
             &mut param_types,
         );
+        if inherited {
+            self.retype_through_newtype_chain(target_type_id, &mut param_types);
+        }
 
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
@@ -1912,12 +1917,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             // A `_` is answered as the bare spelling answers the slot it
             // leaves out, by the one inference both spellings share.
+            let newtype = match self.tysys.type_table.borrow().get(target_type_id) {
+                ResolvedType::Newtype { def, .. } if inherited => Some(*def),
+                _ => None,
+            };
+            let at_base = match newtype {
+                Some(def) => self.args_at_representation(def, &args),
+                None => args.clone(),
+            };
             let inferred = struct_name_for_lookup.clone().map(|name| {
                 self.infer_static_method_type_args(
                     &name,
                     &static_call.method,
                     &static_call.args,
-                    &args,
+                    &at_base,
                     expected_type,
                     static_call.span,
                     struct_key_for_lookup.as_ref(),
@@ -1987,6 +2000,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_in_args,
                 &mut param_types,
             );
+            if inherited {
+                self.retype_through_newtype_chain(target_type_id, &mut param_types);
+            }
             let mut args = args;
             self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
             args
@@ -3466,13 +3482,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
         self.enforce_static_block_bounds(self.tysys.block_of(&method_ref), impl_type_args, span);
 
-        let return_type =
+        let mut return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
-        let return_type = self.retype_static_to_newtype(
+        self.retype_static_to_newtype(
             &self.impl_target(struct_name),
             self.tysys.block_of(&method_ref),
             impl_type_args,
-            return_type,
+            std::slice::from_mut(&mut return_type),
         );
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);

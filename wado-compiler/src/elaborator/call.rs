@@ -1791,7 +1791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let substituted: Vec<TypeId> = if generic {
+                let mut substituted: Vec<TypeId> = if generic {
                     let mut combined_type_args = impl_type_args_inferred.clone();
                     combined_type_args.extend_from_slice(&method_type_args);
                     raw_param_types
@@ -1801,6 +1801,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     raw_param_types
                 };
+                let block = resolved
+                    .found()
+                    .and_then(|callee| self.tysys.block_of(&callee.method_ref));
+                self.retype_static_to_newtype(
+                    &receiver_key,
+                    block,
+                    &impl_type_args_inferred,
+                    &mut substituted,
+                );
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 // Per-argument checking alone passes a call of the wrong length:
                 // the loop below reaches neither a missing argument nor a
@@ -2072,11 +2081,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         resolved.return_type(),
                     );
                     if let Some(key) = &ns_key {
-                        return_type = self.retype_static_to_newtype(
+                        self.retype_static_to_newtype(
                             key,
                             block,
                             &impl_type_args_inferred,
-                            return_type,
+                            std::slice::from_mut(&mut return_type),
                         );
                     }
 
@@ -2100,12 +2109,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         CalleeParams {
                             param_is_mut,
                             param_defaults,
-                            param_types,
+                            mut param_types,
                             self_in_args,
                             defaults_module,
                         },
                         declares_params,
                     ) = resolved.params();
+                    if let Some(key) = &ns_key {
+                        self.retype_static_to_newtype(
+                            key,
+                            block,
+                            &impl_type_args_inferred,
+                            &mut param_types,
+                        );
+                    }
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -4275,8 +4292,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         span: token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let receiver = self.resolve_unsited_type_name(callee.type_name, span);
-        let (_, base_args) = self.at_newtype_base(Some(receiver), args);
+        let newtype = key
+            .decl()
+            .expect("a newtype receiver names its declaration");
+        let base_args = self.args_at_representation(newtype, args);
         let (inferred, method_args) = self.infer_static_method_type_args(
             &base_name,
             callee.method_name,
@@ -4292,8 +4311,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// `return_type` as the newtype `key` inherits it from its base's static in
-    /// `block`: the base at `base_args` becomes the newtype (`spec-types`,
+    /// `types`, read off the base's static in `block`, as the newtype `key`
+    /// inherits them: the base at `base_args` becomes the newtype (`spec-types`,
     /// "Method Signature Substitution"). The resolution retypes a newtype
     /// declaring no parameters itself; one declaring some has to be solved
     /// from `base_args` first. A block on the newtype itself keeps what it
@@ -4303,21 +4322,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &ImplTargetKey,
         block: Option<DefId>,
         base_args: &[TypeId],
-        return_type: TypeId,
-    ) -> TypeId {
+        types: &mut [TypeId],
+    ) {
         let target = block.and_then(|b| self.tysys.type_table.borrow().impl_target_decl(b));
         if target.is_some() && target == key.decl() {
-            return return_type;
+            return;
         }
         let Some((newtype, _)) = self.newtype_at_base_args(key, base_args) else {
-            return return_type;
+            return;
         };
         if self.tysys.type_table.borrow().contains_infer_var(newtype) {
-            return return_type;
+            return;
         }
         let base = self.tysys.peeled_base(newtype).0;
-        self.tysys
-            .substitute_newtype_in_type(return_type, base, newtype)
+        for ty in types {
+            *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
+        }
     }
 
     /// The newtype `key` declares, at the arguments that make its base's

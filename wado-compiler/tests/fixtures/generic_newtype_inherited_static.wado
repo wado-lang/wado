@@ -1,7 +1,8 @@
 // A generic newtype calling a static its base supplies, its arguments
 // inferred: the call solves the newtype's own parameters, which `Listed`
-// places inside the base's argument, and answers with the newtype. Every
-// spelling of the receiver does, bare, with `_`, or through a namespace.
+// places inside the base's argument, and reads the base as the newtype in
+// both its parameters and its result. Every spelling of the receiver does,
+// bare, with a turbofish or `_`, along a chain, or through a namespace.
 // A static the newtype declares itself keeps the type it wrote.
 use { println, Stdout } from "core:cli";
 use dep from "./sub/generic_newtype_inherited_static_dep.wado";
@@ -17,6 +18,10 @@ impl<T> Wrap<T> {
 
     fn make(v: T) -> Wrap<T> {
         return Wrap { v };
+    }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
     }
 }
 
@@ -42,7 +47,17 @@ export fn run() with Stdout {
     let h: dep::Same<i32> = dep::Same::make(5);
     let i = dep::Listed::id(l);
     println(`${a} ${b.v} ${c.len()} ${d.v.len()} ${e.len()} ${f.v} ${g.v} ${h.v} ${i.len()}`);
+
+    let j = Same::take(b);
+    let k = Same::<i32>::take(b);
+    let m = Same::<_>::take(b);
+    let n = Listed::take(d).len();
+    let o = Listed::<i32>::take(d).len();
+    let p = Chained::take(f);
+    let q = Chained::<_>::take(f);
+    let r = dep::Same::take(h);
+    println(`${j} ${k} ${m} ${n} ${o} ${p} ${q} ${r}`);
 }
 
 __DATA__
-{"stdout": "1 2 2 2 2 3 4 5 2\n"}
+{"stdout": "1 2 2 2 2 3 4 5 2\n2 2 2 2 2 3 3 5\n"}

@@ -1,7 +1,8 @@
 // A generic newtype's arguments shape its base's, so a static the base
 // supplies is checked at that shape: `Listed`'s `T` sits inside a `List`, and
 // an `i32` argument answers no `T`. One the arguments leave open is reported
-// as for the base itself.
+// as for the base itself. A parameter the base writes as itself takes the
+// newtype, not the base.
 
 struct Wrap<T> {
     v: T,
@@ -15,6 +16,10 @@ impl<T> Wrap<T> {
     fn zero() -> i32 {
         return 0;
     }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
+    }
 }
 
 type Same<T> = Wrap<T>;
@@ -26,9 +31,11 @@ test {
     let c = Listed::<_>::id(1);
     let d = Same::zero();
     let e = Listed::<_>::zero();
+    let f = Same::take(Wrap { v: 1 });
+    let g = Same::<i32>::take(Wrap { v: 1 });
 }
 
 __DATA__
 {
-    "compile_error": ":24:13: analysis error: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 25:31: type mismatch: expected 'List<i32>', found 'i32'; 26:13: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 27:13: cannot infer type parameter `T` of `Same::zero`; add a turbofish (`Same::<...>::zero()`) or a type annotation; 28:13: cannot infer type parameter `T` of `Listed::zero`; add a turbofish (`Listed::<...>::zero()`) or a type annotation"
+    "compile_error": ":29:13: analysis error: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 30:31: type mismatch: expected 'List<i32>', found 'i32'; 31:13: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 32:13: cannot infer type parameter `T` of `Same::zero`; add a turbofish (`Same::<...>::zero()`) or a type annotation; 33:13: cannot infer type parameter `T` of `Listed::zero`; add a turbofish (`Listed::<...>::zero()`) or a type annotation; 34:24: type mismatch: expected 'Same<i32>', found 'Wrap<i32>'; 35:31: type mismatch: expected 'Same<i32>', found 'Wrap<i32>'"
 }

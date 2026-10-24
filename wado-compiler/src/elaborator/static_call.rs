@@ -424,36 +424,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         arg_types: &[TypeId],
     ) -> (Option<TypeId>, Vec<TypeId>) {
-        let Some(newtype) = receiver else {
+        let Some(ResolvedType::Newtype { def, base_type, .. }) =
+            receiver.map(|newtype| self.tysys.type_table.borrow().get(newtype).clone())
+        else {
             return (None, arg_types.to_vec());
         };
-        let Some(base) = self.tysys.type_table.borrow().get_newtype_base(newtype) else {
-            return (None, arg_types.to_vec());
-        };
-        let at_base = arg_types
+        (Some(base_type), self.args_at_newtype_base(def, arg_types))
+    }
+
+    /// `arg_types` as the base of the newtype `def` reads them.
+    fn args_at_newtype_base(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
+        arg_types
             .iter()
-            .map(|&arg| self.tysys.substitute_newtype_in_type(arg, newtype, base))
-            .collect();
-        (Some(base), at_base)
+            .map(|&arg| self.tysys.unwrap_newtype_in_type(arg, def))
+            .collect()
+    }
+
+    /// `arg_types` as the type at the end of the newtype `def`'s chain reads
+    /// them.
+    pub(super) fn args_at_representation(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
+        arg_types
+            .iter()
+            .map(|&arg| self.tysys.represent_newtype_in_type(arg, def))
+            .collect()
     }
 
     /// `callee` as a newtype inherits it: every base on `receiver`'s chain
     /// becomes `receiver`, in each parameter and the return type (`spec-types`,
     /// "Method Signature Substitution"). Any other receiver is left as is.
     fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
+        self.retype_through_newtype_chain(receiver, &mut callee.params.param_types);
+        self.retype_through_newtype_chain(receiver, std::slice::from_mut(&mut callee.return_type));
+    }
+
+    /// `types` with every base on `receiver`'s newtype chain become `receiver`.
+    pub(super) fn retype_through_newtype_chain(&self, receiver: TypeId, types: &mut [TypeId]) {
         let mut link = receiver;
         loop {
             let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
                 break;
             };
-            for param in &mut callee.params.param_types {
-                *param = self
-                    .tysys
-                    .substitute_newtype_in_type(*param, base, receiver);
+            for ty in types.iter_mut() {
+                *ty = self.tysys.substitute_newtype_in_type(*ty, base, receiver);
             }
-            callee.return_type =
-                self.tysys
-                    .substitute_newtype_in_type(callee.return_type, base, receiver);
             link = base;
         }
     }

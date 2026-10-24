@@ -999,21 +999,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Each link of the receiver's newtype chain is searched in turn, behind
     /// any reference, at the arguments that link spells, as dispatch reaches
-    /// a newtype's base and a reference's pointee.
+    /// a newtype's base and a reference's pointee. The blocks for references
+    /// searched are those for `ref_kinds`, the ones the site's dispatch reaches.
     pub(super) fn report_unmet_impl_bound(
         &mut self,
         receiver: TypeId,
+        ref_kinds: &[RefKind],
         span: Span,
         offers: impl Fn(&Self, DefId) -> bool,
     ) -> bool {
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        // `&mut X` coerces to `&X`, so a block for either answers it.
-        let ref_kinds: &[RefKind] =
-            match RefKind::from_resolved(self.tysys.type_table.borrow().get(receiver)) {
-                Some(RefKind::Shared) => &[RefKind::Shared],
-                Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
-                None => &[],
-            };
         let mut link = self.tysys.type_table.borrow().peel_refs(receiver);
         loop {
             if let Some(head) = self.tysys.struct_name_for_type(link) {
@@ -1122,7 +1117,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|&item| self.tysys.compiler_trait_def(item))
             .collect();
-        self.report_unmet_impl_bound(ty, span, |s, def| {
+        // `&mut X` coerces to `&X`, so a block for either answers it.
+        let ref_kinds: &[RefKind] =
+            match RefKind::from_resolved(self.tysys.type_table.borrow().get(ty)) {
+                Some(RefKind::Shared) => &[RefKind::Shared],
+                Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
+                None => &[],
+            };
+        self.report_unmet_impl_bound(ty, ref_kinds, span, |s, def| {
             s.tysys
                 .signatures
                 .impl_trait(def)
