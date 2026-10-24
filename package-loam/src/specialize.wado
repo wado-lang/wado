@@ -4,7 +4,7 @@
 
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise } from "./graph.wado";
+use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
 use { is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
@@ -142,35 +142,34 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
     return Result::Ok(());
 }
 
-/// Each output `last` names, cut to its last position along the axis it
-/// gives, as a language model's next token reads only the last position's
-/// logits. The cut moves back through the nodes that compute each position
-/// along that axis from the same position of their operands, so those compute
-/// the one position kept: an elementwise operator, a reduction keeping the
-/// axis, and a product along its rows. `shapes` is what checking the graph
-/// whole found: each operand's rank, and the axes that broadcast.
+/// `output` cut to its last position along `axis`, as a language model's next
+/// token reads only the last position's logits. The cut moves back through the
+/// nodes that compute each position along that axis from the same position of
+/// their operands, so those compute the one position kept: an elementwise
+/// operator, a reduction keeping the axis, and a product along its rows.
+/// `shapes` is what checking the graph as it stands found: each operand's
+/// rank, and the axes that broadcast.
 pub fn keep_last(
     graph: &mut Graph,
     shapes: &HashMap<String, Shape>,
-    last: &TreeMap<String, i32>,
+    output: &String,
+    axis: i32,
 ) -> Result<(), OptionConflict> {
-    for let [output, axis] of last.entries() {
-        let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
-            return conflict("last", `the graph declares no output ${output}`);
-        };
-        let rank = shapes.get(*output).unwrap().rank();
-        if *axis < 0 || *axis >= rank {
-            return conflict("last", `${output} has ${rank} axes, and no axis ${axis}`);
-        }
-        if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
-            return conflict("last", `${output} is read inside the graph, which needs all of it`);
-        }
-        cut_last(graph, shapes, output, *axis - rank);
-        if let Dims(written) = graph.outputs[at].rank {
-            let mut declared = written;
-            declared[*axis] = Dim::Static(1);
-            graph.outputs[at].rank = Rank::Dims(declared);
-        }
+    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
+        return conflict("last", `the graph declares no output ${*output}`);
+    };
+    let rank = shapes.get(*output).unwrap().rank();
+    if axis < 0 || axis >= rank {
+        return conflict("last", `${*output} has ${rank} axes, and no axis ${axis}`);
+    }
+    if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
+        return conflict("last", `${*output} is read inside the graph, which needs all of it`);
+    }
+    cut_last(graph, shapes, output, axis - rank);
+    if let Dims(written) = graph.outputs[at].rank {
+        let mut declared = written;
+        declared[axis] = Dim::Static(1);
+        graph.outputs[at].rank = Rank::Dims(declared);
     }
     return Result::Ok(());
 }
@@ -181,17 +180,18 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
     let mut producer: HashMap<String, i32> = HashMap::new();
     for let [i, node] of graph.nodes.into_iter().enumerate() {
         for let input of node.reads() {
-            let mut at = readers.get(input).unwrap_or([]);
-            at.push(i);
-            readers[input] = at;
+            read_at(&mut readers, &input, i);
         }
         for let o of node.outputs {
             producer[o] = i;
         }
     }
-    let mut declared = HashSet::<String>::new();
+    // The scope reads what it returns, at no node's position, so another
+    // output stays whole.
     for let vi of &graph.outputs {
-        declared.insert(vi.name);
+        if vi.name != *output {
+            read_at(&mut readers, &vi.name, -1);
+        }
     }
     // A node computes one position where every value it writes is read only by
     // nodes that do, or is the output itself. Readers come later, so a walk
@@ -207,58 +207,74 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
                 return true;
             }
             let read = readers.get(o).unwrap_or([]);
-            return !declared.contains(o) && !read.is_empty() && read.into_iter().all(|r| cut.contains(r));
+            return !read.is_empty() && read.into_iter().all(|r| cut.contains(r));
         });
         if kept {
             cut.insert(i);
         }
     }
+    // A cut of another output along the same axis made these already, and the
+    // slices of the operands it shares with this one.
     let starts = `loam.last${axis}.starts`;
     let ends = `loam.last${axis}.ends`;
     let axes = `loam.last${axis}.axes`;
-    let mut nodes: List<Node> = [
-        ints(&starts, -1),
-        ints(&ends, i64::MAX),
-        ints(&axes, axis as i64),
-    ];
-    let slice = |input: String, sliced: String| Node {
+    let mut nodes: List<Node> = [];
+    if !producer.contains_key(starts) {
+        nodes.push(ints(&starts, -1));
+        nodes.push(ints(&ends, i64::MAX));
+        nodes.push(ints(&axes, axis as i64));
+    }
+    let sliced_name = |input: &String| `${*input}/last${axis}`;
+    let slice = |input: &String, sliced: String| Node {
         op: "Slice",
         outputs: [sliced],
-        inputs: [input, starts, ends, axes],
+        inputs: [*input, starts, ends, axes],
         attrs: [],
     };
-    let mut sliced = HashMap::<String, String>::new();
-    for let [i, node] of graph.nodes.into_iter().enumerate() {
-        if !cut.contains(i) {
-            if node.outputs.contains_str(output) {
-                // The output's producer reads more than one position, so its
-                // output is cut where it is written.
-                let whole = `${*output}/whole`;
-                let mut written = node;
-                written.outputs = node.outputs.into_iter().map(|o| if o == *output { whole } else { o }).collect();
-                nodes.push(written);
-                nodes.push(slice(whole, *output));
-            } else {
-                nodes.push(node);
-            }
-            continue;
-        }
-        let mut narrowed = node;
+    // The cut nodes read their operands from outside the cut sliced, and each
+    // slice follows what writes its operand, so it precedes every reader.
+    let mut wanted = HashSet::<String>::new();
+    let mut written = graph.nodes;
+    for let i of cut {
+        let node = &mut written[i];
         for let j of 0..<node.inputs.len() {
             let input = node.inputs[j];
             let from_cut = producer.get(input) matches { Some(p) && cut.contains(p) };
-            if input == "" || from_cut || !cuts_operand(&node, j) || !spans(&shapes.get(input).unwrap(), axis) {
+            if input == "" || from_cut || !cuts_operand(node, j) || !spans(&shapes.get(input).unwrap(), axis) {
                 continue;
             }
-            if !sliced.contains_key(input) {
-                let name = `${input}/last`;
-                nodes.push(slice(input, name));
-                sliced[input] = name;
+            node.inputs[j] = sliced_name(&input);
+            if !producer.contains_key(node.inputs[j]) {
+                wanted.insert(input);
             }
-            narrowed.inputs[j] = sliced.get(input).unwrap();
         }
-        nodes.push(narrowed);
     }
+    let mut slice_written = |nodes: &mut List<Node>, values: &List<String>| {
+        for let v of *values {
+            if wanted.remove(v) {
+                nodes.push(slice(&v, sliced_name(&v)));
+            }
+        }
+    };
+    for let given of [&graph.inputs, &graph.initializers] {
+        let names: List<String> = given.into_iter().map(|vi| vi.name).collect();
+        slice_written(&mut nodes, &names);
+    }
+    for let [i, node] of written.into_iter().enumerate() {
+        if !cut.contains(i) && node.outputs.contains_str(output) {
+            // The output's producer reads more than one position, so its
+            // output is cut where it is written.
+            let whole = `${*output}/whole`;
+            let mut renamed = node;
+            renamed.outputs = node.outputs.into_iter().map(|o| if o == *output { whole } else { o }).collect();
+            nodes.push(renamed);
+            nodes.push(slice(&whole, *output));
+        } else {
+            nodes.push(node);
+        }
+        slice_written(&mut nodes, &node.outputs);
+    }
+    assert wanted.is_empty();
     graph.nodes = nodes;
 }
 
@@ -302,7 +318,13 @@ fn ints(name: &String, value: i64) -> Node {
         op: "Constant",
         outputs: [*name],
         inputs: [],
-        attrs: [Attr { name: "value_ints", values: [`${value}`], is_list: true }],
+        attrs: [
+            Attr {
+                name: "value_ints",
+                values: [`${value}`],
+                is_list: true,
+            },
+        ],
     };
 }
 

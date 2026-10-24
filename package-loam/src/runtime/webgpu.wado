@@ -1205,9 +1205,8 @@ impl WebGpuBackend {
             let half = bound.views[1].half;
             let [key, row_groups, group_columns] = if narrow {
                 let width = word_width(&bound.views[1], across);
-                let lanes = narrow_columns(across, 1, cols);
                 [
-                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, lanes]),
+                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, per_group]),
                     1,
                     narrow_columns(across, width, cols),
                 ];
@@ -3375,14 +3374,14 @@ fn right_index_wgsl(k: String, column: String = "col") -> String {
 /// Where `across`, a column's lanes split the inner axis, so fewer columns a
 /// workgroup means more workgroups and a longer sum of each column's parts:
 /// the most columns that still leave `NARROW_GROUPS` workgroups, and at least
-/// 2. On Gemma 3 (270M)'s layers each of 2048, 1024, 640 and 256 columns runs
+/// 4. On Gemma 3 (270M)'s layers each of 2048, 1024, 640 and 256 columns runs
 /// fastest at the count this picks.
 fn narrow_columns(across: bool, width: i32, cols: i32) -> i32 {
     if !across {
         return 32 * width;
     }
     let mut columns = 16;
-    while columns > 2 && cols / columns < NARROW_GROUPS {
+    while columns > 4 && cols / columns < NARROW_GROUPS {
         columns /= 2;
     }
     return columns;

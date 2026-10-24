@@ -131,6 +131,13 @@ pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
     }
 }
 
+/// Records that the node at `at` reads `tensor`.
+pub fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
+    let mut by = readers.get(*tensor).unwrap_or([]);
+    by.push(at);
+    readers[*tensor] = by;
+}
+
 /// The extents' product is how many elements the tensor says it has, and a
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {

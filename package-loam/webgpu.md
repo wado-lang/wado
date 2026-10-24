@@ -87,7 +87,7 @@ runs.
   that read the weight together read where it is contiguous: one row's run of
   columns, or one column of a transposed weight, such as Gemma's head. Across
   a transposed weight a workgroup takes the most columns that still leave 128
-  workgroups, from 16 down to 2, and adds each column's parts in halves. A
+  workgroups, from 16 down to 4, and adds each column's parts in halves. A
   layer's products of 256 to 2048 columns ran in 32 to 256 workgroups of 8
   columns, too few reads at once for the device, and took 1.2 times as long.
 - `arg_max` ranks each part of 4096 elements of a lane in a workgroup of its

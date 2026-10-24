@@ -139,32 +139,52 @@ fn head() -> Graph {
 fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionConflict> {
     let schema = Schema {
         layout: [
-            LayoutRule { pattern: "X", axes: ["Batch", "Seq", "Embed"] },
-            LayoutRule { pattern: "G", axes: ["Embed"] },
-            LayoutRule { pattern: "W", axes: ["Embed", "Vocab"] },
+            LayoutRule {
+                pattern: "X",
+                axes: ["Batch", "Seq", "Embed"],
+            },
+            LayoutRule {
+                pattern: "G",
+                axes: ["Embed"],
+            },
+            LayoutRule {
+                pattern: "W",
+                axes: ["Embed", "Vocab"],
+            },
         ],
     };
-    let checked = infer(graph, &schema).unwrap();
-    keep_last(graph, &checked.shapes, &last)?;
-    let recheck = infer(graph, &schema).unwrap();
+    let mut checked = infer(graph, &schema).unwrap();
+    for let [output, axis] of last.entries() {
+        keep_last(graph, &checked.shapes, output, *axis)?;
+        checked = infer(graph, &schema).unwrap();
+    }
     let nodes: List<String> = graph.nodes.into_iter().filter(|n| n.op != "Constant").map(
         |n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`,
     ).collect();
-    let out = recheck.shapes.get("Y").unwrap();
+    let out = checked.shapes.get("Y").unwrap();
     let axes: List<String> = out.axes.into_iter().map(|a| a.name).collect();
     return Result::Ok(`${nodes.join(" ")} | Y ${axes.join(",")}`);
 }
 
 test "a cut moves back through a norm and a product's rows" {
     let mut graph = head();
-    assert cut(&mut graph, { Y: 1 }).unwrap()
-        == "X/last=Slice(X,loam.last-2.starts) Q=Mul(X/last,X/last) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) Q=Mul(X/last-2,X/last-2) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last-2,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y Batch,Seq,Vocab";
+}
+
+test "two outputs cut along one axis share the slices of what both read" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[4] G, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {
+            H = Mul(X, G)
+            Y = MatMul(H, W)
+            P = Relu(X)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=MatMul(H,W) P=Relu(X/last-2) | Y Batch,Seq,Vocab";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {
     let mut graph = head();
-    assert cut(&mut graph, { P: 1 }).unwrap()
-        == "Q=Mul(X,X) M=ReduceMean(Q) R=Sqrt(M) D=Div(X,R) H=Mul(D,G) Y=MatMul(H,W) P/whole=Softmax(X) P=Slice(P/whole,loam.last-2.starts) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { P: 1 }).unwrap() == "Q=Mul(X,X) M=ReduceMean(Q) R=Sqrt(M) D=Div(X,R) H=Mul(D,G) Y=MatMul(H,W) P/whole=Softmax(X) P=Slice(P/whole,loam.last-2.starts) | Y Batch,Seq,Vocab";
 }
 
 test "a cut along the axis a reduction folds stays at the output" {

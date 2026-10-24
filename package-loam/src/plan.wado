@@ -12,6 +12,7 @@ use {
     data_type,
     is_binary_elementwise,
     is_unary_operator,
+    read_at,
     settled,
 } from "./graph.wado";
 use { Checked, gemm_options, has_bias, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
@@ -156,13 +157,6 @@ fn spreads_over(x: &Shape, flat: &Shape, product: &Shape, y: &Shape) -> bool {
 /// Whether `a`'s axis `i` is `b`'s axis `j`, by name and extent.
 fn same_axis(a: &Shape, i: i32, b: &Shape, j: i32) -> bool {
     return a.axes[i].name == b.axes[j].name && a.axes[i].extent.agrees(&b.axes[j].extent);
-}
-
-/// Records that the node at `at` reads `tensor`.
-fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
-    let mut by = readers.get(*tensor).unwrap_or([]);
-    by.push(at);
-    readers[*tensor] = by;
 }
 
 /// Whether a `Gemm`'s bias, if it has one, is one value per column, so it

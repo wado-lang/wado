@@ -10,9 +10,18 @@ use { Batch, Embed, Seq, Vocab, Weights, forward } from "./last.onnxtext"
             module: "lib:loam",
             options: {
                 layout: [
-                    { pattern: "X", axes: ["Batch", "Seq", "Embed"] },
-                    { pattern: "G", axes: ["Embed"] },
-                    { pattern: "W", axes: ["Embed", "Vocab"] },
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "G",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "W",
+                        axes: ["Embed", "Vocab"],
+                    },
                 ],
                 last: { Y: 1 },
             },
@@ -20,8 +29,8 @@ use { Batch, Embed, Seq, Vocab, Weights, forward } from "./last.onnxtext"
     };
 
 global X: List<f32> = [
-    0.5, -1.0, 2.0, 0.25, 1.5, 0.0, -0.5, 1.0, -2.0, 0.75, 1.25, -0.25,
-    1.0, 2.0, -1.5, 0.5, -0.75, 0.25, 1.75, -1.25, 0.0, -0.5, 1.5, 2.5,
+    0.5, -1.0, 2.0, 0.25, 1.5, 0.0, -0.5, 1.0, -2.0, 0.75, 1.25, -0.25, 1.0, 2.0, -1.5, 0.5, -0.75, 0.25, 1.75, -1.25,
+    0.0, -0.5, 1.5, 2.5,
 ];
 global G: List<f32> = [1.0, 0.5, -1.0, 2.0];
 global W: List<f32> = [0.5, -1.0, 0.25, 1.0, 0.0, -0.5, -0.25, 1.5, 0.75, 2.0, -0.75, 1.0];
@@ -59,9 +68,18 @@ fn last_rows(batch: i32, seq: i32) -> List<f32> {
 fn run(batch: i32, seq: i32) -> Tensor<f32, [Batch, Seq, Vocab]> {
     return forward(
         &mut Cpu {},
-        &Tensor::<f32, [Batch, Seq, Embed]> { data: X[0..<batch * seq * 4].to_list(), extents: [batch, seq, 4] },
-        &Tensor::<f32, [Embed]> { data: G, extents: [4] },
-        &Tensor::<f32, [Embed, Vocab]> { data: W, extents: [4, 3] },
+        &Tensor::<f32, [Batch, Seq, Embed]> {
+            data: X[0..<batch * seq * 4].to_list(),
+            extents: [batch, seq, 4],
+        },
+        &Tensor::<f32, [Embed]> {
+            data: G,
+            extents: [4],
+        },
+        &Tensor::<f32, [Embed, Vocab]> {
+            data: W,
+            extents: [4, 3],
+        },
         &Weights {}.prepare(&mut Cpu {}),
     );
 }
