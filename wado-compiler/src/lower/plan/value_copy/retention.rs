@@ -32,7 +32,7 @@ use crate::tir::{
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
 /// The destination of a position the callee hands back with its result. The
 /// caller resolves it against the local it binds the result to.
@@ -683,34 +683,70 @@ impl Contributions {
     }
 }
 
-/// A callee's facts, in the current fixpoint iteration.
-struct StoresOracle<'a> {
-    calls: &'a CallRetention,
-    /// Read through [`Self::rows`], which notes the read in `read_rows`.
-    rows: &'a FunctorRows,
-    read_rows: Cell<bool>,
-    call_graph: &'a CallGraph,
-    /// Which of each function's parameters take a function value, by the dense
-    /// id the call graph uses.
-    functor_params: &'a [FunctorParams],
+/// Its own module so that the rows stay private to it: a later round re-walks
+/// only the bodies [`StoresOracle::read_rows`] names, which holds only while
+/// every read of a row goes through [`StoresOracle::rows`].
+mod oracle {
+    use std::cell::Cell;
+
+    use super::{CallGraph, CallRetention, Callees, FunctorParams, FunctorRows, RetentionFacts};
+    use crate::tir::TirExpr;
+
+    /// A callee's facts, in the current fixpoint iteration.
+    pub(super) struct StoresOracle<'a> {
+        pub(super) calls: &'a CallRetention,
+        rows: &'a FunctorRows,
+        read_rows: Cell<bool>,
+        pub(super) call_graph: &'a CallGraph,
+        /// Which of each function's parameters take a function value, by the
+        /// dense id the call graph uses.
+        functor_params: &'a [FunctorParams],
+    }
+
+    impl<'a> StoresOracle<'a> {
+        pub(super) fn new(
+            calls: &'a CallRetention,
+            rows: &'a FunctorRows,
+            call_graph: &'a CallGraph,
+            functor_params: &'a [FunctorParams],
+        ) -> Self {
+            Self {
+                calls,
+                rows,
+                read_rows: Cell::new(false),
+                call_graph,
+                functor_params,
+            }
+        }
+
+        pub(super) fn rows(&self) -> &FunctorRows {
+            self.read_rows.set(true);
+            self.rows
+        }
+
+        /// Whether the walk read a row.
+        pub(super) fn read_rows(&self) -> bool {
+            self.read_rows.get()
+        }
+
+        /// Facts for an indirect (functor) callee: the join over the values the
+        /// walk resolved it to, or the callee type's row where it resolved none.
+        pub(super) fn indirect(
+            &self,
+            callees: &Callees,
+            callee: &TirExpr,
+            arity: usize,
+        ) -> RetentionFacts {
+            self.rows().row_of(callees, callee.type_id, arity)
+        }
+
+        pub(super) fn functor_params(&self, function: u32) -> &FunctorParams {
+            &self.functor_params[function as usize]
+        }
+    }
 }
 
-impl StoresOracle<'_> {
-    fn rows(&self) -> &FunctorRows {
-        self.read_rows.set(true);
-        self.rows
-    }
-
-    /// Facts for an indirect (functor) callee: the join over the values the
-    /// walk resolved it to, or the callee type's row where it resolved none.
-    fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
-        self.rows().row_of(callees, callee.type_id, arity)
-    }
-
-    fn functor_params(&self, function: u32) -> &FunctorParams {
-        &self.functor_params[function as usize]
-    }
-}
+use oracle::StoresOracle;
 
 /// What a direct call keeps of its arguments, whatever the callee is: a body
 /// answers from the fixpoint, a body-less declaration from what it states, and
@@ -813,13 +849,7 @@ pub fn compute_retention(
                 .map(|p| (p.local_index, p.type_id))
                 .collect();
             let (found, from_body) = {
-                let oracle = StoresOracle {
-                    calls: &calls,
-                    rows: &rows,
-                    read_rows: Cell::new(false),
-                    call_graph,
-                    functor_params: &functor_params,
-                };
+                let oracle = StoresOracle::new(&calls, &rows, call_graph, &functor_params);
                 let walked = facts_of_body(
                     &positions,
                     &functor_params[id as usize],
@@ -830,7 +860,7 @@ pub fn compute_retention(
                     Owner::Named(id),
                     BodyRef::Block(body),
                 );
-                reads_rows[id as usize] = oracle.read_rows.get();
+                reads_rows[id as usize] = oracle.read_rows();
                 walked
             };
             round.extend(from_body);

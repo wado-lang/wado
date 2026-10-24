@@ -25,7 +25,7 @@ use std::ops::Range;
 
 mod loc_set;
 
-use loc_set::LocSet;
+use loc_set::{Loc, LocSet};
 
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
@@ -102,7 +102,7 @@ pub struct Locations<'a> {
 
 impl<'a> Locations<'a> {
     pub fn iter(self) -> impl Iterator<Item = u32> + 'a {
-        self.set.iter().map(|index| self.nodes[index as usize])
+        self.set.iter().map(|Loc(index)| self.nodes[index as usize])
     }
 }
 
@@ -469,7 +469,7 @@ struct Graph {
     /// The node of each location.
     locations: Vec<u32>,
     /// The index in `locations` of each node that is one.
-    location_index: IndexMap<u32, u32>,
+    location_index: IndexMap<u32, Loc>,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
     rep: DisjointSets,
@@ -575,7 +575,7 @@ impl Graph {
         if self.inert.contains(&node) {
             return;
         }
-        let next = u32::try_from(self.locations.len()).expect("location count fits u32");
+        let next = Loc(u32::try_from(self.locations.len()).expect("location count fits u32"));
         let loc = *self.location_index.entry(loc).or_insert_with(|| {
             self.locations.push(loc);
             next
@@ -794,8 +794,8 @@ impl Graph {
     /// `edges`; its copies are left to the caller.
     fn carry(&mut self, node: u32, locs: &LocSet, edges: &Edges) {
         let n = node as usize;
-        for loc in locs.iter() {
-            let loc = self.locations[loc as usize];
+        for Loc(index) in locs.iter() {
+            let loc = self.locations[index as usize];
             for i in edges.loads.clone() {
                 let to = self.loads[n][i];
                 self.copy(loc, to);
@@ -815,18 +815,21 @@ impl Graph {
     fn number_locations_in_node_order(&mut self) {
         let mut by_node: Vec<u32> = (0..).take(self.locations.len()).collect();
         by_node.sort_unstable_by_key(|&index| self.locations[index as usize]);
-        let mut renumbered = vec![0; by_node.len()];
+        let mut renumbered = vec![Loc(0); by_node.len()];
         for (new, &old) in (0..).zip(&by_node) {
-            renumbered[old as usize] = new;
+            renumbered[old as usize] = Loc(new);
         }
         for set in self.pts.iter_mut().chain(&mut self.delta) {
-            let mut locs: Vec<u32> = set.iter().map(|old| renumbered[old as usize]).collect();
+            let mut locs: Vec<Loc> = set
+                .iter()
+                .map(|Loc(old)| renumbered[old as usize])
+                .collect();
             locs.sort_unstable();
             *set = locs.into_iter().collect();
         }
         self.locations.sort_unstable();
         for (index, &node) in (0..).zip(&self.locations) {
-            self.location_index.insert(node, index);
+            self.location_index.insert(node, Loc(index));
         }
     }
 

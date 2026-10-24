@@ -1,10 +1,15 @@
-//! A set of location nodes. Most sets hold a few locations, but one a
+//! A set of locations. Most sets hold a few locations, but one a
 //! context-insensitive parameter gathers from every caller holds thousands,
 //! and the solver unions such sets along every copy: words of 64 locations make
 //! that a merge of words rather than a hash insert per location.
 
 /// The size past which a set holds words.
 const SMALL_MAX: usize = 32;
+
+/// A location by its dense index, which is not the id of its node: the solver
+/// numbers locations apart so that a set packs into few words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Loc(pub u32);
 
 #[derive(Clone, Debug)]
 pub struct LocSet {
@@ -40,7 +45,7 @@ impl LocSet {
         self.len() == 0
     }
 
-    pub fn contains(&self, loc: u32) -> bool {
+    pub fn contains(&self, Loc(loc): Loc) -> bool {
         match &self.repr {
             Repr::Small(locs) => locs.binary_search(&loc).is_ok(),
             Repr::Words { words, .. } => words
@@ -50,13 +55,17 @@ impl LocSet {
     }
 
     /// Ascending.
-    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Loc> + '_ {
         let (small, words) = self.forms();
-        small.iter().copied().chain(
-            words
-                .iter()
-                .flat_map(|&(i, w)| Bits(w).map(move |b| i * 64 + b)),
-        )
+        small
+            .iter()
+            .copied()
+            .chain(
+                words
+                    .iter()
+                    .flat_map(|&(i, w)| Bits(w).map(move |b| i * 64 + b)),
+            )
+            .map(Loc)
     }
 
     /// The locations of a small set and the words of a large one: the other
@@ -68,7 +77,7 @@ impl LocSet {
         }
     }
 
-    pub fn insert(&mut self, loc: u32) -> bool {
+    pub fn insert(&mut self, Loc(loc): Loc) -> bool {
         self.insert_word(loc / 64, 1 << (loc % 64)) != 0
     }
 
@@ -222,8 +231,8 @@ fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut Lo
     gained
 }
 
-impl FromIterator<u32> for LocSet {
-    fn from_iter<I: IntoIterator<Item = u32>>(locs: I) -> Self {
+impl FromIterator<Loc> for LocSet {
+    fn from_iter<I: IntoIterator<Item = Loc>>(locs: I) -> Self {
         let mut set = Self::default();
         for loc in locs {
             set.insert(loc);
@@ -266,14 +275,14 @@ impl Iterator for Bits {
 
 #[cfg(test)]
 mod tests {
-    use super::LocSet;
+    use super::{Loc, LocSet};
 
     fn set(locs: impl IntoIterator<Item = u32>) -> LocSet {
-        let mut s = LocSet::default();
-        for loc in locs {
-            s.insert(loc);
-        }
-        s
+        locs.into_iter().map(Loc).collect()
+    }
+
+    fn indices(set: &LocSet) -> Vec<u32> {
+        set.iter().map(|Loc(index)| index).collect()
     }
 
     #[test]
@@ -295,10 +304,10 @@ mod tests {
             let is_a = |n: &u32| n.is_multiple_of(step_a as u32);
             let is_b = |n: &u32| n.is_multiple_of(step_b as u32);
             let expected: Vec<u32> = (0..end).filter(|n| is_a(n) || is_b(n)).collect();
-            assert_eq!(a.iter().collect::<Vec<_>>(), expected);
+            assert_eq!(indices(&a), expected);
             assert_eq!(a.len(), expected.len());
             let new: Vec<u32> = (0..end).filter(|n| is_b(n) && !is_a(n)).collect();
-            assert_eq!(added.iter().collect::<Vec<_>>(), new);
+            assert_eq!(indices(&added), new);
             assert_eq!(added.len(), new.len());
         }
     }
@@ -319,7 +328,7 @@ mod tests {
                 .collect();
             expected.sort_unstable();
             expected.dedup();
-            assert_eq!(out.iter().collect::<Vec<_>>(), expected);
+            assert_eq!(indices(&out), expected);
             assert_eq!(out.len(), expected.len());
         }
     }
@@ -328,11 +337,12 @@ mod tests {
     fn membership_and_equality_ignore_the_form() {
         let small = set(0..20);
         let mut words = set(0..40);
-        assert!(words.contains(39) && !words.contains(40) && !words.contains(100_000));
-        assert!(!words.insert(6));
+        assert!(words.contains(Loc(39)) && !words.contains(Loc(40)));
+        assert!(!words.contains(Loc(100_000)));
+        assert!(!words.insert(Loc(6)));
         assert_ne!(small, words);
         assert_eq!(set((0..40).rev()), words);
-        words.insert(100_000);
-        assert!(words.contains(100_000));
+        words.insert(Loc(100_000));
+        assert!(words.contains(Loc(100_000)));
     }
 }
