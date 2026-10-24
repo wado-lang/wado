@@ -25,14 +25,19 @@ case "$(uname -s)-$(uname -m)" in
         ;;
 esac
 
+# Unpacked beside the cache and renamed into it, so an interrupted run leaves
+# nothing a later one would take for the release.
 cache="$HOME/.cache/loam"
 if [ ! -d "$cache/$asset" ]; then
     mkdir -p "$cache"
-    tgz="$cache/$asset.tgz"
-    curl -fsSL -o "$tgz" "https://github.com/microsoft/onnxruntime/releases/download/v$VERSION/$asset.tgz"
+    part="$cache/$asset.part"
+    rm -rf "$part"
+    mkdir "$part"
+    curl -fsSL -o "$part/release.tgz" "https://github.com/microsoft/onnxruntime/releases/download/v$VERSION/$asset.tgz"
     if command -v sha256sum > /dev/null; then sha256=(sha256sum); else sha256=(shasum -a 256); fi
-    echo "$sha  $tgz" | "${sha256[@]}" -c - >&2
-    tar -xzf "$tgz" -C "$cache"
-    rm "$tgz"
+    echo "$sha  $part/release.tgz" | "${sha256[@]}" -c - >&2
+    tar -xzf "$part/release.tgz" -C "$part"
+    mv "$part/$asset" "$cache/$asset"
+    rm -rf "$part"
 fi
 echo "$cache/$asset"

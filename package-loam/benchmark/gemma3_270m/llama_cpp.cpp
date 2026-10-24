@@ -10,41 +10,12 @@
 #include <ggml-backend.h>
 #include <llama.h>
 
-#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
-#include <sstream>
-#include <string>
 #include <vector>
 
-static const char* ORACLE = "../example/gemma3-270m/generate.json";
-static const char* PROMPT = "Hello, my name is";
-static const int STEPS = 8;
-static const int WARMUP = 1;
-static const int ITERATIONS = 3;
-
-// The ids generate.json records for PROMPT: the `ids` list after the entry
-// whose `prompt` it is.
-static std::vector<llama_token> prompt_ids() {
-    std::ifstream file(ORACLE);
-    std::stringstream buf;
-    buf << file.rdbuf();
-    const std::string text = buf.str();
-    const std::size_t entry = text.find("\"" + std::string(PROMPT) + "\"");
-    const std::size_t open = text.find('[', text.find("\"ids\"", entry));
-    const std::size_t close = text.find(']', open);
-    if (entry == std::string::npos || open == std::string::npos || close == std::string::npos) {
-        std::fprintf(stderr, "generate.json records no ids for \"%s\"\n", PROMPT);
-        std::exit(1);
-    }
-    std::vector<llama_token> ids;
-    std::stringstream list(text.substr(open + 1, close - open - 1));
-    std::string item;
-    while (std::getline(list, item, ',')) ids.push_back(std::stoi(item));
-    return ids;
-}
+#include "harness.hpp"
 
 static void decode(llama_context* ctx, std::vector<llama_token>& tokens) {
     if (llama_decode(ctx, llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()))) != 0) {
@@ -53,40 +24,17 @@ static void decode(llama_context* ctx, std::vector<llama_token>& tokens) {
     }
 }
 
-// The token the last decode ranks first.
-static llama_token greatest(llama_context* ctx, int32_t vocab) {
-    const float* logits = llama_get_logits_ith(ctx, -1);
-    llama_token best = 0;
-    for (llama_token v = 1; v < vocab; v++) {
-        if (logits[v] > logits[best]) best = v;
-    }
-    return best;
-}
-
 static std::vector<llama_token> continued(llama_context* ctx, int32_t vocab, const std::vector<llama_token>& ids) {
     llama_memory_clear(llama_get_memory(ctx), true);
     std::vector<llama_token> fresh = ids;
     std::vector<llama_token> generated;
-    for (int s = 0; s < STEPS; s++) {
+    for (int s = 0; s < harness::STEPS; s++) {
         decode(ctx, fresh);
-        const llama_token next = greatest(ctx, vocab);
+        const llama_token next = harness::greatest(llama_get_logits_ith(ctx, -1), vocab);
         generated.push_back(next);
         fresh = {next};
     }
     return generated;
-}
-
-// The throughput line `core:benchmark` prints, which `logs.ts` reads.
-static void print_throughput(const char* label, int work_per_iter, int n, double elapsed_ns, const char* unit) {
-    const double secs = elapsed_ns / 1e9;
-    const double rate = secs > 0 ? static_cast<double>(work_per_iter) * n / secs : 0;
-    const double per_ms = elapsed_ns / n / 1e6;
-    char rbuf[64];
-    if (rate >= 1e9) std::snprintf(rbuf, sizeof rbuf, "%.2f G %s/s", rate / 1e9, unit);
-    else if (rate >= 1e6) std::snprintf(rbuf, sizeof rbuf, "%.2f M %s/s", rate / 1e6, unit);
-    else if (rate >= 1e3) std::snprintf(rbuf, sizeof rbuf, "%.2f k %s/s", rate / 1e3, unit);
-    else std::snprintf(rbuf, sizeof rbuf, "%.2f %s/s", rate, unit);
-    std::printf("%s: %s   (%.3f ms/iter, %d iter)\n", label, rbuf, per_ms, n);
 }
 
 static void quiet(ggml_log_level level, const char* text, void*) {
@@ -109,9 +57,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "cannot load %s\n", argv[1]);
         return 1;
     }
-    const std::vector<llama_token> ids = prompt_ids();
+    const std::vector<int64_t> oracle = harness::prompt_ids("../example/gemma3-270m/generate.json");
+    const std::vector<llama_token> ids(oracle.begin(), oracle.end());
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = static_cast<uint32_t>(ids.size() + STEPS);
+    ctx_params.n_ctx = static_cast<uint32_t>(ids.size() + harness::STEPS);
     ctx_params.n_batch = static_cast<uint32_t>(ids.size());
     ctx_params.n_threads = std::atoi(argv[4]);
     ctx_params.n_threads_batch = ctx_params.n_threads;
@@ -121,18 +70,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     const int32_t vocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
-
-    std::vector<llama_token> generated;
-    for (int i = 0; i < WARMUP; i++) generated = continued(ctx, vocab, ids);
-    const auto started = std::chrono::steady_clock::now();
-    for (int i = 0; i < ITERATIONS; i++) generated = continued(ctx, vocab, ids);
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-    print_throughput("generate", STEPS, ITERATIONS,
-                     static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count()),
-                     "tokens");
-    std::printf("generated = [");
-    for (std::size_t i = 0; i < generated.size(); i++) std::printf(i ? ", %d" : "%d", generated[i]);
-    std::printf("]\n");
+    harness::time([&] { return continued(ctx, vocab, ids); });
 
     llama_free(ctx);
     llama_model_free(model);

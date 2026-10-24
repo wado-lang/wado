@@ -12,7 +12,7 @@
 lockfile = true
 
 [tasks.build]
-description = "Build what every Loam benchmark runs: wado-run-webgpu, wado, and the onnxruntime and llama.cpp arms"
+description = "Build what every Loam benchmark runs: wado-run-webgpu, wado, and the onnxruntime arms"
 hide = true
 run = """
 #!/usr/bin/env bash
@@ -24,11 +24,21 @@ fi
 ort=$(./fetch_onnxruntime.sh)
 mkdir -p build
 for model in gpt2_124m gemma3_270m; do
-    c++ -O2 -std=c++17 -I"$ort/include" $model/onnxruntime.cpp \
+    c++ -O2 -std=c++17 -I. -I"$ort/include" $model/onnxruntime.cpp \
         -L"$ort/lib" -lonnxruntime -Wl,-rpath,"$ort/lib" -o build/onnxruntime_$model
 done
+"""
+
+# Apart from `build`, as llama.cpp's Vulkan release is Linux x86_64's alone.
+[tasks.build-llama-cpp]
+description = "Build the llama.cpp arm"
+hide = true
+run = """
+#!/usr/bin/env bash
+set -e
 llama=$(./fetch_llama_cpp.sh)
-c++ -O2 -std=c++17 -I"$llama/include" gemma3_270m/llama_cpp.cpp \
+mkdir -p build
+c++ -O2 -std=c++17 -I. -I"$llama/include" gemma3_270m/llama_cpp.cpp \
     -L"$llama" -lllama -lggml -lggml-base -Wl,-rpath,"$llama" -o build/llama_cpp
 """
 
@@ -60,7 +70,7 @@ echo "=== Loam (Cpu) ==="
 
 [tasks.gemma3-270m]
 description = "Run Gemma 3 (270M) greedy generation (Loam Cpu and WebGPU vs onnxruntime and llama.cpp)"
-depends = ["build"]
+depends = ["build", "build-llama-cpp"]
 run = """
 #!/usr/bin/env bash
 set -e
