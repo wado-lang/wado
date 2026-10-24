@@ -481,9 +481,8 @@ fn a_missing_program_reports_not_found() {
     assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::NotFound);
 }
 
-fn spawn_outside_the_grants() -> std::io::Result<super::Spawned> {
+fn spawn_outside_the_grants(tree: &Tree) -> std::io::Result<super::Spawned> {
     assert_available();
-    let tree = Tree::new();
     let outside = write_script(&tree.outside());
     let policy = tree.policy(Network::Denied);
     spawn(&Command {
@@ -502,7 +501,7 @@ fn spawn_outside_the_grants() -> std::io::Result<super::Spawned> {
 #[test]
 fn a_program_outside_the_grants_reports_permission_denied() {
     assert_eq!(
-        spawn_outside_the_grants().err().unwrap().kind(),
+        spawn_outside_the_grants(&Tree::new()).err().unwrap().kind(),
         std::io::ErrorKind::PermissionDenied
     );
 }
@@ -512,7 +511,8 @@ fn a_program_outside_the_grants_reports_permission_denied() {
 #[cfg(target_os = "macos")]
 #[test]
 fn a_program_outside_the_grants_never_runs() {
-    let spawned = spawn_outside_the_grants().unwrap();
+    let tree = Tree::new();
+    let spawned = spawn_outside_the_grants(&tree).unwrap();
     assert_ne!(spawned.child.wait().unwrap(), OK);
 }
 
