@@ -244,6 +244,25 @@ pub fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     backend::spawn(command)
 }
 
+/// The path the OS holds for an open directory, where a relative program path
+/// resolves.
+///
+/// # Errors
+///
+/// Returns the OS error the lookup reports.
+///
+/// # Panics
+///
+/// Panics when [`availability`] is not `Available`.
+pub fn descriptor_path(file: &File) -> io::Result<PathBuf> {
+    assert_eq!(
+        availability(),
+        Availability::Available,
+        "only a host that can confine a child spawns"
+    );
+    backend::descriptor_path(file)
+}
+
 /// How a child ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitStatus {
@@ -296,7 +315,9 @@ impl Child {
         Ok(())
     }
 
-    /// Block until the child exits, then reap it.
+    /// Block until the child exits, kill what is left of its group, then reap
+    /// it. A descendant never outlives the child, so none keeps its grants
+    /// unwatched.
     ///
     /// # Errors
     ///
@@ -328,6 +349,7 @@ impl Child {
                 return Err(err);
             }
         }
+        self.signal_group(libc::SIGKILL)?;
         let mut reaped = lock(&self.reaped);
         assert!(!*reaped, "a child is reaped once");
         let mut status = 0;

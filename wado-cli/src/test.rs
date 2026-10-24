@@ -25,6 +25,7 @@ use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession};
 use crate::fingerprint::Input;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
+use crate::process_host::ProcessGrant;
 use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
@@ -608,6 +609,8 @@ struct LoadedModule {
     /// What the compile read, where those reads decide every test's outcome,
     /// so a pass can be cached.
     cache_reads: Option<Vec<Input>>,
+    /// Whether this module's tests may spawn.
+    process: ProcessGrant,
     _module_permit: OwnedSemaphorePermit,
 }
 
@@ -1046,6 +1049,7 @@ fn load_module(
                 profiler,
                 coverage,
                 cache_reads,
+                process: runtime_knobs.process,
                 _module_permit: module_permit,
             })
         }
@@ -1678,6 +1682,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         &job.grants,
         &module.path,
         EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
+        module.process,
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),

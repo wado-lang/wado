@@ -11,6 +11,7 @@ use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
@@ -129,6 +130,10 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         stdout: child.stdout.take().map(OwnedFd::from),
         stderr: child.stderr.take().map(OwnedFd::from),
     })
+}
+
+pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
+    std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
 }
 
 fn std_stdio(stdio: Stdio) -> StdStdio {

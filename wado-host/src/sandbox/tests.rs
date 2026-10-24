@@ -430,6 +430,31 @@ fn a_group_kill_ends_every_descendant() {
 }
 
 #[test]
+fn no_descendant_outlives_the_child() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    let args: Vec<OsString> = ["-c", "sleep 60 &"].iter().map(OsString::from).collect();
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd: None,
+        stdin: Stdio::Null,
+        stdout: Stdio::Piped,
+        stderr: Stdio::Inherit,
+        policy: &policy,
+    })
+    .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
+    // The background `sleep` held the pipe's write end; EOF means it is gone.
+    let mut rest = Vec::new();
+    File::from(spawned.stdout.unwrap())
+        .read_to_end(&mut rest)
+        .unwrap();
+}
+
+#[test]
 fn a_missing_program_reports_not_found() {
     assert_available();
     let policy = Policy::new(Network::Denied);

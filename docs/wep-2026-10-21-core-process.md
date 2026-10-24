@@ -270,8 +270,6 @@ cannot keep with other hosts. On adoption only the namespace changes.
 package core:process@0.1.0;
 
 interface types {
-    use wasi:filesystem/types@0.3.0.{descriptor};
-
     variant exit-status { exited(u8), signaled(u8), timed-out }
 
     enum availability { available, denied, unsupported }
@@ -305,9 +303,9 @@ interface types {
     }
 }
 
-interface spawn {
-    use types.{availability, command, spawned, error-code};
+interface process {
     use wasi:filesystem/types@0.3.0.{descriptor};
+    use types.{availability, command, spawned, error-code};
 
     get-availability: func() -> availability;
 
@@ -319,6 +317,9 @@ interface spawn {
   the guest exits. The host signals a group only before it reaps the group's
   leader: the unreaped leader holds its pid, so the group's id cannot pass to an
   unrelated process.
+- The group dies with its leader. Once the child exits, the host kills what is
+  left of its group before reaping it, so no descendant keeps the child's grants
+  with nobody watching, and none holds a pipe the guest is reading open.
 - `exit-status` takes Unix's shape, a `u8`, since Windows runs only under WSL2.
   `timed-out` is distinct from `signaled(9)`.
 - `cwd` is its own parameter because a record cannot hold a `borrow`. With

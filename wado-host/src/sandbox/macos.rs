@@ -103,7 +103,7 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
 }
 
 /// The real path of the file `file` names, as the kernel records it.
-fn descriptor_path(file: &File) -> io::Result<PathBuf> {
+pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
     let mut buf = vec![0u8; libc::PATH_MAX as usize];
     // SAFETY: F_GETPATH writes at most PATH_MAX bytes, NUL-terminated.
     if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETPATH, buf.as_mut_ptr()) } == -1 {
