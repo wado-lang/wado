@@ -17,8 +17,8 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
 use crate::tir::{
-    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext, TemplateId,
-    TypeId, positional_substitution,
+    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
+    TemplateId, TypeId, positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -31,7 +31,7 @@ use super::call::{
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiation};
-use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
+use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
@@ -127,9 +127,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl MethodInfo {
-    /// The receiver's own method `sig`, its types as `instantiated` settled
-    /// them; the fields no signature carries start empty.
-    pub(super) fn of_sig(sig: &MethodSig, instantiated: InstantiatedSig) -> Self {
+    /// The receiver's own method `sig`, its types as `received` settled them;
+    /// the fields no signature carries start empty.
+    pub(super) fn of_sig(sig: &MethodSig, received: ReceivedSig) -> Self {
+        let ReceivedSig {
+            sig: instantiated,
+            own_slots,
+        } = received;
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
         Self {
             method_def: Some(sig.def),
@@ -143,7 +147,7 @@ impl MethodInfo {
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name.clone(),
             is_ref_impl: false,
-            method_type_param_ids: sig.own_type_param_ids(),
+            method_type_param_ids: own_slots,
             method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
@@ -2181,7 +2185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .impl_effect_binding(impl_ref.0, receiver_type_args.unwrap_or(&[]));
-            let instantiated = method_sig.decl.instantiate_bound(
+            let instantiated = method_sig.instantiate_received(
                 &scope.tysys.type_table,
                 &impl_slots,
                 &SlotProjections::default(),
@@ -2230,12 +2234,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|(name, &ty)| ProjectionAnswer::at_any(trait_decl, name.clone(), ty))
                     .collect();
-                let instantiated = default_method.sig.decl.instantiate_slots_with(
+                let instantiated = default_method.sig.instantiate_received(
                     tt,
                     &default_method
                         .sig
                         .call_slots(tt, None, &declaring_args, &[]),
                     &SlotProjections::from_iter([(0, own_assoc)]),
+                    &EffectRows::default(),
                 );
 
                 found_traits.push(TraitMethodMatch {
@@ -3494,7 +3499,7 @@ impl TypeSystem {
             .type_table
             .borrow()
             .impl_effect_binding(impl_ref.0, receiver_type_args);
-        let instantiated = sig.decl.instantiate_bound(
+        let instantiated = sig.instantiate_received(
             &self.type_table,
             &slots,
             &SlotProjections::default(),
@@ -3554,9 +3559,12 @@ impl TypeSystem {
         if sig.self_kind == ast::SelfKind::None {
             return None;
         }
-        let instantiated = sig
-            .decl
-            .instantiate(&self.type_table, receiver_type_args.unwrap_or(&[]));
+        let instantiated = sig.instantiate_received(
+            &self.type_table,
+            &positional_substitution(receiver_type_args.unwrap_or(&[])),
+            &SlotProjections::default(),
+            &EffectRows::default(),
+        );
         Some(MethodInfo::of_sig(sig, instantiated))
     }
 
