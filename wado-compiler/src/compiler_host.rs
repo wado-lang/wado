@@ -488,7 +488,6 @@ pub trait SpanEmitter {
     fn debug(&self, message: &str);
 }
 
-/// Run `f` inside the span `name`.
 pub fn in_span<T>(profiler: &dyn SpanEmitter, name: &str, f: impl FnOnce() -> T) -> T {
     profiler.span_start(name);
     let result = f();

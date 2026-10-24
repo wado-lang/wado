@@ -17,6 +17,8 @@ use std::collections::VecDeque;
 
 /// Dense function ids (position in `project.functions`) plus call edges both
 /// ways: the reverse edges drive the worklist, the forward ones the components.
+/// A function taken by name as a value counts as called: the body minting the
+/// value reads its summary as a call does, so its change must reach that body.
 pub struct CallGraph {
     index: FuncIndex,
     /// `callers[callee]` lists every function that calls `callee`.
@@ -25,7 +27,6 @@ pub struct CallGraph {
     callees: Vec<Vec<u32>>,
 }
 
-/// The ids of the functions with a body.
 pub fn body_ids(project: &FlatPackage) -> impl Iterator<Item = u32> + '_ {
     (0..)
         .zip(&project.functions)
@@ -173,8 +174,17 @@ struct CalleeCollector<'a> {
 
 impl TirRefVisitor for CalleeCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Call { func, .. } = &expr.kind
-            && let Some(id) = self.index.id(&func.module_source, &func.name)
+        let named = match &expr.kind {
+            TirExprKind::Call { func, .. } => Some((&func.module_source, &func.name)),
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => Some((module_source, name)),
+            _ => None,
+        };
+        if let Some((module_source, name)) = named
+            && let Some(id) = self.index.id(module_source, name)
         {
             self.callees.push(id);
         }

@@ -683,9 +683,11 @@ impl Contributions {
     }
 }
 
-/// Its own module so that the rows stay private to it: a later round re-walks
-/// only the bodies [`StoresOracle::read_rows`] names, which holds only while
-/// every read of a row goes through [`StoresOracle::rows`].
+/// Its own module so that the rows stay private to it. A walk reads the rows
+/// and the facts of the functions the call graph links its body to; the graph
+/// re-walks it when those facts move, and a later round when it read a row,
+/// which [`StoresOracle::read_rows`] knows only while every read goes through
+/// [`StoresOracle::rows`].
 mod oracle {
     use std::cell::Cell;
 
@@ -724,7 +726,6 @@ mod oracle {
             self.rows
         }
 
-        /// Whether the walk read a row.
         pub(super) fn read_rows(&self) -> bool {
             self.read_rows.get()
         }
