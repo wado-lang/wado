@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792842570630,
+  "lastUpdate": 1792855028898,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70213,6 +70213,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96c011217b24a1f61b92662e5fa716691699158d",
+          "message": "Merge pull request #2438 from wado-lang/ccr-bf269f57-0gkwrh\n\nfeat(cm): import a component interface by its full name, and bind CM functions by declaration",
+          "timestamp": "2026-10-24T23:56:28+09:00",
+          "tree_id": "33202416649c826d8ff9ac617d502883e652f8a7",
+          "url": "https://github.com/wado-lang/wado/commit/96c011217b24a1f61b92662e5fa716691699158d"
+        },
+        "date": 1792855027903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
             "unit": "bytes"
           }
         ]
