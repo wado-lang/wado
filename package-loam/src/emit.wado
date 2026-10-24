@@ -363,8 +363,8 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Concat", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired",
-    "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "concat_columns", "extent_mismatch",
+    "Attention", "Backend", "BinaryOp", "Columns", "Concat", "Epilogue", "Expected", "Expr", "LoadError", "Merged",
+    "Paired", "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch",
     "extents_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent",
     "unmet",
 ];
@@ -523,11 +523,11 @@ fn emit_prepared_fields(
             let verb = if converted { "prepare_rhs_paired" } else { "keep_rhs_paired" };
             `backend.${verb}(${host}, ${hosts[second]})`;
         } else if let Some(parts) = together.concat.get(vi.name) {
-            let mut joined = host;
+            let mut joined = `Columns::of(${host})`;
             for let part of parts[1..<parts.len()].to_list() {
-                joined = `&concat_columns(${joined}, ${hosts[part]})`;
+                joined = `${joined}.then(${hosts[part]})`;
             }
-            `backend.${if converted { "prepare_rhs" } else { "keep_rhs" }}(${joined})`;
+            `backend.${if converted { "prepare_rhs" } else { "keep_rhs" }}(&${joined}.joined())`;
         } else {
             preparation(checked, held, &vi.name, host, weight_holding(rhs, &vi.name));
         };

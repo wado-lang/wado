@@ -125,7 +125,9 @@ export fn run() with Stdout {
 
 test "three products of one normalized input are one product, its normalization their prologue, and compute what they compute apart, bit for bit" {
     let source = projected_source(true);
-    assert source.contains("backend.keep_rhs(&concat_columns(&concat_columns(");
+    assert source.contains("backend.keep_rhs(&Columns::of(");
+    // Two parts after the first, in `Weights::prepare` and `Prepared::embedded`.
+    assert source.split(".then(").count() == 5;
     assert source.contains("backend.matmul_rhs_from(Prologue {");
     assert source.split("matmul_rhs").count() == 2;
     let fused = projected_bits(true);

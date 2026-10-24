@@ -940,24 +940,48 @@ pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Ten
 pub struct Concat<A, B> {
 }
 
-/// `a`'s columns, then `b`'s, as `Concat` says.
-pub fn concat_columns<E, K, A, B>(a: &Tensor<E, [K, A]>, b: &Tensor<E, [K, B]>) -> Tensor<E, [K, Concat<A, B>]>
-    contract a.extents[0] == b.extents[0]
-{
-    let [k, n, m] = [a.extents[0], a.extents[1], b.extents[1]];
-    let mut data = List::<E>::with_capacity(k * (n + m));
-    for let r of 0..<k {
-        for let j of 0..<n {
-            data.push(a.data[r * n + j]);
-        }
-        for let j of 0..<m {
-            data.push(b.data[r * m + j]);
-        }
+/// Matrices of `K` rows to join by their columns, `N` naming the columns as
+/// nested `Concat`s do. They are read only when joined, so each is copied once.
+pub struct Columns<E, K, N> {
+    rows: i32,
+    parts: List<&List<E>>,
+    widths: List<i32>,
+}
+
+impl<E, K, N> Columns<E, K, N> {
+    /// `a`'s columns, for `then` to place others after.
+    pub fn of(a: &Tensor<E, [K, N]>) -> Columns<E, K, N> {
+        return Columns { rows: a.extents[0], parts: [&a.data], widths: [a.extents[1]] };
     }
-    return Tensor {
-        data,
-        extents: [k, n + m],
-    };
+
+    /// These columns, then `b`'s.
+    pub fn then<B>(&self, b: &Tensor<E, [K, B]>) -> Columns<E, K, Concat<N, B>>
+        contract b.extents[0] == self.rows
+    {
+        let mut parts = self.parts;
+        parts.push(&b.data);
+        let mut widths = self.widths;
+        widths.push(b.extents[1]);
+        return Columns { rows: self.rows, parts, widths };
+    }
+
+    /// The matrix whose rows hold each part's row in turn.
+    pub fn joined(&self) -> Tensor<E, [K, N]> {
+        let columns = self.widths.into_iter().fold(0, |sum, w| sum + w);
+        let mut data = List::<E>::with_capacity(self.rows * columns);
+        for let r of 0..<self.rows {
+            for let [p, part] of self.parts.into_iter().enumerate() {
+                let width = self.widths[p];
+                for let j of 0..<width {
+                    data.push(part[r * width + j]);
+                }
+            }
+        }
+        return Tensor {
+            data,
+            extents: [self.rows, columns],
+        };
+    }
 }
 
 /// The left operand `a` computes, as the kernel the plan would otherwise have

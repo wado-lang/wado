@@ -1,6 +1,8 @@
 use {
     Backend,
     BinaryOp,
+    Columns,
+    Concat,
     Cpu,
     Epilogue,
     Expr,
@@ -365,6 +367,15 @@ test "a paired product joins the products by both matrices, each operand where t
     // a·b is [[1, 2], [3, 4]] and a·c is [[4, 7], [10, 15]].
     assert got.extents == [1, 2, 2] as List<i32>;
     assert got.data == [4.5, 14.5, 30.5, 60.5] as List<f32>;
+}
+
+test "matrices joined by their columns hold each row's columns of each in turn" {
+    let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
+    let b: Tensor<f32, [Row, Inner]> = tensor([2, 2], [3.0, 4.0, 5.0, 6.0]);
+    let c: Tensor<f32, [Row, Col]> = tensor([2, 1], [7.0, 8.0]);
+    let joined: Tensor<f32, [Row, Concat<Concat<Col, Inner>, Col>]> = Columns::of(&a).then(&b).then(&c).joined();
+    assert joined.extents == [2, 4] as List<i32>;
+    assert joined.data == [1.0, 3.0, 4.0, 7.0, 2.0, 5.0, 6.0, 8.0] as List<f32>;
 }
 
 test "matmul_shared multiplies every batch element by one matrix" {
