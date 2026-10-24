@@ -2546,13 +2546,6 @@ fn type_arg_at<'a>(args: &'a [FqTypeName], path: &[usize]) -> Option<&'a FqTypeN
 }
 
 impl SemEffectWalker<'_> {
-    /// The effects a direct `E::op()` call requires. A bare interface-operation
-    /// call resolves to a `ModuleSource::Local(E)` free-call `func_ref` that
-    /// carries no declared effects, so without this it would slip through the
-    /// checker unflagged. For a host/WASI effect the requirement is the effect
-    /// itself; for a CM-component-imported interface it is the reconstructed
-    /// host-leaf effect set — empty for a purely-computational component, so its
-    /// operations need no `with`. Returns empty for a non-effect-op callee.
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
         binding_granted_effects(self.annotations, self.index, binding)
     }

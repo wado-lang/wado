@@ -247,7 +247,7 @@ pub struct DispatchPlan {
     /// boundary. A handler that leaves one out keeps the wrapper's routing
     /// rather than falling to a local default, which would shadow the real
     /// implementation on the other side.
-    pub open_boundary_ops: IndexSet<String>,
+    pub open_boundary_ops: IndexSet<DefId>,
 }
 
 /// The label dispatch infrastructure is named after: `Stream` declared in
@@ -506,11 +506,11 @@ fn synthesize_dispatch_wrappers(
         .borrow()
         .defs()
         .ast_id(effect.def());
+    let registry = &project.cm_interface_registry;
     let open_and_registered: Vec<bool> = plan
         .operations
         .iter()
         .map(|op| {
-            let registry = &project.cm_interface_registry;
             is_open
                 && registry
                     .operation_key(declared_at, op.cm_name.as_deref(), &op.name)
@@ -522,7 +522,7 @@ fn synthesize_dispatch_wrappers(
         .iter()
         .zip(&open_and_registered)
         .filter(|(_, is_open_import)| **is_open_import)
-        .map(|(op, _)| op.name.clone())
+        .map(|(op, _)| op.def)
         .collect();
     let entry_module = project
         .tir_modules
@@ -1662,7 +1662,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
             } else if impl_info.rest.is_none()
                 && op.has_default
-                && !plan.open_boundary_ops.contains(&op.name)
+                && !plan.open_boundary_ops.contains(&op.def)
             {
                 // No rest clause, and the interface said what the operation
                 // does unhandled. `..trap` above wins over that — a mock means
@@ -2450,8 +2450,8 @@ fn build_forward_closure(
 
 /// Rewrite every effect-operation call site to route through a dispatch wrapper.
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
-/// elaborator emits: a `Call` in `ModuleSource::Effect` for
-/// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
+/// elaborator emits: a `Call` naming its operation (`TemplateId::Operation`)
+/// for `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
 /// op. Calls inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
@@ -2522,8 +2522,8 @@ fn build_wrapper_indexes(
                 // user-side calls (no canonical attribute → no
                 // elaborator-side `cm_name` tag), so skip them.
             } else {
-                // Effect op: route via the `ModuleSource::Effect` call shape
-                // regardless of whether the op carries a CM attribute (the
+                // Effect op: route by its declaration regardless of whether
+                // the op carries a CM attribute (the
                 // WASI effect adapter generation in cm_binding still kicks in
                 // for the wrapper fallback).
                 user_to_wrapper.insert(op.def, wrapper_name.clone());

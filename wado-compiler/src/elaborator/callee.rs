@@ -25,7 +25,7 @@ pub(super) enum CalleeRef {
         module: ModuleSource,
         name: String,
     },
-    /// A callee no declaration names: a probe for a name not yet resolved.
+    /// A callee no declaration names: a builtin probed by its bare name.
     Rendered { module: ModuleSource, name: String },
 }
 
