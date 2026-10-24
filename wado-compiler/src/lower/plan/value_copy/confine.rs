@@ -18,7 +18,7 @@
 use super::analyze::{collect_pattern_bindings, passes_through};
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
-use super::needs_value_copy;
+use super::CopyNeeds;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
@@ -26,7 +26,6 @@ use crate::tir::{
     TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::type_table::TypeTable;
 
 /// Per-parameter confinement bits. A missing entry answers "not confined".
 pub struct ConfinedParams {
@@ -103,6 +102,7 @@ pub fn compute_confined_params(
     builtins: &BuiltinDeclarations,
 ) -> ConfinedParams {
     let type_table = project.type_table.borrow();
+    let needs = CopyNeeds::new(&type_table);
     let kinds = classify_functions(project);
 
     let mut funcs: FuncKeyMap<ParamEscape> = FuncKeyMap::default();
@@ -123,7 +123,7 @@ pub fn compute_confined_params(
             return false;
         };
         let ctx = Ctx {
-            type_table: &type_table,
+            needs: &needs,
             builtins,
             kinds: &kinds,
             funcs: &funcs,
@@ -169,7 +169,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
 }
 
 struct Ctx<'a> {
-    type_table: &'a TypeTable,
+    needs: &'a CopyNeeds<'a>,
     builtins: &'a BuiltinDeclarations,
     kinds: &'a FuncKeyMap<Kind>,
     funcs: &'a FuncKeyMap<ParamEscape>,
@@ -217,7 +217,7 @@ impl Ctx<'_> {
             Kind::ValueCopy => false,
             Kind::Declared => self.builtins.retain_specs(func).any(|r| {
                 r.source == param_index
-                    && (!r.elements || holds_identity(operand.type_id, self.type_table))
+                    && (!r.elements || holds_identity(operand.type_id, self.needs))
             }),
             Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
             Kind::Opaque => true,
@@ -260,7 +260,7 @@ struct SinkWalker<'a> {
 
 impl SinkWalker<'_> {
     fn raise_ret(&mut self, op: &TirExpr) {
-        if carries_identity(self.return_type, self.ctx.type_table) {
+        if carries_identity(self.return_type, self.ctx.needs) {
             let t = taint_of(self.ctx, self.taint, op);
             raise(&t, &mut self.pe.ret);
         }
@@ -274,7 +274,7 @@ impl SinkWalker<'_> {
     /// `op` lands in an owner the body holds. A reference or a plain value
     /// takes nothing over.
     fn raise_taken(&mut self, op: &TirExpr) {
-        if needs_value_copy(op.type_id, self.ctx.type_table) {
+        if self.ctx.needs.of(op.type_id) {
             let t = taint_of(self.ctx, self.taint, op);
             raise(&t, &mut self.pe.taken);
         }
@@ -330,7 +330,7 @@ impl TirRefVisitor for SinkWalker<'_> {
                 self.raise_call_sides(func, &operands);
                 // A call that never returns is a failure path, where a copy
                 // costs nothing that matters.
-                if !self.ctx.type_table.is_never(expr.type_id) {
+                if !self.ctx.needs.type_table.is_never(expr.type_id) {
                     for (i, op) in operands.iter().enumerate() {
                         if !self.ctx.callee_shares(func, i) {
                             self.raise_taken(op);
@@ -462,7 +462,7 @@ fn merge_into(taint: &mut IndexMap<u32, Taint>, local: u32, t: Taint) -> bool {
 }
 
 fn taint_of(ctx: &Ctx, taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
-    if !carries_identity(expr.type_id, ctx.type_table) {
+    if !carries_identity(expr.type_id, ctx.needs) {
         return Taint::default();
     }
     match &expr.kind {
@@ -578,21 +578,21 @@ fn body_defies_model(body: &TirBlock) -> bool {
     s.found
 }
 
-fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
-    needs_value_copy(type_id, type_table)
+fn carries_identity(type_id: TypeId, needs: &CopyNeeds) -> bool {
+    needs.of(type_id)
         || matches!(
-            type_table.get(type_id),
+            needs.type_table.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         )
 }
 
 /// Whether what the reference `type_id` points to hands on an identity: an
 /// array's elements, or any other referent itself. Plain data hands on nothing.
-fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
-    let referent = type_table.peel_refs(type_id);
-    match type_table.get(referent) {
-        ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),
-        _ => carries_identity(referent, type_table),
+fn holds_identity(type_id: TypeId, needs: &CopyNeeds) -> bool {
+    let referent = needs.type_table.peel_refs(type_id);
+    match needs.type_table.get(referent) {
+        ResolvedType::BuiltinArray(element) => carries_identity(*element, needs),
+        _ => carries_identity(referent, needs),
     }
 }
 
