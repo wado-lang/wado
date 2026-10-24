@@ -54,6 +54,7 @@ fn probe() {
             Ok(_) => 0,
             Err(err) => exit_with(&err),
         },
+        #[cfg(target_os = "linux")]
         "setsid" => {
             // The child leads its group, where `setsid` fails unconfined too, so
             // the call is made by a descendant that does not.
@@ -86,7 +87,12 @@ fn probe() {
         "ptrace" => {
             let pid: libc::pid_t = arg.parse().unwrap();
             // SAFETY: plain system call.
-            unsafe { libc::ptrace(libc::PTRACE_ATTACH, pid, 0, 0) as libc::c_int }
+            #[cfg(target_os = "linux")]
+            let ret = unsafe { libc::ptrace(libc::PTRACE_ATTACH, pid, 0, 0) as libc::c_int };
+            // SAFETY: plain system call.
+            #[cfg(target_os = "macos")]
+            let ret = unsafe { libc::ptrace(libc::PT_ATTACHEXC, pid, std::ptr::null_mut(), 0) };
+            ret
         }
         "signal" => {
             let pid: libc::pid_t = arg.parse().unwrap();
@@ -99,6 +105,7 @@ fn probe() {
             // SAFETY: reads one byte into `byte`.
             unsafe { libc::read(fd, (&raw mut byte).cast(), 1) as libc::c_int }
         }
+        #[cfg(target_os = "linux")]
         "io_uring" => {
             // SAFETY: the kernel writes the params it reads.
             let mut params = [0u8; 120];
@@ -280,6 +287,8 @@ fn no_unix_socket_by_path_even_with_the_network() {
     assert_eq!(probe_under(tree.policy(Network::Granted), &act), REFUSED);
 }
 
+/// Seatbelt cannot stop `setsid`, a known gap of the WEP.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_descendant_cannot_leave_the_group() {
     assert_available();
@@ -314,6 +323,7 @@ fn reaches_no_process_outside_the_sandbox() {
     );
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn no_io_uring() {
     assert_available();
@@ -471,13 +481,12 @@ fn a_missing_program_reports_not_found() {
     assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::NotFound);
 }
 
-#[test]
-fn a_program_outside_the_grants_reports_permission_denied() {
+fn spawn_outside_the_grants() -> std::io::Result<super::Spawned> {
     assert_available();
     let tree = Tree::new();
     let outside = write_script(&tree.outside());
     let policy = tree.policy(Network::Denied);
-    let result = spawn(&Command {
+    spawn(&Command {
         program: &outside,
         args: &[],
         env: &[],
@@ -486,9 +495,41 @@ fn a_program_outside_the_grants_reports_permission_denied() {
         stdout: Stdio::Null,
         stderr: Stdio::Null,
         policy: &policy,
-    });
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_program_outside_the_grants_reports_permission_denied() {
     assert_eq!(
-        result.err().unwrap().kind(),
+        spawn_outside_the_grants().err().unwrap().kind(),
         std::io::ErrorKind::PermissionDenied
     );
+}
+
+/// `sandbox-exec` starts and then fails to execute the program, a known gap
+/// of the WEP.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_program_outside_the_grants_never_runs() {
+    let spawned = spawn_outside_the_grants().unwrap();
+    assert_ne!(spawned.child.wait().unwrap(), OK);
+}
+
+#[test]
+fn a_grant_confines_to_exactly_its_path_whatever_it_holds() {
+    assert_available();
+    let root = tempfile::tempdir().unwrap();
+    let granted = root.path().join(r#"a"b\c)d"#);
+    let sibling = root.path().join(r#"a"b\c)d-sibling"#);
+    for dir in [&granted, &sibling] {
+        fs::create_dir(dir).unwrap();
+        fs::write(dir.join("f.txt"), "f").unwrap();
+    }
+    let mut policy = Policy::new(Network::Denied);
+    policy.grant_dir(granted.clone(), Arc::new(File::open(&granted).unwrap()));
+    // The names hold no `'`, so single quotes pass them to `cat` as written.
+    let read = |dir: &Path| sh(&policy, &format!("cat '{}'", dir.join("f.txt").display()));
+    assert_eq!(read(&granted), OK);
+    assert_ne!(read(&sibling), OK);
 }
