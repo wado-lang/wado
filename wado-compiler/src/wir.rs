@@ -53,7 +53,7 @@ pub enum ImportKind {
     /// like a host interface, then composes the dependency in with `wasm-compose`.
     Component,
     /// A world-level function imported from a CM component dependency (Phase 9).
-    /// `fq` holds the bare (Wado) function name. Codegen imports it as a
+    /// `fq` holds its plain CM name. Codegen imports it as a
     /// top-level `func`, not an instance; `wasm-compose` wires it by CM name.
     WorldFunction,
 }

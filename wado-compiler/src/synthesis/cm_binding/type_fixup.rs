@@ -7,12 +7,13 @@ use std::rc::Rc;
 use crate::ast::{CmImport, Type};
 use crate::call_args::CallArgs;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, cm_function_key};
+use crate::defs::{DefId, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::DeclaredHead;
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirModule, TirStmt, TirStmtKind, TypeId,
+    CallArg, FunctionRef, ResolvedType, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirModule, TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
@@ -475,48 +476,51 @@ pub(super) struct CmCallSites<'a> {
     pub(super) registry: &'a CmInterfaceRegistry,
     /// The key each operation of an interface or resource binds.
     operation_keys: IndexMap<(DeclaredHead, String), String>,
-    /// The interface or resource each key's operation belongs to.
-    owners: IndexMap<String, DeclaredHead>,
+    /// The interfaces and resources whose operations bind each key.
+    owners: IndexMap<String, IndexSet<DeclaredHead>>,
+    /// The key each bodyless world-import function binds.
+    world_imports: IndexMap<DefId, String>,
 }
 
 impl<'a> CmCallSites<'a> {
     pub(super) fn new(
         registry: &'a CmInterfaceRegistry,
         modules: &IndexMap<ModuleSource, TirModule>,
+        defs: &DefTable,
     ) -> Self {
         let mut operation_keys = IndexMap::default();
-        let mut owners = IndexMap::default();
+        let mut owners: IndexMap<String, IndexSet<DeclaredHead>> = IndexMap::default();
         let declarations = modules.values().flat_map(|module| {
             let effects = module.effects.iter().map(|e| (&e.head, &e.operations));
             effects.chain(module.resources.iter().map(|r| (&r.head, &r.operations)))
         });
         for (head, operations) in declarations {
+            let owner = defs.ast_id(head.def());
             for op in operations {
-                let Some(key) =
-                    registry.operation_key(head.name(), op.cm_name.as_deref(), &op.name)
+                let Some(key) = registry.operation_key(owner, op.cm_name.as_deref(), &op.name)
                 else {
                     continue;
                 };
-                // Of two declarations binding one function, the binding
-                // module's own owns it.
-                let owner = owners.entry(key.clone()).or_insert_with(|| head.clone());
-                if !is_binding(owner) && is_binding(head) {
-                    *owner = head.clone();
-                }
+                owners.entry(key.clone()).or_default().insert(head.clone());
                 operation_keys.insert((head.clone(), op.name.clone()), key);
             }
         }
+        let world_imports = defs
+            .iter()
+            .filter_map(|def| Some((def, registry.world_import_key(defs.ast_id(def))?.to_owned())))
+            .collect();
         Self {
             registry,
             operation_keys,
             owners,
+            world_imports,
         }
     }
 
-    /// The interface or resource whose operation binds `key`; `None` for a
-    /// world import, which belongs to none.
-    pub(super) fn owner(&self, key: &str) -> Option<&DeclaredHead> {
-        self.owners.get(key)
+    /// The interfaces and resources whose operations bind `key`: none for a
+    /// world import, which belongs to no interface.
+    pub(super) fn owners(&self, key: &str) -> impl Iterator<Item = &DeclaredHead> {
+        self.owners.get(key).into_iter().flatten()
     }
 
     /// The key of the CM function `expr` calls, bound or not.
@@ -524,11 +528,13 @@ impl<'a> CmCallSites<'a> {
         let TirExprKind::Call { func, .. } = &expr.kind else {
             return None;
         };
-        // The same-source check keeps a same-named local function from being
-        // taken for a world import.
-        if self.registry.world_import_source(&func.name) == Some(&func.module_source) {
-            let key = self.registry.world_import_key(&func.name)?;
-            return Some((key.to_string(), CmCallKind::Function));
+        if let Some(key) = func
+            .template
+            .as_ref()
+            .and_then(TemplateId::def)
+            .and_then(|def| self.world_imports.get(&def))
+        {
+            return Some((key.clone(), CmCallKind::Function));
         }
         if let Some(head) = func.module_source.effect_interface() {
             let key = self
@@ -547,10 +553,6 @@ impl<'a> CmCallSites<'a> {
         };
         Some((key, kind))
     }
-}
-
-fn is_binding(head: &DeclaredHead) -> bool {
-    matches!(head.module(), ModuleSource::Binding { .. })
 }
 
 pub(super) fn collect_effect_calls_in_block(

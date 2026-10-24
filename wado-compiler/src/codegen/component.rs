@@ -310,7 +310,7 @@ pub fn build_component(
         }
     }
     // World functions (Phase 9) lower into the same `wasi` instance.
-    for (_, func) in project.cm_interface_registry.world_import_functions() {
+    for func in project.cm_interface_registry.world_import_functions() {
         let local_name = func.local_alias_name();
         if ctx.has_core_func(&local_name) {
             available_wasi_funcs.insert(local_name);
@@ -3909,19 +3909,12 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    // World functions (Phase 9) compose by their CM (WIT) name, but the plan
-    // keys them by the Wado (snake) name, so translate via the registry —
-    // else a multi-word `render-html` never matches its plan entry `render_html`.
-    let planned_world_funcs: IndexSet<&str> = import_plan
+    // World functions (Phase 9) compose by their CM (WIT) name, which the plan
+    // keys them by.
+    let world_func_cm_names: IndexSet<String> = import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::WorldFunction)
-        .map(|e| e.fq.as_str())
-        .collect();
-    let world_func_cm_names: IndexSet<String> = project
-        .cm_interface_registry
-        .world_import_functions()
-        .filter(|(name, _)| planned_world_funcs.contains(name))
-        .map(|(_, f)| f.wasi_func_name.clone())
+        .map(|e| e.fq.clone())
         .collect();
     if dependency_fqs.is_empty() && world_func_cm_names.is_empty() && providers.is_empty() {
         return Ok(program_bytes);
@@ -4097,13 +4090,13 @@ fn generate_cm_world_func_imports(
     let world_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
-        .map(|(_, f)| f.clone())
+        .cloned()
         .collect();
     let mut type_gen = CmTypeGen::new();
     for func in &world_funcs {
         if !import_plan
             .iter()
-            .any(|e| e.kind == ImportKind::WorldFunction && e.fq == func.method_name)
+            .any(|e| e.kind == ImportKind::WorldFunction && e.fq == func.cm_identifier())
         {
             continue;
         }
@@ -4181,7 +4174,7 @@ fn lower_wasi_functions(
     let world_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
-        .map(|(_, f)| f.clone())
+        .cloned()
         .collect();
     for func in &world_funcs {
         let local_name = func.local_alias_name();

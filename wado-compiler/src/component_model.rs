@@ -719,10 +719,16 @@ impl CmFunctionInfo {
     /// The Wado name that binds it: `Interface::operation`, or a world import's
     /// bare name.
     fn wado_name(&self) -> String {
-        if self.interface_name.is_empty() {
+        if self.is_world_function() {
             return self.method_name.clone();
         }
         DeclPath::method_of(&DeclName::new(&self.interface_name), &self.method_name).into_string()
+    }
+
+    /// Whether the component's world imports it directly, under no interface.
+    #[must_use]
+    pub fn is_world_function(&self) -> bool {
+        self.interface_path.is_empty()
     }
 
     /// The CM function this binds, as [`CmImport::full_path`] spells it (a world
@@ -730,7 +736,7 @@ impl CmFunctionInfo {
     /// registry and in `NirPackage::used_wasi_functions`.
     #[must_use]
     pub fn cm_identifier(&self) -> String {
-        if self.interface_path.is_empty() {
+        if self.is_world_function() {
             return self.wasi_func_name.clone();
         }
         cm_function_path(&self.interface_path, &self.wasi_func_name)
@@ -968,9 +974,9 @@ pub struct CmInterfaceRegistry {
     /// Using `BTreeMap` for deterministic ordering
     interfaces: BTreeMap<String, Vec<CmFunctionInfo>>,
 
-    /// A `--lib` package's guest effect, by name -> the interface minted for
-    /// it. The name is its identity: the interface is made from it.
-    guest_effects: IndexMap<String, CmImport>,
+    /// A `--lib` package's guest effect, by its declaration -> the interface
+    /// minted for it.
+    guest_effects: IndexMap<AstId, CmImport>,
 
     /// Newtypes collected from WASI modules (e.g., Instant -> u64).
     /// Key: `(source_interface, wado_name)` where `source_interface` is the
@@ -1032,14 +1038,9 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// World-level function imports (Phase 9), by bare Wado name -> their key
-    /// in `functions`.
-    world_import_functions: IndexMap<String, String>,
-
-    /// World-level function import name → the dependency `ModuleSource` that
-    /// exports it (the composition target, and the identity that distinguishes
-    /// it from a same-named local function).
-    world_import_sources: IndexMap<String, ModuleSource>,
+    /// World-level function imports (Phase 9), by the bodyless function
+    /// declaring each -> its key in `functions`.
+    world_imports: IndexMap<AstId, String>,
 
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
@@ -2297,6 +2298,7 @@ impl CmInterfaceRegistry {
                 // `AsyncCall<T>` wrapper user code keeps seeing.
                 let return_type = unwrap_async_call_if_async(func.is_async, &func.return_type);
                 self.register_world_import(
+                    func.id,
                     &func.name,
                     cm_func_name,
                     func.is_async,
@@ -2519,7 +2521,6 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &ast::Module,
         interface_fqs: &[String],
-        world_func_names: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) -> Result<(), String> {
@@ -2532,10 +2533,6 @@ impl CmInterfaceRegistry {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
-        }
-        for name in world_func_names {
-            self.world_import_sources
-                .insert(name.clone(), module_source.clone());
         }
         Ok(())
     }
@@ -2627,8 +2624,7 @@ impl CmInterfaceRegistry {
                 version: base.version.clone(),
                 function: None,
             };
-            self.guest_effects
-                .insert(effect.name.clone(), cm_import.clone());
+            self.guest_effects.insert(effect.id, cm_import.clone());
             for method in &effect.methods {
                 let params: Vec<(String, String, Type)> = method
                     .params
@@ -3567,11 +3563,12 @@ impl CmInterfaceRegistry {
         Ok(true)
     }
 
-    /// Register a world-level function import (Phase 9), keyed by its bare name
-    /// (empty interface). Stored like an interface method so the adapter
-    /// pipeline reuses the interface-method path.
+    /// Register the world-level function import (Phase 9) the bodyless function
+    /// `decl` declares. Stored like an interface method so the adapter pipeline
+    /// reuses the interface-method path.
     pub fn register_world_import(
         &mut self,
+        decl: AstId,
         func_name: &str,
         cm_func_name: &str,
         is_async: bool,
@@ -3592,30 +3589,23 @@ impl CmInterfaceRegistry {
             callbacks,
             return_type,
         };
-        if self.bind(&func_info)? {
-            self.world_import_functions
-                .insert(func_name.to_string(), func_info.cm_identifier());
-        }
+        self.bind(&func_info)?;
+        self.world_imports.insert(decl, func_info.cm_identifier());
         Ok(())
     }
 
-    /// The key of the world-level function import (Phase 9) bare-named `name`.
+    /// The key of the world-level function import (Phase 9) the function
+    /// `decl` declares.
     #[must_use]
-    pub fn world_import_key(&self, name: &str) -> Option<&str> {
-        self.world_import_functions.get(name).map(String::as_str)
+    pub fn world_import_key(&self, decl: AstId) -> Option<&str> {
+        self.world_imports.get(&decl).map(String::as_str)
     }
 
-    /// Every world-level function import, as `(bare_name, info)`.
-    pub fn world_import_functions(&self) -> impl Iterator<Item = (&str, &CmFunctionInfo)> + '_ {
-        self.world_import_functions
-            .iter()
-            .map(|(name, key)| (name.as_str(), &self.functions[key]))
-    }
-
-    /// The dependency `ModuleSource` exporting world-level function `name`.
-    #[must_use]
-    pub fn world_import_source(&self, name: &str) -> Option<&ModuleSource> {
-        self.world_import_sources.get(name)
+    /// Every world-level function import (Phase 9).
+    pub fn world_import_functions(&self) -> impl Iterator<Item = &CmFunctionInfo> + '_ {
+        self.functions
+            .values()
+            .filter(|func| func.is_world_function())
     }
 
     /// The bound CM function whose [`CmFunctionInfo::cm_identifier`] is `key`.
@@ -3623,20 +3613,20 @@ impl CmInterfaceRegistry {
         self.functions.get(key)
     }
 
-    /// The key of the function that the operation `operation` of interface or
-    /// resource `owner` binds, from its `#[cm]` payload `cm_name`. A guest
-    /// effect's operation carries none: its interface is minted from `owner`'s
-    /// name.
+    /// The key of the function that the operation `operation` of the interface
+    /// or resource declared at `owner` binds, from its `#[cm]` payload
+    /// `cm_name`. A guest effect's operation carries none: its interface is the
+    /// one minted for `owner`.
     #[must_use]
     pub fn operation_key(
         &self,
-        owner: &str,
+        owner: AstId,
         cm_name: Option<&str>,
         operation: &str,
     ) -> Option<String> {
         let cm_import = match cm_name {
             Some(cm_name) => CmImport::parse(cm_name)?,
-            None => self.guest_effects.get(owner)?.clone(),
+            None => self.guest_effects.get(&owner)?.clone(),
         };
         Some(cm_function_key(&cm_import, operation))
     }

@@ -2732,34 +2732,20 @@ pub(crate) fn fold_component_interfaces(
         let interface_fqs: Vec<String> = exported_interfaces(module)
             .map(|(_, cm)| cm.interface_path())
             .collect();
-        let world_func_names = component_world_func_names(module);
-        if !interface_fqs.is_empty() || !world_func_names.is_empty() {
+        let imports_world_function = module.items.iter().any(
+            |item| matches!(item, Item::Function(func) if world_import_of(&func.attrs).is_some()),
+        );
+        if !interface_fqs.is_empty() || imports_world_function {
             let host_leaf_imports = module_host_leaf_imports(module);
             Arc::make_mut(registry).register_component_decls(
                 module,
                 &interface_fqs,
-                &world_func_names,
                 &host_leaf_imports,
                 ms,
             )?;
         }
     }
     Ok(())
-}
-
-/// Bare names of the world-level function imports (Phase 9) a component-binding
-/// module declares.
-fn component_world_func_names(module: &Module) -> Vec<String> {
-    module
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Function(func) if world_import_of(&func.attrs).is_some() => {
-                Some(func.name.clone())
-            }
-            _ => None,
-        })
-        .collect()
 }
 
 /// The first `_` placeholder `ty` writes, at any depth.

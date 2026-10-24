@@ -500,6 +500,11 @@ fn synthesize_dispatch_wrappers(
     // registered as one: a non-lib build registers no guest imports, so its
     // wrappers keep trapping rather than emit an unresolvable import call.
     let is_open = open_effects.contains(effect);
+    let declared_at = project.tir_modules[entry_source]
+        .type_table
+        .borrow()
+        .defs()
+        .ast_id(effect.def());
     let open_and_registered: Vec<bool> = plan
         .operations
         .iter()
@@ -507,7 +512,7 @@ fn synthesize_dispatch_wrappers(
             let registry = &project.cm_interface_registry;
             is_open
                 && registry
-                    .operation_key(effect.name(), op.cm_name.as_deref(), &op.name)
+                    .operation_key(declared_at, op.cm_name.as_deref(), &op.name)
                     .is_some_and(|key| registry.get_function(&key).is_some())
         })
         .collect();

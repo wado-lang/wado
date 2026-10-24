@@ -491,7 +491,7 @@ pub(super) fn synthesize_adapter(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
-    effect: Option<EffectRef>,
+    effects: Vec<EffectRef>,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
     let lower_ctx = LowerContext {
@@ -561,7 +561,7 @@ pub(super) fn synthesize_adapter(
         builder.next_local,
         builder.locals,
     );
-    binding.borrow_mut().effects.extend(effect);
+    binding.borrow_mut().effects.extend(effects);
     AdapterArtifacts {
         adapter: binding,
         auxiliary: builder.auxiliary,

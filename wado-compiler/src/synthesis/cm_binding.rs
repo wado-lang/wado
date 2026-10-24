@@ -439,7 +439,12 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 fn generate_import_adapters(project: &mut Package) -> Callbacks {
     let entry_source = project.entry_module_source.clone();
     let registry = Arc::clone(&project.cm_interface_registry);
-    let call_sites = CmCallSites::new(&registry, &project.tir_modules);
+    let entry_type_table = entry_type_table(project);
+    let call_sites = CmCallSites::new(
+        &registry,
+        &project.tir_modules,
+        entry_type_table.borrow().defs(),
+    );
 
     let mut seen_effects: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
@@ -455,20 +460,21 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
         return callbacks;
     }
 
-    let entry_type_table = entry_type_table(project);
     let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for key in &seen_effects {
         let func_info = registry
             .get_function(key)
             .expect("the collector records only a registered CM function");
-        // An operation on `E`, effect or resource alike, requires `with E`; a
-        // world function belongs to no interface and requires nothing.
-        let effect = call_sites
-            .owner(key)
-            .map(|owner| EffectRef::Concrete(owner.clone()));
+        // An operation on `E`, effect or resource alike, requires `with E`, for
+        // each `E` binding the function; a world function belongs to no
+        // interface and requires nothing.
+        let effects: Vec<EffectRef> = call_sites
+            .owners(key)
+            .map(|owner| EffectRef::Concrete(owner.clone()))
+            .collect();
         assert!(
-            effect.is_some() || func_info.interface_path.is_empty(),
+            effects.is_empty() == func_info.is_world_function(),
             "an interface function's effect is declared"
         );
         let produced = synthesize_adapter(
@@ -476,7 +482,7 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
             &registry,
             &entry_type_table,
             &project.interner,
-            effect,
+            effects,
             &entry_source,
         );
         auxiliary_functions.extend(produced.auxiliary);

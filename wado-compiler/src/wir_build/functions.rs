@@ -229,7 +229,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     // lowered type as an interface method, so the adapter's `CmRawCall` resolves.
     let world_funcs: Vec<CmFunctionInfo> = cm_interface_registry
         .world_import_functions()
-        .map(|(_, f)| f.clone())
+        .cloned()
         .collect();
     for func in &world_funcs {
         let local_name = func.local_alias_name();
