@@ -22,7 +22,19 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Backend, BinaryOp, Cpu, Epilogue, Tensor, UnaryOp, WebGpuBackend, element_count, operand } from "lib:loam";
+use {
+    Backend,
+    BinaryOp,
+    Cpu,
+    Epilogue,
+    Prologue,
+    Tensor,
+    UnaryOp,
+    WebGpuBackend,
+    constant,
+    element_count,
+    operand,
+} from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 use { Pick, Picked, Weights, forward } from "./webgpu.onnxtext"
     with {
@@ -221,6 +233,62 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     narrow_column_counts();
     half_weights();
     paired_products();
+    prologue_products();
+}
+
+/// Products of an RMS normalization each workgroup computes itself, as a
+/// step's one row and a few rows of a batch make them, paired and alone, and
+/// for a tile of rows, which the device normalizes in a kernel of its own.
+fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let x = operand(0);
+    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
+        UnaryOp::Sqrt,
+    );
+    let norm = x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+    let scale = tensor::<[Long]>([640], 42);
+    let b = halved(tensor::<[Long, Col]>([640, 256], 43));
+    let c = halved(tensor::<[Long, Col]>([640, 256], 44));
+    // silu(operand(0)) * operand(1)
+    let gated = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
+    let cases = [
+        ["step", tensor::<[Row, Inner, Long]>([1, 1, 640], 45)],
+        ["few", tensor::<[Row, Inner, Long]>([2, 3, 640], 46)],
+        ["tile", tensor::<[Row, Inner, Long]>([1, 20, 640], 47)],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>]>;
+    for let [name, a] of cases {
+        let mut cpu = Cpu {};
+        let cpu_a = Prologue {
+            operands: [
+                cpu.read(&a),
+                cpu.read_suffix::<[Row, Inner], [Long]>(&scale),
+            ],
+            op: norm,
+        };
+        let on_cpu = cpu.matmul_rhs_paired_from(cpu_a, &cpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [],
+            op: gated,
+        });
+        let alone_cpu = cpu.matmul_rhs_from(cpu_a, &cpu.keep_rhs(&b), null);
+        let uploaded = gpu.upload(&a);
+        let kept = gpu.keep(&scale);
+        let gpu_a = Prologue {
+            operands: [
+                gpu.read(&uploaded),
+                gpu.read_suffix::<[Row, Inner], [Long]>(&kept),
+            ],
+            op: norm,
+        };
+        let on_gpu = gpu.matmul_rhs_paired_from(gpu_a, &gpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [],
+            op: gated,
+        });
+        println(`prologue paired ${name} ${deviation(&gpu.download(&on_gpu).data, &on_cpu.data)}`);
+        let alone_gpu = gpu.matmul_rhs_from(gpu_a, &gpu.keep_rhs(&b), null);
+        println(`prologue ${name} ${deviation(&gpu.download(&alone_gpu).data, &alone_cpu.data)}`);
+    }
 }
 
 /// A gated layer's two products of one input, joined with a third operand, as

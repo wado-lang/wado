@@ -59,6 +59,7 @@ fn gated_source(fuse: bool) -> String {
     let schema = Schema {
         layout: [
             rule("X", ["Batch", "Seq", "Embed"]),
+            rule("W", ["Embed"]),
             rule("G", ["Embed", "Inner"]),
             rule("U", ["Embed", "Inner"]),
             rule("D", ["Inner", "Embed"]),
@@ -80,10 +81,10 @@ export fn run() with Stdout {
 `);
 }
 
-test "a gated layer's two products of one input pair, and compute what they compute apart, bit for bit" {
+test "a gated layer's two products of one normalized input pair, its normalization their prologue, and compute what they compute apart, bit for bit" {
     let source = gated_source(true);
     assert source.contains("backend.keep_rhs_paired(");
-    assert source.contains("backend.matmul_rhs_paired(X, &weights.G, Epilogue");
+    assert source.contains("backend.matmul_rhs_paired_from(Prologue {");
     let fused = gated_bits(true);
     assert fused.split(",").count() == 6;
     assert fused == gated_bits(false);

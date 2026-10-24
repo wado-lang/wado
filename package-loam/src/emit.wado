@@ -19,7 +19,18 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, Plan, Spread, branches, is_alias, plan, reduces_rows, row_fold, selects_floats } from "./plan.wado";
+use {
+    IfBranch,
+    Plan,
+    Spread,
+    branches,
+    branches_of,
+    is_alias,
+    plan,
+    reduces_rows,
+    row_fold,
+    selects_floats,
+} from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
@@ -175,7 +186,7 @@ pub fn emit(
 
     let kept = kept_literals(&literals, checked);
     let decided = plan(graph, checked, fuse);
-    let rhs = rhs_weights(graph, checked, &decided, fuse);
+    let rhs = decided.rhs;
     let paired = paired_weights(graph, checked, &decided, &rhs, &held);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &paired, &placement);
     let symbols = Symbols::of(&carriers, &names);
@@ -348,9 +359,9 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired", "RowOp", "Step",
-    "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end", "input_mismatch",
-    "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
+    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired", "Prologue",
+    "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end",
+    "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -630,28 +641,6 @@ fn weight_type(
     return `${BACKEND_PARAM}::Rhs<${shape.axes[k].name}, ${columns}>`;
 }
 
-/// The initializers of rank 2 that every read takes as a matrix product's right
-/// operand, in one orientation, in the graph and every branch it carries, and
-/// that are not an output. Each maps to whether the product reads it
-/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
-/// in the layout the product reads, which only a product, a product by its
-/// viewed transpose, and a row gather read.
-fn rhs_weights(graph: &Graph, checked: &Checked, decided: &Plan, fuse: bool) -> HashMap<String, bool> {
-    let mut uses = OperandUses {
-        right: HashMap::new(),
-        elsewhere: HashSet::new(),
-    };
-    uses.note(graph, checked, decided, fuse);
-    let mut out = HashMap::<String, bool>::new();
-    for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
-        ) == 2 {
-            out[vi.name] = transposed;
-        }
-    }
-    return out;
-}
-
 /// The weights a backend holds in pairs, each pair's first mapped to its
 /// second: the right operands of two products the plan pairs, each held as
 /// stored, read by its product alone, and of one axis list and element.
@@ -685,87 +674,6 @@ fn paired_weights(
         }
     }
     return paired;
-}
-
-/// How the nodes read each operand: as a product's right operand, transposed
-/// or not, or some other way.
-struct OperandUses {
-    right: HashMap<String, bool>,
-    elsewhere: HashSet<String>,
-}
-
-impl OperandUses {
-    /// The reads of `graph`'s nodes, its outputs, and those of the branches
-    /// they carry, a branch's outputs being values it yields as tensors. A
-    /// tensor read in both orientations is read elsewhere, as no one layout
-    /// serves.
-    ///
-    /// A product by a viewed transpose reads the weight itself, in the
-    /// orientation its rows are stored in, and so does a row gather of it.
-    fn note(&mut self, graph: &Graph, checked: &Checked, decided: &Plan, fuse: bool) {
-        for let vi of &graph.outputs {
-            self.elsewhere.insert(vi.name);
-        }
-        let mut viewed = HashMap::<String, String>::new();
-        for let [at, node] of graph.nodes.into_iter().enumerate() {
-            if decided.lowering(at) matches { Transposed } {
-                viewed[node.outputs[0]] = node.inputs[0];
-            }
-        }
-        for let [at, node] of graph.nodes.into_iter().enumerate() {
-            if viewed.contains_key(node.outputs[0]) {
-                continue;
-            }
-            let orientation = rhs_orientation(&node, &checked.shapes);
-            let gathers = decided.lowering(at) matches { Kernel } && gathers_float_rows(&node, checked);
-            for let [i, input] of node.inputs.into_iter().enumerate() {
-                if i == 1 && let Some(weight) = viewed.get(input) {
-                    self.right_operand(weight, false);
-                } else if i == 1 && let Some(transposed) = orientation {
-                    self.right_operand(input, transposed);
-                } else if i == 0 && gathers {
-                    self.right_operand(input, false);
-                } else {
-                    self.elsewhere.insert(input);
-                }
-            }
-        }
-        for let [branch_graph, branch] of branches_of(graph, checked) {
-            self.note(&branch_graph, &branch, &plan(&branch_graph, &branch, fuse), fuse);
-        }
-    }
-
-    fn right_operand(&mut self, tensor: String, transposed: bool) {
-        if self.right.get(tensor) matches { Some(t) && t != transposed } {
-            self.elsewhere.insert(tensor);
-        }
-        self.right[tensor] = transposed;
-    }
-}
-
-/// Whether `node` gathers whole rows of a float matrix, as an embedding
-/// lookup does.
-fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
-    if node.op != "Gather" {
-        return false;
-    }
-    let data = checked.shapes[node.inputs[0]];
-    return data.rank() == 2
-        && settled(gather_axis(node, data.rank())) == 0
-        && checked.primitives[node.inputs[0]] == "f32";
-}
-
-/// Whether `node` reads its operand 1 as the right operand of a matrix
-/// product `matmul_rhs` serves, and if so whether transposed:
-/// `Gemm`'s, and `MatMul`'s beside a left operand of rank 2 or more.
-fn rhs_orientation(node: &Node, shapes: &HashMap<String, Shape>) -> Option<bool> {
-    if node.op == "Gemm" {
-        return Option::Some(settled(gemm_options(node)).3);
-    }
-    if node.op == "MatMul" && shapes[node.inputs[0]].rank() >= 2 {
-        return Option::Some(false);
-    }
-    return null;
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -865,6 +773,9 @@ struct Operands {
     /// What a kernel `Plan` fuses into the kernel after it computes, not yet
     /// written.
     pending: HashMap<String, Term> = HashMap::new(),
+    /// What a kernel `Plan` takes into the product after it computes, as the
+    /// `Prologue` the product reads its left operand from.
+    prologues: HashMap<String, String> = HashMap::new(),
     /// The weight each `Transposed` lowering's output is the transpose of,
     /// which the product reading it reads as stored.
     transposed: HashMap<String, String> = HashMap::new(),
@@ -1000,6 +911,16 @@ fn symbol_carriers(graph: &Graph, shapes: &HashMap<String, Shape>) -> List<Carri
 }
 
 impl Operands {
+    /// A product's left operand `tensor`: the `Prologue` computing it inside
+    /// the product, and `true`, where the plan took it in so, and its
+    /// reference otherwise.
+    fn left(&self, tensor: &String) -> [String, bool] {
+        return match self.prologues.get(*tensor) {
+            Some(prologue) => [prologue, true],
+            None => [self.reference(tensor), false],
+        };
+    }
+
     fn reference(&self, tensor: &String) -> String {
         let named = self.values.get(*tensor).unwrap();
         return if self.borrowed.contains(*tensor) { named } else { `&${named}` };
@@ -1191,6 +1112,8 @@ fn scope_body(
                 // An alias of a value a later kernel computes stays pending.
                 if let Some(pending) = exprs.pending.get(node.inputs[0]) {
                     exprs.pending[node.outputs[0]] = pending;
+                } else if let Some(prologue) = exprs.prologues.get(node.inputs[0]) {
+                    exprs.prologues[node.outputs[0]] = prologue;
                 } else {
                     exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
                     if exprs.borrowed.contains(node.inputs[0]) {
@@ -1211,6 +1134,10 @@ fn scope_body(
                     continue;
                 }
                 let space = decided.space_of(checked, &output);
+                if decided.is_prologue(&output) {
+                    exprs.prologues[output] = term.prologue(&space);
+                    continue;
+                }
                 body.push(bound_to(&output, term.call(&space, &decided.rows_of(&output), &exprs.paired), names, exprs));
             },
         }
@@ -1797,10 +1724,10 @@ fn node_term(
             let head = `backend.${kernel}(${a}, ${exprs.reference(&weight)}`;
             return Result::Ok(Option::Some(Term::after(Product::of(head), out)));
         }
-        let [a, b, left, right] = binary_call(node, shapes, exprs);
         let head = if exprs.rhs.contains_key(node.inputs[1]) {
-            Product::by_rhs(a, b, node.inputs[1]);
+            Product::by_rhs(exprs.left(&node.inputs[0]), exprs.reference(&node.inputs[1]), node.inputs[1]);
         } else {
+            let [a, b, left, right] = binary_call(node, shapes, exprs);
             Product::of(product_head(&a, &b, &left, &right, &out));
         };
         return Result::Ok(Option::Some(Term::after(head, out)));
@@ -2142,11 +2069,19 @@ struct Product {
 }
 
 /// A product `matmul_rhs` computes: `a` by the weight `weight`, which `b`
-/// refers to.
+/// refers to. Where `from`, `a` is the `Prologue` computing the left operand.
 struct RhsProduct {
     a: String,
+    from: bool,
     b: String,
     weight: String,
+}
+
+impl RhsProduct {
+    /// The call computing this, `kernel` named for a left operand as is.
+    fn kernel(&self, kernel: String) -> String {
+        return if self.from { `backend.${kernel}_from` } else { `backend.${kernel}` };
+    }
 }
 
 impl Product {
@@ -2154,8 +2089,12 @@ impl Product {
         return Product { call, rhs: null };
     }
 
-    fn by_rhs(a: String, b: String, weight: String) -> Product {
-        return Product { call: `backend.matmul_rhs(${a}, ${b}`, rhs: Option::Some(RhsProduct { a, b, weight }) };
+    /// The product by the weight `weight` of the left operand `left` gives,
+    /// as `Operands::left` gives it.
+    fn by_rhs(left: [String, bool], b: String, weight: String) -> Product {
+        let [a, from] = left;
+        let product = RhsProduct { a, from, b, weight };
+        return Product { call: `${product.kernel("matmul_rhs")}(${a}, ${b}`, rhs: Option::Some(product) };
     }
 }
 
@@ -2285,9 +2224,16 @@ impl Term {
         )} }`;
         if heads.len() == 2 {
             let product = first.rhs.unwrap();
-            return `backend.matmul_rhs_paired(${product.a}, ${product.b}, ${epilogue})`;
+            return `${product.kernel("matmul_rhs_paired")}(${product.a}, ${product.b}, ${epilogue})`;
         }
         return `${first.call}, Option::Some(${epilogue}))`;
+    }
+
+    /// This as the `Prologue` a product computes its left operand from, over
+    /// that operand's axes, `space`.
+    fn prologue(&self, space: &Shape) -> String {
+        let reads: List<String> = self.lanes.into_iter().map(|lane| lane_read(&lane, space)).collect();
+        return `Prologue { operands: [${reads.join(", ")}], op: ${expr_source(&self.expr)} }`;
     }
 
     /// The `fused` call computing this over `out`'s axes, every lane a tensor.
@@ -2414,14 +2360,15 @@ fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String)
 /// The first operand of a `Spread`'s product, read before its leading axes were
 /// flattened, and the axes the product computes over.
 struct SpreadOperand {
-    reference: String,
+    /// The operand as `Operands::left` gives it.
+    left: [String, bool],
     shape: Shape,
     product: Shape,
 }
 
 fn spread_product(s: &Spread, shapes: &HashMap<String, Shape>, exprs: &Operands) -> SpreadOperand {
     return SpreadOperand {
-        reference: exprs.reference(&s.operand),
+        left: exprs.left(&s.operand),
         shape: shapes[s.operand],
         product: shapes[s.restored],
     };
@@ -2434,22 +2381,29 @@ fn spread_product(s: &Spread, shapes: &HashMap<String, Shape>, exprs: &Operands)
 fn gemm_term(node: &Node, shapes: &HashMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let [a, left, product_axes] = match spread {
-        Some(s) => [s.reference, s.shape, s.product],
+        Some(s) => [s.left, s.shape, s.product],
         None => {
             let [a, left] = gemm_operand(
                 &exprs.reference(&node.inputs[0]),
                 &shapes.get(node.inputs[0]).unwrap(),
                 trans_a,
             );
-            [a, left, gemm_product(node, shapes)];
+            [
+                [a, false],
+                left,
+                gemm_product(node, shapes),
+            ];
         },
     };
     let b_operand = exprs.reference(&node.inputs[1]);
     let head = if exprs.rhs.contains_key(node.inputs[1]) {
         Product::by_rhs(a, b_operand, node.inputs[1]);
     } else {
+        // The plan takes a prologue in only by a weight held for products.
+        let [reference, from] = a;
+        assert !from;
         let [b, right] = gemm_operand(&b_operand, &shapes.get(node.inputs[1]).unwrap(), trans_b);
-        Product::of(product_head(&a, &b, &left, &right, &product_axes));
+        Product::of(product_head(&reference, &b, &left, &right, &product_axes));
     };
     let mut term = Term::after(head, product_axes);
     if alpha != 1.0 {
@@ -2560,21 +2514,6 @@ fn push_scope_axes(names: &mut List<String>, seen: &mut HashSet<String>, graph: 
     for let [branch_graph, branch] of branches_of(graph, checked) {
         push_scope_axes(names, seen, &branch_graph, &branch);
     }
-}
-
-/// Each `If`'s two branches in `graph`, in order: the graph each holds, and the
-/// scope stage 0 checked it in.
-fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
-    let mut found: List<[Graph, Checked]> = [];
-    for let node of &graph.nodes {
-        if !checked.branches.contains_key(node.outputs[0]) {
-            continue;
-        }
-        for let b of branches(node, checked) {
-            found.push([b.graph, b.checked]);
-        }
-    }
-    return found;
 }
 
 

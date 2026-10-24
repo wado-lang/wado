@@ -62,6 +62,8 @@ pub struct NodeReport {
 pub enum Lowered {
     Kernel,
     Fused,
+    /// Computed as a product kernel reads its left operand.
+    Prologue,
     Folded,
     Alias,
     Branch,
@@ -173,6 +175,10 @@ fn node_report(
             match decided.of(&node.outputs[0]) {
                 Fused(into) => {
                     r.lowering = Lowered::Fused;
+                    r.into = Option::Some(writer(decided, into));
+                },
+                Prologue(into) => {
+                    r.lowering = Lowered::Prologue;
                     r.into = Option::Some(into);
                 },
                 Written(reason) => {
@@ -202,13 +208,27 @@ fn node_report(
 fn taken_in(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
     let mut taken = HashMap::<String, List<String>>::new();
     for let node of &graph.nodes {
-        if let Some(Fused(into)) = decided.decisions.get(node.outputs[0]) {
-            let mut list = taken.get(into).unwrap_or([]);
-            list.push(node.outputs[0]);
-            taken[into] = list;
-        }
+        let into = match decided.decisions.get(node.outputs[0]) {
+            Some(Fused(into)) => writer(decided, into),
+            Some(Prologue(into)) => into,
+            _ => {
+                continue;
+            },
+        };
+        let mut list = taken.get(into).unwrap_or([]);
+        list.push(node.outputs[0]);
+        taken[into] = list;
     }
     return taken;
+}
+
+/// The tensor written by the kernel computing `head`: `head` itself, or the
+/// product it is the prologue of.
+fn writer(decided: &Plan, head: String) -> String {
+    return match decided.of(&head) {
+        Prologue(product) => product,
+        _ => head,
+    };
 }
 
 /// The bytes `tensors` would hold, f32 each, or `None` where an extent product
@@ -271,6 +291,7 @@ fn label(lowering: &Lowered) -> String {
     return match lowering {
         Kernel => "kernel",
         Fused => "fused",
+        Prologue => "prologue",
         Folded => "folded",
         Alias => "alias",
         Branch => "branch",
@@ -350,7 +371,7 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
     for let node of &s.nodes {
         match node.lowering {
             Kernel => tally.kernels += 1,
-            Fused => tally.fused += 1,
+            Fused | Prologue => tally.fused += 1,
             Folded => tally.folded += 1,
             Alias => tally.aliases += 1,
             Branch => tally.branches += 1,

@@ -934,6 +934,18 @@ pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Ten
     };
 }
 
+/// The left operand `a` computes, as the kernel the plan would otherwise have
+/// written it with: a row kernel where it folds, an elementwise one where not.
+pub fn prologue_tensor<affine Bk: Backend, Axes>(
+    backend: &mut Bk,
+    a: Prologue<Bk::Operand<Axes>>,
+) -> Bk::Tensor<f32, Axes> with _ {
+    if a.op.folds_rows() {
+        return backend.rows::<Axes, Axes>(a.operands, &a.op, 1, false);
+    }
+    return backend.fused(a.operands, &a.op);
+}
+
 /// [`Backend::matmul_rhs_paired`] as two kernels: the product by both
 /// matrices at once, then `then` over its two halves.
 pub fn paired_by_parts<affine Bk: Backend, ..Bs, M, K, N>(
@@ -1720,7 +1732,12 @@ impl Expr {
 
     /// Whether a step folds along a row, so only a row kernel runs this.
     pub fn folds_rows(&self) -> bool {
-        return self.steps.position(|s| s matches { Fold(_) }) matches { Some(_) };
+        return self.fold_count() > 0;
+    }
+
+    /// The steps that fold along a row.
+    pub fn fold_count(&self) -> i32 {
+        return self.steps.into_iter().filter(|s| s matches { Fold(_) }).count();
     }
 
     fn last(&self) -> i32 {
@@ -2047,6 +2064,15 @@ pub struct Epilogue<O> {
     pub op: Expr,
 }
 
+/// What a product computes its left operand from, each element as it reads
+/// it: `op` over `operands`, `operand(i)` reading the `i`th, row by row along
+/// the product's inner axis as [`Backend::rows`] runs it, so a `Fold` step
+/// folds a row of the left operand.
+pub struct Prologue<O> {
+    pub operands: List<O>,
+    pub op: Expr,
+}
+
 /// An epilogue ready to apply to a contraction's output of `extents`.
 struct Finish {
     op: Expr,
@@ -2260,6 +2286,26 @@ pub affine trait Backend with _ {
         then: Epilogue<Self::Operand<[..Bs, M, N]>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]> {
         return paired_by_parts::<Self, [..Bs], M, K, N>(self, a, bc, then);
+    }
+    /// [`Self::matmul_rhs`] of the left operand `a` computes.
+    fn matmul_rhs_from<..Bs, M, K, N>(
+        &mut self,
+        a: Prologue<Self::Operand<[..Bs, M, K]>>,
+        b: &Self::Rhs<K, N>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]> {
+        let lhs = prologue_tensor::<Self, [..Bs, M, K]>(self, a);
+        return self.matmul_rhs(&lhs, b, then);
+    }
+    /// [`Self::matmul_rhs_paired`] of the left operand `a` computes.
+    fn matmul_rhs_paired_from<..Bs, M, K, N>(
+        &mut self,
+        a: Prologue<Self::Operand<[..Bs, M, K]>>,
+        bc: &Self::Rhs<K, Paired<N>>,
+        then: Epilogue<Self::Operand<[..Bs, M, N]>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]> {
+        let lhs = prologue_tensor::<Self, [..Bs, M, K]>(self, a);
+        return self.matmul_rhs_paired(&lhs, bc, then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

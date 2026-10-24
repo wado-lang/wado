@@ -3,7 +3,7 @@
 //! See WEP 2026-09-20 § "Fusion Is Decided by Operator Kind" and
 //! `package-loam/webgpu.md`.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use {
     GROUP_QUERY_ATTENTION,
     Graph,
@@ -15,7 +15,16 @@ use {
     read_at,
     settled,
 } from "./graph.wado";
-use { Checked, gemm_options, has_bias, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
+use {
+    Checked,
+    gather_axis,
+    gemm_options,
+    has_bias,
+    is_reduction,
+    reduced_axes,
+    softmax_lane,
+    transpose_perm,
+} from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// What `forward` does for one node.
@@ -280,6 +289,9 @@ pub variant Decision {
     /// Computed inside the kernel that writes the tensor named, and never
     /// written itself.
     Fused(String),
+    /// Computed inside the product kernel that writes the tensor named, as
+    /// that product reads its left operand: the kernel's prologue.
+    Prologue(String),
     /// Written as a tensor, for the reason given.
     Written(Reason),
 }
@@ -323,6 +335,9 @@ pub struct Plan {
     /// The products that pair in one kernel, by the tensors they compute, in
     /// the graph's order.
     pub pairs: List<[String, String]>,
+    /// The weights a backend holds as a product's right operand, as
+    /// `rhs_weights` finds them.
+    pub rhs: HashMap<String, bool>,
 }
 
 impl Plan {
@@ -349,6 +364,12 @@ impl Plan {
     /// Whether `tensor` is computed inside a later kernel rather than written.
     pub fn is_fused(&self, tensor: &String) -> bool {
         return self.decisions.get(*tensor) matches { Some(Fused(_)) };
+    }
+
+    /// Whether `tensor` is computed inside the product reading it, as its
+    /// left operand.
+    pub fn is_prologue(&self, tensor: &String) -> bool {
+        return self.decisions.get(*tensor) matches { Some(Prologue(_)) };
     }
 
     /// The whole rows the kernel writing `tensor` folds along, or `None` where
@@ -505,7 +526,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
                 heads[tensor] = head;
                 groups[head] = joined(&groups[head], node, &join, &lhs, checked);
             },
-            Written(_) => {
+            _ => {
                 heads[tensor] = tensor;
                 let alone = Group { out, contracted: Contracted::None, rows: null };
                 groups[tensor] = joined(&alone, node, &join, &lhs, checked);
@@ -513,13 +534,53 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         }
         decisions[tensor] = decision;
     }
+    let rhs = rhs_weights(graph, checked, &lowered, fuse);
+    // The left operand each product by a weight held for products reads, by
+    // position: what a prologue of that product computes.
+    let mut by_rhs: List<Option<String>> = [];
+    for let node of &graph.nodes {
+        let lhs = product_lhs(node, checked, &spreads, &aliased);
+        by_rhs.push(if lhs matches { Some(_) } && rhs.contains_key(node.inputs[1]) { lhs } else { null });
+    }
     let mut rows = HashMap::<String, Shape>::new();
     for let [head, group] of groups.entries() {
         if let Some(space) = group.rows {
             rows[*head] = space;
         }
+        // Only a whole kernel shows whether it takes a contraction in, which a
+        // prologue does not, so a prologue is found once every kernel is.
+        if group.contracted matches { None } && decisions[*head] matches { Written(Reader(Contraction)) } {
+            let reads = readers.get(*head).unwrap_or([]);
+            if let Some(product) = prologue_head(graph, head, &reads, &by_rhs, &heads) {
+                decisions[*head] = Decision::Prologue(product);
+            }
+        }
     }
-    return Plan { decisions, rows, lowered, spreads, pairs };
+    return Plan { decisions, rows, lowered, spreads, pairs, rhs };
+}
+
+/// The product kernel that takes `tensor` in as its prologue, read at `reads`:
+/// where every read is a product's left operand, by a weight held for
+/// products (`by_rhs`), and the products are one kernel.
+fn prologue_head(
+    graph: &Graph,
+    tensor: &String,
+    reads: &List<i32>,
+    by_rhs: &List<Option<String>>,
+    heads: &HashMap<String, String>,
+) -> Option<String> {
+    let mut head: Option<String> = null;
+    for let r of *reads {
+        if by_rhs[r] != Option::Some(*tensor) {
+            return null;
+        }
+        let h = heads[graph.nodes[r].outputs[0]];
+        if head matches { Some(other) && other != h } {
+            return null;
+        }
+        head = Option::Some(h);
+    }
+    return head;
 }
 
 /// The axes `forward` computes `tensor` over: its own, or for a `Spread`'s
@@ -571,6 +632,125 @@ fn product_lhs(
         return Option::Some(s.operand);
     }
     return null;
+}
+
+/// The initializers of rank 2 that every read takes as a matrix product's right
+/// operand, in one orientation, in the graph and every branch it carries, and
+/// that are not an output. Each maps to whether the product reads it
+/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
+/// in the layout the product reads, which only a product, a product by its
+/// viewed transpose, and a row gather read.
+fn rhs_weights(graph: &Graph, checked: &Checked, lowered: &List<Lowering>, fuse: bool) -> HashMap<String, bool> {
+    let mut uses = OperandUses {
+        right: HashMap::new(),
+        elsewhere: HashSet::new(),
+    };
+    uses.note(graph, checked, lowered, fuse);
+    let mut out = HashMap::<String, bool>::new();
+    for let vi of &graph.initializers {
+        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
+        ) == 2 {
+            out[vi.name] = transposed;
+        }
+    }
+    return out;
+}
+
+/// How the nodes read each operand: as a product's right operand, transposed
+/// or not, or some other way.
+struct OperandUses {
+    right: HashMap<String, bool>,
+    elsewhere: HashSet<String>,
+}
+
+impl OperandUses {
+    /// The reads of `graph`'s nodes, lowered as `lowered`, its outputs, and
+    /// those of the branches they carry, a branch's outputs being values it
+    /// yields as tensors. A tensor read in both orientations is read
+    /// elsewhere, as no one layout serves.
+    ///
+    /// A product by a viewed transpose reads the weight itself, in the
+    /// orientation its rows are stored in, and so does a row gather of it.
+    fn note(&mut self, graph: &Graph, checked: &Checked, lowered: &List<Lowering>, fuse: bool) {
+        for let vi of &graph.outputs {
+            self.elsewhere.insert(vi.name);
+        }
+        let mut viewed = HashMap::<String, String>::new();
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if lowered[at] matches { Transposed } {
+                viewed[node.outputs[0]] = node.inputs[0];
+            }
+        }
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if viewed.contains_key(node.outputs[0]) {
+                continue;
+            }
+            let orientation = rhs_orientation(&node, &checked.shapes);
+            let gathers = lowered[at] matches { Kernel } && gathers_float_rows(&node, checked);
+            for let [i, input] of node.inputs.into_iter().enumerate() {
+                if i == 1 && let Some(weight) = viewed.get(input) {
+                    self.right_operand(weight, false);
+                } else if i == 1 && let Some(transposed) = orientation {
+                    self.right_operand(input, transposed);
+                } else if i == 0 && gathers {
+                    self.right_operand(input, false);
+                } else {
+                    self.elsewhere.insert(input);
+                }
+            }
+        }
+        for let [branch_graph, branch] of branches_of(graph, checked) {
+            let [branch_lowered, _] = lowerings(&branch_graph, &branch, fuse);
+            self.note(&branch_graph, &branch, &branch_lowered, fuse);
+        }
+    }
+
+    fn right_operand(&mut self, tensor: String, transposed: bool) {
+        if self.right.get(tensor) matches { Some(t) && t != transposed } {
+            self.elsewhere.insert(tensor);
+        }
+        self.right[tensor] = transposed;
+    }
+}
+
+/// Whether `node` gathers whole rows of a float matrix, as an embedding
+/// lookup does.
+pub fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
+    if node.op != "Gather" {
+        return false;
+    }
+    let data = checked.shapes[node.inputs[0]];
+    return data.rank() == 2
+        && settled(gather_axis(node, data.rank())) == 0
+        && checked.primitives[node.inputs[0]] == "f32";
+}
+
+/// Whether `node` reads its operand 1 as the right operand of a matrix
+/// product `matmul_rhs` serves, and if so whether transposed:
+/// `Gemm`'s, and `MatMul`'s beside a left operand of rank 2 or more.
+fn rhs_orientation(node: &Node, shapes: &HashMap<String, Shape>) -> Option<bool> {
+    if node.op == "Gemm" {
+        return Option::Some(settled(gemm_options(node)).3);
+    }
+    if node.op == "MatMul" && shapes[node.inputs[0]].rank() >= 2 {
+        return Option::Some(false);
+    }
+    return null;
+}
+
+/// Each `If`'s two branches in `graph`, in order: the graph each holds, and the
+/// scope stage 0 checked it in.
+pub fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
+    let mut found: List<[Graph, Checked]> = [];
+    for let node of &graph.nodes {
+        if !checked.branches.contains_key(node.outputs[0]) {
+            continue;
+        }
+        for let b of branches(node, checked) {
+            found.push([b.graph, b.checked]);
+        }
+    }
+    return found;
 }
 
 /// Where `node`'s output goes, its readers' kernels and the scope's returns

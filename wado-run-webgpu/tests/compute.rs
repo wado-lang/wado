@@ -171,8 +171,9 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     // smaller than a weight, which splits the kernels reading it, then three
     // `arg_max`es, then four products of a few rows from each limit, then two
     // across weights of few columns and of many, then six reads of a weight
-    // kept in bf16 or f32 from each limit, then three paired products.
-    assert_eq!(lines.len(), 54, "stdout: {stdout}");
+    // kept in bf16 or f32 from each limit, then three paired products, then
+    // three products of a normalization, paired and alone.
+    assert_eq!(lines.len(), 60, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')
@@ -209,7 +210,8 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 
 /// A whole model's pass stays on the device: each sequence length reads back
 /// once, for the logits `forward` returns, in as many dispatches as the plan
-/// leaves kernels.
+/// leaves kernels, and one more for each prologue a product of that many rows
+/// writes with a kernel of its own.
 #[test]
 fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -220,14 +222,16 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "stdout: {stdout}");
-    for line in lines {
+    // Ten a layer over five layers, and the embeddings, the last
+    // normalization and the head: `package-loam/webgpu.md` counts them. Four
+    // rows compute each layer's two normalizations in the products after them,
+    // and seven write them.
+    for (line, dispatches) in lines.into_iter().zip(["46", "56"]) {
         let words: Vec<&str> = line.split(' ').collect();
         assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
-        // Ten a layer over five layers, and the embeddings, the last
-        // normalization and the head: `package-loam/webgpu.md` counts them.
         assert_eq!(
             words[words.len() - 5..words.len() - 3],
-            ["dispatches", "56"],
+            ["dispatches", dispatches],
             "{line}"
         );
         let deviation: f32 = words[words.len() - 6]

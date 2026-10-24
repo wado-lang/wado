@@ -247,6 +247,24 @@ workgroup's lanes sum an even column and the one after it, and the lane
 holding the even one applies the epilogue to both sums. Any other product runs
 as the product by the whole matrix, then the epilogue over its two halves.
 
+#### A normalization is its product's prologue
+
+A normalization before a layer is a row group that only the layer's products
+read, by weights, as their left operand. The plan makes such a group, one that
+takes no contraction in, the prologue of the products' kernel, and `forward`
+calls `matmul_rhs_from` or `matmul_rhs_paired_from` with it. A row group still
+takes no contraction: the prologue is a kernel of its own that the product
+computes rather than reads. The plan finds prologues after every kernel is
+formed, since a kernel the plan has not finished may still take a product in.
+
+On a device, a product of a few rows runs it in the product's dispatch. Each
+workgroup folds a block of rows and computes the block's elements into
+workgroup memory, which its lanes then read as the left matrix. Every
+workgroup repeats the fold, which costs the rows' reads again per workgroup
+and saves a dispatch and the normalized tensor's write and read. A product of
+more rows, or of rows too long for workgroup memory, writes the prologue with
+the row kernel it would otherwise have had.
+
 #### What a layer costs
 
 | Dispatch            | Nodes it covers                           |

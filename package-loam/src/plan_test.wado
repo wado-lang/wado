@@ -60,6 +60,7 @@ test "a contraction and the elementwise chain after it fuse into the last kernel
     let p = plan_of(MLP, mlp_layout());
     assert p.of(&"H") == fused("A");
     assert p.of(&"HB") == fused("A");
+    // A kernel that takes a product in is no prologue of the product reading it.
     assert p.of(&"A") == written(Reason::Reader(Kind::Contraction));
     assert p.of(&"T") == fused("Y");
     assert p.of(&"Y") == written(Reason::Returned);
@@ -561,6 +562,80 @@ g (float[N, 4] X, float[N, 4] Z, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y
     // The nodes are read last to first, so the later product is the one taken in.
     assert p.of(&"Q") == fused("Y");
     assert p.of(&"P") == written(Reason::SecondContraction);
+}
+
+/// An RMS normalization that two products read, by initializers where
+/// `weights` and by inputs otherwise.
+fn normalized_plan(weights: bool) -> Plan {
+    let [inputs, initializers] = if weights {
+        ["", ", float[4, 3] W, float[4, 3] V"];
+    } else {
+        [", float[4, 3] W, float[4, 3] V", ""];
+    };
+    let source = `
+g (float[N, 4] X${inputs}) => (float[N, 3] Y)
+<float[4] G, int64[1] Axes = {1}${initializers}>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    Eps = Constant <value = float {0.000001}> ()
+    A = Add(M, Eps)
+    D = Sqrt(A)
+    Q = Div(X, D)
+    H = Mul(Q, G)
+    P = MatMul(H, W)
+    R = MatMul(H, V)
+    Y = Add(P, R)
+}
+`;
+    let mut layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "V",
+            ["Feat", "Out"],
+        ],
+        [
+            "G",
+            ["Feat"],
+        ],
+    ];
+    for let t of ["P", "R", "Y"] {
+        layout.push([
+            t,
+            ["Batch", "Out"],
+        ]);
+    }
+    for let t of ["M", "A", "D"] {
+        layout.push([
+            t,
+            ["Batch", "One"],
+        ]);
+    }
+    layout.push([
+        "*",
+        ["Batch", "Feat"],
+    ]);
+    return plan_of(source, layout);
+}
+
+test "a row kernel only products by weights read is their kernel's prologue" {
+    let p = normalized_plan(true);
+    assert p.of(&"H") == Decision::Prologue("Y");
+    for let tensor of ["S", "M", "A", "D", "Q"] {
+        assert p.of(&tensor) == fused("H");
+    }
+    assert p.rows_of(&"H") matches { Some(_) };
+    assert p.pairs == [
+        ["P", "R"],
+    ];
+}
+
+test "a row kernel products by inputs read is written" {
+    let p = normalized_plan(false);
+    assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
 }
 
 test "a window takes in no operator after it" {
