@@ -1,0 +1,26 @@
+// A newtype over a struct writes as that struct, so it may be the payload of
+// an internally tagged case.
+use json from "core:json";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type Spot = Point;
+
+#[wire(tag = "type")]
+variant Mark {
+    At(Spot),
+    Nowhere,
+}
+
+test "a newtype payload round-trips beside its tag" {
+    let at = Mark::At(Point { x: 1, y: 2 } as Spot);
+    let text = json::to_string(&at).unwrap();
+    assert text == `{"type":"At","x":1,"y":2}`;
+    assert json::from_string::<Mark>(text) matches { Ok(At(p)) && p.x == 1 && p.y == 2 };
+}
+
+__DATA__
+{"test": {}}

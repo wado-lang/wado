@@ -1,0 +1,90 @@
+// `#[wire(tag = "key")]` writes each case as an object holding its wire name
+// under `key`, beside the payload's fields. A reader finds the tag wherever it
+// stands, since JSON gives an object's keys no order.
+use { DeserializeErrorKind } from "core:serde";
+use json from "core:json";
+use cbor from "core:cbor";
+use value from "core:value";
+use { Value } from "core:value";
+
+#[wire(tag = "type", name_policy = "snake_case")]
+variant PreTokenizer {
+    ByteLevel(ByteLevel),
+    #[wire(name = "ws")]
+    Whitespace,
+    Split(Split),
+}
+
+struct ByteLevel {
+    add_prefix_space: bool = false,
+    use_regex: bool = true,
+}
+
+struct Split {
+    pattern: String,
+}
+
+fn read(text: String) -> Result<PreTokenizer, DeserializeErrorKind> {
+    return json::from_string::<PreTokenizer>(text).map_err(|e| e.kind);
+}
+
+test "a case is written as its payload's fields, the tag first" {
+    let b = PreTokenizer::ByteLevel(ByteLevel { use_regex: false });
+    assert json::to_string(&b) matches {
+        Ok(s) && s == `\{"type":"byte_level","add_prefix_space":false,"use_regex":false\}`
+    };
+    assert json::to_string(&PreTokenizer::Whitespace) matches { Ok(s) && s == `\{"type":"ws"\}` };
+}
+
+test "the tag is read wherever it stands" {
+    assert read(`\{"type":"split","pattern":"x"\}`) matches { Ok(Split(s)) && s.pattern == "x" };
+    assert read(`\{"pattern":"x","type":"split"\}`) matches { Ok(Split(s)) && s.pattern == "x" };
+    assert read(`\{"use_regex":false,"type":"byte_level","add_prefix_space":true\}`) matches {
+        Ok(ByteLevel(b)) && b.add_prefix_space && !b.use_regex
+    };
+    assert read(`\{"extra":[1,\{"type":"ws"\}],"type":"ws"\}`) matches { Ok(Whitespace) };
+}
+
+test "a payload's missing fields take their defaults, and unknown keys are skipped" {
+    assert read(`\{"type":"byte_level","trim_offsets":true\}`) matches {
+        Ok(ByteLevel(b)) && !b.add_prefix_space && b.use_regex
+    };
+    assert read(`\{"type":"split"\}`) matches { Err(MissingField) };
+}
+
+test "an unknown or a missing tag is refused" {
+    assert read(`\{"type":"Split","pattern":"x"\}`) matches { Err(UnknownVariant) };
+    assert read(`\{"pattern":"x"\}`) matches { Err(MissingField) };
+    assert read(`"ws"`) matches { Err(_) };
+}
+
+/// `Split` as a writer that puts the tag last spells it.
+struct SplitTagLast {
+    pattern: String,
+    #[wire(name = "type")]
+    kind: String,
+}
+
+test "a tag after the fields is read in a binary format too" {
+    let bytes = cbor::to_bytes(&[SplitTagLast { pattern: "x", kind: "split" }]).unwrap();
+    assert cbor::from_bytes::<[PreTokenizer]>(bytes) matches { Ok([Split(s)]) && s.pattern == "x" };
+}
+
+test "a list of cases round-trips through each format" {
+    let all: List<PreTokenizer> = [
+        PreTokenizer::Split(Split { pattern: "\\s+" }),
+        PreTokenizer::Whitespace,
+        PreTokenizer::ByteLevel(ByteLevel {}),
+    ];
+    let text = json::to_string(&all).unwrap();
+    assert json::from_string::<List<PreTokenizer>>(&text).unwrap() == all;
+    let bytes = cbor::to_bytes(&all).unwrap();
+    assert cbor::from_bytes::<List<PreTokenizer>>(bytes).unwrap() == all;
+    let v = value::to_value(&all).unwrap();
+    assert value::from_value::<List<PreTokenizer>>(&v).unwrap() == all;
+    let parsed = json::from_string::<Value>(&text).unwrap();
+    assert value::from_value::<List<PreTokenizer>>(&parsed).unwrap() == all;
+}
+
+__DATA__
+{"test": {}}

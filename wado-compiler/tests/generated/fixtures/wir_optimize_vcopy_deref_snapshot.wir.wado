@@ -98,7 +98,7 @@ fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
     builtin::array_set<i32>(arr_0.repr, 3, 100);
     arr_0.used = 4;
     $load_0 = snapshot.repr;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(3)), 0, $load_0, 0, 3);
+    builtin::array_copy<i32>(builtin::array_new<i32>(3), 0, $load_0, 0, 3);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     if @unlikely(local.tee new_used_28(0 + 9) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -128,8 +128,8 @@ fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
     $moved_4 = "wir_optimize_vcopy_deref_snapshot.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_28; new_used_28 = 0; $moved_4);
     new_used_28 = start_29;
     start_29 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_29 = new_used_28; new_used_28 = 0; start_29, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_29 = $moved_4; $moved_4 = 0; start_29);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_28, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_28 = $moved_4; $moved_4 = 0; new_used_28);
 }
 
 fn "wir_optimize_vcopy_deref_snapshot.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

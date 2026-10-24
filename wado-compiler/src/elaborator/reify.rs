@@ -1234,6 +1234,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect(),
         );
 
+        let wire_tag = wire_value_of(&variant_decl.attrs, "tag");
+        if let Some(tag) = &wire_tag {
+            self.check_internal_tag(variant_decl, tag, &cases);
+        }
+
         TirVariantDecl {
             def,
             name: variant_decl.name.clone(),
@@ -1243,7 +1248,92 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cases,
             span: variant_decl.span,
             wire_name_policy: wire_name_policy_of(&variant_decl.attrs),
+            wire_tag,
         }
+    }
+
+    /// An internally tagged case is written as an object holding `tag` beside
+    /// its payload's fields, so the payload is a struct, or nothing, and writes
+    /// no field under `tag`.
+    fn check_internal_tag(
+        &self,
+        variant_decl: &ast::VariantDecl,
+        tag: &str,
+        cases: &[tir::TirVariantCase],
+    ) {
+        let unit = self.tysys.type_table.borrow().type_key(TypeTable::UNIT);
+        for (case, reified) in variant_decl.cases.iter().zip(cases) {
+            if self.tysys.type_table.borrow().type_key(reified.payload) == unit {
+                continue;
+            }
+            let case_path = format!("{}::{}", variant_decl.name, case.name);
+            let Some(payload) = self.derived_struct_decl_of(reified.payload) else {
+                let payload = self.tysys.type_table.borrow().type_name(reified.payload);
+                self.error_at(
+                    Code::AttrMisuse,
+                    case.span,
+                    format!(
+                        "`{case_path}` carries `{payload}`, but a case of a variant with \
+                         `#[wire(tag)]` carries nothing or a struct its derivation writes"
+                    ),
+                );
+                continue;
+            };
+            let policy = wire_name_policy_of(&payload.attrs);
+            for field in &payload.fields {
+                let wire_name = NamePolicy::wire_name(
+                    wire_name_override_of(&field.attrs).as_deref(),
+                    policy,
+                    &field.name,
+                );
+                if wire_name == tag {
+                    self.error_at(
+                        Code::AttrMisuse,
+                        case.span,
+                        format!(
+                            "`{case_path}` writes its payload's field `{}` as `{tag}`, \
+                             the key its tag is written under",
+                            field.name
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The struct declaration `ty` instantiates, through any newtype over it,
+    /// where the derivation reads and writes it as a struct: no link of `ty`
+    /// has a hand-written `Serialize` or `Deserialize`, whose shape nothing
+    /// here can see. `String` and `List` are declared as structs and are such.
+    fn derived_struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
+        let written = [CompilerItem::Serialize, CompilerItem::Deserialize]
+            .into_iter()
+            .filter_map(|item| self.tysys.compiler_trait_def(item))
+            .any(|trait_| self.tysys.impl_link(ty, trait_).is_some());
+        if written {
+            return None;
+        }
+        self.struct_decl_of(ty)
+    }
+
+    /// The struct declaration `ty` instantiates, through any newtype over it,
+    /// or `None` where `ty` is not a declared struct.
+    fn struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
+        let def = {
+            let type_table = self.tysys.type_table.borrow();
+            let head = type_table.newtype_representation(ty).unwrap_or(ty);
+            type_table.nominal_def(head)?
+        };
+        let defs = self.tysys.resolutions.defs();
+        let target = defs.ast_id(def);
+        self.loaded_modules
+            .get(defs.module(def))?
+            .items
+            .iter()
+            .find_map(|item| match item {
+                ast::Item::Struct(decl) if decl.id == target => Some(decl),
+                _ => None,
+            })
     }
 
     /// Reify an `interface E { … }` declaration. Effects have no
@@ -10761,9 +10851,14 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
 
 /// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
+    wire_value_of(attrs, "name")
+}
+
+/// The string a `#[wire(key = "...")]` on the declaration writes.
+fn wire_value_of(attrs: &[ast::Attribute], key: &str) -> Option<String> {
     attrs.iter().find_map(|a| {
         if a.name == WIRE {
-            a.kv_value("name").map(str::to_string)
+            a.kv_value(key).map(str::to_string)
         } else {
             None
         }

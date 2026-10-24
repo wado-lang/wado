@@ -1,0 +1,20 @@
+// `ReflectVariant::<V>::wire_tag()` reports a variant's `#[wire(tag)]` as
+// written, and `None` for a variant that declares none. A derivation reads it
+// as a compile-time fact, so an untagged variant's tagged branch folds away.
+
+#[wire(tag = "type")]
+variant Tagged {
+    One,
+}
+
+variant Plain {
+    One(i32),
+}
+
+test "the tag is reported as written" {
+    assert ReflectVariant::<Tagged>::wire_tag() matches { Some(t) && t == "type" };
+    assert ReflectVariant::<Plain>::wire_tag() matches { None };
+}
+
+__DATA__
+{"test": {}}

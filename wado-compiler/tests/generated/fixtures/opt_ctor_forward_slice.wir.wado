@@ -82,7 +82,7 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     $moved_4 = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_16; $sroa_$pattern_temp_0_0_16 = 0; $moved_4);
     $sroa_body_repr_18 = global:opt_ctor_forward_slice.wado::$const_obj_0;
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $sroa_$pattern_temp_0_0_16($sroa_$pattern_temp_0_1_17), $sroa_body_repr_18, 0, 5);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_17, $sroa_body_repr_18, 0, 5);
     });
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_16 = $sroa_$pattern_temp_0_1_17; $sroa_$pattern_temp_0_1_17 = 0; $sroa_$pattern_temp_0_0_16);
     drop("opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"($sroa_$pattern_temp_0_0_16 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_16));
@@ -120,7 +120,7 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     };
     result = ref.null none;
     if (status_15 & 15) == 0 {
-        result = (if local.tee status_15(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+        result = (if builtin::load_u8(ptr) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0;
         } else {
             status_15 = (if local.tee status_15(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {

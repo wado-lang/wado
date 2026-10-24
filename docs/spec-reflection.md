@@ -14,7 +14,7 @@ type's identity. Each kind trait carries the structure of that kind.
 | ----------------- | ------------------------------ | ------------------------------------------------------------------------------ |
 | `Reflect`         | every type below               | `type_name()`, `wire_name_policy()`                                            |
 | `ReflectStruct`   | every struct                   | `FieldTypes`, `FieldSlots`, `Members`, `members()`, `from_fields()`, the slots |
-| `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`                       |
+| `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`, `wire_tag()`         |
 | `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                |
 | `ReflectFlags`    | every flags type               | `Members`, `members()`, `bits()`, `from_bits()`                                |
 | `ReflectNewtype`  | every newtype                  | `Base`                                                                         |
@@ -180,6 +180,28 @@ test "core:serde resolves the wire name from both facts" {
     let policy = Reflect::<Account>::wire_name_policy();
     assert wire_name(&fs.0, policy) == "userId";
     assert wire_name(&fs.1, policy) == "mail";
+}
+```
+
+`ReflectVariant::<V>::wire_tag()` returns the variant's
+[`#[wire(tag)]`](./spec-attributes.md#internal-tags) as written, and `None` when
+it declares none:
+
+<!-- {"fixture":"reflect_wire_tag.wado"} -->
+
+```wado
+#[wire(tag = "type")]
+variant Tagged {
+    One,
+}
+
+variant Plain {
+    One(i32),
+}
+
+test "the tag is reported as written" {
+    assert ReflectVariant::<Tagged>::wire_tag() matches { Some(t) && t == "type" };
+    assert ReflectVariant::<Plain>::wire_tag() matches { None };
 }
 ```
 

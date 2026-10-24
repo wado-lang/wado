@@ -406,7 +406,7 @@ pub affine struct ReadCopy<affine T> {
 
 impl<affine T> ReadCopy<T> {
     /// The end and what the copy moved. Waits for a copy that has not settled,
-    /// so a copy that never joined a set finishes as well.
+    /// so a copy never inserted into a set finishes as well.
     pub fn finish(self) -> [Stream<T>, StreamChunk<T>] {
         let mut copy = self;
         let [end, started] = copy.copy.take().unwrap();
@@ -555,7 +555,7 @@ pub affine struct WriteCopy<affine T> {
 
 impl<affine T> WriteCopy<T> {
     /// The end and what the copy left of its data. Waits for a copy that has
-    /// not settled, so a copy that never joined a set finishes as well.
+    /// not settled, so a copy never inserted into a set finishes as well.
     pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>] {
         let mut copy = self;
         let [end, started] = copy.copy.take().unwrap();
@@ -717,7 +717,7 @@ internal fn cm_await_copy(handle: i32) -> i32 {
 }
 
 /// What a `WaitableSet` waits on: a value the host reports events for by its
-/// handle. It is sealed, so a set joins only what it can account for: the
+/// handle. It is sealed, so a set holds only what it can account for: the
 /// standard library implements it on the calls, and a variant whose cases each
 /// hold one derives it with `impl Waitable for V;`. A bare stream or future end
 /// is none, since no copy on it is in flight: a copy started on a stream end,
@@ -855,7 +855,7 @@ pub affine struct WaitableSet<affine W: Waitable> {
     raw: RawWaitableSet,
     /// The members joined to `raw`, which the host reports events for.
     members: List<W>,
-    /// The members the host has no event left to report for, in join order:
+    /// The members the host has no event left to report for, in insertion order:
     /// one it does not know, `Unreported`, or a subtask whose resolution a set
     /// already delivered, reported again.
     ready: List<Ready<W>>,
@@ -874,9 +874,9 @@ impl<affine W: Waitable> WaitableSet<W> {
         return WaitableSet { raw: RawWaitableSet::new(), members: [], ready: [] };
     }
 
-    /// Moves `member` into the set. A member joins one set at a time, so
+    /// Moves `member` into the set. A member is in one set at a time, so
     /// whether the host has an event left for it is settled here.
-    pub fn join(&mut self, member: W) {
+    pub fn insert(&mut self, member: W) {
         match member.wait_on() {
             Host(id) => {
                 builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
@@ -1024,14 +1024,14 @@ impl<affine T> AsyncCall<T> {
         let mut call = self;
         if let Some(subtask) = call.subtask.take() {
             let mut set = WaitableSet::<Subtask>::new();
-            set.join(subtask);
+            set.insert(subtask);
             loop {
                 let ready = set.wait();
                 if ready.event matches { Call(state) && state.is_resolved() } {
                     drop_resolved(ready.member);
                     break;
                 }
-                set.join(ready.member);
+                set.insert(ready.member);
             }
         }
         // The buffer drops, freed, once the lift has read it.

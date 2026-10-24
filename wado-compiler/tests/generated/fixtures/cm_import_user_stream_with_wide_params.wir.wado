@@ -26,13 +26,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_import_user_stream_with_wide_params.wado/run"() with Sink {
-    let $moved_2: i32;
     let $cm_pair_3: i64;
     let $sroa_$pattern_temp_0_0_5: i32;
     let $sroa_$pattern_temp_0_1_6: i32;
     $sroa_$pattern_temp_0_0_5 = builtin::i32_wrap_i64(local.tee $cm_pair_3("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_6 = builtin::i32_wrap_i64($cm_pair_3 >> 32_i64);
-    "cm_import_user_stream_with_wide_params.wado/$cm_binding__Sink_send"($moved_2 = $sroa_$pattern_temp_0_0_5; $sroa_$pattern_temp_0_0_5 = 0; $moved_2, 4294967298_i64, 2.5);
+    "cm_import_user_stream_with_wide_params.wado/$cm_binding__Sink_send"($sroa_$pattern_temp_0_0_5, 4294967298_i64, 2.5);
     if ($sroa_$pattern_temp_0_1_6 == 0) == 0 {
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_6);
     }

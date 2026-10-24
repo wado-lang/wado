@@ -1,0 +1,18 @@
+// A newtype payload writes its base struct's fields, so one named as the tag
+// collides through the newtype as it would on the struct.
+
+#[wire(tag = "kind")]
+variant Event {
+    Click(Press),
+}
+
+type Press = Click;
+
+struct Click {
+    kind: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:5: analysis error: `Event::Click` writes its payload's field `kind` as `kind`, the key its tag is written under", "compile_error_codes": ["ATTR_MISUSE"]}

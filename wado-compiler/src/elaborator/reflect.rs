@@ -142,6 +142,7 @@ impl StructMethods {
 struct VariantMethods {
     discriminant: String,
     cases: String,
+    wire_tag: String,
 }
 
 impl VariantMethods {
@@ -154,11 +155,14 @@ impl VariantMethods {
             cases: items
                 .method_name(CompilerItem::ReflectVariantMembers)
                 .to_string(),
+            wire_tag: items
+                .method_name(CompilerItem::ReflectVariantWireTag)
+                .to_string(),
         }
     }
 
     fn declares(&self, method: &str) -> bool {
-        [&self.discriminant, &self.cases]
+        [&self.discriminant, &self.cases, &self.wire_tag]
             .into_iter()
             .any(|name| name == method)
     }
@@ -1085,6 +1089,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             TypeTable::I32
         } else if method == methods.cases {
             self.payload_members_ty(CompilerItem::ReflectVariantCase, self_ty, &payloads)
+        } else if method == methods.wire_tag {
+            self.option_string_ty()
         } else {
             unreachable!("reflect_dispatch_of admits only the trait's methods")
         };
@@ -1100,6 +1106,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(static_call.id, func_ref, arg_param_is_mut(is_discriminant));
 
         return_type
+    }
+
+    /// `Option<String>`, what `ReflectVariant::wire_tag` returns.
+    fn option_string_ty(&self) -> TypeId {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let string = tt.make_compiler_struct(CompilerItem::String);
+        tt.make_option(string)
     }
 
     /// Resolve `ReflectVariant::<T>::method()` where `T` is a type parameter
@@ -1146,6 +1159,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             };
             members_ty
+        } else if method == methods.wire_tag {
+            self.option_string_ty()
         } else {
             unreachable!("reflect_dispatch_of admits only the trait's methods")
         };

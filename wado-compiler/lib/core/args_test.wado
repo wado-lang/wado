@@ -129,6 +129,11 @@ test "invalid scalar reports InvalidValue" {
     assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
+test "an argv error names the path it failed at" {
+    let r = parse::<Repeatable>(["in.txt", "--n", "1", "--n", "abc"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue && e.message == "n[1]: invalid value: 'abc'" };
+}
+
 test "option value missing before a flag reports MissingValue, not a silent steal" {
     // `--output` needs a value; the next token `--verbose` is an option, so the
     // value is missing rather than `--verbose` being swallowed as the value.
@@ -400,9 +405,46 @@ test "a repeatable enum option converts each occurrence" {
 test "an enum option naming no case reports InvalidValue" {
     let bad = parse::<EnumOpts>(["--shade", "indigo"]);
     assert bad matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
-        && e.message == "invalid value for option --shade: 'indigo'" };
+        && e.message == "shade: invalid value for option --shade: 'indigo'" };
     let r = parse::<EnumOpts>(["--layer", "light", "--layer=indigo"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+struct DryRun {
+    dry_run: String = "",
+    dark_shade: Shade = Shade::Light,
+    dark_layer: List<Shade> = [],
+}
+impl Deserialize for DryRun;
+
+test "an error names the option as written" {
+    let e = parse::<DryRun>(["--dry-run"]).unwrap_err();
+    assert e.message == "dry_run: missing value for option --dry-run";
+    let bad = parse::<DryRun>(["--dark-shade", "indigo"]).unwrap_err();
+    assert bad.message == "dark_shade: invalid value for option --dark-shade: 'indigo'";
+}
+
+test "an error names the occurrence of a repeated option as written" {
+    let e = parse::<DryRun>(["--dark-layer", "light", "--dark_layer"]).unwrap_err();
+    assert e.message == "dark_layer: missing value for option --dark_layer";
+    let bad = parse::<DryRun>(["--dark-layer", "light", "--dark_layer", "indigo"]).unwrap_err();
+    assert bad.message == "dark_layer[1]: invalid value for option --dark_layer: 'indigo'";
+}
+
+flags Feature {
+    Fast,
+    Safe,
+}
+
+struct FeatureOpts {
+    shade: Shade = Shade::Light,
+    features: Feature = Feature::none(),
+}
+impl Deserialize for FeatureOpts;
+
+test "an enum option that named its case is not blamed for a later unknown name" {
+    let e = parse::<FeatureOpts>(["--shade", "light", "--features", "bogus"]).unwrap_err();
+    assert e.message == "features: unknown flag: bogus";
 }
 
 test "an enum option without a value reports MissingValue" {
@@ -439,7 +481,7 @@ test "every scalar option type converts leniently" {
 
 test "an error displays its message" {
     let r = parse::<Numbers>(["--a", "x"]);
-    assert r matches { Err(e) && `${e}` == "invalid value: 'x'" };
+    assert r matches { Err(e) && `${e}` == "a: invalid value: 'x'" };
 }
 
 test "a value out of the field's range reports InvalidValue" {
@@ -469,7 +511,7 @@ impl Deserialize for EvenOpt;
 test "a field type's own failure reports InvalidValue" {
     assert parse::<EvenOpt>(["--even", "4"]) matches { Ok(o) && o.even.n == 4 };
     assert parse::<EvenOpt>(["--even", "3"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
-        && e.message == "odd" };
+        && e.message == "even: odd" };
     assert parse::<EvenOpt>(["--even", "x"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
@@ -480,7 +522,7 @@ impl Deserialize for MapOpt;
 
 test "a map option is unsupported" {
     let r = parse::<MapOpt>(["--pairs", "a"]);
-    assert r matches { Err(e) && e.message == "core:args does not support map yet" };
+    assert r matches { Err(e) && e.message == "pairs: core:args does not support map yet" };
 }
 
 test "a repeatable option missing its value reports MissingValue" {
@@ -557,4 +599,27 @@ impl Deserialize for UnitProbe {
 test "a hand-written impl may skip a field, but not probe a case for a payload" {
     assert parse::<Skipper>([]) matches { Ok(_) };
     assert parse::<UnitProbe>(["Tag"]) matches { Err(_) };
+}
+
+// A hand-written impl that recovers from a failed read: the failure it
+// swallowed is not the one a later field reports.
+struct Tolerant {
+    n: i32,
+}
+impl Deserialize for Tolerant {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Tolerant, DeserializeError> {
+        return Result::Ok(Tolerant { n: i32::deserialize(d).unwrap_or(0) });
+    }
+}
+
+struct Recovering {
+    a: Tolerant,
+    b: i32,
+}
+impl Deserialize for Recovering;
+
+test "a failure an impl recovered from is not reported for a later one" {
+    let e = parse::<Recovering>(["--a"]).unwrap_err();
+    assert e.kind matches { MissingArgument };
+    assert e.message == "missing field: b";
 }

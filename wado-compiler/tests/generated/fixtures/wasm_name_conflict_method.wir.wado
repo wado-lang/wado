@@ -73,22 +73,18 @@ fn "wasm_name_conflict_method.wado/run"() with Stdout {
     $moved_4_91 = "wasm_name_conflict_method.wado/$cm_binding__Stdout_write_via_stream"($moved_4_91 = $sroa_$pattern_temp_0_0_13_100; $sroa_$pattern_temp_0_0_13_100 = 0; $moved_4_91);
     $sroa_$pattern_temp_0_0_13_100 = $sroa_$pattern_temp_0_1_14_101;
     $sroa_$pattern_temp_0_1_14_101 = 0;
-    $sroa_$pattern_temp_0_1_14_101 = $sroa_$pattern_temp_0_0_13_100;
-    $sroa_$pattern_temp_0_0_13_100 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasm_name_conflict_method.wado::$const_obj_1;
-    "core:rt/write_string_to_stream$dae[add_newline]$spec0"($sroa_$pattern_temp_0_1_14_101, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_101 = $moved_4_91; $moved_4_91 = 0; $sroa_$pattern_temp_0_1_14_101);
-    $sroa_$pattern_temp_0_1_14_101 = builtin::i32_wrap_i64(local.tee $cm_pair_7_94("wasi/stream-new"()));
+    "core:rt/write_string_to_stream$dae[add_newline]$spec0"($sroa_$pattern_temp_0_0_13_100, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_100 = $moved_4_91; $moved_4_91 = 0; $sroa_$pattern_temp_0_0_13_100);
+    $sroa_$pattern_temp_0_0_13_100 = builtin::i32_wrap_i64(local.tee $cm_pair_7_94("wasi/stream-new"()));
     $moved_4_91 = builtin::i32_wrap_i64($cm_pair_7_94 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_100 = "wasm_name_conflict_method.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_100 = $sroa_$pattern_temp_0_1_14_101; $sroa_$pattern_temp_0_1_14_101 = 0; $sroa_$pattern_temp_0_0_13_100);
-    $sroa_$pattern_temp_0_1_14_101 = $moved_4_91;
+    $sroa_$pattern_temp_0_1_14_101 = "wasm_name_conflict_method.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_101 = $sroa_$pattern_temp_0_0_13_100; $sroa_$pattern_temp_0_0_13_100 = 0; $sroa_$pattern_temp_0_1_14_101);
+    $sroa_$pattern_temp_0_0_13_100 = $moved_4_91;
     $moved_4_91 = 0;
-    $moved_4_91 = $sroa_$pattern_temp_0_1_14_101;
-    $sroa_$pattern_temp_0_1_14_101 = 0;
     $mv_arg_2 = global:wasm_name_conflict_method.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$dae[add_newline]$spec1"($moved_4_91, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_91 = $sroa_$pattern_temp_0_0_13_100; $sroa_$pattern_temp_0_0_13_100 = 0; $moved_4_91);
+    "core:rt/write_string_to_stream$dae[add_newline]$spec1"($sroa_$pattern_temp_0_0_13_100, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_100 = $sroa_$pattern_temp_0_1_14_101; $sroa_$pattern_temp_0_1_14_101 = 0; $sroa_$pattern_temp_0_0_13_100);
 }
 
 fn "wasm_name_conflict_method.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -169,7 +165,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]$spec0"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(6)), 0, $mv$message$repr, 0, 5);
     builtin::array_set_u8(new_repr, 5, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 6);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 6);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
@@ -179,7 +175,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]$spec1"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(11)), 0, $mv$message$repr, 0, 10);
     builtin::array_set_u8(new_repr, 10, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 11);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 11);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

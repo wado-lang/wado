@@ -82,98 +82,98 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
     let out_1: ref "core:prelude//List<i32>";
     let s: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
-    let elements_10: ref Array<i32>;
     let end_16: i32;
     let ref_val: i32;
     let self_23: i32;
     let digit_count_31: i32;
     let x_33: i64;
+    let n_54: i32;
+    let new_used_58: i32;
+    let start_59: i32;
+    let $sroa_hh_data_61: ref "core:prelude//List<i32>";
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let n_64: i32;
-    let new_used_68: i32;
-    let start_69: i32;
-    let $sroa_hh_data_71: ref "core:prelude//List<i32>";
+    let $sroa_$iter_0_repr_89: ref Array<i32>;
     let $sroa_$iter_0_index_90: i32;
     let new_used_129: i32;
     let start_130: i32;
     let start_185: i32;
-    $sroa_hh_data_71 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    out_1 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_10(array.new_fixed<i32>()), used: 0 };
-    "licm_reloadable_hoist_alias.wado/probe$sroa[&mut(sink.data),h.data]"($sroa_hh_data_71, $sroa_hh_data_71, out_1);
+    $sroa_hh_data_61 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    out_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    "licm_reloadable_hoist_alias.wado/probe$sroa[&mut(sink.data),h.data]"($sroa_hh_data_61, $sroa_hh_data_61, out_1);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     end_16 = out_1.used;
-    elements_10 = out_1.repr;
+    $sroa_$iter_0_repr_89 = out_1.repr;
     $sroa_$iter_0_index_90 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_90 >= end_16;
-            ref_val = builtin::array_get_value<i32>(elements_10, $sroa_$iter_0_index_90);
+            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_89, $sroa_$iter_0_index_90);
             $sroa_$iter_0_index_90 = $sroa_$iter_0_index_90 + 1;
             $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
             ref_val = local.tee self_23(ref_val) < 0;
             x_33 = builtin::i64_extend_i32_s(self_23);
             x_33 = select i64(x_33 < 0_i64, 0_i64 - x_33, x_33);
-            digit_count_31 = $inline_count_digits_u64_13: block -> i32 {
+            digit_count_31 = $inline_count_digits_u64_1: block -> i32 {
                 if x_33 <u 100000_i64 {
                     if x_33 <u 100_i64 {
                         if x_33 <u 10_i64 {
-                            break $inline_count_digits_u64_13: 1;
+                            break $inline_count_digits_u64_1: 1;
                         }
-                        break $inline_count_digits_u64_13: 2;
+                        break $inline_count_digits_u64_1: 2;
                     }
                     if x_33 <u 1000_i64 {
-                        break $inline_count_digits_u64_13: 3;
+                        break $inline_count_digits_u64_1: 3;
                     }
                     if x_33 <u 10000_i64 {
-                        break $inline_count_digits_u64_13: 4;
+                        break $inline_count_digits_u64_1: 4;
                     }
-                    break $inline_count_digits_u64_13: 5;
+                    break $inline_count_digits_u64_1: 5;
                 }
                 if x_33 <u 10000000000_i64 {
                     if x_33 <u 10000000_i64 {
                         if x_33 <u 1000000_i64 {
-                            break $inline_count_digits_u64_13: 6;
+                            break $inline_count_digits_u64_1: 6;
                         }
-                        break $inline_count_digits_u64_13: 7;
+                        break $inline_count_digits_u64_1: 7;
                     }
                     if x_33 <u 100000000_i64 {
-                        break $inline_count_digits_u64_13: 8;
+                        break $inline_count_digits_u64_1: 8;
                     }
                     if x_33 <u 1000000000_i64 {
-                        break $inline_count_digits_u64_13: 9;
+                        break $inline_count_digits_u64_1: 9;
                     }
-                    break $inline_count_digits_u64_13: 10;
+                    break $inline_count_digits_u64_1: 10;
                 }
                 if x_33 <u 1000000000000000_i64 {
                     if x_33 <u 1000000000000_i64 {
                         if x_33 <u 100000000000_i64 {
-                            break $inline_count_digits_u64_13: 11;
+                            break $inline_count_digits_u64_1: 11;
                         }
-                        break $inline_count_digits_u64_13: 12;
+                        break $inline_count_digits_u64_1: 12;
                     }
                     if x_33 <u 10000000000000_i64 {
-                        break $inline_count_digits_u64_13: 13;
+                        break $inline_count_digits_u64_1: 13;
                     }
                     if x_33 <u 100000000000000_i64 {
-                        break $inline_count_digits_u64_13: 14;
+                        break $inline_count_digits_u64_1: 14;
                     }
-                    break $inline_count_digits_u64_13: 15;
+                    break $inline_count_digits_u64_1: 15;
                 }
                 if x_33 <u 100000000000000000_i64 {
                     if x_33 <u 10000000000000000_i64 {
-                        break $inline_count_digits_u64_13: 16;
+                        break $inline_count_digits_u64_1: 16;
                     }
-                    break $inline_count_digits_u64_13: 17;
+                    break $inline_count_digits_u64_1: 17;
                 }
                 if x_33 <u 1000000000000000000_i64 {
-                    break $inline_count_digits_u64_13: 18;
+                    break $inline_count_digits_u64_1: 18;
                 }
                 if x_33 <u -8446744073709551616_i64 {
-                    break $inline_count_digits_u64_13: 19;
+                    break $inline_count_digits_u64_1: 19;
                 }
-                break $inline_count_digits_u64_13: 20;
+                break $inline_count_digits_u64_1: 20;
             };
             if ref_val {
                 if @unlikely(local.tee new_used_129(0 + 1) > builtin::array_len($local_5.repr)) {
@@ -215,26 +215,26 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
             digit_count_31 = $local_5.used;
             $local_5.used = start_185;
             builtin::array_copy<u8>($local_5.repr, digit_count_31, global:licm_reloadable_hoist_alias.wado::$const_obj_0, 0, 1);
-            $inline_core_prelude_string_wado_String__internal_push_string_23: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_23 local.tee n_64($local_5.used) == 0;
-                if @unlikely(local.tee new_used_68(s.used + n_64) > builtin::array_len(s.repr)) {
+            $inline_core_prelude_string_wado_String__internal_push_string_21: block {
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_21 local.tee n_54($local_5.used) == 0;
+                if @unlikely(local.tee new_used_58(s.used + n_54) > builtin::array_len(s.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_68);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_58);
                 }
-                start_69 = s.used;
-                s.used = new_used_68;
-                builtin::array_copy<u8>(s.repr, start_69, $local_5.repr, 0, n_64);
+                start_59 = s.used;
+                s.used = new_used_58;
+                builtin::array_copy<u8>(s.repr, start_59, $local_5.repr, 0, n_54);
             };
             continue l1;
         };
     };
-    start_69 = builtin::i32_wrap_i64(local.tee q("wasi/stream-new"()));
-    new_used_68 = builtin::i32_wrap_i64(q >> 32_i64);
-    n_64 = "licm_reloadable_hoist_alias.wado/$cm_binding__Stdout_write_via_stream"(n_64 = start_69; start_69 = 0; n_64);
-    start_69 = new_used_68;
-    new_used_68 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_68 = start_69; start_69 = 0; new_used_68, s.repr, s.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_68 = n_64; n_64 = 0; new_used_68);
+    start_59 = builtin::i32_wrap_i64(local.tee q("wasi/stream-new"()));
+    new_used_58 = builtin::i32_wrap_i64(q >> 32_i64);
+    n_54 = "licm_reloadable_hoist_alias.wado/$cm_binding__Stdout_write_via_stream"(n_54 = start_59; start_59 = 0; n_54);
+    start_59 = new_used_58;
+    new_used_58 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_59, s.repr, s.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_59 = n_54; n_54 = 0; start_59);
 }
 
 fn "licm_reloadable_hoist_alias.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
