@@ -104,8 +104,8 @@ global global:effect_handler_resume.wado::$const_obj_3: ref "core:prelude/string
 fn "effect_handler_resume.wado/run"() with Stdout {
     let c: ref "effect_handler_resume.wado//CounterState";
     let $save_effect_handler_resume.wado/Counter: ref null "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter";
-    let $d_effect_handler_resume.wado/Counter: ref "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter";
     let $local_0_8: ref null "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter";
+    let $local_1_9: ref "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter";
     let $local_2_10: i32;
     let $local_2_13: i32;
     let is_negative_22: bool;
@@ -113,13 +113,13 @@ fn "effect_handler_resume.wado/run"() with Stdout {
     let x_26: i64;
     let $sroa_$f_buf_135: ref "core:prelude/string.wado//String";
     c = struct.new "effect_handler_resume.wado//CounterState" { value: 0 };
-    global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $d_effect_handler_resume.wado/Counter(struct.new "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter" { outer: local.tee $save_effect_handler_resume.wado/Counter(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resume.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/effect_handler_resume.wado/$closure_wrapper_0" } });
+    global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = struct.new "effect_handler_resume.wado//$Dispatch_effect_handler_resume.wado/Counter" { outer: local.tee $save_effect_handler_resume.wado/Counter(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resume.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/effect_handler_resume.wado/$closure_wrapper_0" } };
     $local_2_10 = $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_1: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_8(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter)) == 0) {
-            global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $d_effect_handler_resume.wado/Counter(ref.as_non_null($local_0_8)).outer;
+            global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $local_1_9(ref.as_non_null($local_0_8)).outer;
             $local_2_10 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_9.op_next)).env);
             };
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = $local_0_8;
             break $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_1: $local_2_10;
@@ -132,9 +132,9 @@ fn "effect_handler_resume.wado/run"() with Stdout {
     };
     $local_2_13 = $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_2: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_8(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter)) == 0) {
-            global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $d_effect_handler_resume.wado/Counter(ref.as_non_null($local_0_8)).outer;
+            global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $local_1_9(ref.as_non_null($local_0_8)).outer;
             $local_2_13 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_9.op_next)).env);
             };
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = $local_0_8;
             break $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_2: $local_2_13;
@@ -190,8 +190,8 @@ fn "effect_handler_resume.wado/run"() with Stdout {
     is_negative_22 = "effect_handler_resume.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_22 = $local_2_10; $local_2_10 = 0; is_negative_22);
     $local_2_10 = $local_2_13;
     $local_2_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_13 = $local_2_10; $local_2_10 = 0; $local_2_13, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_13 = is_negative_22; is_negative_22 = 0; $local_2_13);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_10, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_10 = is_negative_22; is_negative_22 = 0; $local_2_10);
     global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = $save_effect_handler_resume.wado/Counter;
 }
 

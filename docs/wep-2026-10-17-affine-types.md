@@ -689,7 +689,7 @@ pub affine struct WaitableSet<affine W: Waitable> { … }
 
 impl<affine W: Waitable> WaitableSet<W> {
     pub fn new() -> WaitableSet<W>;
-    pub fn join(&mut self, member: W);
+    pub fn insert(&mut self, member: W);
     pub fn wait(&mut self) -> Ready<W>;
     pub fn poll(&mut self) -> Option<Ready<W>>;
 }
@@ -703,7 +703,7 @@ pub variant ReadyEvent {
 }
 ```
 
-`join` moves the member into the set. `wait` blocks until a member has an event,
+`insert` moves the member into the set. `wait` blocks until a member has an event,
 moves it out, and returns it with the event, decoded into a `ReadyEvent`
 variant. A raw code and payload would leave every caller to decode the
 Component Model's numbering, and a caller that read a stream's count as a
@@ -870,7 +870,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [x] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
   with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
   nobody awaited.
-- [x] `WaitableSet<W>` owns its members: `Waitable`, `join`, `wait` and `poll`
+- [x] `WaitableSet<W>` owns its members: `Waitable`, `insert`, `wait` and `poll`
   returning `Ready<W>`, and its `Drop` dropping the members first.
   `Waitable = i32`, `WaitEvent.handle` and the `join` methods go. Fixtures: a
   set waiting on two calls through a variant, a set dropped with members, and

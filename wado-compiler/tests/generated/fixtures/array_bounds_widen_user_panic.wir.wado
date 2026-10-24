@@ -91,12 +91,10 @@ fn "array_bounds_widen_user_panic.wado/guarded$dae[return]"(xs, i) with Stdout {
         $moved_4 = "array_bounds_widen_user_panic.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $load_0; $load_0 = 0; $moved_4);
         $load_0 = i;
         i = 0;
-        i = $load_0;
-        $load_0 = 0;
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:array_bounds_widen_user_panic.wado::$const_obj_0;
-        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(i, $mv_arg_4.repr, $mv_arg_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = $moved_4; $moved_4 = 0; i);
+        "core:rt/write_string_to_stream$spec0$dae[add_newline]"($load_0, $mv_arg_4.repr, $mv_arg_4.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $moved_4; $moved_4 = 0; $load_0);
         cold_path;
         "core:rt/panic"(array.new_fixed<u8>(66), 1);
         unreachable;
@@ -213,7 +211,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(5)), 0, $mv$message$repr, 0, 4);
     builtin::array_set_u8(new_repr, 4, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 5);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 5);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

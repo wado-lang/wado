@@ -84,7 +84,7 @@ fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     let $sroa_o_x_93: ref "core:prelude//List<i32>";
     let $moved_4: i32;
     let $cm_pair_7: i64;
-    let $sroa_$f_buf_124: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_125: ref "core:prelude/string.wado//String";
     $sroa_o_x_93 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 1, 2, 3), used: 4 };
     if @unlikely(4 >= builtin::array_len($sroa_o_x_93.repr)) {
         cold_path;
@@ -92,8 +92,8 @@ fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     }
     builtin::array_set<i32>($sroa_o_x_93.repr, 4, 99);
     $sroa_o_x_93.used = 5;
-    offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_124(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_124.repr, offset_30, 5_i64, 1);
+    offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_125(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_125.repr, offset_30, 5_i64, 1);
     if @unlikely(local.tee offset_30($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, offset_30);
@@ -101,8 +101,8 @@ fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     start_44 = $local_1.used;
     $local_1.used = offset_30;
     builtin::array_copy<u8>($local_1.repr, start_44, global:opt_value_copy_move_field_out.wado::$const_obj_0, 0, 1);
-    start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_124($local_1), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_124.repr, start_44, 4_i64, 1);
+    start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_125($local_1), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_125.repr, start_44, 4_i64, 1);
     if @unlikely(local.tee start_44($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_44);
@@ -110,15 +110,15 @@ fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     offset_30 = $local_1.used;
     $local_1.used = start_44;
     builtin::array_copy<u8>($local_1.repr, offset_30, global:opt_value_copy_move_field_out.wado::$const_obj_0, 0, 1);
-    offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_124($local_1), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_124.repr, offset_30, 6_i64, 1);
+    offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_125($local_1), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_125.repr, offset_30, 6_i64, 1);
     offset_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     start_44 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "opt_value_copy_move_field_out.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = offset_30; offset_30 = 0; $moved_4);
     offset_30 = start_44;
     start_44 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_44 = offset_30; offset_30 = 0; start_44, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_44 = $moved_4; $moved_4 = 0; start_44);
+    "core:rt/write_string_to_stream$dae[add_newline]"(offset_30, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_30 = $moved_4; $moved_4 = 0; offset_30);
 }
 
 fn "opt_value_copy_move_field_out.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

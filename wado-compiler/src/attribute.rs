@@ -259,9 +259,8 @@ fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
     match target {
         AttrTarget::StructField => &["name", "positional", "default"],
         AttrTarget::EnumCase | AttrTarget::VariantCase => &["name"],
-        AttrTarget::Struct | AttrTarget::Enum | AttrTarget::Variant | AttrTarget::Flags => {
-            &["name_policy"]
-        }
+        AttrTarget::Variant => &["name_policy", "tag"],
+        AttrTarget::Struct | AttrTarget::Enum | AttrTarget::Flags => &["name_policy"],
         AttrTarget::Module
         | AttrTarget::Newtype
         | AttrTarget::Function
@@ -533,7 +532,9 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: WIRE,
         targets: WIRE_TARGET,
-        args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
+        args: AttrArgs::Read(
+            "`name = \"…\"`, `name_policy = \"…\"`, `tag = \"…\"`, `positional`, or `default`",
+        ),
         summary: "how serialization spells this declaration",
         stdlib_only: false,
         bodyless: None,

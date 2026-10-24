@@ -39,6 +39,9 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     deeper,
+    read_tag,
+    report_duplicate_field,
+    DuplicateFieldPolicy,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -1506,11 +1509,9 @@ impl DeserializeStruct for CborStructAccess {
         if !self.indef {
             self.remaining -= 1;
         }
-        // Fast path: a definite-length text key matches the schema straight from
-        // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
-        // Only definite lengths (ai <= AI_8BYTE) take it; indefinite (31) and
-        // reserved (28..=30) fall to the slow path, where `read_head` reports the
-        // precise malformed-head diagnostic.
+        // `entry_key`'s read, kept inline: `next_field` has an instance per
+        // struct, and the inliner declines a callee that size at that many
+        // sites, which costs cbor-twitter's decode 5%.
         let head = self.de.peek_byte()?;
         if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
             let key_range = (unchecked self.de.read_text_key_range(head))?;
@@ -1520,9 +1521,6 @@ impl DeserializeStruct for CborStructAccess {
             };
             return Result::Ok(Option::Some(idx));
         }
-        // Slow path: an indefinite-length or tag-wrapped key (rare, but
-        // well-formed) is materialized via `deserialize_string` and matched
-        // by its bytes.
         builtin::cold_path();
         let key = self.de.deserialize_string()?;
         let idx = match S::lookup(key.as_bytes()) {
@@ -1543,6 +1541,55 @@ impl DeserializeStruct for CborStructAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
+    }
+
+    fn tag<S: AsStrSlice>(&mut self, key: S, on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
+        let wanted = key.as_str_slice();
+        let start = self.de.pos;
+        let remaining = self.remaining;
+        let mut found: Option<String> = null;
+        while !self.de.container_step(self.remaining, self.indef)? {
+            if !self.indef {
+                self.remaining -= 1;
+            }
+            let is_tag = self.entry_key()? == wanted.as_bytes();
+            self.de.depth = self.depth;
+            if !is_tag {
+                self.de.skip_item(self.depth)?;
+                continue;
+            }
+            if found matches { Some(_) } {
+                report_duplicate_field(on_duplicate, &wanted.to_string())?;
+            }
+            found = Option::Some(read_tag(self.de, wanted)?);
+        }
+        let Some(value) = found else {
+            return Result::Err(DeserializeError::missing_field(key));
+        };
+        self.de.pos = start;
+        self.remaining = remaining;
+        return Result::Ok(value);
+    }
+}
+
+impl CborStructAccess {
+    /// Reads the next entry's key.
+    fn entry_key(&mut self) -> Result<ByteSlice, DeserializeError> {
+        // Fast path: a definite-length text key is read from the input in place
+        // (RFC 8949 §6.1: text-string keys). Only definite lengths
+        // (ai <= AI_8BYTE) take it; indefinite (31) and reserved (28..=30) fall
+        // to the slow path, where `read_head` reports the precise malformed-head
+        // diagnostic.
+        let head = self.de.peek_byte()?;
+        if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
+            let key_range = (unchecked self.de.read_text_key_range(head))?;
+            return Result::Ok(self.de.input.slice(key_range.0, key_range.0 + key_range.1));
+        }
+        // Slow path: an indefinite-length or tag-wrapped key (rare, but
+        // well-formed) is materialized via `deserialize_string`.
+        builtin::cold_path();
+        let key = self.de.deserialize_string()?;
+        return Result::Ok(key.as_bytes());
     }
 }
 

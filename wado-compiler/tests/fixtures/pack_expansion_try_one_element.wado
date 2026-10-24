@@ -1,0 +1,41 @@
+// `[..T::make(n)?]` applies `?` to each element of the expansion. Over a
+// one-type pack the tuple holds a single element, which must still be the
+// unwrapped value rather than the `Result` around it.
+
+trait Make with () {
+    fn make(n: i32) -> Result<Self, String>;
+}
+
+impl Make for i32 {
+    fn make(n: i32) -> Result<i32, String> {
+        if n < 0 {
+            return Result::Err("negative");
+        }
+        return Result::Ok(n);
+    }
+}
+
+impl Make for String {
+    fn make(n: i32) -> Result<String, String> {
+        return Result::Ok(`${n}`);
+    }
+}
+
+fn build<..T: Make>(n: i32) -> Result<[..T], String> {
+    let t = [..T::make(n)?];
+    return Result::Ok(t);
+}
+
+test "one element" {
+    assert build::<[i32]>(1) matches { Ok([1]) };
+    assert build::<[i32]>(-1) matches { Err(e) && e == "negative" };
+    assert build::<[String]>(7) matches { Ok([s]) && s == "7" };
+}
+
+test "two elements" {
+    assert build::<[i32, String]>(2) matches { Ok([2, s]) && s == "2" };
+    assert build::<[i32, String]>(-2) matches { Err(_) };
+}
+
+__DATA__
+{"test": {}}

@@ -41,28 +41,27 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:variadic_zip_ref_receiver.wado::$const_obj_3: ref "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }, 1: struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 } } };
+global global:variadic_zip_ref_receiver.wado::$const_obj_4: ref "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }, 1: struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 } } };
 
 fn "variadic_zip_ref_receiver.wado/$test_0_a_zip_transposes_what_a_reference_refers_to"() {
     let $load_3: i32;
     let $load_8: ref "tuple//[i32, core:prelude/string.wado/String]";
     let $load_10: ref "tuple//[i32, core:prelude/string.wado/String]";
     let $v2_2: ref "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]";
-    let v_224: ref "core:prelude/string.wado//String";
-    v_224 = local.tee $v2_2(global:variadic_zip_ref_receiver.wado::$const_obj_3).0.1;
+    let v_228: ref "core:prelude/string.wado//String";
+    v_228 = local.tee $v2_2(global:variadic_zip_ref_receiver.wado::$const_obj_4).0.1;
     let $array_clone_src_1: ref Array<u8>;
-    $array_clone_src_1 = v_224.repr;
-    $load_3 = v_224.used;
-    let $array_clone_dst_2: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $array_clone_src_1, 0, $load_3);
-    $array_clone_dst_2 = local.tee v_224($v2_2.1.1).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_3(v_224.used))), 0, $array_clone_dst_2, 0, $load_3);
-    drop(local.tee $load_8(local.tee $v2_2(global:variadic_zip_ref_receiver.wado::$const_obj_3).0).0);
+    $array_clone_src_1 = v_228.repr;
+    $load_3 = v_228.used;
+    builtin::array_copy<u8>(builtin::array_new<u8>($load_3), 0, $array_clone_src_1, 0, $load_3);
+    $array_clone_src_1 = local.tee v_228($v2_2.1.1).repr;
+    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_3(v_228.used)), 0, $array_clone_src_1, 0, $load_3);
+    drop(local.tee $load_8(local.tee $v2_2(global:variadic_zip_ref_receiver.wado::$const_obj_4).0).0);
     drop(local.tee $load_10($v2_2.1).0);
-    $array_clone_src_1 = local.tee v_224($load_8.1).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_3(v_224.used))), 0, $array_clone_src_1, 0, $load_3);
-    $array_clone_dst_2 = local.tee v_224($load_10.1).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_3(v_224.used))), 0, $array_clone_dst_2, 0, $load_3);
+    $array_clone_src_1 = local.tee v_228($load_8.1).repr;
+    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_3(v_228.used)), 0, $array_clone_src_1, 0, $load_3);
+    $array_clone_src_1 = local.tee v_228($load_10.1).repr;
+    builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $load_3(v_228.used)), 0, $array_clone_src_1, 0, $load_3);
 }
 
 fn "variadic_zip_ref_receiver.wado/$cm_export__$test_0_a_zip_transposes_what_a_reference_refers_to"() {

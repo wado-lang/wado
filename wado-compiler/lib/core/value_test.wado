@@ -17,7 +17,7 @@ use {
     IgnoredAny,
     Visitor,
 } from "core:serde";
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
     let mut m: TreeMap<String, Value> = TreeMap::new();
@@ -1158,6 +1158,13 @@ test "a HashMap read under a last-wins policy keeps the last repeated key" {
     assert r matches { Ok(m) && m.value.len() == 2 && m.value["a"] == 3 };
 }
 
+test "a set read under a last-wins policy names a bad element by its place in the input" {
+    let tree: Result<ReadLastWins<TreeSet<i32>>, DeserializeError> = from_string(`[1,1,"x"]`);
+    assert tree matches { Err(e) && e.path == "[2]" };
+    let hashed: Result<ReadLastWins<HashSet<i32>>, DeserializeError> = from_string(`[1,1,"x"]`);
+    assert hashed matches { Err(e) && e.path == "[2]" };
+}
+
 test "a Value read under a last-wins policy keeps the last repeated key" {
     let r: Result<ReadLastWins<Value>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     let expected: Value = { a: 3.0, b: 2.0 };
@@ -1188,4 +1195,38 @@ test "a case with more than one payload holds them as a list" {
         ],
     ]);
     assert to_value(&TwoPayloads {}) == Result::Ok(Value::Object(both));
+}
+
+struct TagSplit {
+    pattern: String,
+}
+
+#[wire(tag = "type")]
+variant InternallyTagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "an internal tag is looked up among the object's entries" {
+    let split = InternallyTagged::Split(TagSplit { pattern: "x" });
+    let written = obj([
+        ["type", Value::String("Split")],
+        ["pattern", Value::String("x")],
+    ]);
+    assert to_value(&split) == Result::Ok(Value::Object(written));
+    assert from_value::<InternallyTagged>(&Value::Object(written)) == Result::Ok(split);
+    assert fails_with::<InternallyTagged>(&Value::Object(obj([
+        ["pattern", Value::String("x")],
+    ])), MissingField);
+    let untyped = Value::Object(obj([
+        ["type", Value::Bool(true)],
+    ]));
+    assert from_value::<InternallyTagged>(&untyped) matches { Err(e) && e.path == "type" };
+}
+
+test "a repeated internal tag meets the duplicate policy, and an accepted one gives the last" {
+    let repeated = `{"type":"Empty","pattern":"x","type":"Split"}`;
+    assert from_string::<InternallyTagged>(repeated) matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    let last: Result<ReadLastWins<InternallyTagged>, DeserializeError> = from_string(repeated);
+    assert last matches { Ok(r) && r.value == InternallyTagged::Split(TagSplit { pattern: "x" }) };
 }

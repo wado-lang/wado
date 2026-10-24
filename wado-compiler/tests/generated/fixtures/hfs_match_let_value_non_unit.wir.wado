@@ -86,6 +86,7 @@ fn "hfs_match_let_value_non_unit.wado/run"() with Stdout {
     let b: ref "hfs_match_let_value_non_unit.wado//Buf";
     let sum: i32;
     let i: i32;
+    let val: i32;
     let $local_4: ref "core:prelude/string.wado//String";
     let x_18: i64;
     let $sroa_$f_buf_71: ref "core:prelude/string.wado//String";
@@ -98,8 +99,7 @@ fn "hfs_match_let_value_non_unit.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 i >= 4;
-            let $match_scrut_0: i32;
-            $match_scrut_0 = (if local.tee $match_scrut_0(i % 2) == 0 -> i32 {
+            val = (if (i % 2) == 0 -> i32 {
                 local.tee $hfs_v_74($hfs_v_74 + 1);
             } else {
                 b.v = $hfs_v_74;
@@ -107,7 +107,7 @@ fn "hfs_match_let_value_non_unit.wado/run"() with Stdout {
                 $hfs_v_74 = b.v;
                 $hfs_call_75;
             });
-            sum = sum + $match_scrut_0;
+            sum = sum + val;
             i = i + 1;
             b.v = $hfs_v_74;
             continue l1;
@@ -135,8 +135,8 @@ fn "hfs_match_let_value_non_unit.wado/run"() with Stdout {
     $hfs_v_74 = "hfs_match_let_value_non_unit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_v_74 = $hfs_call_75; $hfs_call_75 = 0; $hfs_v_74);
     $hfs_call_75 = sum;
     sum = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(sum = $hfs_call_75; $hfs_call_75 = 0; sum, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = $hfs_v_74; $hfs_v_74 = 0; sum);
+    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_call_75, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_call_75 = $hfs_v_74; $hfs_v_74 = 0; $hfs_call_75);
 }
 
 fn "hfs_match_let_value_non_unit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

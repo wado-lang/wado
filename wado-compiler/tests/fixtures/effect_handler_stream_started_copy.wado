@@ -37,7 +37,7 @@ export fn run() with Stdout {
     with &mut scripted do {
         let [rx, tx] = Stream::<u8>::new();
         let mut set = WaitableSet::<ReadCopy<u8>>::new();
-        set.join(rx.start_read(2));
+        set.insert(rx.start_read(2));
         let ready = set.wait();
         let [reader, chunk] = ready.member.finish();
         println(`first ${chunk.items:?} ${ready.event:?}`);

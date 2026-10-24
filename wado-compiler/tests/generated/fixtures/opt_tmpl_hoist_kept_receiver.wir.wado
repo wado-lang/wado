@@ -91,13 +91,11 @@ fn "opt_tmpl_hoist_kept_receiver.wado/run"() with Stdout {
     let aliased: ref "core:prelude//List<core:prelude/string.wado/StrSlice>";
     let i: i32;
     let $local_10: ref "core:prelude/string.wado//String";
-    let elements_16: ref "Array<core:prelude/string.wado/StrSlice>";
     let new_used_31: i32;
     let start_32: i32;
     let abs_val_42: u64;
     let x_45: i64;
     let value_48: ref "core:prelude/string.wado//StrSlice";
-    let repr_51: ref Array<u8>;
     let abs_val_80: u64;
     let x_83: i64;
     let part_107: ref Array<u8>;
@@ -105,10 +103,12 @@ fn "opt_tmpl_hoist_kept_receiver.wado/run"() with Stdout {
     let $moved_5_131: i32;
     let $moved_6_132: i32;
     let $moved_3_138: i32;
+    let $sroa_$iter_1_repr_160: ref "Array<core:prelude/string.wado/StrSlice>";
+    let $sroa_item_repr_184: ref Array<u8>;
     let $sroa_item_start_185: i32;
     let $sroa_item_end_186: i32;
-    direct = struct.new "core:prelude//List<core:prelude/string.wado/StrSlice>" { repr: local.tee elements_16(array.new_fixed<ref "core:prelude/string.wado//StrSlice">()), used: 0 };
-    aliased = struct.new "core:prelude//List<core:prelude/string.wado/StrSlice>" { repr: local.tee elements_16(array.new_fixed<ref "core:prelude/string.wado//StrSlice">()), used: 0 };
+    direct = struct.new "core:prelude//List<core:prelude/string.wado/StrSlice>" { repr: array.new_fixed<ref "core:prelude/string.wado//StrSlice">(), used: 0 };
+    aliased = struct.new "core:prelude//List<core:prelude/string.wado/StrSlice>" { repr: array.new_fixed<ref "core:prelude/string.wado//StrSlice">(), used: 0 };
     i = 0;
     b0: block {
         l1: loop {
@@ -125,7 +125,7 @@ fn "opt_tmpl_hoist_kept_receiver.wado/run"() with Stdout {
             new_used_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_42(x_45 = builtin::i64_extend_i32_s(i); select i64(x_45 < 0_i64, 0_i64 - x_45, x_45)));
             start_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_10, start_32, new_used_31);
             "core:prelude/primitive.wado/write_decimal_digits"($local_10.repr, start_32, abs_val_42, new_used_31);
-            value_48 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_51($local_10.repr), start: 0, end: $local_10.used };
+            value_48 = struct.new "core:prelude/string.wado//StrSlice" { repr: $local_10.repr, start: 0, end: $local_10.used };
             if @unlikely(local.tee new_used_31(direct.used) >= builtin::array_len(direct.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/StrSlice>::grow"(direct);
@@ -144,7 +144,7 @@ fn "opt_tmpl_hoist_kept_receiver.wado/run"() with Stdout {
             new_used_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_80(x_83 = builtin::i64_extend_i32_s(i); select i64(x_83 < 0_i64, 0_i64 - x_83, x_83)));
             start_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_10, start_32, new_used_31);
             "core:prelude/primitive.wado/write_decimal_digits"($local_10.repr, start_32, abs_val_80, new_used_31);
-            value_48 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_51($local_10.repr), start: 0, end: $local_10.used };
+            value_48 = struct.new "core:prelude/string.wado//StrSlice" { repr: $local_10.repr, start: 0, end: $local_10.used };
             if @unlikely(local.tee new_used_31(aliased.used) >= builtin::array_len(aliased.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/StrSlice>::grow"(aliased);
@@ -156,45 +156,45 @@ fn "opt_tmpl_hoist_kept_receiver.wado/run"() with Stdout {
         };
     };
     i = direct.used;
-    elements_16 = direct.repr;
+    $sroa_$iter_1_repr_160 = direct.repr;
     new_used_31 = 0;
     b6: block {
         l7: loop {
             break_if b6 new_used_31 >= i;
-            repr_51 = local.tee value_48(builtin::array_get_value<ref "core:prelude/string.wado//StrSlice">(elements_16, new_used_31)).repr;
+            $sroa_item_repr_184 = local.tee value_48(builtin::array_get_value<ref "core:prelude/string.wado//StrSlice">($sroa_$iter_1_repr_160, new_used_31)).repr;
             $sroa_item_start_185 = value_48.start;
             $sroa_item_end_186 = value_48.end;
             new_used_31 = new_used_31 + 1;
-            builtin::array_copy<u8>(local.tee part_107(builtin::array_new<u8>(local.tee start_32($sroa_item_end_186 - $sroa_item_start_185))), 0, repr_51, $sroa_item_start_185, start_32);
+            builtin::array_copy<u8>(local.tee part_107(builtin::array_new<u8>(local.tee start_32($sroa_item_end_186 - $sroa_item_start_185))), 0, $sroa_item_repr_184, $sroa_item_start_185, start_32);
             $local_10 = struct.new "core:prelude/string.wado//String" { repr: part_107, used: start_32 };
             $sroa_item_start_185 = builtin::i32_wrap_i64(local.tee abs_val_80("wasi/stream-new"()));
             $sroa_item_end_186 = builtin::i32_wrap_i64(abs_val_80 >> 32_i64);
             $sroa_item_start_185 = "opt_tmpl_hoist_kept_receiver.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_130 = $sroa_item_start_185; $sroa_item_start_185 = 0; $moved_4_130);
             $moved_5_131 = $sroa_item_end_186;
             $sroa_item_end_186 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_138 = $moved_5_131; $moved_5_131 = 0; $moved_3_138, $local_10.repr, start_32);
+            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_3_138($moved_5_131), $local_10.repr, start_32);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_132 = $sroa_item_start_185; $sroa_item_start_185 = 0; $moved_6_132);
             continue l7;
         };
     };
     $moved_6_132 = aliased.used;
-    elements_16 = aliased.repr;
+    $sroa_$iter_1_repr_160 = aliased.repr;
     $moved_3_138 = 0;
     b8: block {
         l9: loop {
             break_if b8 $moved_3_138 >= $moved_6_132;
-            part_107 = local.tee value_48(builtin::array_get_value<ref "core:prelude/string.wado//StrSlice">(elements_16, $moved_3_138)).repr;
+            part_107 = local.tee value_48(builtin::array_get_value<ref "core:prelude/string.wado//StrSlice">($sroa_$iter_1_repr_160, $moved_3_138)).repr;
             $sroa_item_start_185 = value_48.start;
             $moved_5_131 = value_48.end;
             $moved_3_138 = $moved_3_138 + 1;
-            builtin::array_copy<u8>(local.tee repr_51(builtin::array_new<u8>(local.tee $moved_4_130($moved_5_131 - $sroa_item_start_185))), 0, part_107, $sroa_item_start_185, $moved_4_130);
-            $local_10 = struct.new "core:prelude/string.wado//String" { repr: repr_51, used: $moved_4_130 };
+            builtin::array_copy<u8>(local.tee $sroa_item_repr_184(builtin::array_new<u8>(local.tee $moved_4_130($moved_5_131 - $sroa_item_start_185))), 0, part_107, $sroa_item_start_185, $moved_4_130);
+            $local_10 = struct.new "core:prelude/string.wado//String" { repr: $sroa_item_repr_184, used: $moved_4_130 };
             $sroa_item_start_185 = builtin::i32_wrap_i64(local.tee abs_val_80("wasi/stream-new"()));
             $moved_5_131 = builtin::i32_wrap_i64(abs_val_80 >> 32_i64);
             $sroa_item_start_185 = "opt_tmpl_hoist_kept_receiver.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_32 = $sroa_item_start_185; $sroa_item_start_185 = 0; start_32);
             $sroa_item_end_186 = $moved_5_131;
             $moved_5_131 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"(new_used_31 = $sroa_item_end_186; $sroa_item_end_186 = 0; new_used_31, $local_10.repr, $moved_4_130);
+            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee new_used_31($sroa_item_end_186), $local_10.repr, $moved_4_130);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = $sroa_item_start_185; $sroa_item_start_185 = 0; i);
             continue l9;
         };

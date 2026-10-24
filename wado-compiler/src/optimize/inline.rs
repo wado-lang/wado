@@ -44,7 +44,7 @@ use crate::nir::FuncId;
 use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
-use crate::optimize::dce::DescriptorCache;
+use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::Executor;
 use crate::token::Span;
@@ -1264,11 +1264,15 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
 type ArgSite = (FuncId, Vec<(u32, Operand)>);
 
 /// The [`ArgSite`]s of every function, indexed by store position; empty for a
-/// bodyless one.
-fn argument_sites(scans: &[BodyScan]) -> Vec<Vec<ArgSite>> {
+/// bodyless one and for one no entry reaches.
+fn argument_sites(scans: &[BodyScan], live: &[bool]) -> Vec<Vec<ArgSite>> {
     scans
         .iter()
-        .map(|scan| {
+        .zip(live)
+        .map(|(scan, &live)| {
+            if !live {
+                return Vec::new();
+            }
             scan.calls
                 .iter()
                 .map(|(callee, args)| {
@@ -1845,9 +1849,10 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
-fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
-    let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
+/// A site in a function no entry reaches never runs, so it is not counted.
+fn call_site_counts(sites: &[Vec<ArgSite>]) -> Vec<usize> {
+    let mut counts = vec![0usize; sites.len()];
+    for (callee, _) in sites.iter().flatten() {
         counts[callee.index()] += 1;
     }
     counts
@@ -1855,9 +1860,12 @@ fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
 
 /// The functions some cold site calls, indexed by store position: the ones a
 /// [`Site::Cold`] admission asks whether they shrink.
-fn called_cold(scans: &[BodyScan], cold: &[bool]) -> Vec<bool> {
+fn called_cold(scans: &[BodyScan], live: &[bool], cold: &[bool]) -> Vec<bool> {
     let mut called = vec![false; scans.len()];
     for (caller, scan) in scans.iter().enumerate() {
+        if !live[caller] {
+            continue;
+        }
         if cold[caller] {
             for (callee, _) in &scan.calls {
                 called[callee.index()] = true;
@@ -2113,7 +2121,21 @@ pub fn inline_functions(
     descriptor_cache: &mut DescriptorCache,
     mod_ref: &mut SummaryCache,
     scans: &mut InlineScans,
+    reachability: &mut ReachabilityCache,
 ) -> bool {
+    // Function DCE runs outside the loop, so a branch pruned inside it leaves
+    // functions only that branch called. Their sites would price a callee as
+    // called more often than it is, which declines a splice the live program
+    // would take.
+    let live = {
+        let reachable =
+            reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
+        let mut live = vec![false; project.functions.len()];
+        for pos in reachable {
+            live[pos] = true;
+        }
+        live
+    };
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
@@ -2121,16 +2143,25 @@ pub fn inline_functions(
     let cold_path = cold_path_id(descriptors);
     let InlineScans { bodies, read } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
-    let call_sites = call_site_counts(scans);
-    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
+    let call_sites = call_site_counts(&sites);
+    let (live_ref, no_callees) = (&live, &IndexSet::default());
+    let live_edges = |pick: fn(&BodyScan) -> &IndexSet<FuncId>| {
+        move |caller: usize| {
+            if live_ref[caller] {
+                pick(&scans[caller])
+            } else {
+                no_callees
+            }
+        }
+    };
+    let cold = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
-    let looped = unreached_through(project, &call_sites, |caller| {
-        &scans[caller].unlooped_callees
-    });
-    let called_cold = called_cold(scans, &cold);
+    let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
+    let called_cold = called_cold(scans, &live, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2175,7 +2206,6 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let sites = argument_sites(scans);
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
@@ -2421,7 +2451,8 @@ pub fn inline_functions(
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
     let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
-        if held.contains(&fid) {
+        // A dead caller's sites were priced as never running, so none is taken.
+        if !live[fid.index()] || held.contains(&fid) {
             return None;
         }
         let candidates = Candidates {

@@ -6,7 +6,7 @@
 
 use { HashMap, TreeMap } from "core:collections";
 use { from_string } from "core:json";
-use { Value } from "core:value";
+use { Deserialize, DeserializeError, DeserializeMap, DeserializeSeq, Deserializer, Visitor } from "core:serde";
 use { TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
 
 /// A BPE pipeline: the vocabulary, the merges resolved to ids, the added
@@ -44,67 +44,213 @@ fn refused<T>(message: String) -> Result<T, TokenizerError> {
     return Result::Err(TokenizerError { message });
 }
 
+/// A setting at `at` whose `key` holds `value`, which Loam does not generate.
+fn unsupported<T>(at: String, key: String, value: String) -> Result<T, TokenizerError> {
+    return refused(`${at}: ${key} ${value} is not supported`);
+}
+
+/// What Loam reads of a `tokenizer.json`. A key it names no field for is
+/// skipped, and a field absent from the file holds the value that changes
+/// nothing.
+struct TokenizerFile {
+    added_tokens: List<AddedToken> = [],
+    normalizer: Option<Normalizer> = null,
+    pre_tokenizer: Option<PreTokenizer> = null,
+    post_processor: Option<PostProcessor> = null,
+    decoder: Option<Decoder> = null,
+    model: Model,
+    truncation: Option<Setting> = null,
+    padding: Option<Setting> = null,
+}
+
+/// A stage Loam generates nothing for, whatever it holds.
+struct Setting {
+}
+
+struct AddedToken {
+    id: i32,
+    content: String,
+    single_word: bool = false,
+    lstrip: bool = false,
+    rstrip: bool = false,
+    normalized: bool = false,
+}
+
+struct Model {
+    /// Absent from the older files, which write only BPE.
+    #[wire(name = "type")]
+    kind: String = "BPE",
+    vocab: Option<TreeMap<String, i32>> = null,
+    merges: Option<List<Merge>> = null,
+    dropout: Option<f64> = null,
+    continuing_subword_prefix: Option<String> = null,
+    end_of_word_suffix: Option<String> = null,
+    ignore_merges: bool = false,
+    unk_token: Option<String> = null,
+    fuse_unk: bool = false,
+    byte_fallback: bool = false,
+}
+
+/// A file's model type alone, read where the whole file does not read.
+struct TypeOfModel {
+    model: ModelType,
+}
+
+struct ModelType {
+    #[wire(name = "type")]
+    kind: String = "BPE",
+}
+
+/// That `kind`, a model's type, is the one Loam generates.
+fn bpe(kind: &String) -> Result<(), TokenizerError> {
+    if *kind != "BPE" {
+        return refused(`model: ${*kind} is not supported`);
+    }
+    return Result::Ok(());
+}
+
+/// The two tokens a merge joins.
+struct Merge {
+    left: String,
+    right: String,
+}
+
+#[wire(tag = "type")]
+variant Normalizer {
+    Replace(Replace),
+}
+
+#[wire(tag = "type")]
+variant PreTokenizer {
+    ByteLevel(ByteLevel),
+}
+
+#[wire(tag = "type")]
+variant Decoder {
+    ByteLevel(ByteLevel),
+    Sequence(DecoderSequence),
+}
+
+#[wire(tag = "type")]
+variant DecodeStep {
+    Replace(Replace),
+    ByteFallback,
+    Fuse,
+}
+
+#[wire(tag = "type")]
+variant PostProcessor {
+    ByteLevel(ByteLevel),
+    TemplateProcessing(Template),
+}
+
+struct ByteLevel {
+    add_prefix_space: bool = false,
+    use_regex: bool = true,
+}
+
+struct Replace {
+    pattern: ReplacePattern,
+    content: String,
+}
+
+variant ReplacePattern {
+    String(String),
+    Regex(String),
+}
+
+struct DecoderSequence {
+    decoders: List<DecodeStep>,
+}
+
+struct Template {
+    single: List<TemplatePiece> = [],
+}
+
+variant TemplatePiece {
+    SpecialToken(TemplateId),
+    Sequence(TemplateId),
+}
+
+struct TemplateId {
+    id: String,
+}
+
 /// The pipeline `text`, a `tokenizer.json`, writes down.
 pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
-    let root = match from_string::<Value>(text) {
-        Ok(Object(fields)) => fields,
-        Ok(_) => {
-            return refused("not a JSON object");
-        },
+    let file = match from_string::<TokenizerFile>(text) {
+        Ok(file) => file,
         Err(e) => {
-            return refused(`not JSON: ${e}`);
+            // A model of another type lays its fields out its own way, so its
+            // type is the reason, not the first field that reads otherwise.
+            if let Ok(TypeOfModel { model }) = from_string::<TypeOfModel>(text) {
+                bpe(&model.kind)?;
+            }
+            return refused(`${e}`);
         },
     };
-    for let stage of ["truncation", "padding"] {
-        if let Some(value) = root.get(stage) && !value matches { Null } {
-            return refused(`${stage}: ${kind_of(&value)} is not supported`);
+    if file.truncation matches { Some(_) } {
+        return refused("truncation is not supported");
+    }
+    if file.padding matches { Some(_) } {
+        return refused("padding is not supported");
+    }
+    let spelling = spelling_of(&file)?;
+    let model = file.model;
+    bpe(&model.kind)?;
+    if let Some(dropout) = model.dropout {
+        return unsupported("model", "dropout", `${dropout}`);
+    }
+    for let [key, affix] of [
+        ["continuing_subword_prefix", model.continuing_subword_prefix],
+        ["end_of_word_suffix", model.end_of_word_suffix],
+    ] as List<[String, Option<String>]> {
+        // An empty string and none mean the same affix.
+        if let Some(affix) = affix && affix != "" {
+            return unsupported("model", key, affix);
         }
     }
-    let spelling = spelling_of(&root)?;
-    let Some(Object(model)) = root.get("model") else {
-        return refused("model: not an object");
-    };
-    if let Some(kind) = model.get("type") && !kind matches { String(s) && s == "BPE" } {
-        return refused(`model: ${spelled(&kind)} is not supported`);
+    if model.ignore_merges {
+        return unsupported("model", "ignore_merges", "true");
     }
     let pieces = spelling matches { Pieces };
-    for let [key, neutral] of [
-        ["dropout", Value::Null],
-        ["continuing_subword_prefix", Value::String("")],
-        ["end_of_word_suffix", Value::String("")],
-        ["ignore_merges", Value::Bool(false)],
-    ] as List<[String, Value]> {
-        settled(&model, "model", key, &neutral)?;
-    }
     if !pieces {
-        for let [key, neutral] of [
-            ["unk_token", Value::Null],
-            ["fuse_unk", Value::Bool(false)],
-            ["byte_fallback", Value::Bool(false)],
-        ] as List<[String, Value]> {
-            settled(&model, "model", key, &neutral)?;
+        if let Some(unknown) = model.unk_token {
+            return unsupported("model", "unk_token", unknown);
         }
-    } else if model.get("fuse_unk") != Option::Some(Value::Bool(true))
-        && model.get("unk_token") matches { Some(String(_)) } {
+        if model.fuse_unk {
+            return unsupported("model", "fuse_unk", "true");
+        }
+        if model.byte_fallback {
+            return unsupported("model", "byte_fallback", "true");
+        }
+    } else if !model.fuse_unk && model.unk_token matches { Some(_) } {
         return refused("model: an unknown token that does not fuse is not supported");
     }
-    let Some(Object(vocab)) = model.get("vocab") else {
+    let Some(vocab) = model.vocab else {
         return refused("model: no vocab");
     };
     let mut tokens = tokens_of(&vocab)?;
-    let specials = specials_of(&root, &vocab, &mut tokens, pieces)?;
+    let specials = specials_of(&file.added_tokens, &vocab, &mut tokens, pieces)?;
     let mut ids = HashMap::<String, i32>::new();
     for let [id, token] of tokens.into_iter().enumerate() {
         ids.try_insert(token, id);
     }
-    let merges = merges_of(&model, &ids)?;
-    let mut pipeline = BpePipeline { tokens, merges, specials, spelling };
+    let Some(merges) = model.merges else {
+        return refused("model: no merges");
+    };
+    let mut pipeline = BpePipeline { tokens, merges: merges_of(&merges, &ids)?, specials, spelling };
     if pieces {
-        spelled_in_pieces(&model, &ids)?;
-        if let Some(String(unknown)) = model.get("unk_token") {
+        if !model.byte_fallback {
+            return refused("model: SentencePiece's spelling without byte_fallback is not supported");
+        }
+        for let b of 0..<256 {
+            id_of(&ids, &byte_token(b), "model: the byte token")?;
+        }
+        if let Some(unknown) = model.unk_token {
             pipeline.unknown = id_of(&ids, &unknown, "model: the unknown token")?;
         }
-        pipeline.prefix = prefix_of(&root, &ids)?;
+        pipeline.prefix = prefix_of(&file.post_processor, &ids)?;
     } else {
         spelled_in_bytes(&pipeline, &ids)?;
     }
@@ -113,48 +259,68 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
 
 /// The spelling the normalizer, pre-tokenizer and decoder write down together:
 /// GPT-2's byte level, or SentencePiece's spaces as `▁`.
-fn spelling_of(root: &TreeMap<String, Value>) -> Result<TokenSpelling, TokenizerError> {
-    let normalizer = root.get("normalizer").unwrap_or(Value::Null);
-    if normalizer matches { Null } {
-        let pre = stage_of(root, "pre_tokenizer", ["ByteLevel"])?;
-        settled(&pre, "pre_tokenizer", "add_prefix_space", &Value::Bool(false))?;
-        settled(&pre, "pre_tokenizer", "use_regex", &Value::Bool(true))?;
-        stage_of(root, "decoder", ["ByteLevel"])?;
+fn spelling_of(file: &TokenizerFile) -> Result<TokenSpelling, TokenizerError> {
+    let Some(normalizer) = file.normalizer else {
+        let Some(ByteLevel(pre)) = file.pre_tokenizer else {
+            return refused("pre_tokenizer: none is not supported");
+        };
+        if pre.add_prefix_space {
+            return unsupported("pre_tokenizer", "add_prefix_space", "true");
+        }
+        if !pre.use_regex {
+            return unsupported("pre_tokenizer", "use_regex", "false");
+        }
+        if !file.decoder matches { Some(ByteLevel(_)) } {
+            return refused(`decoder: ${kind_of(&file.decoder)} is not supported`);
+        }
         // Only offsets depend on it, which Loam does not compute.
-        if let Some(value) = root.get("post_processor") && !value matches { Null } {
-            stage_of(root, "post_processor", ["ByteLevel"])?;
+        if file.post_processor matches { Some(TemplateProcessing(_)) } {
+            return refused(`post_processor: ${kind_of(&file.post_processor)} is not supported`);
         }
         return Result::Ok(TokenSpelling::ByteLevel);
-    }
-    if !is_space_replacement(&normalizer, " ", "▁") {
-        return refused(`normalizer: ${kind_of(&normalizer)} is not supported`);
-    }
-    if let Some(value) = root.get("pre_tokenizer") && !value matches { Null } {
-        return refused(`pre_tokenizer: ${kind_of(&value)} is not supported`);
-    }
-    let decoder = stage_of(root, "decoder", ["Sequence"])?;
-    let Some(List(steps)) = decoder.get("decoders") else {
-        return refused("decoder: a Sequence with no decoders");
     };
-    let kinds: List<String> = steps.into_iter().map(|s| kind_of(&s)).collect();
-    if kinds != ["Replace", "ByteFallback", "Fuse"] as List<String> || !is_space_replacement(&steps[0], "▁", " ") {
+    let Replace(replace) = normalizer;
+    if !is_space_replacement(&replace, " ", "▁") {
+        return refused(`normalizer: ${kind_of(&file.normalizer)} is not supported`);
+    }
+    if file.pre_tokenizer matches { Some(_) } {
+        return refused(`pre_tokenizer: ${kind_of(&file.pre_tokenizer)} is not supported`);
+    }
+    let Some(Sequence(sequence)) = file.decoder else {
+        return refused(`decoder: ${kind_of(&file.decoder)} is not supported`);
+    };
+    let steps = sequence.decoders;
+    if !(steps.len() == 3
+        && steps[0] matches { Replace(r) && is_space_replacement(&r, "▁", " ") }
+        && steps[1] matches { ByteFallback }
+        && steps[2] matches { Fuse }) {
+        let kinds: List<String> = steps.into_iter().map(|s| case_name(&s)).collect();
         return refused(`decoder: ${kinds.join(", ")} is not supported`);
     }
     return Result::Ok(TokenSpelling::Pieces);
 }
 
-/// Whether `stage` is a `Replace` of the string `pattern` by `content`.
-fn is_space_replacement(stage: &Value, pattern: String, content: String) -> bool {
-    let Object(fields) = *stage else {
-        return false;
+/// Whether `replace` replaces the string `pattern` by `content`.
+fn is_space_replacement(replace: &Replace, pattern: String, content: String) -> bool {
+    return replace.pattern matches { String(p) && p == pattern } && replace.content == content;
+}
+
+/// How `stage` reads in a refusal: its type, or none.
+fn kind_of<V: ReflectVariant<CasePayloads = [..P]>, ..P>(stage: &Option<V>) -> String {
+    return match *stage {
+        Some(given) => case_name(&given),
+        None => "none",
     };
-    let Some(Object(written)) = fields.get("pattern") else {
-        return false;
-    };
-    return fields.get("type") == Option::Some(Value::String("Replace"))
-        && written.get("String") == Option::Some(Value::String(pattern))
-        && written.len() == 1
-        && fields.get("content") == Option::Some(Value::String(content));
+}
+
+/// The name of the case `value` holds.
+fn case_name<V: ReflectVariant<CasePayloads = [..P]>, ..P>(value: &V) -> String {
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(value) {
+            return case.name();
+        }
+    }
+    unreachable();
 }
 
 /// That the vocabulary spells every byte and every token but an added one is
@@ -177,49 +343,28 @@ fn spelled_in_bytes(pipeline: &BpePipeline, ids: &HashMap<String, i32>) -> Resul
     return Result::Ok(());
 }
 
-/// That the vocabulary has a `<0xXX>` token for every byte, where the model
-/// falls back to them.
-fn spelled_in_pieces(model: &TreeMap<String, Value>, ids: &HashMap<String, i32>) -> Result<(), TokenizerError> {
-    if model.get("byte_fallback") != Option::Some(Value::Bool(true)) {
-        return refused("model: SentencePiece's spelling without byte_fallback is not supported");
-    }
-    for let b of 0..<256 {
-        id_of(ids, &byte_token(b), "model: the byte token")?;
-    }
-    return Result::Ok(());
-}
-
 /// The ids a `TemplateProcessing` puts before a single sequence. Only special
 /// tokens before it are supported, as a beginning-of-sequence token is.
-fn prefix_of(root: &TreeMap<String, Value>, ids: &HashMap<String, i32>) -> Result<List<i32>, TokenizerError> {
-    let Some(value) = root.get("post_processor") else {
+fn prefix_of(processor: &Option<PostProcessor>, ids: &HashMap<String, i32>) -> Result<List<i32>, TokenizerError> {
+    let Some(processor) = *processor else {
         return Result::Ok([]);
     };
-    if value matches { Null } {
-        return Result::Ok([]);
-    }
-    let processor = stage_of(root, "post_processor", ["TemplateProcessing"])?;
-    let Some(List(single)) = processor.get("single") else {
-        return refused("post_processor: no single template");
+    let TemplateProcessing(template) = processor else {
+        return refused(`post_processor: ${case_name(&processor)} is not supported`);
     };
     let mut prefix: List<i32> = [];
-    for let [i, piece] of single.into_iter().enumerate() {
-        let Object(fields) = piece else {
-            return refused("post_processor: a template piece is an object");
-        };
-        if let Some(Object(sequence)) = fields.get("Sequence") {
-            if i != single.len() - 1 || sequence.get("id") != Option::Some(Value::String("A")) {
-                return refused("post_processor: only special tokens before the sequence are supported");
-            }
-            return Result::Ok(prefix);
+    for let [i, piece] of template.single.into_iter().enumerate() {
+        match piece {
+            Sequence(sequence) => {
+                if i != template.single.len() - 1 || sequence.id != "A" {
+                    return refused("post_processor: only special tokens before the sequence are supported");
+                }
+                return Result::Ok(prefix);
+            },
+            SpecialToken(special) => {
+                prefix.push(id_of(ids, &special.id, "post_processor: the special token")?);
+            },
         }
-        let Some(Object(special)) = fields.get("SpecialToken") else {
-            return refused("post_processor: a template piece is a SpecialToken or the Sequence");
-        };
-        let Some(String(name)) = special.get("id") else {
-            return refused("post_processor: a SpecialToken with no id");
-        };
-        prefix.push(id_of(ids, &name, "post_processor: the special token")?);
     }
     return refused("post_processor: the single template holds no sequence");
 }
@@ -231,102 +376,31 @@ fn id_of(ids: &HashMap<String, i32>, token: &String, what: String) -> Result<i32
     };
 }
 
-/// The stage `key`, which must be one of `kinds`.
-fn stage_of(
-    root: &TreeMap<String, Value>,
-    key: String,
-    kinds: List<String>,
-) -> Result<TreeMap<String, Value>, TokenizerError> {
-    let Some(Object(stage)) = root.get(key) else {
-        return refused(`${key}: none is not supported`);
-    };
-    let kind = match stage.get("type") {
-        Some(String(kind)) => kind,
-        _ => {
-            return refused(`${key}: no type`);
-        },
-    };
-    if !kinds.contains(&kind) {
-        return refused(`${key}: ${kind} is not supported`);
-    }
-    return Result::Ok(stage);
-}
-
-/// That `stage`'s `key` is absent or `neutral`, the one value Loam generates.
-fn settled(stage: &TreeMap<String, Value>, at: String, key: String, neutral: &Value) -> Result<(), TokenizerError> {
-    let Some(value) = stage.get(key) else {
-        return Result::Ok(());
-    };
-    // An empty string and none mean the same affix.
-    if value == *neutral || neutral matches { String(s) && s == "" } && value matches { Null } {
-        return Result::Ok(());
-    }
-    return refused(`${at}: ${key} ${spelled(&value)} is not supported`);
-}
-
 /// The tokens of `vocab`, in id order.
-fn tokens_of(vocab: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
+fn tokens_of(vocab: &TreeMap<String, i32>) -> Result<List<String>, TokenizerError> {
     let mut tokens = List::<String>::filled(vocab.len(), "");
     let mut seen = List::<bool>::filled(vocab.len(), false);
     for let [token, id] of vocab.entries() {
-        let Some(id) = index_of(id, vocab.len()) else {
+        if *id < 0 || *id >= vocab.len() {
             return refused(`model: ${*token} has no id below ${vocab.len()}`);
-        };
-        if seen[id] {
-            return refused(`model: id ${id} names two tokens`);
+        }
+        if seen[*id] {
+            return refused(`model: id ${*id} names two tokens`);
         }
         // The generated tokenizer separates its tokens by NUL.
         if token.contains("\0") {
-            return refused(`model: token ${id} holds a NUL`);
+            return refused(`model: token ${*id} holds a NUL`);
         }
-        seen[id] = true;
-        tokens[id] = *token;
+        seen[*id] = true;
+        tokens[*id] = *token;
     }
     return Result::Ok(tokens);
 }
 
-/// `value` as an index below `len`.
-fn index_of(value: &Value, len: i32) -> Option<i32> {
-    let Float(f) = *value else {
-        return null;
-    };
-    if f < 0.0 || f >= len as f64 || f != f64::floor(f) {
-        return null;
-    }
-    return Option::Some(f as i32);
-}
-
-/// Each merge as the ids it joins and joins to. The older files write one as
-/// `"left right"`, the newer as a pair.
-fn merges_of(
-    model: &TreeMap<String, Value>,
-    ids: &HashMap<String, i32>,
-) -> Result<List<[i32, i32, i32]>, TokenizerError> {
-    let Some(List(items)) = model.get("merges") else {
-        return refused("model: no merges");
-    };
-    let mut merges: List<[i32, i32, i32]> = [];
-    for let item of items {
-        let [left, right] = match item {
-            String(merge) => {
-                let Some([l, r]) = merge.split_once(" ") else {
-                    return refused(`model: merge ${merge} is not two tokens`);
-                };
-                [
-                    l.to_string(),
-                    r.to_string(),
-                ];
-            },
-            List(pair) && pair.len() == 2 => {
-                let [String(l), String(r)] = [pair[0], pair[1]] else {
-                    return refused("model: a merge pair holds two strings");
-                };
-                [l, r];
-            },
-            _ => {
-                return refused("model: a merge is a string or a pair");
-            },
-        };
+/// Each merge as the ids it joins and joins to.
+fn merges_of(merges: &List<Merge>, ids: &HashMap<String, i32>) -> Result<List<[i32, i32, i32]>, TokenizerError> {
+    let mut resolved: List<[i32, i32, i32]> = [];
+    for let { left, right } of *merges {
         let mut joined: List<i32> = [];
         for let part of [left, right, `${left}${right}`] {
             let Some(id) = ids.get(part) else {
@@ -334,79 +408,109 @@ fn merges_of(
             };
             joined.push(id);
         }
-        merges.push([joined[0], joined[1], joined[2]]);
+        resolved.push([joined[0], joined[1], joined[2]]);
     }
-    return Result::Ok(merges);
+    return Result::Ok(resolved);
 }
 
 /// The added tokens, each matched as it stands, which must not wait for a
 /// normalizer where `normalizes`. One past the vocabulary's end extends it;
 /// any other must be the vocabulary's own token of its id.
 fn specials_of(
-    root: &TreeMap<String, Value>,
-    vocab: &TreeMap<String, Value>,
+    added: &List<AddedToken>,
+    vocab: &TreeMap<String, i32>,
     tokens: &mut List<String>,
     normalizes: bool,
 ) -> Result<List<String>, TokenizerError> {
-    let Some(List(added)) = root.get("added_tokens") else {
-        return Result::Ok([]);
-    };
     let mut specials: List<String> = [];
-    for let token of added {
-        let Object(fields) = token else {
-            return refused("added_tokens: an added token is an object");
-        };
-        let Some(String(content)) = fields.get("content") else {
-            return refused("added_tokens: an added token has no content");
-        };
-        for let key of ["single_word", "lstrip", "rstrip"] {
-            settled(&fields, `added_tokens: ${content}`, key, &Value::Bool(false))?;
+    for let token of *added {
+        let at = `added_tokens: ${token.content}`;
+        for let [key, set] of [
+            ["single_word", token.single_word],
+            ["lstrip", token.lstrip],
+            ["rstrip", token.rstrip],
+        ] as List<[String, bool]> {
+            if set {
+                return unsupported(at, key, "true");
+            }
         }
         // The runtime matches an added token against the text as written.
-        if normalizes {
-            settled(&fields, `added_tokens: ${content}`, "normalized", &Value::Bool(false))?;
+        if normalizes && token.normalized {
+            return unsupported(at, "normalized", "true");
         }
-        let id = fields.get("id");
-        let own = vocab.get(content);
-        let extends = own matches { None } && id matches { Some(Float(f)) && f == tokens.len() as f64 };
-        if extends {
-            tokens.push(content);
-        } else if !id matches { Some(Float(_)) } || id != own {
+        let own = vocab.get(token.content);
+        if own matches { None } && token.id == tokens.len() {
+            tokens.push(token.content);
+        } else if own != Option::Some(token.id) {
             let given = match own {
-                Some(Float(v)) => `${v as i64}`,
-                _ => "none",
+                Some(id) => `${id}`,
+                None => "none",
             };
-            let claimed = match id {
-                Some(Float(v)) => `${v as i64}`,
-                _ => "none",
-            };
-            return refused(`added_tokens: ${content} is id ${claimed}, and the vocabulary gives it ${given}`);
+            return refused(`${at} is id ${token.id}, and the vocabulary gives it ${given}`);
         }
-        specials.push(content);
+        specials.push(token.content);
     }
     return Result::Ok(specials);
 }
 
-/// A stage's type, or how a non-object reads.
-fn kind_of(value: &Value) -> String {
-    return match *value {
-        Object(fields) => match fields.get("type") {
-            Some(String(kind)) => kind,
-            _ => "an untyped stage",
-        },
-        other => spelled(&other),
-    };
+/// A merge, which the older files write as `"left right"` and the newer as a
+/// pair.
+impl Deserialize for Merge {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Merge, DeserializeError> {
+        return d.deserialize_any(&mut MergeVisitor {});
+    }
 }
 
-/// A scalar as JSON writes it.
-fn spelled(value: &Value) -> String {
-    return match *value {
-        Null => "null",
-        Bool(b) => `${b}`,
-        Float(f) => `${f}`,
-        String(s) => s,
-        List(_) => "a list",
-        Object(_) => "an object",
-        _ => "a value JSON does not write",
-    };
+struct MergeVisitor {
+}
+
+impl MergeVisitor {
+    fn neither<T>(&self) -> Result<T, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("a merge is a string or a pair"));
+    }
+}
+
+impl Visitor for MergeVisitor {
+    type Value = Merge;
+
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Merge, DeserializeError> {
+        let merge = v.as_str_slice();
+        let Some([left, right]) = merge.split_once(" ") else {
+            return Result::Err(DeserializeError::invalid_value(`merge ${merge} is not two tokens`));
+        };
+        return Result::Ok(Merge {
+            left: left.to_string(),
+            right: right.to_string(),
+        });
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Merge, DeserializeError> {
+        let Some(left) = seq.next_element::<String>()? else {
+            return self.neither();
+        };
+        let Some(right) = seq.next_element::<String>()? else {
+            return self.neither();
+        };
+        if seq.next_element::<String>()? matches { Some(_) } {
+            return self.neither();
+        }
+        seq.end()?;
+        return Result::Ok(Merge { left, right });
+    }
+
+    fn visit_null(&mut self) -> Result<Merge, DeserializeError> {
+        return self.neither();
+    }
+
+    fn visit_bool(&mut self, v: bool) -> Result<Merge, DeserializeError> {
+        return self.neither();
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<Merge, DeserializeError> {
+        return self.neither();
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Merge, DeserializeError> {
+        return self.neither();
+    }
 }

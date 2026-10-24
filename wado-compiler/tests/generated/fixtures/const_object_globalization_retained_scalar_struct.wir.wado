@@ -142,8 +142,7 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
                 $sroa_slot_67 = 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__4;
             };
-            let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_67) == 1 {
+            if $sroa_slot_67 == 1 {
                 h = "const_object_globalization_retained_scalar_struct.wado/stash"(global:const_object_globalization_retained_scalar_struct.wado::$const_obj_1, z);
                 acc = ((acc + local.tee $load_0(h.p).x) + $load_0.y) + h.tag;
                 if @unlikely(local.tee used_20(keep.used) >= builtin::array_len(keep.repr)) {
@@ -177,11 +176,17 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, acc, x_37, used_20);
     used_20 = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
     acc = builtin::i32_wrap_i64(x_37 >> 32_i64);
+<<<<<<< HEAD
     $match_scrut_0 = "const_object_globalization_retained_scalar_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($match_scrut_0 = used_20; used_20 = 0; $match_scrut_0);
+||||||| ed92649a8
+    $match_scrut_0 = "const_object_globalization_retained_scalar_struct.wado/$cm_binding__Stdout_write_via_stream"($match_scrut_0 = used_20; used_20 = 0; $match_scrut_0);
+=======
+    $sroa_$iter_0_start_70 = "const_object_globalization_retained_scalar_struct.wado/$cm_binding__Stdout_write_via_stream"($sroa_$iter_0_start_70 = used_20; used_20 = 0; $sroa_$iter_0_start_70);
+>>>>>>> origin/main
     used_20 = acc;
     acc = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(acc = used_20; used_20 = 0; acc, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(acc = $match_scrut_0; $match_scrut_0 = 0; acc);
+    "core:rt/write_string_to_stream$dae[add_newline]"(used_20, $local_6.repr, $local_6.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_20 = $sroa_$iter_0_start_70; $sroa_$iter_0_start_70 = 0; used_20);
 }
 
 fn "const_object_globalization_retained_scalar_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

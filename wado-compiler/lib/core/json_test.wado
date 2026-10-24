@@ -13,7 +13,7 @@ use {
     DeserializeErrorKind,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 
 use {
     to_string,
@@ -1517,9 +1517,9 @@ test "a control byte outside JSON's four is not whitespace" {
 }
 
 test "a container reports a bad separator or a missing end where it stops" {
-    assert de_err::<List<i32>>("[1 2]") == DeserializeError::malformed("expected ',' or ']'", 3);
-    assert de_err::<List<i32>>("[1") == DeserializeError::eof(2);
-    assert de_err::<List<i32>>("[") == DeserializeError::eof(1);
+    assert de_err::<List<i32>>("[1 2]") == DeserializeError::malformed("expected ',' or ']'", 3).within_item(&1);
+    assert de_err::<List<i32>>("[1") == DeserializeError::eof(2).within_item(&1);
+    assert de_err::<List<i32>>("[") == DeserializeError::eof(1).within_item(&0);
     assert de_err::<List<i32>>("{}") == DeserializeError::malformed("expected '[', found '{'", 0);
 
     assert de_err::<TreeMap<String, i32>>(`{"a":1 "b":2}`) == DeserializeError::malformed("expected ',' or '}'", 7);
@@ -1824,8 +1824,8 @@ test "a point or an exponent needs a digit after it" {
     assert de_err::<f64>("1e") == DeserializeError::eof(2);
     assert de_err::<f64>("1e+") == DeserializeError::eof(3);
 
-    let point = DeserializeError::malformed("expected digit after '.'", 3);
-    let exponent = DeserializeError::malformed("expected digit in exponent", 3);
+    let point = DeserializeError::malformed("expected digit after '.'", 3).within_item(&0);
+    let exponent = DeserializeError::malformed("expected digit in exponent", 3).within_item(&0);
     assert de_err::<List<f64>>("[1.e5]") == point;
     assert de_err::<List<i32>>("[1.]") == point;
     assert de_err::<List<i64>>("[1.]") == point;
@@ -1833,7 +1833,7 @@ test "a point or an exponent needs a digit after it" {
     assert de_err::<List<i128>>("[1.]") == point;
     assert de_err::<List<i64>>("[1e]") == exponent;
     assert de_err::<List<u32>>("[2E]") == exponent;
-    assert de_err::<List<f64>>("[1E-]") == DeserializeError::malformed("expected digit in exponent", 4);
+    assert de_err::<List<f64>>("[1E-]") == DeserializeError::malformed("expected digit in exponent", 4).within_item(&0);
 }
 
 test "a string rejects an unescaped control character" {
@@ -1896,4 +1896,85 @@ test "a skipped number is held to the read path's grammar" {
     assert point.skip_value(0).unwrap_err() == DeserializeError::malformed("expected digit after '.'", 3);
     let mut exponent = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
     assert exponent.skip_number().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
+}
+
+struct TagSplit {
+    pattern: String,
+    invert: bool = false,
+}
+
+#[wire(tag = "type")]
+variant Tagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "an internally tagged case writes its tag first" {
+    let split = Tagged::Split(TagSplit { pattern: "x", invert: true });
+    assert to_string(&split) == Result::Ok(`{"type":"Split","pattern":"x","invert":true}`);
+    assert to_string(&Tagged::Empty) == Result::Ok(`{"type":"Empty"}`);
+}
+
+test "an internal tag is read wherever it stands" {
+    let split = Tagged::Split(TagSplit { pattern: "x", invert: true });
+    assert from_string::<Tagged>(`{"type":"Split","pattern":"x","invert":true}`) == Result::Ok(split);
+    assert from_string::<Tagged>(`{"pattern":"x","invert":true,"type":"Split"}`) == Result::Ok(split);
+    assert from_string::<Tagged>(`{"extra":[1,{"a":2}],"type":"Empty","more":3}`) == Result::Ok(Tagged::Empty);
+    // An escaped key is read in full, before the tag and as the tag.
+    assert from_string::<Tagged>(`{"p\\u0061ttern":"x","type":"Split"}`) == Result::Ok(Tagged::Split(
+        TagSplit { pattern: "x" },
+    ));
+    assert from_string::<Tagged>(`{"ty\\u0070e":"Empty"}`) == Result::Ok(Tagged::Empty);
+}
+
+test "a malformed object fails the look-ahead for its tag" {
+    let malformed = [
+        `{"a":1 x`, `{"a":tru,"type":"Empty"}`, `{"type":1}`, `{"type" 1}`, `{"\\q":1}`, `{"t\\u0079pe" 1}`,
+    ] as List<String>;
+    for let input of malformed {
+        assert from_string::<Tagged>(input) matches { Err(_) };
+    }
+}
+
+test "an internal tag must be present, name a case, and stand under a key" {
+    assert from_string::<Tagged>(`{"pattern":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::MissingField };
+    assert from_string::<Tagged>(`{"type":"Join"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
+    assert from_string::<Tagged>(`{type:"Empty"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_bytes::<Tagged>(b"{\"\xff\":1}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+struct PathLeaf {
+    n: i32,
+}
+
+struct PathRoot {
+    items: List<PathLeaf> = [],
+    by: TreeMap<String, PathLeaf> = TreeMap::new(),
+    hashed: HashMap<String, PathLeaf> = HashMap::new(),
+    set: TreeSet<i32> = TreeSet::new(),
+    hashed_set: HashSet<i32> = HashSet::new(),
+    stage: Option<Tagged> = null,
+    either: Result<PathLeaf, i32> = Result::Err(0),
+}
+
+fn path_of(json: String) -> String {
+    return from_string::<PathRoot>(json).unwrap_err().path;
+}
+
+test "an error names the fields and elements it was reached through" {
+    assert path_of(`{"items":[{"n":1},{"n":"x"}]}`) == "items[1].n";
+    assert path_of(`{"by":{"k":{"n":true}}}`) == `by["k"].n`;
+    assert path_of(`{"hashed":{"k":{"n":true}}}`) == `hashed["k"].n`;
+    assert path_of(`{"set":[1,"x"]}`) == "set[1]";
+    assert path_of(`{"hashed_set":[1,"x"]}`) == "hashed_set[1]";
+    assert path_of(`{"stage":{"type":"Join"}}`) == "stage.type";
+    assert path_of(`{"stage":{"type":7}}`) == "stage.type";
+    assert path_of(`{"stage":{"type":"Split","pattern":"x","type":"Empty"}}`) == "stage";
+    assert path_of(`{"stage":{"pattern":"x"}}`) == "stage";
+    assert path_of(`{"stage":{"pattern":[1 2],"type":"Split"}}`) == "stage";
+    assert path_of(`{"stage":{"type":"Split","pattern":1}}`) == "stage.pattern";
+    assert path_of(`{"either":{"Ok":{"n":null}}}`) == "either.Ok.n";
+    assert path_of(`{"items":7}`) == "items";
+    let e = from_string::<PathRoot>(`{"items":[{"n":"x"}]}`).unwrap_err();
+    assert `${e}` == `items[0].n: ${e.message} at offset ${e.offset}`;
 }

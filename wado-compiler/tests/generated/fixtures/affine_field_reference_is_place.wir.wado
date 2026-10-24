@@ -115,8 +115,8 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_fi
 fn "affine_field_reference_is_place.wado/run"() with Stdout {
     let $load_13: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
     let h: ref null "affine_field_reference_is_place.wado//Holder";
+    let $temp_8: ref null "affine_field_reference_is_place.wado//Tok";
     let slot: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<affine_field_reference_is_place.wado/Tok>>";
-    let $drop_v_2: ref null "affine_field_reference_is_place.wado//Tok";
     let $replaced_3_18: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
     let self_19: i32;
     let $local_1_20: ref "core:prelude/string.wado//String";
@@ -129,7 +129,7 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
     slot.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
     if $replaced_3_18.discriminant == 0 {
     } else {
-        self_19 = local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0).n;
+        self_19 = ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0.n;
         $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         if @unlikely(local.tee new_used_33(0 + 5) > builtin::array_len($local_1_20.repr)) {
             cold_path;
@@ -153,24 +153,23 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
     start_34 = "affine_field_reference_is_place.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_34 = self_19; self_19 = 0; start_34);
     self_19 = new_used_33;
     new_used_33 = 0;
-    new_used_33 = self_19;
-    self_19 = 0;
     $local_1_20 = global:affine_field_reference_is_place.wado::$const_obj_9;
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_33, $local_1_20.repr, $local_1_20.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = start_34; start_34 = 0; new_used_33);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(self_19, $local_1_20.repr, $local_1_20.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
     slot = h.other;
     $replaced_3_18 = struct.new "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some" { discriminant: 1, payload_0: struct.new "affine_field_reference_is_place.wado//Tok" { n: 2 } };
     if ref.is_null(local.tee $load_13(slot.value)) == 0 {
         if $load_13.discriminant == 0 {
         } else {
-            new_used_33 = local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_13).payload_0).n;
+            self_19 = ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_13).payload_0.n;
             $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
             if @unlikely(local.tee start_34(0 + 5) > builtin::array_len($local_1_20.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, start_34);
             }
-            self_19 = $local_1_20.used;
+            new_used_33 = $local_1_20.used;
             $local_1_20.used = start_34;
+<<<<<<< HEAD
             builtin::array_copy<u8>($local_1_20.repr, self_19, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
             self_19 = new_used_33 < 0;
             new_used_33 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(new_used_33); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
@@ -181,21 +180,44 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
             start_34 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(start_34 = new_used_33; new_used_33 = 0; start_34);
             "core:rt/write_string_to_stream$dae[add_newline]"(new_used_33 = self_19; self_19 = 0; new_used_33, $local_1_20.repr, $local_1_20.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = start_34; start_34 = 0; new_used_33);
+||||||| ed92649a8
+            builtin::array_copy<u8>($local_1_20.repr, self_19, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
+            self_19 = new_used_33 < 0;
+            new_used_33 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(new_used_33); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+            self_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, self_19, new_used_33);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, self_19, x_47, new_used_33);
+            new_used_33 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+            self_19 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+            start_34 = "wasi/wasi:cli/Stdout::write_via_stream"(start_34 = new_used_33; new_used_33 = 0; start_34);
+            "core:rt/write_string_to_stream$dae[add_newline]"(new_used_33 = self_19; self_19 = 0; new_used_33, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = start_34; start_34 = 0; new_used_33);
+=======
+            builtin::array_copy<u8>($local_1_20.repr, new_used_33, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
+            new_used_33 = self_19 < 0;
+            self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(self_19); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, self_19);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, self_19);
+            self_19 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+            new_used_33 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+            start_34 = "wasi/wasi:cli/Stdout::write_via_stream"(start_34 = self_19; self_19 = 0; start_34);
+            "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+>>>>>>> origin/main
         }
     }
     slot.value = $replaced_3_18;
     $replaced_3_18 = local.tee slot(h.other).value;
     slot.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
-    $drop_v_2 = ref.null none;
+    $temp_8 = ref.null none;
     $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    if @unlikely(local.tee new_used_33(0 + 5) > builtin::array_len($local_1_20.repr)) {
+    if @unlikely(local.tee self_19(0 + 5) > builtin::array_len($local_1_20.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, new_used_33);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, self_19);
     }
     start_34 = $local_1_20.used;
-    $local_1_20.used = new_used_33;
+    $local_1_20.used = self_19;
     builtin::array_copy<u8>($local_1_20.repr, start_34, global:affine_field_reference_is_place.wado::$const_obj_7, 0, 5);
-    new_used_33 = local.tee start_34(local.tee $drop_v_2($inline_core_prelude_types_wado_Option_affine_field_reference_is_place_wado_Tok___unwrap_5: block -> ref null "affine_field_reference_is_place.wado//Tok" {
+    self_19 = local.tee start_34(local.tee $temp_8($inline_core_prelude_types_wado_Option_affine_field_reference_is_place_wado_Tok___unwrap_5: block -> ref null "affine_field_reference_is_place.wado//Tok" {
         $load_13 = $replaced_3_18;
         $replaced_3_18 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
         let $match_scrut_2: ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>";
@@ -213,19 +235,47 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
         if ref.is_null($load_13) == 0 {
             if $load_13.discriminant == 0 {
             } else {
-                "affine_field_reference_is_place.wado/affine_field_reference_is_place.wado/Tok^core:prelude/traits.wado/Drop::drop$sroa[self.n]"(local.tee $moved_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_13).payload_0).n);
+                "affine_field_reference_is_place.wado/affine_field_reference_is_place.wado/Tok^core:prelude/traits.wado/Drop::drop$sroa[self.n]"(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($load_13).payload_0.n);
             }
         }
         unreachable;
     }).n) < 0;
     start_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(start_34); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
-    new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, start_34);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, start_34);
+    self_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, self_19, start_34);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, self_19, x_47, start_34);
+    start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+    self_19 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+    new_used_33 = "affine_field_reference_is_place.wado/$cm_binding__Stdout_write_via_stream"(new_used_33 = start_34; start_34 = 0; new_used_33);
+    start_34 = self_19;
+    self_19 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_34, $local_1_20.repr, $local_1_20.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = new_used_33; new_used_33 = 0; start_34);
+    if ref.is_null($temp_8) == 0 {
+        start_34 = $temp_8.n;
+        $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+        if @unlikely(local.tee new_used_33(0 + 5) > builtin::array_len($local_1_20.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, new_used_33);
+        }
+        self_19 = $local_1_20.used;
+        $local_1_20.used = new_used_33;
+        builtin::array_copy<u8>($local_1_20.repr, self_19, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
+        self_19 = start_34 < 0;
+        start_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(start_34); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+        self_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, self_19, start_34);
+        "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, self_19, x_47, start_34);
+        start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+        self_19 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+        new_used_33 = "wasi/wasi:cli/Stdout::write_via_stream"(new_used_33 = start_34; start_34 = 0; new_used_33);
+        "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = self_19; self_19 = 0; start_34, $local_1_20.repr, $local_1_20.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = new_used_33; new_used_33 = 0; start_34);
+    }
     start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     new_used_33 = builtin::i32_wrap_i64(x_47 >> 32_i64);
     self_19 = "affine_field_reference_is_place.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_19 = start_34; start_34 = 0; self_19);
     start_34 = new_used_33;
     new_used_33 = 0;
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_33 = start_34; start_34 = 0; new_used_33, $local_1_20.repr, $local_1_20.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = self_19; self_19 = 0; new_used_33);
     if ref.is_null($drop_v_2) == 0 {
@@ -255,30 +305,72 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
     self_19 = 0;
     self_19 = new_used_33;
     new_used_33 = 0;
+||||||| ed92649a8
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_33 = start_34; start_34 = 0; new_used_33, $local_1_20.repr, $local_1_20.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = self_19; self_19 = 0; new_used_33);
+    if ref.is_null($drop_v_2) == 0 {
+        new_used_33 = $drop_v_2.n;
+        $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+        if @unlikely(local.tee self_19(0 + 5) > builtin::array_len($local_1_20.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, self_19);
+        }
+        start_34 = $local_1_20.used;
+        $local_1_20.used = self_19;
+        builtin::array_copy<u8>($local_1_20.repr, start_34, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
+        start_34 = new_used_33 < 0;
+        new_used_33 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(new_used_33); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+        start_34 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, start_34, new_used_33);
+        "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, start_34, x_47, new_used_33);
+        new_used_33 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+        start_34 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+        self_19 = "wasi/wasi:cli/Stdout::write_via_stream"(self_19 = new_used_33; new_used_33 = 0; self_19);
+        "core:rt/write_string_to_stream$dae[add_newline]"(new_used_33 = start_34; start_34 = 0; new_used_33, $local_1_20.repr, $local_1_20.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_33 = self_19; self_19 = 0; new_used_33);
+    }
+    new_used_33 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+    self_19 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+    start_34 = "affine_field_reference_is_place.wado/$cm_binding__Stdout_write_via_stream"(start_34 = new_used_33; new_used_33 = 0; start_34);
+    new_used_33 = self_19;
+    self_19 = 0;
+    self_19 = new_used_33;
+    new_used_33 = 0;
+=======
+>>>>>>> origin/main
     $local_1_20 = global:affine_field_reference_is_place.wado::$const_obj_5;
-    "core:rt/write_string_to_stream$spec1$dae[add_newline]"(self_19, $local_1_20.repr, $local_1_20.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+    "core:rt/write_string_to_stream$spec1$dae[add_newline]"(start_34, $local_1_20.repr, $local_1_20.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = self_19; self_19 = 0; start_34);
     if ref.is_null($replaced_3_18) == 0 {
         if $replaced_3_18.discriminant == 0 {
         } else {
-            self_19 = local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0).n;
+            start_34 = ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0.n;
             $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-            if @unlikely(local.tee start_34(0 + 5) > builtin::array_len($local_1_20.repr)) {
+            if @unlikely(local.tee self_19(0 + 5) > builtin::array_len($local_1_20.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, start_34);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, self_19);
             }
             new_used_33 = $local_1_20.used;
-            $local_1_20.used = start_34;
+            $local_1_20.used = self_19;
             builtin::array_copy<u8>($local_1_20.repr, new_used_33, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
-            new_used_33 = self_19 < 0;
-            self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(self_19); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
-            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, self_19);
-            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, self_19);
-            self_19 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+            new_used_33 = start_34 < 0;
+            start_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(start_34); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, start_34);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, start_34);
+            start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
             new_used_33 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+<<<<<<< HEAD
             start_34 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(start_34 = self_19; self_19 = 0; start_34);
             "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+||||||| ed92649a8
+            start_34 = "wasi/wasi:cli/Stdout::write_via_stream"(start_34 = self_19; self_19 = 0; start_34);
+            "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+=======
+            self_19 = "wasi/wasi:cli/Stdout::write_via_stream"(self_19 = start_34; start_34 = 0; self_19);
+            "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = new_used_33; new_used_33 = 0; start_34, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = self_19; self_19 = 0; start_34);
+>>>>>>> origin/main
         }
     }
     if ref.is_null((if ref.is_null(local.tee slot(h.slot)) -> ref null "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>" {
@@ -292,24 +384,34 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
             slot.value;
         })).discriminant == 0 {
         } else {
-            self_19 = local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0).n;
+            start_34 = ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0.n;
             $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-            if @unlikely(local.tee start_34(0 + 5) > builtin::array_len($local_1_20.repr)) {
+            if @unlikely(local.tee self_19(0 + 5) > builtin::array_len($local_1_20.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, start_34);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, self_19);
             }
             new_used_33 = $local_1_20.used;
-            $local_1_20.used = start_34;
+            $local_1_20.used = self_19;
             builtin::array_copy<u8>($local_1_20.repr, new_used_33, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
-            new_used_33 = self_19 < 0;
-            self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(self_19); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
-            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, self_19);
-            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, self_19);
-            self_19 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+            new_used_33 = start_34 < 0;
+            start_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(start_34); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, start_34);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, start_34);
+            start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
             new_used_33 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+<<<<<<< HEAD
             start_34 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(start_34 = self_19; self_19 = 0; start_34);
             "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+||||||| ed92649a8
+            start_34 = "wasi/wasi:cli/Stdout::write_via_stream"(start_34 = self_19; self_19 = 0; start_34);
+            "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+=======
+            self_19 = "wasi/wasi:cli/Stdout::write_via_stream"(self_19 = start_34; start_34 = 0; self_19);
+            "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = new_used_33; new_used_33 = 0; start_34, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = self_19; self_19 = 0; start_34);
+>>>>>>> origin/main
         }
     }
     $replaced_3_18 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
@@ -329,24 +431,34 @@ fn "affine_field_reference_is_place.wado/run"() with Stdout {
             slot.value;
         })).discriminant == 0 {
         } else {
-            self_19 = local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0).n;
+            start_34 = ref.cast "core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>::Some"($replaced_3_18).payload_0.n;
             $local_1_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-            if @unlikely(local.tee start_34(0 + 5) > builtin::array_len($local_1_20.repr)) {
+            if @unlikely(local.tee self_19(0 + 5) > builtin::array_len($local_1_20.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, start_34);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_20, self_19);
             }
             new_used_33 = $local_1_20.used;
-            $local_1_20.used = start_34;
+            $local_1_20.used = self_19;
             builtin::array_copy<u8>($local_1_20.repr, new_used_33, global:affine_field_reference_is_place.wado::$const_obj_2, 0, 5);
-            new_used_33 = self_19 < 0;
-            self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(self_19); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
-            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, self_19);
-            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, self_19);
-            self_19 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
+            new_used_33 = start_34 < 0;
+            start_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_47(x_47 = builtin::i64_extend_i32_s(start_34); select i64(x_47 < 0_i64, 0_i64 - x_47, x_47)));
+            new_used_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1_20, new_used_33, start_34);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_1_20.repr, new_used_33, x_47, start_34);
+            start_34 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
             new_used_33 = builtin::i32_wrap_i64(x_47 >> 32_i64);
+<<<<<<< HEAD
             start_34 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(start_34 = self_19; self_19 = 0; start_34);
             "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+||||||| ed92649a8
+            start_34 = "wasi/wasi:cli/Stdout::write_via_stream"(start_34 = self_19; self_19 = 0; start_34);
+            "core:rt/write_string_to_stream$dae[add_newline]"(self_19 = new_used_33; new_used_33 = 0; self_19, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_19 = start_34; start_34 = 0; self_19);
+=======
+            self_19 = "wasi/wasi:cli/Stdout::write_via_stream"(self_19 = start_34; start_34 = 0; self_19);
+            "core:rt/write_string_to_stream$dae[add_newline]"(start_34 = new_used_33; new_used_33 = 0; start_34, $local_1_20.repr, $local_1_20.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_34 = self_19; self_19 = 0; start_34);
+>>>>>>> origin/main
         }
     }
     $replaced_3_18 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_field_reference_is_place.wado/Tok>$0;
@@ -561,7 +673,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $mv$message$repr, 0, 7);
     builtin::array_set_u8(new_repr, 7, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 8);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 8);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
@@ -571,7 +683,7 @@ fn "core:rt/write_string_to_stream$spec1$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, $mv$message$repr, 0, 3);
     builtin::array_set_u8(new_repr, 3, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 4);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 4);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

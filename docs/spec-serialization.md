@@ -51,6 +51,14 @@ message, and the byte offset into the input, or `-1` where the failure has no
 position. Nesting deeper than a format's `max_depth` is a `DepthLimitExceeded`
 error, not a trap.
 
+A `DeserializeError` also carries its `path`, the fields and elements the
+failed read was reached through. A struct field is written by its wire name,
+and so is the payload of a case and an internal tag. An element of a list or a
+set is written as `[i]`, and a map value as its key, as `Inspect` writes the key
+(`by["k"]`). Displayed, the error leads with its path: `items[1].n: <message>`.
+
+> Not yet implemented: an element of a tuple adds no step to the path.
+
 A format is self-describing (SD) when the input names what it holds, such as
 `core:json` writing a struct as an object keyed by field name. A
 self-describing format resolves each key to a field by its wire name. A
@@ -95,11 +103,13 @@ internal tag. No untagged representation exists. In JSON:
 
 `#[wire(tag = "key")]` on a `variant` tags it internally: each case is written
 as a struct whose first field is `key`, holding the case's wire name, followed
-by the fields of its payload. A case carries no payload or a struct, and a
-payload field whose wire name is `key` is a compile error. Reading, a tag that
-names no case is `UnknownVariant`, and a missing tag is `MissingField`.
-
-> Not yet implemented: `#[wire(tag = "...")]` is not recognized.
+by the fields of its payload. A reader finds the tag wherever it stands among
+the entries. A case carries no payload, or a struct the derivation writes, or a
+newtype over one. A struct with a hand-written `Serialize` or `Deserialize`,
+such as `String` or `List<T>`, is not one. A payload field whose wire name is
+`key` is a compile error. Reading, a tag that names no case is
+`UnknownVariant`, a missing tag is `MissingField`, and a repeated one meets
+the duplicate policy as a repeated field does.
 
 The standard library's own impls:
 

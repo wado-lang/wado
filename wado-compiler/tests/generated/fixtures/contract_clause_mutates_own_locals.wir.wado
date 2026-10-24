@@ -128,11 +128,11 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
     builtin::array_set<i32>(copy_4.repr, $load_0, 1);
     copy_4.used = $load_0 + 1;
     struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
-    if @unlikely(local.tee sum_1((if sum_1 >= 0 -> i32 {
+    if @unlikely((if sum_1 >= 0 -> i32 {
         copy_4.used == (xs.used + 2);
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "contract_clause_mutates_own_locals.wado/total$cold0$dae[xs]"();
         unreachable;
@@ -195,8 +195,8 @@ fn "contract_clause_mutates_own_locals.wado/run"() with Stdout {
     ref_val = "contract_clause_mutates_own_locals.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(ref_val = self_7; self_7 = 0; ref_val);
     self_7 = is_negative_13;
     is_negative_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_13 = self_7; self_7 = 0; is_negative_13, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_13 = ref_val; ref_val = 0; is_negative_13);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_7, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_7 = ref_val; ref_val = 0; self_7);
 }
 
 fn "contract_clause_mutates_own_locals.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

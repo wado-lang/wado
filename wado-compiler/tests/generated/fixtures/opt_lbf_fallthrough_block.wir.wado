@@ -65,12 +65,10 @@ fn "opt_lbf_fallthrough_block.wado/$cm_export__run"() {
     $moved_4_39 = "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_39 = $sroa_$pattern_temp_0_0_13_48; $sroa_$pattern_temp_0_0_13_48 = 0; $moved_4_39);
     $sroa_$pattern_temp_0_0_13_48 = $sroa_$pattern_temp_0_1_14_49;
     $sroa_$pattern_temp_0_1_14_49 = 0;
-    $sroa_$pattern_temp_0_1_14_49 = $sroa_$pattern_temp_0_0_13_48;
-    $sroa_$pattern_temp_0_0_13_48 = 0;
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("OK: 42");
-    "core:rt/write_string_to_stream$dae[add_newline]$spec1"($sroa_$pattern_temp_0_1_14_49, $mv_field_2, 6);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_49 = $moved_4_39; $moved_4_39 = 0; $sroa_$pattern_temp_0_1_14_49);
+    "core:rt/write_string_to_stream$dae[add_newline]$spec1"($sroa_$pattern_temp_0_0_13_48, $mv_field_2, 6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_48 = $moved_4_39; $moved_4_39 = 0; $sroa_$pattern_temp_0_0_13_48);
     "wasi/task-return"(0);
 }
 
@@ -143,7 +141,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]$spec1"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, $mv$message$repr, 0, 6);
     builtin::array_set_u8(new_repr, 6, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 7);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 7);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

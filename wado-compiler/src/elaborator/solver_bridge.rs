@@ -1193,7 +1193,7 @@ impl SolverBridge {
             .collect();
         members.extend(shapes.into_iter().map(|(shape, _)| shape));
         stated.extend(members.iter().chain(&handles).map(|decl| decl.id));
-        Self::derive_all(tysys, table, lowering, program, members, handles);
+        Self::derive_all(tysys, data, table, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
         Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::state_type_facts(tysys, data, table, lowering, program);
@@ -1594,6 +1594,7 @@ impl SolverBridge {
     /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
     fn derive_all(
         tysys: &TypeSystem,
+        data: &DataDecls,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
@@ -1617,6 +1618,7 @@ impl SolverBridge {
             .into_iter()
             .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
             .collect();
+        let first = program.next_impl_id();
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
@@ -1626,6 +1628,48 @@ impl SolverBridge {
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
+        }
+        if let Some(&(_, deserialize)) = traits
+            .iter()
+            .find(|(item, _)| *item == CompilerItem::Deserialize)
+            && let Some(schema) = Self::derived_trait(tysys, lowering, CompilerItem::FieldSchema)
+        {
+            Self::derive_field_schemas(data, lowering, program, deserialize, schema, first);
+        }
+    }
+
+    /// The `FieldSchema` a struct's derived `Deserialize` reads its keys by, at
+    /// the same arguments: the body is synthesized with the derivation's, so
+    /// one holds exactly where the other does. Only the impls from `first` on
+    /// are this round's.
+    fn derive_field_schemas(
+        data: &DataDecls,
+        lowering: &Lowering,
+        program: &mut Program,
+        deserialize: TraitDeclId,
+        schema: TraitDeclId,
+        first: ImplId,
+    ) {
+        let mirrored: Vec<ImplDef> = program
+            .impls_of(deserialize)
+            .filter(|(id, def)| {
+                *id >= first
+                    && matches!(def.origin, ImplOrigin::Derived)
+                    && matches!(
+                        &def.target,
+                        SolverType::Decl(head, _) if matches!(
+                            lowering.decl_key(*head),
+                            DeclKey::Def(def) if data.struct_fields.contains_key(def)
+                        )
+                    )
+            })
+            .map(|(_, def)| ImplDef {
+                trait_: Some(schema),
+                ..def.clone()
+            })
+            .collect();
+        for def in mirrored {
+            program.push_impl(def);
         }
     }
 

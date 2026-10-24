@@ -108,6 +108,11 @@ One nesting level deeper, or `DepthLimitExceeded` at the limit. Threaded as
 a value, so there is nothing to decrement and a format cannot leave the
 count unbalanced; each picks its own `max_depth` and container boundaries.
 
+### `pub fn read_tag<D: Deserializer, S: AsStrSlice>(d: &mut D, key: S) -> Result<String, DeserializeError>`
+
+The string an internal tag holds, read from `d` once `DeserializeStruct::tag`
+has found it under `key`, which an error names in its path.
+
 ### `pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
@@ -301,6 +306,18 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 `#[compiler_item("deserialize_struct_end")]`
 
+#### `fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError>`
+
+The string under `key`, wherever it stands among the entries: an
+internally tagged variant's case. Every entry is looked at, so a repeat
+of `key` meets `on_duplicate` as a repeated field does, and an accepted
+one gives the last string. The entries are then read again from the
+first, where `next_field` passes `key`'s over as a key no field has. An
+error reading the string names `key` in its path; one reading past
+another entry names nothing, as `next_field`'s skip does. A format that
+cannot look ahead keeps the default, which refuses rather than read the
+wrong case.
+
 ### `pub trait DeserializeVariant with ()`
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
@@ -465,6 +482,20 @@ string to spell as.
 
 Byte offset into the input, or `-1` where the failure has no position —
 a whole-value rejection, or a format that counts nothing.
+
+#### `path: String`
+
+Where in the value the failure is, as the fields and elements it was
+reached through: `model.vocab`, `added_tokens[2].id`. Empty at the root.
+
+#### `pub fn within_field<S: AsStrSlice>(&self, name: S) -> DeserializeError`
+
+This error, reached through the field `name`.
+
+#### `pub fn within_item<K: Inspect>(&self, key: &K) -> DeserializeError`
+
+This error, reached through the element or entry `key`: a list's index,
+a map's key, written as `Inspect` writes it.
 
 #### `pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
