@@ -1,7 +1,6 @@
 // GPT-2 (124M) on onnxruntime's own C++ API, against Microsoft's release as
-// shipped (fetch_onnxruntime.sh): the program `onnxruntime.mjs` runs, with
-// nothing between the generation loop and the session. A numeric argument caps
-// onnxruntime's threads, which it otherwise picks itself.
+// shipped (fetch_onnxruntime.sh): the program generate.wado times. A numeric
+// argument caps onnxruntime's threads, which it otherwise picks itself.
 //
 //   mise run gpt2-124m   # builds and runs it
 

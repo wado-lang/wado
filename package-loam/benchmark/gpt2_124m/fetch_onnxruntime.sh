@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Downloads Microsoft's onnxruntime release for this host, unmodified, and
 # prints the directory it unpacked to. The version is the one onnxruntime-node
-# pins in package-loam/package.json, so the native and Node arms run one
-# onnxruntime. Cached under ~/.cache/loam.
+# pins in package-loam/package.json, which Loam's oracles run. Cached under
+# ~/.cache/loam.
 set -euo pipefail
 
 VERSION=1.30.0
