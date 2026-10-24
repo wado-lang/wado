@@ -1,6 +1,6 @@
 // A subscript whose only impl has a bound the key does not meet reports that
 // bound, not an absent `IndexValue`, and an assignment through it reports
-// nothing more.
+// nothing more. An assignment's own `IndexAssign` impl reports its bound too.
 
 use { HashMap } from "core:collections";
 
@@ -30,16 +30,28 @@ struct Point {
     x: i32,
 }
 
+struct Sink<T> {
+    v: T,
+}
+
+impl<T: Tag> IndexAssign<i32> for Sink<T> {
+    type Output = i32;
+
+    fn index_assign(&mut self, i: i32, value: i32) {}
+}
+
 test {
     let w = Wrap { v: "s" };
     let a = w[0];
     let mut m = HashMap::<Point, i32>::new();
     m[Point { x: 1 }] = 3;
     let b = m[Point { x: 1 }];
+    let mut s = Sink { v: "s" };
+    s[0] = 1;
 }
 
 __DATA__
 {
-    "compile_error": ":35:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 36:17: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 37:5: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 38:13: type 'Point' does not implement trait 'Hash' required by bound on 'K'",
+    "compile_error": ":45:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 46:17: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 47:5: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 48:13: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 50:5: type 'String' does not implement trait 'Tag' required by bound on 'T'",
     "compile_errors_not_contains": ["IndexValue", "not a place"]
 }

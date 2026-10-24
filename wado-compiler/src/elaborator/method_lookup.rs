@@ -996,39 +996,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `receiver`: the first that reaches it but whose bound its arguments
     /// miss. Whether one was reported; the caller says the impl is absent
     /// where none was.
+    ///
+    /// Each link of the receiver's newtype chain is searched in turn, behind
+    /// any reference, at the arguments that link spells, as dispatch reaches
+    /// a newtype's base and a reference's pointee.
     pub(super) fn report_unmet_impl_bound(
         &mut self,
         receiver: TypeId,
         span: Span,
         offers: impl Fn(&Self, DefId) -> bool,
     ) -> bool {
-        let Some(head) = self.tysys.struct_name_for_type(receiver) else {
-            return false;
-        };
-        let target = self.impl_target_of(receiver, &DeclName::new(&head));
-        let args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(receiver)
-            .unwrap_or_default();
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let unmet = trait_env
-            .all_impl_keys(&target)
-            .into_iter()
-            .find_map(|def| {
-                if !offers(self, def) || !self.tysys.impl_reaches(def, Some(&args)) {
-                    return None;
+        // `&mut X` coerces to `&X`, so a block for either answers it.
+        let ref_kinds: &[RefKind] = match RefKind::from_resolved(
+            self.tysys.type_table.borrow().get(receiver),
+        ) {
+            Some(RefKind::Shared) => &[RefKind::Shared],
+            Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
+            None => &[],
+        };
+        let mut link = self.tysys.type_table.borrow().peel_refs(receiver);
+        loop {
+            if let Some(head) = self.tysys.struct_name_for_type(link) {
+                let target = self.impl_target_of(link, &DeclName::new(&head));
+                let (args, decl) = {
+                    let table = self.tysys.type_table.borrow();
+                    (
+                        table.nominal_type_args(link).unwrap_or_default(),
+                        table.nominal_def(link),
+                    )
+                };
+                let on_ref = ref_kinds.iter().flat_map(|&kind| {
+                    trait_env
+                        .all_impl_keys(&ImplTargetKey::Ref(kind))
+                        .into_iter()
+                        .filter(|&def| {
+                            self.tysys.type_table.borrow().impl_target_decl(def) == decl
+                        })
+                });
+                let unmet = trait_env
+                    .all_impl_keys(&target)
+                    .into_iter()
+                    .chain(on_ref.collect::<Vec<_>>())
+                    .find_map(|def| {
+                        if !offers(self, def) || !self.tysys.impl_reaches(def, Some(&args)) {
+                            return None;
+                        }
+                        self.tysys.unmet_impl_bound(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            def,
+                            Some(receiver),
+                            Some(&args),
+                        )
+                    });
+                if let Some(unmet) = unmet {
+                    return self.report_unmet(unmet, span);
                 }
-                self.tysys.unmet_impl_bound(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    def,
-                    Some(receiver),
-                    Some(&args),
-                )
-            });
-        unmet.is_some_and(|unmet| self.report_unmet(unmet, span))
+            }
+            let ResolvedType::Newtype { base_type, .. } =
+                self.tysys.type_table.borrow().get_unerased(link).clone()
+            else {
+                return false;
+            };
+            link = base_type;
+        }
     }
 
     /// Enforce the bounds of the impl block a static call selected at the
@@ -1080,11 +1112,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::report_unmet_impl_bound`] over `ty`'s impls of the prelude
-    /// trait `item`.
+    /// trait `item`, those taking `trait_arg` where one is given: an
+    /// operator's right operand, a subscript's key.
     pub(super) fn report_unmet_trait_impl_bound(
         &mut self,
         ty: TypeId,
         item: CompilerItem,
+        trait_arg: Option<TypeId>,
         span: Span,
     ) -> bool {
         let Some(trait_) = self.tysys.compiler_trait_def(item) else {
@@ -1092,6 +1126,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.report_unmet_impl_bound(ty, span, |s, def| {
             s.tysys.signatures.impl_trait(def) == Some(trait_)
+                && trait_arg.is_none_or(|arg| {
+                    // An unwritten argument is the trait's default, `Self`.
+                    let defaulted = s.tysys.signatures.impl_sig(def).trait_type_args.is_empty();
+                    let tt = s.tysys.type_table.borrow();
+                    if defaulted {
+                        tt.type_key(arg) == tt.type_key(ty)
+                    } else {
+                        drop(tt);
+                        s.impl_takes_key(def, arg)
+                    }
+                })
         })
     }
 

@@ -1,5 +1,7 @@
 // A method whose impl block has a bound the receiver's arguments do not meet
 // reports that bound, with why the argument misses it, not an absent method.
+// A newtype reaches its base's block at the arguments the base reads, which
+// `Pairs` re-shapes.
 
 trait Tag with () {
     fn tag(&self) -> i32;
@@ -35,16 +37,23 @@ struct NoOrd {
     f: fn(),
 }
 
+type Same<T> = Wrap<T>;
+type Pairs<T> = List<[T, i32]>;
+
 test {
     let w = Wrap { v: "s" };
     let a = w.get();
     let n = w.name();
     let mut l: List<NoOrd> = [];
     l.sort();
+    let s = w as Same<String>;
+    let b = s.get();
+    let mut p = [] as Pairs<NoOrd>;
+    p.sort();
 }
 
 __DATA__
 {
-    "compile_error": ":40:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 41:13: type 'String' does not implement trait 'Tag' required by bound on 'T'; 43:5: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'\n  note: `NoOrd` does not implement `Ord` because field `f` of type `fn() -> ()` does not implement `Ord`",
+    "compile_error": ":45:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 46:13: type 'String' does not implement trait 'Tag' required by bound on 'T'; 48:5: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'\n  note: `NoOrd` does not implement `Ord` because field `f` of type `fn() -> ()` does not implement `Ord`; 50:13: type 'String' does not implement trait 'Tag' required by bound on 'T'; 52:5: type '[NoOrd, i32]' does not implement trait 'Ord' required by bound on 'T'",
     "compile_errors_not_contains": ["no method"]
 }
