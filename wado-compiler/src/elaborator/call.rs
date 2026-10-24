@@ -562,14 +562,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {
+                if matches!(arg, ast::Expr::Closure(_)) {
+                    let declared = this
+                        .packs_answered(&packs, param_types, &resolved, i)
+                        .map(|(declared, _)| declared);
+                    if this.param_still_open(declared) {
+                        deferred.push(i);
+                        continue;
+                    }
+                }
                 let param =
                     this.with_packs_answered(&packs, param_types, &resolved, i, &mut stand_ins);
-                if matches!(arg, ast::Expr::Closure(_))
-                    && this.param_still_open(param.map(|p| p.declared))
-                {
-                    deferred.push(i);
-                    continue;
-                }
                 resolved[i] =
                     Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
             }
@@ -617,21 +620,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// What parameter `i` reads its argument against. A pack is no variable
-    /// the module-end sweep substitutes, so a value typed from a tuple holding
-    /// one, as a list literal's element type is, would keep the callee's slot
-    /// in its own type. Each of `packs` the arguments resolved so far answer
-    /// is replaced by its answer, and each tuple a pack still open holds
-    /// stands in as a variable, pushed to `stand_ins` with the tuple, for
-    /// [`Self::answer_stand_ins`].
-    fn with_packs_answered(
+    /// Parameter `i`'s type, each of `packs` the arguments resolved so far
+    /// answer replaced by its answer, and the slots of those still open.
+    fn packs_answered(
         &mut self,
         packs: &[(TypeId, u32)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
         i: usize,
-        stand_ins: &mut Vec<(TypeId, TypeId)>,
-    ) -> Option<ArgParam> {
+    ) -> Option<(TypeId, Vec<TypeId>)> {
         let param = param_types.get(i).copied()?;
         let mentions_pack = {
             let table = self.tysys.type_table.borrow();
@@ -640,7 +637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .any(|&(_, index)| table.contains_type_param_index(param, index))
         };
         if !mentions_pack {
-            return Some(ArgParam::of(param));
+            return Some((param, Vec::new()));
         }
         let answers = self.pack_answers(packs, param_types, resolved);
         let declared = self
@@ -648,11 +645,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .substitute_type_params(param, &answers);
-        let open: Vec<TypeId> = packs
+        let open = packs
             .iter()
             .filter(|&&(_, index)| !answers.contains_key(&index))
             .map(|&(slot, _)| slot)
             .collect();
+        Some((declared, open))
+    }
+
+    /// What parameter `i` reads its argument against. A pack is no variable
+    /// the module-end sweep substitutes, so a value typed from a tuple holding
+    /// one, as a list literal's element type is, would keep the callee's slot
+    /// in its own type. Beyond [`Self::packs_answered`], each tuple a pack
+    /// still open holds stands in as a variable, pushed to `stand_ins` with
+    /// the tuple, for [`Self::answer_stand_ins`].
+    fn with_packs_answered(
+        &mut self,
+        packs: &[(TypeId, u32)],
+        param_types: &[TypeId],
+        resolved: &[Option<TypeId>],
+        i: usize,
+        stand_ins: &mut Vec<(TypeId, TypeId)>,
+    ) -> Option<ArgParam> {
+        let (declared, open) = self.packs_answered(packs, param_types, resolved, i)?;
+        if open.is_empty() {
+            return Some(ArgParam::of(declared));
+        }
         // A tuple parameter itself stays, for the unifier to splice the pack
         // across its argument's elements.
         let held = self
