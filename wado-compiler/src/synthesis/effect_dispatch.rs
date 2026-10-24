@@ -12,7 +12,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclName, DeclPath, DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver,
+    DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver,
     cm_wrap_async_func_name, dispatch_field_name, dispatch_global_name, dispatch_struct_name,
     dispatch_wrapper_name, effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
@@ -504,14 +504,11 @@ fn synthesize_dispatch_wrappers(
         .operations
         .iter()
         .map(|op| {
+            let registry = &project.cm_interface_registry;
             is_open
-                && project
-                    .cm_interface_registry
-                    .get_function(&DeclPath::method_of(
-                        &DeclName::new(effect.name()),
-                        &op.name,
-                    ))
-                    .is_some()
+                && registry
+                    .operation_key(effect.name(), op.cm_name.as_deref(), &op.name)
+                    .is_some_and(|key| registry.get_function(&key).is_some())
         })
         .collect();
     plan.open_boundary_ops = plan

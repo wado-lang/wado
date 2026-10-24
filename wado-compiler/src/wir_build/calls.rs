@@ -925,7 +925,7 @@ impl FunctionTranslator<'_, '_> {
                     .ctx
                     .package
                     .cm_interface_registry
-                    .get_function(&stream.write_operation())
+                    .get_function(&stream.write_operation(&self.ctx.package.cm_interface_registry))
                     .expect("`wasi:cli` declares every ambient stream's write");
                 let key = MangledName::wasi_import(&write.local_alias_name());
                 let func_id = self.ctx.func_map.get(&key).cloned().expect(

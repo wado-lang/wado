@@ -425,14 +425,10 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
 /// What a `CmRawCall` invokes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmCallTarget {
-    /// A lowered import: the function `operation` of the interface declared as
-    /// `interface`, by its local alias name
-    /// (`"wasi:cli/Stdout::write_via_stream"`).
-    Import {
-        alias: String,
-        interface: String,
-        operation: String,
-    },
+    /// A lowered import, by its local alias name
+    /// (`"wasi:cli/Stdout::write_via_stream"`), and the
+    /// `CmFunctionInfo::cm_identifier` of the function it is.
+    Import { alias: String, function: String },
     Canonical(CanonicalIntrinsic),
 }
 

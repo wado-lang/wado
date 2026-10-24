@@ -8,7 +8,6 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     EffectRef, FunctionKind, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLocal, TirParam, TirStmt, TypeId,
@@ -555,7 +554,7 @@ pub(super) fn synthesize_adapter(
     };
 
     let binding = make_binding_function(
-        cm_binding_func_name(&func_info.interface_name, &func_info.method_name),
+        func_info.binding_name(),
         builder.params,
         adapter_return_type,
         block(builder.body_stmts),
@@ -1249,7 +1248,7 @@ impl<'a> AdapterBuilder<'a> {
 
         // Per-import lift function: `AsyncCall<T>::wait` calls back
         // through this `FuncRef` to materialise the result.
-        let lift_fn_name = cm_lift_func_name(&func_info.interface_name, &func_info.method_name);
+        let lift_fn_name = func_info.lift_name();
         let lift_fn = synthesize_async_lift_function(
             lift_fn_name.clone(),
             func_info,

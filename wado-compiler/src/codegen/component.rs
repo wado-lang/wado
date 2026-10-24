@@ -463,7 +463,7 @@ pub fn build_component(
 /// resource types into the instance type that the world never imports.
 fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
     project.cm_interface_registry.is_function_supported(func)
-        && project.used_wasi_functions.contains(&func.used_key())
+        && project.used_wasi_functions.contains(&func.cm_identifier())
 }
 
 /// The unified entry point for converting a Wado type into a `ComponentValType`,
@@ -2980,7 +2980,7 @@ fn import_resource_defining_interface(
                 )
                 // An unused one would reference a resource type the instance
                 // never emits, such as `RequestOptions`.
-                && project.used_wasi_functions.contains(&f.used_key())
+                && project.used_wasi_functions.contains(&f.cm_identifier())
         };
 
         let exported = all_funcs
@@ -3867,7 +3867,7 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
         .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
         .flat_map(|interface| {
             interface.functions.into_iter().filter_map(|func| {
-                let used = project.used_wasi_functions.contains(&func.used_key());
+                let used = project.used_wasi_functions.contains(&func.cm_identifier());
                 (!used).then(|| func.cm_identifier())
             })
         })

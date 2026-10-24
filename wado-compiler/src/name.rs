@@ -466,6 +466,15 @@ pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
     format!("{INTERNAL_PREFIX}{}", interface.interface_path())
 }
 
+/// `name` as the `homonym`-th function bound under one spelling mints it: the
+/// first keeps it, a later one appends its number.
+pub fn homonym_name(name: &str, homonym: usize) -> String {
+    if homonym == 0 {
+        return name.to_string();
+    }
+    format!("{name}{INTERNAL_PREFIX}{homonym}")
+}
+
 /// The binding of the import `method` of `interface`.
 pub fn cm_binding_func_name(interface: &str, method: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_binding__{interface}_{method}")
@@ -2275,13 +2284,6 @@ impl DeclPath {
     #[must_use]
     pub fn method_of(receiver: &DeclName, method: &str) -> Self {
         Self(format!("{receiver}::{method}"))
-    }
-
-    /// A path already spelled in the declaration namespace — a WIT-derived
-    /// `interface::function` key, or one read back out of the registry.
-    #[must_use]
-    pub(crate) fn from_declared(path: impl Into<String>) -> Self {
-        Self(path.into())
     }
 
     #[must_use]

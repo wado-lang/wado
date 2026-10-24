@@ -356,8 +356,7 @@ pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
 pub fn cm_raw_call(func: &CmFunctionInfo, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     let target = CmCallTarget::Import {
         alias: func.local_alias_name(),
-        interface: func.interface_name.clone(),
-        operation: func.method_name.clone(),
+        function: func.cm_identifier(),
     };
     cm_target_call(target, args, return_type)
 }

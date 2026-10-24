@@ -983,13 +983,3 @@ fresh inference variable, never the callee's binder, so a default fills it and
 an unanswered one is reported
 (`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
 settle is reported once, and its slot becomes the error type.
-
-## Known gap: a CM operation is bound by its spelling
-
-A call to an interface operation finds its Component Model binding by
-`Interface::operation`, not by the declaration it names. Two interfaces of one
-name that each declare an operation of one name are rejected as a collision,
-whether or not one program reaches both. What it admits is a refusal no scope
-explains: a program's own `Client::send` collides with `wasi:http`'s, which it
-never imports. The pending fixture is
-`cm_interface_name_shared_with_stdlib_todo.wado`.

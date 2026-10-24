@@ -109,9 +109,9 @@ site the resolver answers, as WIT's own `use` is, so no synthesized type
 carries only a spelling.
 
 An operation is bound to its interface's declaration, not to the spelling
-`Interface::operation`. This closes the
-[known gap](./wep-2026-08-12-declaration-identity.md#known-gap-a-cm-operation-is-bound-by-its-spelling)
-that rejected two same-named interfaces declaring one operation.
+`Interface::operation`, so two same-named interfaces may each declare an
+operation of one name. A program's own `Client::send` used to be refused
+because `wasi:http` declares one too, though the program never imports it.
 
 ### An interface's types are named through it
 
@@ -184,9 +184,9 @@ disagreement is an error naming both files.
 - [x] A name items of different ranks share goes to the higher rank, and one
   two items of one rank share is an error naming what it could mean. The
   fixture from issue #2421 imports both `trip` interfaces by full name.
-- [ ] Each interface of a component is a scope of its own, and an operation is
+- [x] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
-  `cm_interface_name_shared_with_stdlib_todo.wado` passes.
+  `cm_interface_name_shared_with_stdlib.wado` passes.
 - [ ] A Wado `interface` declares types, named only through it.
 - [ ] A component's interface types are named only through their interface,
   except the default interface's, which are items of the module.

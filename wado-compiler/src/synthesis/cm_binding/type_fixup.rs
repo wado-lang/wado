@@ -4,15 +4,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::Type;
+use crate::ast::{CmImport, Type};
 use crate::call_args::CallArgs;
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, CmTypeKind};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, cm_function_key};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{DeclName, DeclPath};
+use crate::name::DeclaredHead;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TirStmtKind, TypeId,
+    TirModule, TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
@@ -163,9 +163,9 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
 
 pub(super) fn rewrite_calls_in_block(
     block: &mut TirBlock,
-    adapters: &IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
+    adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
+    call_sites: &CmCallSites,
     type_table: &Rc<RefCell<TypeTable>>,
     applied_returns: &mut IndexMap<usize, TypeId>,
     callbacks: &mut Callbacks,
@@ -174,7 +174,8 @@ pub(super) fn rewrite_calls_in_block(
     CallRewriteWalker {
         adapters,
         entry_source,
-        cm_interface_registry,
+        call_sites,
+        cm_interface_registry: call_sites.registry,
         type_table,
         applied_returns,
         callbacks,
@@ -186,8 +187,9 @@ pub(super) fn rewrite_calls_in_block(
 /// Points every call of a CM import at its adapter, retyped to the call site.
 /// `applied_returns` records each adapter's retyped return across all sites.
 struct CallRewriteWalker<'a> {
-    adapters: &'a IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
+    adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
+    call_sites: &'a CmCallSites<'a>,
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
     applied_returns: &'a mut IndexMap<usize, TypeId>,
@@ -318,16 +320,15 @@ fn adapter_params_of<'f, A>(
 
 impl CallRewriteWalker<'_> {
     fn rewrite_expr(&mut self, expr: &mut TirExpr) {
-        let adapters = self.adapters;
-        let Some((key, kind)) =
-            cm_call_key(expr, self.type_table, self.cm_interface_registry, |key| {
-                adapters.contains_key(key)
-            })
+        let Some((key, kind)) = self
+            .call_sites
+            .key_of(expr)
+            .filter(|(key, _)| self.adapters.contains_key(key))
         else {
             self.walk_expr(expr);
             return;
         };
-        let adapter = &adapters[&key];
+        let adapter = &self.adapters[&key];
         let func_info = self
             .cm_interface_registry
             .get_function(&key)
@@ -469,88 +470,95 @@ enum CmCallKind {
     Method,
 }
 
-/// The registry key of the CM import `expr` calls, where `is_bound` accepts it.
-fn cm_call_key(
-    expr: &TirExpr,
-    type_table: &RefCell<TypeTable>,
-    registry: &CmInterfaceRegistry,
-    is_bound: impl Fn(&DeclPath) -> bool,
-) -> Option<(DeclPath, CmCallKind)> {
-    let TirExprKind::Call { func, .. } = &expr.kind else {
-        return None;
-    };
-    // The same-source check keeps a same-named local function from being taken
-    // for a world import.
-    let world_import = (registry.world_import_source(&func.name) == Some(&func.module_source))
-        .then(|| DeclPath::from_declared(&func.name));
-    let interface_function = func
-        .module_source
-        .interface_name()
-        .map(|interface| DeclPath::method_of(&DeclName::new(interface), &func.name));
-    if let Some(key) = world_import
-        .into_iter()
-        .chain(interface_function)
-        .find(|key| is_bound(key))
-    {
-        return Some((key, CmCallKind::Function));
-    }
-    if let Some((receiver, func, _)) = expr.kind.as_method_call()
-        && let Some(key) = cm_method_call_key(receiver, func, type_table, registry, &is_bound)
-    {
-        return Some((key, CmCallKind::Method));
-    }
-    cm_static_method_key(func)
-        .filter(|key| is_bound(key))
-        .map(|key| (key, CmCallKind::Function))
+/// Which CM function a call binds, found from the declaration it calls and
+/// never from its spelling: two interfaces may share a name.
+pub(super) struct CmCallSites<'a> {
+    pub(super) registry: &'a CmInterfaceRegistry,
+    /// The key each operation of an interface or resource binds.
+    operation_keys: IndexMap<(DeclaredHead, String), String>,
+    /// The interface or resource each key's operation belongs to.
+    owners: IndexMap<String, DeclaredHead>,
 }
 
-/// The registry key, `Resource::method`, of a `#[cm]` static call.
-fn cm_static_method_key(func: &FunctionRef) -> Option<DeclPath> {
-    let info = func.method_info.as_ref().filter(|i| i.cm_name.is_some())?;
-    Some(DeclPath::method_of(
-        &info.receiver_decl_name(),
-        &info.method_name,
-    ))
+impl<'a> CmCallSites<'a> {
+    pub(super) fn new(
+        registry: &'a CmInterfaceRegistry,
+        modules: &IndexMap<ModuleSource, TirModule>,
+    ) -> Self {
+        let mut operation_keys = IndexMap::default();
+        let mut owners = IndexMap::default();
+        let declarations = modules.values().flat_map(|module| {
+            let effects = module.effects.iter().map(|e| (&e.head, &e.operations));
+            effects.chain(module.resources.iter().map(|r| (&r.head, &r.operations)))
+        });
+        for (head, operations) in declarations {
+            for op in operations {
+                let Some(key) = registry.operation_key(head.name(), op.cm_name.as_deref(), &op.name)
+                else {
+                    continue;
+                };
+                // Of two declarations binding one function, the binding
+                // module's own owns it.
+                let owner = owners.entry(key.clone()).or_insert_with(|| head.clone());
+                if !is_binding(owner) && is_binding(head) {
+                    *owner = head.clone();
+                }
+                operation_keys.insert((head.clone(), op.name.clone()), key);
+            }
+        }
+        Self {
+            registry,
+            operation_keys,
+            owners,
+        }
+    }
+
+    /// The interface or resource whose operation binds `key`; `None` for a
+    /// world import, which belongs to none.
+    pub(super) fn owner(&self, key: &str) -> Option<&DeclaredHead> {
+        self.owners.get(key)
+    }
+
+    /// The key of the CM function `expr` calls, bound or not.
+    fn key_of(&self, expr: &TirExpr) -> Option<(String, CmCallKind)> {
+        let TirExprKind::Call { func, .. } = &expr.kind else {
+            return None;
+        };
+        // The same-source check keeps a same-named local function from being
+        // taken for a world import.
+        if self.registry.world_import_source(&func.name) == Some(&func.module_source) {
+            let key = self.registry.world_import_key(&func.name)?;
+            return Some((key.to_string(), CmCallKind::Function));
+        }
+        if let Some(head) = func.module_source.effect_interface() {
+            let key = self.operation_keys.get(&(head.clone(), func.name.clone()))?;
+            return Some((key.clone(), CmCallKind::Function));
+        }
+        let info = func.method_info.as_ref()?;
+        let key = cm_function_key(
+            &CmImport::parse(info.cm_name.as_deref()?)?,
+            &info.method_name,
+        );
+        let kind = match expr.kind.as_method_call() {
+            Some(_) => CmCallKind::Method,
+            None => CmCallKind::Function,
+        };
+        Some((key, kind))
+    }
 }
 
-/// The registry key of a `#[cm]` method call that `is_bound` accepts: the
-/// receiver's declared `Resource::method`, or the one its bundled alias names.
-fn cm_method_call_key(
-    receiver: &TirExpr,
-    func: &FunctionRef,
-    type_table: &RefCell<TypeTable>,
-    registry: &CmInterfaceRegistry,
-    is_bound: impl Fn(&DeclPath) -> bool,
-) -> Option<DeclPath> {
-    let info = func.method_info.as_ref().filter(|i| i.cm_name.is_some())?;
-    // A mangled head carries the declaring module the registry never stores.
-    let head = {
-        let tt = type_table.borrow();
-        tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
-            .decl_key()
-    };
-    let qualified = DeclPath::method_of(&head, &info.method_name);
-    if is_bound(&qualified) {
-        return Some(qualified);
-    }
-    let source = registry.find_binding_source(CmTypeKind::Newtype, head.as_decl_str())?;
-    let Some(Type::Named(resolved)) = registry.get_newtype_by_source(source, &head) else {
-        return None;
-    };
-    let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &info.method_name);
-    is_bound(&aliased).then_some(aliased)
+fn is_binding(head: &DeclaredHead) -> bool {
+    matches!(head.module(), ModuleSource::Binding { .. })
 }
 
 pub(super) fn collect_effect_calls_in_block(
     block: &TirBlock,
-    effects: &mut IndexSet<DeclPath>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &RefCell<TypeTable>,
+    effects: &mut IndexSet<String>,
+    call_sites: &CmCallSites,
 ) {
     EffectCallCollector {
         effects,
-        cm_interface_registry,
-        type_table,
+        call_sites,
     }
     .visit_block(block);
 }
@@ -558,17 +566,15 @@ pub(super) fn collect_effect_calls_in_block(
 /// Records the registry key of every CM import call, for
 /// [`super::generate_adapters`] to synthesize an adapter for each.
 struct EffectCallCollector<'a> {
-    effects: &'a mut IndexSet<DeclPath>,
-    cm_interface_registry: &'a CmInterfaceRegistry,
-    type_table: &'a RefCell<TypeTable>,
+    effects: &'a mut IndexSet<String>,
+    call_sites: &'a CmCallSites<'a>,
 }
 
 impl TirRefVisitor for EffectCallCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        let registry = self.cm_interface_registry;
-        if let Some((key, _)) = cm_call_key(expr, self.type_table, registry, |key| {
-            registry.get_function(key).is_some()
-        }) {
+        if let Some((key, _)) = self.call_sites.key_of(expr)
+            && self.call_sites.registry.get_function(&key).is_some()
+        {
             self.effects.insert(key);
         }
         self.walk_expr(expr);

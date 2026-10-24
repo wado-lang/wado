@@ -4,7 +4,7 @@
 //! - WASI import registry: collects WASI imports from effect definitions in lib/wasi/*.wado
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::LazyLock;
 
@@ -28,7 +28,10 @@ use crate::cm_abi::{
 use crate::defs::{DefId, DefTable};
 use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, ref_type_name, to_cm_name};
+use crate::name::{
+    DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_lift_func_name,
+    homonym_name, ref_type_name, to_cm_name,
+};
 use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -697,6 +700,10 @@ pub struct CmFunctionInfo {
     pub callbacks: Vec<(usize, Type)>,
     /// Return type
     pub return_type: Option<Type>,
+    /// How many functions were bound before this one under its
+    /// [`Self::wado_name`]: two interfaces named `Dom` each bind a `Dom::f`.
+    /// Keeps the names minted from that spelling apart.
+    pub homonym: usize,
 }
 
 impl CmFunctionInfo {
@@ -709,29 +716,42 @@ impl CmFunctionInfo {
             &self.namespace,
             &self.package,
             &self.interface_name,
-            &self.method_name,
+            &self.minted_method_name(),
         )
     }
 
-    /// This function's key in `NirPackage::used_wasi_functions` (e.g.
-    /// `"Stdout::write_via_stream"`).
-    #[must_use]
-    pub fn used_key(&self) -> String {
-        operation_key(&self.interface_name, &self.method_name)
+    /// The name of this import's binding, which its call sites call.
+    pub fn binding_name(&self) -> String {
+        cm_binding_func_name(&self.interface_name, &self.minted_method_name())
     }
 
-    /// The CM identifier `interface#function`, as [`CmImport::full_path`] spells it.
+    /// The name of the lift `AsyncCall<T>` points to.
+    pub fn lift_name(&self) -> String {
+        cm_lift_func_name(&self.interface_name, &self.minted_method_name())
+    }
+
+    fn minted_method_name(&self) -> String {
+        homonym_name(&self.method_name, self.homonym)
+    }
+
+    /// The Wado name that binds it: `Interface::operation`, or a world import's
+    /// bare name.
+    fn wado_name(&self) -> String {
+        if self.interface_name.is_empty() {
+            return self.method_name.clone();
+        }
+        DeclPath::method_of(&DeclName::new(&self.interface_name), &self.method_name).into_string()
+    }
+
+    /// The CM function this binds, as [`CmImport::full_path`] spells it (a world
+    /// import: the bare function). What identifies the function: its key in the
+    /// registry and in `NirPackage::used_wasi_functions`.
     #[must_use]
     pub fn cm_identifier(&self) -> String {
-        cm_function_path(&self.interface_path, &self.wasi_func_name)
-    }
-
-    /// The CM function this binds, as `interface#function` (a world import: the bare function).
-    fn cm_path(&self) -> String {
         if self.interface_path.is_empty() {
             return self.wasi_func_name.clone();
         }
-        format!("{}#{}", self.interface_path, self.wasi_func_name)
+        cm_function_path(&self.interface_path, &self.wasi_func_name)
     }
 
     /// The declared closure type of parameter `i`, when it takes one.
@@ -973,20 +993,19 @@ pub struct CmInterfaceRegistry {
     /// every consumer reads the same entry (WEP 2026-08-12).
     source_interfaces: SourceInterfaces,
 
-    /// `Effect::method` -> function info
-    effect_to_func: IndexMap<String, CmFunctionInfo>,
+    /// Every bound CM function, by [`CmFunctionInfo::cm_identifier`].
+    functions: IndexMap<String, CmFunctionInfo>,
+
+    /// How many functions are bound under each [`CmFunctionInfo::wado_name`].
+    homonyms: IndexMap<String, usize>,
 
     /// Interface path -> list of functions
     /// Using `BTreeMap` for deterministic ordering
     interfaces: BTreeMap<String, Vec<CmFunctionInfo>>,
 
-    /// Local alias -> (`interface_path`, `wasi_func_name`)
-    /// Key format: `wasi:{package}/{interface_name}::{method_name`}
-    /// e.g., "`wasi:cli/Stdout::write_via_stream`"
-    local_aliases: IndexMap<String, (String, String)>,
-
-    /// Track which WASI function names are used to detect collisions
-    used_names: BTreeSet<String>,
+    /// A `--lib` package's guest effect, by name -> the interface minted for
+    /// it. The name is its identity: the interface is made from it.
+    guest_effects: IndexMap<String, CmImport>,
 
     /// Newtypes collected from WASI modules (e.g., Instant -> u64).
     /// Key: `(source_interface, wado_name)` where `source_interface` is the
@@ -1048,10 +1067,9 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// World-level function imports (Phase 9), by bare name. Marks which
-    /// `effect_to_func` entries are world-level (their `CmFunctionInfo` lives
-    /// there under the bare name).
-    world_import_functions: IndexSet<String>,
+    /// World-level function imports (Phase 9), by bare Wado name -> their key
+    /// in `functions`.
+    world_import_functions: IndexMap<String, String>,
 
     /// World-level function import name → the dependency `ModuleSource` that
     /// exports it (the composition target, and the identity that distinguishes
@@ -1215,11 +1233,19 @@ fn register_unique<V>(
     map.insert(key, value);
 }
 
-/// The key an interface operation takes in `effect_to_func` and
-/// `NirPackage::used_wasi_functions` (e.g. `"Stdout::write_via_stream"`).
+/// The [`CmFunctionInfo::cm_identifier`] of the function `#[cm(cm_import)]` on
+/// the Wado operation `operation` binds: the one the payload names, or else the
+/// operation's own name in kebab case.
 #[must_use]
-pub fn operation_key(interface: &str, operation: &str) -> String {
-    DeclPath::method_of(&DeclName::new(interface), operation).into_string()
+pub fn cm_function_key(cm_import: &CmImport, operation: &str) -> String {
+    cm_function_path(&cm_import.interface_path(), &cm_function_name(cm_import, operation))
+}
+
+fn cm_function_name(cm_import: &CmImport, operation: &str) -> String {
+    cm_import
+        .function
+        .clone()
+        .unwrap_or_else(|| to_cm_name(operation))
 }
 
 /// `emitting` itself, where it declares `wado_name` in a
@@ -2626,15 +2652,16 @@ impl CmInterfaceRegistry {
             if !is_guest_effect(effect) {
                 continue;
             }
-            let interface = to_cm_name(&effect.name);
+            let cm_import = CmImport {
+                namespace: base.namespace.clone(),
+                package: base.package.clone(),
+                interface: to_cm_name(&effect.name),
+                version: base.version.clone(),
+                function: None,
+            };
+            self.guest_effects
+                .insert(effect.name.clone(), cm_import.clone());
             for method in &effect.methods {
-                let cm_import = CmImport {
-                    namespace: base.namespace.clone(),
-                    package: base.package.clone(),
-                    interface: interface.clone(),
-                    version: base.version.clone(),
-                    function: Some(to_cm_name(&method.name)),
-                };
                 let params: Vec<(String, String, Type)> = method
                     .params
                     .iter()
@@ -3493,7 +3520,7 @@ impl CmInterfaceRegistry {
     /// * `params` - Parameter names and types
     /// * `return_type` - Return type (if any)
     ///
-    /// `Err` when `interface_name::method_name` already binds another function.
+    /// `Err` when the CM function is already bound with another signature.
     pub fn register(
         &mut self,
         interface_name: &str,
@@ -3504,26 +3531,22 @@ impl CmInterfaceRegistry {
         return_type: Option<Type>,
     ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
-
-        let wasi_func_name = wasi
-            .function
-            .clone()
-            .unwrap_or_else(|| to_cm_name(method_name));
         let (params, callbacks) = self.value_params(params);
-        let func_info = CmFunctionInfo {
+        let mut func_info = CmFunctionInfo {
             namespace: wasi.namespace.clone(),
             interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
-            wasi_func_name,
+            wasi_func_name: cm_function_name(wasi, method_name),
             interface_path: interface_path.clone(),
             package: wasi.package.clone(),
             is_async,
             params,
             callbacks,
             return_type,
+            homonym: 0,
         };
 
-        if self.bind(operation_key(interface_name, method_name), &func_info)? {
+        if self.bind(&mut func_info)? {
             self.interfaces
                 .entry(interface_path)
                 .or_default()
@@ -3554,35 +3577,30 @@ impl CmInterfaceRegistry {
         (params, callbacks)
     }
 
-    /// Binds `key` to `func_info`; `Ok(false)` when `key` already binds the same signature.
-    fn bind(&mut self, key: String, func_info: &CmFunctionInfo) -> Result<bool, String> {
-        // A call finds its binding by `key` alone, so a second binding under it
-        // would take over the first one's call sites.
-        if let Some(bound) = self.effect_to_func.get(&key) {
-            let (path, bound_path) = (func_info.cm_path(), bound.cm_path());
-            if path != bound_path {
-                return Err(format!(
-                    "`{key}` binds `{path}`, but another `{key}` already binds `{bound_path}`: \
-                     rename one of the interfaces"
-                ));
-            }
+    /// Binds `func_info`'s CM function; `Ok(false)` when it is already bound
+    /// with the same signature, by any Wado name.
+    fn bind(&mut self, func_info: &mut CmFunctionInfo) -> Result<bool, String> {
+        let key = func_info.cm_identifier();
+        if let Some(bound) = self.functions.get(&key) {
+            // One import serves every binding of the function, so they must
+            // agree on what crosses it.
             if func_info.signature_key(self) != bound.signature_key(self) {
+                let (name, bound_name) = (func_info.wado_name(), bound.wado_name());
+                let bindings = if name == bound_name {
+                    format!("two `{name}`")
+                } else {
+                    format!("`{bound_name}` and `{name}`")
+                };
                 return Err(format!(
-                    "two `{key}` bind `{path}` with different signatures: make them agree"
+                    "{bindings} bind `{key}` with different signatures: make them agree"
                 ));
             }
             return Ok(false);
         }
-        let local_name = func_info.local_alias_name();
-        self.used_names.insert(local_name.clone());
-        self.local_aliases.insert(
-            local_name,
-            (
-                func_info.interface_path.clone(),
-                func_info.wasi_func_name.clone(),
-            ),
-        );
-        self.effect_to_func.insert(key, func_info.clone());
+        let homonyms = self.homonyms.entry(func_info.wado_name()).or_default();
+        func_info.homonym = *homonyms;
+        *homonyms += 1;
+        self.functions.insert(key, func_info.clone());
         Ok(true)
     }
 
@@ -3598,7 +3616,7 @@ impl CmInterfaceRegistry {
         return_type: Option<Type>,
     ) -> Result<(), String> {
         let (params, callbacks) = self.value_params(params);
-        let func_info = CmFunctionInfo {
+        let mut func_info = CmFunctionInfo {
             // A world import sits above any interface, so it has no namespace,
             // package or interface path to name: its alias is a bare key.
             namespace: String::new(),
@@ -3611,25 +3629,26 @@ impl CmInterfaceRegistry {
             params,
             callbacks,
             return_type,
+            homonym: 0,
         };
-        if self.bind(func_name.to_string(), &func_info)? {
-            self.world_import_functions.insert(func_name.to_string());
+        if self.bind(&mut func_info)? {
+            self.world_import_functions
+                .insert(func_name.to_string(), func_info.cm_identifier());
         }
         Ok(())
     }
 
-    /// Whether `name` is a world-level function import (Phase 9).
+    /// The key of the world-level function import (Phase 9) bare-named `name`.
     #[must_use]
-    pub fn is_world_import_function(&self, name: &DeclPath) -> bool {
-        let name = name.as_decl_str();
-        self.world_import_functions.contains(name)
+    pub fn world_import_key(&self, name: &str) -> Option<&str> {
+        self.world_import_functions.get(name).map(String::as_str)
     }
 
     /// Every world-level function import, as `(bare_name, info)`.
     pub fn world_import_functions(&self) -> impl Iterator<Item = (&str, &CmFunctionInfo)> + '_ {
         self.world_import_functions
             .iter()
-            .filter_map(|name| Some((name.as_str(), self.effect_to_func.get(name)?)))
+            .map(|(name, key)| (name.as_str(), &self.functions[key]))
     }
 
     /// The dependency `ModuleSource` exporting world-level function `name`.
@@ -3638,40 +3657,27 @@ impl CmInterfaceRegistry {
         self.world_import_sources.get(name)
     }
 
-    /// Resolve an effect function call to its component-level local alias name
-    ///
-    /// # Arguments
-    /// * `name` - The qualified effect call (e.g., "`Stdout::write_via_stream`")
-    ///
-    /// # Returns
-    /// The component-level local function name (e.g., "`wasi:cli/Stdout::write_via_stream`")
-    pub fn resolve(&self, name: &str) -> Option<String> {
-        if !name.contains("::") {
-            return None;
-        }
-
-        // Look up the function info in the registry
-        let func_info = self.effect_to_func.get(name)?;
-
-        // Find the local name for this function
-        for (local_name, (interface_path, wasi_func_name)) in &self.local_aliases {
-            if interface_path == &func_info.interface_path
-                && wasi_func_name == &func_info.wasi_func_name
-            {
-                return Some(local_name.clone());
-            }
-        }
-
-        // This shouldn't happen if registration is correct, but fallback to a generated name
-        None
+    /// The bound CM function whose [`CmFunctionInfo::cm_identifier`] is `key`.
+    pub fn get_function(&self, key: &str) -> Option<&CmFunctionInfo> {
+        self.functions.get(key)
     }
 
-    /// Get function info by qualified name
-    /// Keyed in the declaration namespace — `Resource::method` as the WIT
-    /// declares it. A mangled name carries the declaring module, which this
-    /// registry never stores, so the key type says which one is wanted.
-    pub fn get_function(&self, name: &DeclPath) -> Option<&CmFunctionInfo> {
-        self.effect_to_func.get(name.as_decl_str())
+    /// The key of the function that the operation `operation` of interface or
+    /// resource `owner` binds, from its `#[cm]` payload `cm_name`. A guest
+    /// effect's operation carries none: its interface is minted from `owner`'s
+    /// name.
+    #[must_use]
+    pub fn operation_key(
+        &self,
+        owner: &str,
+        cm_name: Option<&str>,
+        operation: &str,
+    ) -> Option<String> {
+        let cm_import = match cm_name {
+            Some(cm_name) => CmImport::parse(cm_name)?,
+            None => self.guest_effects.get(owner)?.clone(),
+        };
+        Some(cm_function_key(&cm_import, operation))
     }
 
     /// Get all interfaces that need to be imported
@@ -3841,20 +3847,6 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Every local name bound to one CM function. More than one when a user
-    /// module binds an operation the stdlib already binds: each Wado name mints
-    /// its own alias, and all of them must reach the same import.
-    pub fn local_names_for(
-        &self,
-        interface_path: &str,
-        wasi_func_name: &str,
-    ) -> impl Iterator<Item = &String> {
-        self.local_aliases
-            .iter()
-            .filter(move |(_, (path, func))| path == interface_path && func == wasi_func_name)
-            .map(|(local_name, _)| local_name)
-    }
-
     /// Get the WASI CLI version from registered imports
     ///
     /// Returns the version string from the first wasi:cli/* interface found.
@@ -3874,38 +3866,6 @@ impl CmInterfaceRegistry {
             }
         }
         None
-    }
-
-    /// Get all registered WASI function names
-    ///
-    /// Returns an iterator over function names in `Effect::method` format
-    /// (e.g., "`Stdout::write_via_stream`", "`MonotonicClock::now`").
-    ///
-    /// Used by the optimizer to populate `used_wasi_functions` in O0 mode.
-    pub fn all_function_names(&self) -> impl Iterator<Item = &str> {
-        self.effect_to_func.keys().map(std::string::String::as_str)
-    }
-
-    /// Get standard WASI function names (excluding effects that require explicit usage)
-    ///
-    /// Some effects are not included by default because:
-    /// - Exit: May not be supported by all runtimes
-    /// - Timezone: May not be available in all runtimes (wasi:clocks/timezone)
-    /// - Terminal*: May not be available in non-terminal environments
-    /// - `TcpSocket`, `UdpSocket`, `IpNameLookup`: Network interfaces require explicit usage
-    ///
-    /// These effects are only included when explicitly used in the program.
-    pub fn standard_function_names(&self) -> impl Iterator<Item = &str> {
-        self.all_function_names().filter(|name| {
-            !name.starts_with("Exit::")
-                && !name.starts_with("Timezone::")
-                && !name.starts_with("TerminalStdin::")
-                && !name.starts_with("TerminalStdout::")
-                && !name.starts_with("TerminalStderr::")
-                && !name.starts_with("TcpSocket::")
-                && !name.starts_with("UdpSocket::")
-                && !name.starts_with("IpNameLookup::")
-        })
     }
 
     /// Resolve newtypes in a Type recursively
@@ -5372,10 +5332,53 @@ mod tests {
             .unwrap();
 
         // Local name uses wasi:{package}/{effect}::{method} format
-        let resolved = registry.resolve("Stdout::write_via_stream");
         assert_eq!(
-            resolved,
+            alias_of(
+                &registry,
+                "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
+            ),
             Some("wasi:cli/Stdout::write_via_stream".to_string())
+        );
+    }
+
+    fn alias_of(registry: &CmInterfaceRegistry, key: &str) -> Option<String> {
+        registry
+            .get_function(key)
+            .map(CmFunctionInfo::local_alias_name)
+    }
+
+    /// Whether `registry` binds an operation `interface::operation`.
+    fn binds(registry: &CmInterfaceRegistry, interface: &str, operation: &str) -> bool {
+        registry.interfaces().any(|i| {
+            i.functions
+                .iter()
+                .any(|f| f.interface_name == interface && f.method_name == operation)
+        })
+    }
+
+    #[test]
+    fn test_same_named_interfaces_bind_their_own_functions() {
+        let mut registry = CmInterfaceRegistry::new();
+        for cm in ["example:demo/client#send", "wasi:http/client@0.3.0#send"] {
+            registry
+                .register(
+                    "Client",
+                    "send",
+                    &CmImport::parse(cm).unwrap(),
+                    false,
+                    vec![],
+                    None,
+                )
+                .unwrap();
+        }
+        assert_eq!(
+            alias_of(&registry, "example:demo/client#send"),
+            Some("example:demo/Client::send".to_string())
+        );
+        // The second `Client::send` mints names apart from the first's.
+        assert_eq!(
+            alias_of(&registry, "wasi:http/client@0.3.0#send"),
+            Some("wasi:http/Client::send$1".to_string())
         );
     }
 
@@ -5420,15 +5423,18 @@ mod tests {
             .unwrap();
 
         // Each gets its own unique name via wasi:{package}/{effect}::{method} pattern
-        let stdout_resolved = registry.resolve("Stdout::write_via_stream");
         assert_eq!(
-            stdout_resolved,
+            alias_of(
+                &registry,
+                "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
+            ),
             Some("wasi:cli/Stdout::write_via_stream".to_string())
         );
-
-        let stderr_resolved = registry.resolve("Stderr::write_via_stream");
         assert_eq!(
-            stderr_resolved,
+            alias_of(
+                &registry,
+                "wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream"
+            ),
             Some("wasi:cli/Stderr::write_via_stream".to_string())
         );
     }
@@ -5492,6 +5498,7 @@ mod tests {
             params: vec![],
             callbacks: vec![],
             return_type: None,
+            homonym: 0,
         };
         assert_eq!(
             func_info.local_alias_name(),
@@ -5566,27 +5573,17 @@ mod tests {
     fn test_random_functions_registered() {
         let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
-        // Check that Random functions are registered
-        assert!(
-            registry.resolve("Random::get_random_u64").is_some(),
-            "Random::get_random_u64 should be resolved"
-        );
-        assert!(
-            registry.resolve("Random::get_random_bytes").is_some(),
-            "Random::get_random_bytes should be resolved"
-        );
-        assert!(
-            registry
-                .resolve("Insecure::get_insecure_random_u64")
-                .is_some(),
-            "Insecure::get_insecure_random_u64 should be resolved"
-        );
-        assert!(
-            registry
-                .resolve("Insecure::get_insecure_random_bytes")
-                .is_some(),
-            "Insecure::get_insecure_random_bytes should be resolved"
-        );
+        for (interface, operation) in [
+            ("Random", "get_random_u64"),
+            ("Random", "get_random_bytes"),
+            ("Insecure", "get_insecure_random_u64"),
+            ("Insecure", "get_insecure_random_bytes"),
+        ] {
+            assert!(
+                binds(&registry, interface, operation),
+                "{interface}::{operation} should be registered"
+            );
+        }
 
         // Check that the random interface is included
         let interfaces: Vec<_> = registry.interfaces().collect();
@@ -5604,10 +5601,9 @@ mod tests {
         let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // Check that TcpSocket resource methods are registered
-        let resolved = registry.resolve("TcpSocket::create");
         assert!(
-            resolved.is_some(),
-            "TcpSocket::create should be resolved, got {resolved:?}"
+            binds(&registry, "TcpSocket", "create"),
+            "TcpSocket::create should be registered"
         );
 
         // Check that the sockets types interface is included

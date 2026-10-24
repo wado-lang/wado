@@ -194,7 +194,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // for a used effect. Per-function filtering avoids importing unused
             // WASI functions that the component builder doesn't support (e.g.,
             // [static] HTTP functions like consume_body).
-            if !ctx.package.used_wasi_functions.contains(&func.used_key()) {
+            if !ctx.package.used_wasi_functions.contains(&func.cm_identifier()) {
                 continue;
             }
 
