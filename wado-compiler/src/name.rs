@@ -2481,6 +2481,30 @@ pub fn pack_element_name(pack: &str, walk: u32) -> String {
     }
 }
 
+const REPEAT_PACK_MARKER: &str = "repeat";
+
+/// The pack a signature mints for a `[..X]` repeating the non-pack `X`: its
+/// length, which the argument settles.
+pub fn repeat_pack_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}{REPEAT_PACK_MARKER}{INTERNAL_PREFIX}{element}")
+}
+
+/// The `X` a [`repeat_pack_name`] repeats, or `None` for any other name.
+pub fn repeated_element(pack: &str) -> Option<&str> {
+    pack.strip_prefix(INTERNAL_PREFIX)?
+        .strip_prefix(REPEAT_PACK_MARKER)?
+        .strip_prefix(INTERNAL_PREFIX)
+}
+
+/// A type parameter as a diagnostic names it: a minted repeat pack as the
+/// `..X` that minted it.
+pub fn written_param_name(param: &str) -> String {
+    match repeated_element(param) {
+        Some(element) => type_pack_name(element),
+        None => param.to_string(),
+    }
+}
+
 /// The `<A, B>` a diagnostic writes after a head; empty for no arguments.
 fn display_type_args(args: &[String]) -> String {
     if args.is_empty() {

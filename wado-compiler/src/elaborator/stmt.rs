@@ -35,7 +35,7 @@ use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias, range_local_name,
+    namespace_member_alias, range_local_name, repeat_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -403,7 +403,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
-            .filter(|(name, _)| !self.binds_type_pack(name))
+            .filter(|(name, _)| {
+                !self.binds_type_pack(name) && !self.binds_type_pack(&repeat_pack_name(name))
+            })
             .map(|(name, span)| (name.to_string(), span))
             .collect();
         for (name, span) in bad {

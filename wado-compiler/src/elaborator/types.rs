@@ -21,7 +21,7 @@ use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
+use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member, written_param_name};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
 use crate::token::Span;
@@ -1648,7 +1648,7 @@ impl TypeError {
     ) -> TypeError {
         let named = names
             .iter()
-            .map(|n| format!("`{n}`"))
+            .map(|n| format!("`{}`", written_param_name(n)))
             .collect::<Vec<_>>()
             .join(", ");
         TypeError::CannotInferType {

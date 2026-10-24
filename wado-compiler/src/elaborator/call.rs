@@ -9,7 +9,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
-    unalias_namespace_member,
+    unalias_namespace_member, written_param_name,
 };
 use crate::tir::{
     FunctionRef, InferVarId, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId,
@@ -3644,7 +3644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
              add a turbofish (`{func_name}::<...>()`) or a type annotation",
             unresolved_names
                 .iter()
-                .map(|n| format!("`{n}`"))
+                .map(|n| format!("`{}`", written_param_name(n)))
                 .collect::<Vec<_>>()
                 .join(", ")
         );

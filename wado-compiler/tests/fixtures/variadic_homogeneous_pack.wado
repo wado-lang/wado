@@ -1,0 +1,33 @@
+// `[..T]` over a scalar `T` is a tuple of any length whose every element is
+// `T`: a walk over it binds `T` itself, so the body may treat each element as
+// one. Each length is its own instantiation.
+use { println, Stdout } from "core:cli";
+
+fn collect<T>(items: [..T]) -> List<T> {
+    let mut out: List<T> = [];
+    for let item of items {
+        out.push(item);
+    }
+    return out;
+}
+
+fn sum(values: [..i32]) -> i32 {
+    let mut total = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    println(`${collect([1, 2, 3]):?}`);
+    println(`${collect(["a", "b"]):?}`);
+    println(`${List::<bool>::from_tuple([]):?}`);
+    println(`${sum([1, 2, 3, 4])}`);
+    println(`${sum([])}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 2, 3]\n[\"a\", \"b\"]\n[]\n10\n0\n"
+}

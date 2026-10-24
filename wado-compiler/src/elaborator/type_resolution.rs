@@ -19,7 +19,9 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, type_pack_name};
+use crate::name::{
+    FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name, type_pack_name,
+};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -109,6 +111,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
+                let repeat = repeat_pack_name(name);
+                if let Some(&BinderInScope { index, type_id, .. }) =
+                    self.annotate_ctx.trait_ctx.type_params.get(&repeat)
+                {
+                    if self.tysys.type_table.borrow().is_tuple(type_id) {
+                        return type_id;
+                    }
+                    let element = self.resolve_unsited_type_name(name, *span);
+                    return self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mapped_type_pack(repeat, index, element);
+                }
                 // Look up the type pack parameter
                 if let Some(&BinderInScope { index, type_id, .. }) =
                     self.annotate_ctx.trait_ctx.type_params.get(name)

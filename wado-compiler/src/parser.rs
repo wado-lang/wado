@@ -27,7 +27,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
-use crate::name::{contract_holder_name, namespaced_name};
+use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -100,6 +100,9 @@ pub struct Parser {
     bodies: Bodies,
     /// Each skipped body's block, and the position of its `{`.
     skipped: Vec<(AstId, usize)>,
+    /// The packs the `impl` or `trait` whose members are being read declares.
+    /// A member's `..X` naming none of them, nor one of its own, repeats `X`.
+    enclosing_packs: Vec<String>,
 }
 
 /// Whether the parser reads function bodies.
@@ -307,6 +310,7 @@ impl Parser {
             pure_override_allowed: false,
             bodies: Bodies::Read,
             skipped: Vec::new(),
+            enclosing_packs: Vec::new(),
         }
     }
 
@@ -1421,6 +1425,7 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
+        self.enclosing_packs.clear();
         match self.peek_kind() {
             TokenKind::Use => self
                 .parse_use_decl(visibility, has_export, attrs)
@@ -2210,6 +2215,8 @@ impl Parser {
         }
 
         let return_type = self.parse_optional_return_type()?;
+        let repeats = self.repeat_pack_params(&type_params, &params, return_type.as_ref());
+        type_params.extend(repeats);
 
         let pure_override = std::mem::take(&mut self.pure_override_allowed)
             && self.check(&TokenKind::With)
@@ -2330,6 +2337,8 @@ impl Parser {
         if let Some(hole) = method.type_params.iter().find(|p| p.name == EFFECT_HOLE) {
             type_params.push(self.effect_hole_param(hole.span));
         }
+        let repeats = self.repeat_pack_params(&type_params, &params, None);
+        type_params.extend(repeats);
 
         let span = contracts
             .iter()
@@ -6406,6 +6415,7 @@ impl Parser {
         }
 
         self.expect(&TokenKind::LBrace)?;
+        self.enclosing_packs = pack_names(&type_params);
 
         let mut associated_types = Vec::new();
         let mut constants = Vec::new();
@@ -6652,6 +6662,7 @@ impl Parser {
         }
 
         self.expect(&TokenKind::LBrace)?;
+        self.enclosing_packs = pack_names(&type_params);
 
         let mut associated_types = Vec::new();
         let mut methods = Vec::new();
@@ -6786,6 +6797,41 @@ impl Parser {
             return Ok(TraitHead::Open { span });
         }
         Ok(TraitHead::Fixed { effects, span })
+    }
+
+    /// The packs a signature's `[..X]` mints, one per `X` that names no pack in
+    /// scope: such a spread repeats `X`, and the minted pack is its length.
+    fn repeat_pack_params(
+        &mut self,
+        declared: &[GenericParam],
+        params: &[Param],
+        return_type: Option<&Type>,
+    ) -> Vec<GenericParam> {
+        let mut repeated: Vec<(String, Span)> = Vec::new();
+        for ty in params.iter().map(|p| &p.ty).chain(return_type) {
+            for (name, span) in ty.pack_spreads() {
+                let in_scope = self.enclosing_packs.iter().any(|p| p == name)
+                    || declared.iter().any(|p| p.is_pack && p.name == name);
+                if !in_scope && !repeated.iter().any(|(r, _)| r == name) {
+                    repeated.push((name.to_string(), span));
+                }
+            }
+        }
+        repeated
+            .into_iter()
+            .map(|(element, span)| GenericParam {
+                id: self.alloc_ast_id(),
+                attrs: Vec::new(),
+                name: repeat_pack_name(&element),
+                name_span: span,
+                is_effect: false,
+                is_affine: false,
+                is_pack: true,
+                bounds: Vec::new(),
+                default: None,
+                span,
+            })
+            .collect()
     }
 
     /// The effect parameter a `with _` stands for, named `_` so the clause that
@@ -7258,6 +7304,14 @@ fn span_of_open_brace(origin: Position, space: AstIdSpace) -> Span {
         origin.column,
     )
     .in_space(space)
+}
+
+fn pack_names(params: &[GenericParam]) -> Vec<String> {
+    params
+        .iter()
+        .filter(|p| p.is_pack)
+        .map(|p| p.name.clone())
+        .collect()
 }
 
 /// Linearity is a property of the handle type, so it has one home: the

@@ -12,7 +12,7 @@ use crate::defs::DefId;
 use crate::escape::escape_string;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::WILDCARD;
-use crate::name::UNIT_TYPE_NAME;
+use crate::name::{UNIT_TYPE_NAME, repeated_element};
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -4607,9 +4607,11 @@ impl GenericParam {
     }
 
     /// Whether the source spells this param. The effect parameter `with _`
-    /// mints reads as `_` at its use sites and appears in no list.
+    /// mints reads as `_` at its use sites and appears in no list, and so does
+    /// the pack a `[..X]` repeating a non-pack `X` mints.
     pub fn is_written(&self) -> bool {
         !(self.is_effect && self.name == EFFECT_HOLE)
+            && repeated_element(&self.name).is_none()
     }
 
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
