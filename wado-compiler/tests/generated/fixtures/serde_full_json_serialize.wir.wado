@@ -126,9 +126,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(28)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(29)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//serde_full_json_serialize.wado/run" = fn();  // TypeId(32)
 
@@ -212,7 +212,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(71)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(72)
 
-type "functype//serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(73)
+type "functype//serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(73)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(74)
 
@@ -222,8 +222,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -273,7 +273,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     builtin::array_copy<u8>(writer_6.repr, start_43, global:serde_full_json_serialize.wado::$const_obj_17, 0, 2);
     start_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_73("wasi/stream-new"()));
     new_used = builtin::i32_wrap_i64($cm_pair_7_73 >> 32_i64);
-    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
+    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
     start_43 = new_used;
     new_used = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_43, writer_6.repr, writer_6.used);
@@ -281,7 +281,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string$sroa[&mut(self.w.buf)]"(local.tee writer_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }), global:serde_full_json_serialize.wado::$const_obj_16));
     start_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_73("wasi/stream-new"()));
     $moved_4_70 = builtin::i32_wrap_i64($cm_pair_7_73 >> 32_i64);
-    new_used = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(new_used = start_43; start_43 = 0; new_used);
+    new_used = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = start_43; start_43 = 0; new_used);
     start_43 = $moved_4_70;
     $moved_4_70 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_43, writer_6.repr, writer_6.used);
@@ -290,7 +290,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     writer_6 = writer_51.buf;
     start_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_73("wasi/stream-new"()));
     new_used = builtin::i32_wrap_i64($cm_pair_7_73 >> 32_i64);
-    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
+    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
     start_43 = new_used;
     new_used = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_43, writer_6.repr, writer_6.used);
@@ -301,7 +301,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     writer_6 = writer_51.buf;
     start_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_73("wasi/stream-new"()));
     $moved_4_70 = builtin::i32_wrap_i64($cm_pair_7_73 >> 32_i64);
-    new_used = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(new_used = start_43; start_43 = 0; new_used);
+    new_used = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = start_43; start_43 = 0; new_used);
     start_43 = $moved_4_70;
     $moved_4_70 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_43, writer_6.repr, writer_6.used);
@@ -312,15 +312,15 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     writer_6 = writer_51.buf;
     start_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_73("wasi/stream-new"()));
     new_used = builtin::i32_wrap_i64($cm_pair_7_73 >> 32_i64);
-    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
+    $moved_4_70 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_70 = start_43; start_43 = 0; $moved_4_70);
     start_43 = new_used;
     new_used = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_43, writer_6.repr, writer_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_43 = $moved_4_70; $moved_4_70 = 0; start_43);
 }
 
-fn "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "serde_full_json_serialize.wado/$cm_export__run"() {
@@ -620,7 +620,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

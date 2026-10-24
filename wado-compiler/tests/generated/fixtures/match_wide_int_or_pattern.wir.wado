@@ -35,7 +35,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
 
 type "functype//match_wide_int_or_pattern.wado/beside_literal" = fn(u64, u64) -> i32;  // TypeId(13)
 
@@ -67,7 +67,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//match_wide_int_or_pattern.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
 
@@ -77,7 +77,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -177,7 +177,7 @@ fn "match_wide_int_or_pattern.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_162.repr, self_6, x_17, is_negative_13);
     is_negative_13 = builtin::i32_wrap_i64(local.tee x_17("wasi/stream-new"()));
     self_6 = builtin::i32_wrap_i64(x_17 >> 32_i64);
-    $moved_4_122 = "match_wide_int_or_pattern.wado/$cm_binding__Stdout_write_via_stream"($moved_4_122 = is_negative_13; is_negative_13 = 0; $moved_4_122);
+    $moved_4_122 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_122 = is_negative_13; is_negative_13 = 0; $moved_4_122);
     is_negative_13 = self_6;
     self_6 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_13, $local_0.repr, $local_0.used);
@@ -220,15 +220,15 @@ fn "match_wide_int_or_pattern.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_162.repr, $moved_4_122, x_17, is_negative_13);
     is_negative_13 = builtin::i32_wrap_i64(local.tee x_17("wasi/stream-new"()));
     $moved_4_122 = builtin::i32_wrap_i64(x_17 >> 32_i64);
-    self_6 = "match_wide_int_or_pattern.wado/$cm_binding__Stdout_write_via_stream"(self_6 = is_negative_13; is_negative_13 = 0; self_6);
+    self_6 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_6 = is_negative_13; is_negative_13 = 0; self_6);
     is_negative_13 = $moved_4_122;
     $moved_4_122 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_13, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_13 = self_6; self_6 = 0; is_negative_13);
 }
 
-fn "match_wide_int_or_pattern.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "match_wide_int_or_pattern.wado/$cm_export__run"() {

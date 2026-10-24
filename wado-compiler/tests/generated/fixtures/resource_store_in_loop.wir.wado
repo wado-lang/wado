@@ -268,15 +268,15 @@ struct core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some {  /
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(48)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(49)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(49)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(50)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(50)
 
 type "functype//resource_store_in_loop.wado/moved_each_iteration$dae[n]" = fn();  // TypeId(51)
 
 type "functype//resource_store_in_loop.wado/stored_after_a_move$dae[n]" = fn();  // TypeId(52)
 
-type "functype//resource_store_in_loop.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(53)
+type "functype//resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(53)
 
 type "functype//resource_store_in_loop.wado/$cm_export__handle" = fn(i32);  // TypeId(54)
 
@@ -302,13 +302,13 @@ type "functype//wasi/future-write:val-result<option<own<wasi/http/types.wado#Fie
 
 type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn(i32);  // TypeId(65)
 
-type "functype//resource_store_in_loop.wado/$cm_binding__Response_new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(66)
+type "functype//resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(66)
 
 type "functype//resource_store_in_loop.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(67)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
@@ -326,12 +326,12 @@ fn "resource_store_in_loop.wado/moved_each_iteration$dae[n]"() with Fields {
     let held: ref null "core:prelude//$Resource";
     let i: i32;
     let $stored_3: ref null "core:prelude//$Resource";
-    held = "resource_store_in_loop.wado/$cm_binding__Fields_new"();
+    held = "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            $stored_3 = "resource_store_in_loop.wado/$cm_binding__Fields_new"();
+            $stored_3 = "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
             if ref.is_null(held) {
                 held = $stored_3;
             } else {
@@ -367,7 +367,7 @@ fn "resource_store_in_loop.wado/stored_after_a_move$dae[n]"() with Fields {
     let held: ref null "core:prelude//$Resource";
     let $moved_3: ref null "core:prelude//$Resource";
     let $stored_4: ref null "core:prelude//$Resource";
-    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__Fields_new"());
+    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"());
     held = ref.null none;
     if ref.is_null($moved_3) == 0 {
         let $cm_handle_2: i32;
@@ -379,7 +379,7 @@ fn "resource_store_in_loop.wado/stored_after_a_move$dae[n]"() with Fields {
     b6: block {
         l7: loop {
             break_if b6 $cm_handle_2 >= 3;
-            $stored_4 = "resource_store_in_loop.wado/$cm_binding__Fields_new"();
+            $stored_4 = "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
             if ref.is_null(held) {
                 held = $stored_4;
             } else {
@@ -402,11 +402,11 @@ fn "resource_store_in_loop.wado/stored_after_a_move$dae[n]"() with Fields {
     }
 }
 
-fn "resource_store_in_loop.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "resource_store_in_loop.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $outptr: i32;
@@ -424,7 +424,7 @@ fn "resource_store_in_loop.wado/$cm_binding__Response_new"(headers, contents, tr
     let $cm_handle_6: i32;
     $cm_handle_6 = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
     headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -448,27 +448,27 @@ fn "resource_store_in_loop.wado/$cm_task_entry__handle"(request) {
     "resource_store_in_loop.wado/stored_after_a_move$dae[n]"();
     "resource_store_in_loop.wado/stored_before_some_exits$spec0$dae[n]"();
     "resource_store_in_loop.wado/stored_before_some_exits$spec1$dae[n]"();
-    if ref.is_null(local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__Fields_new"())) == 0 {
+    if ref.is_null(local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"())) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = $moved_2_189.value;
         $moved_2_189.value = 0;
         "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
     }
-    $moved_2_193 = local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__Fields_new"());
+    $moved_2_193 = local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"());
     $moved_2_189 = ref.null none;
     if ref.is_null($moved_2_193) == 0 {
         $cm_handle_2 = $moved_2_193.value;
         $moved_2_193.value = 0;
         "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
     }
-    if ref.is_null(local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__Fields_new"())) == 0 {
+    if ref.is_null(local.tee $moved_2_189("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"())) == 0 {
         $cm_handle_2 = $moved_2_189.value;
         $moved_2_189.value = 0;
         "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
     }
     $cm_handle_2 = builtin::i32_wrap_i64(local.tee $cm_pair_179("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_183 = builtin::i32_wrap_i64($cm_pair_179 >> 32_i64);
-    $moved_2_189 = local.tee $pattern_temp_1("resource_store_in_loop.wado/$cm_binding__Response_new"("resource_store_in_loop.wado/$cm_binding__Fields_new"(), global:resource_store_in_loop.wado::$const_obj_0, $moved_5 = $cm_handle_2; $cm_handle_2 = 0; $moved_5)).0;
+    $moved_2_189 = local.tee $pattern_temp_1("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:resource_store_in_loop.wado::$const_obj_0, $moved_5 = $cm_handle_2; $cm_handle_2 = 0; $moved_5)).0;
     $moved_2_193 = $pattern_temp_1.1;
     $sroa_$task_ret_1_185 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_6 = $moved_2_189; $moved_2_189 = ref.null none; $moved_6 };
     $moved_5 = 0;
@@ -872,7 +872,7 @@ fn "resource_store_in_loop.wado/stored_before_some_exits$spec0$dae[n]"() with Fi
     let held: ref null "core:prelude//$Resource";
     let $moved_3: ref null "core:prelude//$Resource";
     let $stored_4: ref null "core:prelude//$Resource";
-    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__Fields_new"());
+    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"());
     held = ref.null none;
     if ref.is_null($moved_3) == 0 {
         let $cm_handle_2: i32;
@@ -884,7 +884,7 @@ fn "resource_store_in_loop.wado/stored_before_some_exits$spec0$dae[n]"() with Fi
     b106: block {
         l107: loop {
             break_if b106 $cm_handle_2 == 0;
-            $stored_4 = "resource_store_in_loop.wado/$cm_binding__Fields_new"();
+            $stored_4 = "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
             if ref.is_null(held) {
                 held = $stored_4;
             } else {
@@ -912,7 +912,7 @@ fn "resource_store_in_loop.wado/stored_before_some_exits$spec1$dae[n]"() with Fi
     let held: ref null "core:prelude//$Resource";
     let $moved_3: ref null "core:prelude//$Resource";
     let $stored_4: ref null "core:prelude//$Resource";
-    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__Fields_new"());
+    $moved_3 = local.tee held("resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"());
     held = ref.null none;
     if ref.is_null($moved_3) == 0 {
         let $cm_handle_2: i32;
@@ -924,7 +924,7 @@ fn "resource_store_in_loop.wado/stored_before_some_exits$spec1$dae[n]"() with Fi
     b111: block {
         l112: loop {
             break_if b111 $cm_handle_2 == 3;
-            $stored_4 = "resource_store_in_loop.wado/$cm_binding__Fields_new"();
+            $stored_4 = "resource_store_in_loop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
             if ref.is_null(held) {
                 held = $stored_4;
             } else {

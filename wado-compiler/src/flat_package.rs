@@ -77,7 +77,7 @@ pub struct FlatPackage {
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: std::sync::Arc<WorldRegistry>,
 
-    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
+    /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,

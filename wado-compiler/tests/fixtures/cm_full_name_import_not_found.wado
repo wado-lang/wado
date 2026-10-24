@@ -1,0 +1,9 @@
+// A full name no interface of the module carries is not found.
+use { "wado:test/maths" as M } from "./sub/wasm_import_cm_math.wat" with { type: "wat" };
+
+test {
+    assert M::add(2, 40) == 42;
+}
+
+__DATA__
+{"compile_error": ":2:7: analysis error: symbol 'wado:test/maths' not found in module './sub/wasm_import_cm_math.wat'", "compile_error_codes": ["IMPORT_NOT_FOUND"]}

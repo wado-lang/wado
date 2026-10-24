@@ -13,35 +13,35 @@ struct cm_record_with_own_field_param.wado//Slot {  // TypeId(1)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(3)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(3)
 
-type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#pick" = fn(i32, i32) -> i32;  // TypeId(4)
 
-type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(5)
+type "functype//cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(5)
 
 type "functype//cm_record_with_own_field_param.wado/$cm_export__run" = fn();  // TypeId(6)
 
-type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick$spec0" = fn(ref null "cm_record_with_own_field_param.wado//Slot") -> u32;  // TypeId(7)
+type "functype//cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick$spec0" = fn(ref null "cm_record_with_own_field_param.wado//Slot") -> u32;  // TypeId(7)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#pick from "wasi/$wasi:demo/gfx@0.1.0#pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Gfx::get_device"() };
+fn "cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"() };
 }
 
 fn "cm_record_with_own_field_param.wado/$cm_export__run"() {
-    drop("cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick$spec0"(struct.new "cm_record_with_own_field_param.wado//Slot" { device: "cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device"(), index: 3 }));
+    drop("cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick$spec0"(struct.new "cm_record_with_own_field_param.wado//Slot" { device: "cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"(), index: 3 }));
     "wasi/task-return"(0);
 }
 
-fn "cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick$spec0"(slot) with Gfx {
-    return "wasi/wasi:demo/Gfx::pick"(slot.device.value, 3);
+fn "cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick$spec0"(slot) with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#pick"(slot.device.value, 3);
 }
 
 export fn "cm_record_with_own_field_param.wado/$cm_export__run" as "run"
