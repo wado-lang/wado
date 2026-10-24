@@ -43,7 +43,7 @@ use crate::{hashmap, nir};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Target {
     Stored(usize),
-    Extern(FunctionId),
+    Extern(Box<FunctionId>),
 }
 
 /// Every target a walk of the call graph reached, in the order it reached them.
@@ -1368,7 +1368,7 @@ fn compute_reachable(graph: &AnalysisGraph, roots: impl IntoIterator<Item = Targ
         let pos = match pending {
             Pending::Extern(id) => {
                 if externs.insert(id) {
-                    reachable.insert(Target::Extern(id.clone()));
+                    reachable.insert(Target::Extern(Box::new(id.clone())));
                 }
                 continue;
             }
@@ -2852,7 +2852,7 @@ mod tests {
             [
                 Target::Stored(0),
                 Target::Stored(1),
-                Target::Extern(host),
+                Target::Extern(Box::new(host)),
                 Target::Stored(2),
             ]
         );

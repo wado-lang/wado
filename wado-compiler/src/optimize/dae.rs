@@ -303,7 +303,7 @@ fn apply_dae(
     // Phase 3c: name each reshaped callee for its shape. One reshaped into a
     // function that already stands, reached by another route, is that
     // function: its callers, whose arguments 3b already dropped, call it.
-    touched.extend(project.rename_reshaped(confirmed.keys().copied(), &exec));
+    touched.extend(project.rename_reshaped(confirmed.keys().copied(), exec));
     touched.into_iter().collect()
 }
 
