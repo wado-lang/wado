@@ -464,13 +464,12 @@ mod tests {
     /// way: `Point` writes its own, so only `Wrapper` takes one beside `Eq`.
     #[test]
     fn a_written_impl_blocks_derivation_alongside() {
-        const ALONGSIDE: TraitDeclId = TraitDeclId(1);
         let mut p = prelude();
-        p.push_impl(concrete(ALONGSIDE, decl(POINT)));
+        p.push_impl(concrete(ORD, decl(POINT)));
         let derived = vec![concrete(EQ, decl(POINT)), concrete(EQ, decl(WRAPPER))];
-        derive_alongside(&mut p, ALONGSIDE, derived);
+        derive_alongside(&mut p, ORD, derived);
         let targets: Vec<SolverType> = p
-            .impls_of(ALONGSIDE)
+            .impls_of(ORD)
             .map(|(_, def)| def.target.clone())
             .collect();
         assert_eq!(targets, vec![decl(POINT), decl(WRAPPER)]);

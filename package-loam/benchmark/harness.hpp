@@ -19,17 +19,24 @@ inline constexpr int STEPS = 8;
 inline constexpr int WARMUP = 1;
 inline constexpr int ITERATIONS = 3;
 
-// The ids the JSON file `oracle` records for PROMPT: the `ids` list after the
-// string that is PROMPT.
+// The ids the JSON file `oracle` records for PROMPT: the `ids` list of the
+// entry that holds the string PROMPT.
 inline std::vector<int64_t> prompt_ids(const std::string& oracle) {
     std::ifstream file(oracle);
+    if (!file) {
+        std::fprintf(stderr, "cannot read %s\n", oracle.c_str());
+        std::exit(1);
+    }
     std::stringstream buf;
     buf << file.rdbuf();
     const std::string text = buf.str();
-    const std::size_t entry = text.find("\"" + std::string(PROMPT) + "\"");
-    const std::size_t open = text.find('[', text.find("\"ids\"", entry));
+    // An entry is a flat object, so it spans the braces around the string.
+    const std::size_t at = text.find("\"" + std::string(PROMPT) + "\"");
+    const std::size_t from = at == std::string::npos ? at : text.rfind('{', at);
+    const std::size_t to = text.find('}', at);
+    const std::size_t open = text.find('[', text.find("\"ids\"", from));
     const std::size_t close = text.find(']', open);
-    if (entry == std::string::npos || open == std::string::npos || close == std::string::npos) {
+    if (from == std::string::npos || to == std::string::npos || open > to || close > to) {
         std::fprintf(stderr, "%s records no ids for \"%s\"\n", oracle.c_str(), PROMPT);
         std::exit(1);
     }

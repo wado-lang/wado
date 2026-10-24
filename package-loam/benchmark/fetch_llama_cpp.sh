@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Downloads llama.cpp's Vulkan release for this host, unmodified, and prints the
-# directory holding its libraries. The headers the release leaves out come from
-# the source of the same tag, under `<directory>/include`. Cached under
-# ~/.cache/loam.
+# directory holding its libraries, or nothing on a host it has no release for.
+# The headers the release leaves out come from the source of the same tag,
+# under `<directory>/include`. Cached under ~/.cache/loam.
 set -euo pipefail
 
 TAG=b11846
@@ -13,8 +13,7 @@ case "$(uname -s)-$(uname -m)" in
         sha=92d10e8f3a4370988b6b7f7aa23647fb74dc3e59f8a9d2d407cb381c4932fc7a
         ;;
     *)
-        echo "no llama.cpp $TAG Vulkan release for $(uname -s)-$(uname -m)" >&2
-        exit 1
+        exit 0
         ;;
 esac
 
