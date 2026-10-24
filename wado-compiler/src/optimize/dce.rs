@@ -2224,44 +2224,46 @@ pub(super) fn unhoist_unobserved_globals(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     summaries: &FnSummaries,
+    exec: &Executor,
 ) -> bool {
     let descriptors = cache.descriptors(project);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
+    let functions = &project.functions;
     let mut guards = GlobalGuards {
         descriptors,
         types: &types,
         inert_functions: IndexSet::default(),
     };
+    // `inert_body` only gains answers as the set grows, so adding a round's
+    // findings together reaches the same fixed point as adding them one by one.
     loop {
-        let before = guards.inert_functions.len();
-        for (i, func) in project.functions.iter().enumerate() {
-            let func = func.borrow();
-            let calls = summaries.of_body(i);
-            if let (Some(id), Some(body)) = (func.id, &func.body)
-                && !guards.inert_functions.contains(&id)
-                && guards.inert_body(body, calls)
-            {
-                guards.inert_functions.insert(id);
-            }
-        }
-        if guards.inert_functions.len() == before {
+        let fresh = exec.filter_map_indices(functions.len(), |i| {
+            let func = functions[i].borrow();
+            let (Some(id), Some(body)) = (func.id, &func.body) else {
+                return None;
+            };
+            (!guards.inert_functions.contains(&id) && guards.inert_body(body, summaries.of_body(i)))
+                .then_some(id)
+        });
+        if fresh.is_empty() {
             break;
         }
+        guards.inert_functions.extend(fresh);
     }
-    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
-    let mut observed: IndexSet<(String, String)> = IndexSet::default();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
+    let census = exec.map_indices(functions.len(), |i| {
+        let func = functions[i].borrow();
         let calls = summaries.of_body(i);
+        let mut guarded: Vec<(String, String)> = Vec::new();
+        let mut observed: Vec<(String, String)> = Vec::new();
         let Some(body) = func.body.as_ref() else {
-            continue;
+            return (guarded, observed);
         };
         let mentioned = mentioned_locals(body);
         let mut unobserving: IndexSet<ExprId> = IndexSet::default();
         for stmt in reachable_stmt_ids(body) {
             if let Some((read, key, _)) = guards.find(body, stmt, calls) {
-                guarded.insert(key);
+                guarded.push(key);
                 unobserving.insert(read);
             }
             if let Some(value) = guards.dead_binding(body, stmt, &mentioned, calls) {
@@ -2275,16 +2277,23 @@ pub(super) fn unhoist_unobserved_globals(
             } = &body.exprs[e].kind
                 && !unobserving.contains(&e)
             {
-                observed.insert(global_key(module_source, name));
+                observed.push(global_key(module_source, name));
             }
         }
+        (guarded, observed)
+    });
+    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
+    let mut observed: IndexSet<(String, String)> = IndexSet::default();
+    for (g, o) in census {
+        guarded.extend(g);
+        observed.extend(o);
     }
     let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
     if unobserved.is_empty() {
         return false;
     }
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
+    exec.map_indices(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         if let Some(body) = func.body.as_mut() {
             let mentioned = mentioned_locals(body);
@@ -2297,7 +2306,7 @@ pub(super) fn unhoist_unobserved_globals(
                  read of it survived"
             );
         }
-    }
+    });
     true
 }
 
@@ -2379,40 +2388,47 @@ fn global_key(module_source: &ModuleSource, name: &str) -> (String, String) {
 /// follows drops the global, the record and the handler's methods.
 ///
 /// Answers whether any body changed, as [`unhoist_unobserved_globals`] does.
-pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &FnSummaries) -> bool {
-    let mut readers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
-    let mut writers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
-    for (i, func) in project.functions.iter().enumerate() {
+pub(super) fn drop_self_feeding_globals(
+    project: &mut NirPackage,
+    summaries: &FnSummaries,
+    exec: &Executor,
+) -> bool {
+    let functions = &project.functions;
+    let accesses = exec.map(functions, |func| {
         let func = func.borrow();
         let Some(body) = func.body.as_ref() else {
-            continue;
+            return Vec::new();
         };
-        for node in reachable_nodes(body) {
-            let NodeRef::Expr(e) = node else {
-                continue;
+        reachable_nodes(body)
+            .into_iter()
+            .filter_map(|node| {
+                let NodeRef::Expr(e) = node else {
+                    return None;
+                };
+                match &body.exprs[e].kind {
+                    ExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    } => Some((global_key(module_source, name), Access::Read)),
+                    ExprKind::GlobalVarSet {
+                        module_source,
+                        name,
+                        ..
+                    } => Some((global_key(module_source, name), Access::Write)),
+                    _ => None,
+                }
+            })
+            .collect()
+    });
+    let mut readers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    let mut writers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    for (i, found) in accesses.into_iter().enumerate() {
+        for (key, access) in found {
+            let by = match access {
+                Access::Read => &mut readers,
+                Access::Write => &mut writers,
             };
-            match &body.exprs[e].kind {
-                ExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } => {
-                    readers
-                        .entry(global_key(module_source, name))
-                        .or_default()
-                        .insert(i);
-                }
-                ExprKind::GlobalVarSet {
-                    module_source,
-                    name,
-                    ..
-                } => {
-                    writers
-                        .entry(global_key(module_source, name))
-                        .or_default()
-                        .insert(i);
-                }
-                _ => {}
-            }
+            by.entry(key).or_default().insert(i);
         }
     }
     let mut candidates: IndexSet<(String, String)> = readers
@@ -2506,6 +2522,11 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
         );
     }
     true
+}
+
+enum Access {
+    Read,
+    Write,
 }
 
 /// The locals every reachable `let` of which binds a value the pass may delete
@@ -2686,14 +2707,16 @@ pub(super) fn remove_unreachable_globals(
     used_globals: &IndexSet<(String, String)>,
     summaries: &FnSummaries,
     initializers: Initializers,
+    exec: &Executor,
 ) {
     project
         .globals
         .retain(|global| used_globals.contains(&global_key(&global.module_source, &global.name)));
 
-    let type_table = project.type_table.borrow();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
+    let type_table = &*project.type_table.borrow();
+    let functions = &project.functions;
+    exec.map_indices(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         let is_module_init = func.name == MODULE_INIT_FUNCTION;
         if let Some(body) = func.body.as_mut() {
@@ -2701,9 +2724,9 @@ pub(super) fn remove_unreachable_globals(
                 drop_dead_initializers(body, used_globals);
             }
             let root = body.root();
-            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
+            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, type_table, calls);
         }
-    }
+    });
 }
 
 /// What becomes of a dead global's initializer.

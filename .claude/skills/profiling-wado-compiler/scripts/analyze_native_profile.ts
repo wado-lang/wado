@@ -21,7 +21,7 @@
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
  *   ./analyze_native_profile.ts PROFILE.json [--top N] [--binary wado]
  *                             [--main-base 0x100000000] [--symbolicator auto|atos|addr2line]
- *                             [--under REGEX] [--thread REGEX]
+ *                             [--under REGEX] [--callers REGEX] [--thread REGEX]
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -231,6 +231,7 @@ function main(): void {
       arch: { type: "string", default: machine() },
       symbolicator: { type: "string", default: "auto" },
       under: { type: "string" },
+      callers: { type: "string" },
       thread: { type: "string" },
     },
   });
@@ -239,7 +240,7 @@ function main(): void {
     console.error(
       "usage: analyze_native_profile.ts PROFILE.json [--top N] " +
         "[--binary wado] [--main-base 0x100000000] " +
-        "[--symbolicator auto|atos|addr2line] [--under REGEX] [--thread REGEX]",
+        "[--symbolicator auto|atos|addr2line] [--under REGEX] [--callers REGEX] [--thread REGEX]",
     );
     process.exit(2);
   }
@@ -254,6 +255,7 @@ function main(): void {
     }
   };
   const under = regexArg("under");
+  const callers = regexArg("callers");
   const threadFilter = regexArg("thread");
 
   const profilePath = positionals[0];
@@ -284,6 +286,8 @@ function main(): void {
   const attr = new Map<string, number>(); // syscall/alloc leaf -> nearest Rust caller
   const allocBy = new Map<string, number>(); // allocation cost -> requesting caller
   const calleesBy = new Map<string, number>(); // --under: the matched frame's callee
+  const callersBy = new Map<string, number>(); // --callers: the matched frame's callers
+  const inBin = `(in ${binary})`;
   let allocTotal = 0.0;
   let total = 0.0;
   let usedWallclock = false;
@@ -378,6 +382,16 @@ function main(): void {
         }
         if (matched) add(calleesBy, callee, w);
       }
+      // Above the outermost frame matching `callers`, credit its three nearest
+      // callers: which pass a shared helper's time is spent for.
+      if (callers != null) {
+        let chain: string[] | null = null;
+        for (let node: number | null = leaf; node != null; node = stPrefix[node]) {
+          if (callers.test(name(node))) chain = [];
+          else if (chain != null && chain.length < 3) chain.push(name(node).replace(` ${inBin}`, ""));
+        }
+        if (chain != null) add(callersBy, chain.join("  <  ") || "[root]", w);
+      }
       // attribute non-main-binary leaf CPU to nearest main-binary caller
       if (libName(leaf) !== binary) {
         cur = leaf;
@@ -420,7 +434,6 @@ function main(): void {
     }
   };
 
-  const inBin = `(in ${binary})`;
   console.log(`symbolicator = ${symbolicator}`);
   console.log(`total CPU weight = ${total.toFixed(0)}`);
   console.log("\n=== CPU by library (self) ===");
@@ -441,6 +454,7 @@ function main(): void {
     `Allocation cost by requesting caller (${pct(allocTotal)} of total)`, allocBy,
   );
   if (under != null) show(`Callees of the outermost frame matching /${under.source}/`, calleesBy);
+  if (callers != null) show(`Callers of the outermost frame matching /${callers.source}/`, callersBy);
 }
 
 main();
