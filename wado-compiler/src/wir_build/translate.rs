@@ -2378,7 +2378,8 @@ impl FunctionTranslator<'_, '_> {
     /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
-        if self.type_table.is_never(self.body.exprs[expr_id].type_id) && !instr.ends_with_terminator()
+        if self.type_table.is_never(self.body.exprs[expr_id].type_id)
+            && !instr.ends_with_terminator()
         {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {

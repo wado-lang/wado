@@ -560,9 +560,9 @@ pub(super) fn peels_to_never(program: &Program, ty: &SolverType) -> bool {
 }
 
 fn is_never(program: &Program, ty: &SolverType) -> bool {
-    program
-        .never
-        .is_some_and(|never| matches!(ty, SolverType::Decl(id, args) if *id == never && args.is_empty()))
+    program.never.is_some_and(
+        |never| matches!(ty, SolverType::Decl(id, args) if *id == never && args.is_empty()),
+    )
 }
 
 /// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait

@@ -1161,7 +1161,10 @@ pub enum TypeError {
 
     /// An `impl` for `!` or a newtype over it, which holds every trait already
     /// (spec-types.md § Trait Bounds on `!`).
-    ImplForNever { type_name: String, span: Span },
+    ImplForNever {
+        type_name: String,
+        span: Span,
+    },
 
     /// An `impl` method takes a different number of parameters than the trait
     /// declares. Left unreported it reaches codegen as a call built to the
