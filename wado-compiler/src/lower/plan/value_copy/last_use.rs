@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
-use super::points_to::{LocSet, PointsTo};
+use super::points_to::{Locations, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_reference_type, is_scalar_type, needs_value_copy};
@@ -228,7 +228,7 @@ enum Lands<'a> {
     /// The local's own location.
     Local(u32),
     /// What a place, or a handle a call writes through, denotes.
-    Place(&'a LocSet),
+    Place(Locations<'a>),
 }
 
 /// A materialization that may take its aggregate's storage rather than copy it,
@@ -1266,7 +1266,7 @@ struct Analyzer<'a> {
     pending_writes: Vec<WriteCheck<'a>>,
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
-    handed: Vec<&'a LocSet>,
+    handed: Vec<Locations<'a>>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,

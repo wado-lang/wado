@@ -30,6 +30,6 @@ pub fn lower(
     // `translate` mints canonical FuncIds and stamps every call node at
     // construction ("born resolved"); there is no post-pass id assignment.
     Ok(in_span(profiler, "lower/translate", || {
-        translate::translate(flat, plan)
+        translate::translate(flat, plan, profiler)
     }))
 }

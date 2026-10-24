@@ -25,7 +25,7 @@ use std::ops::Range;
 
 mod loc_set;
 
-pub use loc_set::LocSet;
+use loc_set::LocSet;
 
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
@@ -58,7 +58,10 @@ pub struct PointsTo {
     locals: IndexMap<(Frame, u32), u32>,
     /// The frame and local each location node is, the inverse of `locals`.
     owners: IndexMap<u32, (Frame, u32)>,
+    /// Each node's set, holding locations by their index in `locations`.
     pts: Vec<LocSet>,
+    /// The node of each location, ascending.
+    locations: Vec<u32>,
     /// The node whose entry in `pts` each node's set is, flattened.
     rep: DisjointSets,
     /// The node the value each call argument hands its callee flows from, and
@@ -90,9 +93,25 @@ fn site_of(sites: &IndexMap<usize, (u32, Span)>, expr: &TirExpr) -> u32 {
     node
 }
 
+/// A node's set: the location nodes it holds, ascending.
+#[derive(Clone, Copy)]
+pub struct Locations<'a> {
+    set: &'a LocSet,
+    nodes: &'a [u32],
+}
+
+impl<'a> Locations<'a> {
+    pub fn iter(self) -> impl Iterator<Item = u32> + 'a {
+        self.set.iter().map(|index| self.nodes[index as usize])
+    }
+}
+
 impl PointsTo {
-    fn set(&self, node: u32) -> &LocSet {
-        &self.pts[self.rep.root(node) as usize]
+    fn set(&self, node: u32) -> Locations<'_> {
+        Locations {
+            set: &self.pts[self.rep.root(node) as usize],
+            nodes: &self.locations,
+        }
     }
 
     /// The frame of the function `module`/`name`, `None` for one the analysis
@@ -149,13 +168,13 @@ impl PointsTo {
     /// value reaches where that holds a writable handle, and its own where a
     /// `&mut` parameter references it.
     #[must_use]
-    pub fn handed(&self, arg: &TirExpr) -> &LocSet {
+    pub fn handed(&self, arg: &TirExpr) -> Locations<'_> {
         self.set(site_of(&self.handed, arg))
     }
 
     /// The storage an assignment to, or a reference to, `place` denotes.
     #[must_use]
-    pub fn written(&self, place: &TirExpr) -> &LocSet {
+    pub fn written(&self, place: &TirExpr) -> Locations<'_> {
         self.set(site_of(&self.written, place))
     }
 
@@ -444,7 +463,13 @@ struct Carried {
 
 #[derive(Default)]
 struct Graph {
+    /// Each set holds locations by their index in `locations`: a few in ten
+    /// nodes are locations, so numbered apart they pack into dense words.
     pts: Vec<LocSet>,
+    /// The node of each location.
+    locations: Vec<u32>,
+    /// The index in `locations` of each node that is one.
+    location_index: IndexMap<u32, u32>,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
     rep: DisjointSets,
@@ -491,8 +516,7 @@ impl Graph {
         let callee = self.find(callee);
         self.sites[callee as usize].push(site);
         let at = self.sites[callee as usize].len() - 1;
-        let locs: Vec<u32> = self.pts[callee as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(callee) {
             self.bind(callee, at, loc);
         }
     }
@@ -536,11 +560,24 @@ impl Graph {
         self.rep.find(node)
     }
 
+    /// The location nodes in the set of `node`, a representative.
+    fn locations_in(&self, node: u32) -> Vec<u32> {
+        self.pts[node as usize]
+            .iter()
+            .map(|index| self.locations[index as usize])
+            .collect()
+    }
+
     fn add(&mut self, node: u32, loc: u32) {
         let node = self.find(node);
         if self.inert.contains(&node) {
             return;
         }
+        let next = u32::try_from(self.locations.len()).expect("location count fits u32");
+        let loc = *self.location_index.entry(loc).or_insert_with(|| {
+            self.locations.push(loc);
+            next
+        });
         if self.pts[node as usize].insert(loc) {
             if self.delta[node as usize].is_empty() {
                 self.work.push(node);
@@ -584,8 +621,7 @@ impl Graph {
     fn load(&mut self, from: u32, to: u32) {
         let from = self.find(from);
         self.loads[from as usize].push(to);
-        let locs: Vec<u32> = self.pts[from as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(from) {
             self.copy(loc, to);
         }
     }
@@ -593,8 +629,7 @@ impl Graph {
     fn store(&mut self, into: u32, from: u32) {
         let into = self.find(into);
         self.stores[into as usize].push(from);
-        let locs: Vec<u32> = self.pts[into as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(into) {
             self.copy(from, loc);
         }
     }
@@ -607,9 +642,7 @@ impl Graph {
         // location (a store writes it), what a load or a call feeds, and what
         // a location is added to.
         let mut fed: IndexSet<u32> = self.inert.clone();
-        for set in &self.pts {
-            fed.extend(set.iter());
-        }
+        fed.extend(self.locations.iter().copied());
         fed.extend(self.loads.iter().flatten().copied());
         for (&loc, target) in &self.targets {
             fed.insert(loc);
@@ -732,6 +765,9 @@ impl Graph {
                 missing
             })
             .collect();
+        // Many merged nodes copy into one target, so each target lacking
+        // anything takes the whole set once, not each node's missing apiece.
+        let mut lacking: IndexSet<u32> = IndexSet::default();
         for (c, missing) in carried.into_iter().zip(missing) {
             if missing.is_empty() {
                 continue;
@@ -740,10 +776,15 @@ impl Graph {
             for &to in &merged_copy_to[c.edges.copy_to] {
                 let to = self.find(to);
                 if to != root {
-                    self.add_all(to, &missing);
+                    lacking.insert(to);
                 }
             }
         }
+        let pts = std::mem::take(&mut self.pts[r]);
+        for to in lacking {
+            self.add_all(to, &pts);
+        }
+        self.pts[r] = pts;
     }
 
     /// Carry `locs`, new in `node`'s set, along the loads, stores and calls of
@@ -751,6 +792,7 @@ impl Graph {
     fn carry(&mut self, node: u32, locs: &LocSet, edges: &Edges) {
         let n = node as usize;
         for loc in locs.iter() {
+            let loc = self.locations[loc as usize];
             for i in edges.loads.clone() {
                 let to = self.loads[n][i];
                 self.copy(loc, to);
@@ -765,7 +807,28 @@ impl Graph {
         }
     }
 
+    /// Renumber the locations in the order of their nodes, so each set lists
+    /// its locations in node order however the build met them.
+    fn number_locations_in_node_order(&mut self) {
+        let mut by_node: Vec<u32> = (0..).take(self.locations.len()).collect();
+        by_node.sort_unstable_by_key(|&index| self.locations[index as usize]);
+        let mut renumbered = vec![0; by_node.len()];
+        for (new, &old) in (0..).zip(&by_node) {
+            renumbered[old as usize] = new;
+        }
+        for set in self.pts.iter_mut().chain(&mut self.delta) {
+            let mut locs: Vec<u32> = set.iter().map(|old| renumbered[old as usize]).collect();
+            locs.sort_unstable();
+            *set = locs.into_iter().collect();
+        }
+        self.locations.sort_unstable();
+        for (index, &node) in (0..).zip(&self.locations) {
+            self.location_index.insert(node, index);
+        }
+    }
+
     fn solve(&mut self) {
+        self.number_locations_in_node_order();
         self.substitute();
         while let Some(node) = self.work.pop() {
             if self.find(node) != node {
@@ -1028,14 +1091,14 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
     let global_nodes: Vec<u32> = b.globals.values().copied().chain([b.escape]).collect();
     let mut rep = std::mem::take(&mut b.g.rep);
     rep.flatten();
-    let pts = std::mem::take(&mut b.g.pts);
     let locals = std::mem::take(&mut b.locals);
     let owners = locals.iter().map(|(&key, &node)| (node, key)).collect();
     let mut result = PointsTo {
         functions: FuncIndex::default(),
         locals,
         owners,
-        pts,
+        pts: std::mem::take(&mut b.g.pts),
+        locations: std::mem::take(&mut b.g.locations),
         rep,
         handed: std::mem::take(&mut b.handed),
         written: std::mem::take(&mut b.written),
@@ -1719,7 +1782,7 @@ mod tests {
         }
         for node in [v, w] {
             let node = g.find(node);
-            assert_eq!(g.pts[node as usize].iter().collect::<Vec<_>>(), [m]);
+            assert_eq!(g.locations_in(node), [m]);
         }
     }
 }

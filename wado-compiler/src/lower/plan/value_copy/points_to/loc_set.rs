@@ -222,6 +222,16 @@ fn merge_words(ours: &mut Vec<(u32, u64)>, theirs: &[(u32, u64)], added: &mut Lo
     gained
 }
 
+impl FromIterator<u32> for LocSet {
+    fn from_iter<I: IntoIterator<Item = u32>>(locs: I) -> Self {
+        let mut set = Self::default();
+        for loc in locs {
+            set.insert(loc);
+        }
+        set
+    }
+}
+
 impl PartialEq for LocSet {
     fn eq(&self, other: &Self) -> bool {
         // A set holds words exactly when it has grown past `SMALL_MAX`, so two
