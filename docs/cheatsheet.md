@@ -1115,6 +1115,11 @@ fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
 // middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
 
+// A spread over a non-pack type: a tuple of any length, every element that type
+fn sum(values: [..i32]) -> i32 { ... }
+sum([1, 2, 3]);                           // 6
+fn collect<T>(items: [..T]) -> List<T> { ... }   // a walk binds `T` itself
+
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]

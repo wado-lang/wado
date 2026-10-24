@@ -4759,6 +4759,11 @@ impl TypeTable {
                                         // yields `Case<T, P_k>` at position k;
                                         // a pack-independent `..F::method()`
                                         // repeats its return type `|F|` times.
+                                        // A pack nothing answered is as unknown
+                                        // mapped as spliced: no length to repeat.
+                                        Some(_) if pack_type == Self::UNKNOWN => {
+                                            new_elems.push(Self::UNKNOWN);
+                                        }
                                         Some(elem) => {
                                             let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {

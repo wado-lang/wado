@@ -1376,3 +1376,50 @@ takes every type the scalar parameters leave over
 `zip` transposes its operands position by position, so its rows must be equally
 long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
 rejected where it is written.
+
+### Homogeneous Packs
+
+A spread over a type that is not a pack, `[..X]`, is a tuple of any length whose
+every element is `X`. The function takes it without declaring a pack. A walk over
+it binds `X` itself, so the body treats every element as one type.
+
+<!-- {"fixture":"variadic_homogeneous_pack.wado"} -->
+
+```wado
+fn collect<T>(items: [..T]) -> List<T> {
+    let mut out: List<T> = [];
+    for let item of items {
+        out.push(item);
+    }
+    return out;
+}
+
+fn sum(values: [..i32]) -> i32 {
+    let mut total = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+test {
+    assert collect([1, 2, 3]) == [1, 2, 3];
+    assert collect(["a", "b"]) == ["a", "b"];
+    assert sum([1, 2, 3, 4]) == 10;
+    assert sum([]) == 0;
+}
+```
+
+The call settles `X` from the tuple's elements, which must all be `X`. A tuple
+that mixes types is a mismatch:
+
+<!-- {"fixture":"variadic_homogeneous_pack_mismatch_error.wado"} -->
+
+```wado
+assert sum([1, "a"]) == 1;
+```
+
+It is reported as `expected '[i32, i32]', found '[i32, String]'`.
+
+Every length the program passes is its own instantiation, as with a declared
+pack.

@@ -1,7 +1,6 @@
 // `[..T]` over a scalar `T` is a tuple of any length whose every element is
 // `T`: a walk over it binds `T` itself, so the body may treat each element as
 // one. Each length is its own instantiation.
-use { println, Stdout } from "core:cli";
 
 fn collect<T>(items: [..T]) -> List<T> {
     let mut out: List<T> = [];
@@ -19,15 +18,14 @@ fn sum(values: [..i32]) -> i32 {
     return total;
 }
 
-export fn run() with Stdout {
-    println(`${collect([1, 2, 3]):?}`);
-    println(`${collect(["a", "b"]):?}`);
-    println(`${List::<bool>::from_tuple([]):?}`);
-    println(`${sum([1, 2, 3, 4])}`);
-    println(`${sum([])}`);
+test {
+    assert collect([1, 2, 3]) == [1, 2, 3];
+    assert collect(["a", "b"]) == ["a", "b"];
+    assert sum([1, 2, 3, 4]) == 10;
+    assert sum([]) == 0;
 }
 
-__DATA__
-{
-    "stdout": "[1, 2, 3]\n[\"a\", \"b\"]\n[]\n10\n0\n"
+test "List::from_tuple" {
+    assert List::<bool>::from_tuple([]).is_empty();
+    assert List::from_tuple([1, 2]) == [1, 2];
 }
