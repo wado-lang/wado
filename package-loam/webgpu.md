@@ -340,7 +340,7 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
 | GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 294                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.13                             | 204                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
@@ -355,4 +355,7 @@ wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
 roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
 submitting every 32 dispatches to 0.34, keeping the product weights column by
 column in bf16 to 0.28, splitting `arg_max`'s lane over the device to 0.25,
-and reusing buffers and bind groups to 0.19.
+and reusing buffers and bind groups to 0.19. Then the device set the time:
+pairing the gate and the value, workgroups of 256 lanes for the rows and
+attention, and one product of the query, key and value, its normalization in
+it, took it to 0.13.
