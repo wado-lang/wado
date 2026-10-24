@@ -2089,9 +2089,6 @@ impl GlobalGuards<'_> {
         deletable_value(body, *value, self.types, calls).then_some(expr)
     }
 
-    /// Whether every root statement is inert. The only answer the set can
-    /// change is a call's, made by the statement's value itself: see
-    /// [`root_callees`].
     fn inert_body(&self, body: &Body, calls: CallFacts) -> bool {
         body.blocks[body.root()]
             .stmts
