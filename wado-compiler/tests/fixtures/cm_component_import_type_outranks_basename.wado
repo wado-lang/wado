@@ -1,0 +1,9 @@
+// The default interface's type `Counter` outranks the interface's basename, so
+// `Counter` is the type and the interface is reached by its full name.
+use { Counter, make, "wado:counter/counter" as Counters } from "./sub/wasm_import_cm_counter.wat" with { type: "wat" };
+
+test {
+    let c: Counter = make();
+    assert c.n == 7;
+    assert Counters::make().n == 7;
+}

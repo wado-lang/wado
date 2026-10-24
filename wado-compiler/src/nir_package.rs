@@ -10,6 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
@@ -20,8 +21,8 @@ use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclName, DeclPath, FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name,
-    retired_name,
+    FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
+    to_cm_name,
 };
 use crate::nir::{
     ClosureFunctor, FuncCell, FuncId, FuncRef, FunctionRef, NirEnum, NirFlags, NirFunction,
@@ -59,9 +60,14 @@ impl AmbientStream {
         }
     }
 
-    /// The operation that writes the stream: `Stdout::write_via_stream`.
-    pub fn write_operation(self) -> DeclPath {
-        DeclPath::method_of(&DeclName::new(self.interface_name()), "write_via_stream")
+    /// The key in `registry` of the function that writes the stream:
+    /// `wasi:cli/stdout@…#write-via-stream`.
+    pub fn write_operation(self, registry: &CmInterfaceRegistry) -> String {
+        let version = registry
+            .get_cli_version()
+            .expect("the stdlib binds `wasi:cli`");
+        let interface = format!("wasi:cli/{}@{version}", to_cm_name(self.interface_name()));
+        cm_function_path(&interface, "write-via-stream")
     }
 
     /// `core:builtin`'s `ambient_std{out,err}_available`.
@@ -189,7 +195,7 @@ pub struct NirPackage {
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: std::sync::Arc<WorldRegistry>,
 
-    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
+    /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
     /// Set by the first DCE; read it through [`Self::ambient_stdio`].
     pub ambient_stdio: Option<AmbientStdio>,

@@ -233,17 +233,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(53)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/example:demo/Fetch::get" = fn(i32, i32, i32) -> i32;  // TypeId(55)
+type "functype//wasi/$example:demo/fetch#get" = fn(i32, i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(56)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(56)
 
 type "functype//spec_effects_async_operation.wado/$test_0" = fn();  // TypeId(57)
 
-type "functype//spec_effects_async_operation.wado/$cm_binding__Fetch_get" = fn(ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,i32>>";  // TypeId(58)
+type "functype//spec_effects_async_operation.wado/$cm_binding__example:demo/fetch#get" = fn(ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,i32>>";  // TypeId(58)
 
-type "functype//spec_effects_async_operation.wado/$cm_lift__Fetch_get" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>";  // TypeId(59)
+type "functype//spec_effects_async_operation.wado/$cm_lift__example:demo/fetch#get" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>";  // TypeId(59)
 
-type "functype//spec_effects_async_operation.wado/$cm_wrap_async__Fetch_get" = fn(ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,i32>>";  // TypeId(60)
+type "functype//spec_effects_async_operation.wado/$cm_wrap_async__example:demo/fetch#get" = fn(ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,i32>>";  // TypeId(60)
 
 type "functype//spec_effects_async_operation.wado/$cm_export__$test_0" = fn();  // TypeId(61)
 
@@ -475,8 +475,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Fetch::get from "wasi/example:demo/Fetch::get";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$example:demo/fetch#get from "wasi/$example:demo/fetch#get";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
@@ -531,7 +531,7 @@ fn "spec_effects_async_operation.wado/$test_0"() {
             $local_3_17 = ref.null none;
             break $inline__effect_dispatch__spec_effects_async_operation_wado_Fetch__get_1: $moved_4;
         } else {
-            break $inline__effect_dispatch__spec_effects_async_operation_wado_Fetch__get_1: "spec_effects_async_operation.wado/$cm_binding__Fetch_get"(url);
+            break $inline__effect_dispatch__spec_effects_async_operation_wado_Fetch__get_1: "spec_effects_async_operation.wado/$cm_binding__example:demo/fetch#get"(url);
         }
         unreachable;
     }))) -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>" {
@@ -620,7 +620,7 @@ condition: Fetch::get(\"/a\").wait() == Result::Ok(\"body of /a\")
     global:spec_effects_async_operation.wado::$effect_spec_effects_async_operation.wado/Fetch = $save_spec_effects_async_operation.wado/Fetch;
 }
 
-fn "spec_effects_async_operation.wado/$cm_binding__Fetch_get"(url) with Fetch {
+fn "spec_effects_async_operation.wado/$cm_binding__example:demo/fetch#get"(url) with Fetch {
     let $url_packed: i64;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let bytes: ref Array<u8>;
@@ -641,7 +641,7 @@ fn "spec_effects_async_operation.wado/$cm_binding__Fetch_get"(url) with Fetch {
     };
     $url_packed = builtin::i64_extend_i32_u(ptr_9) | (builtin::i64_extend_i32_s(self_10) << 32_i64);
     self_10 = "mem/realloc"(0, 0, 4, 12);
-    ptr_9 = "wasi/example:demo/Fetch::get"(builtin::i32_wrap_i64($url_packed), builtin::i32_wrap_i64($url_packed >> 32_i64), self_10) >>u 4;
+    ptr_9 = "wasi/$example:demo/fetch#get"(builtin::i32_wrap_i64($url_packed), builtin::i32_wrap_i64($url_packed >> 32_i64), self_10) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if ptr_9 != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: ptr_9 } };
@@ -649,7 +649,7 @@ fn "spec_effects_async_operation.wado/$cm_binding__Fetch_get"(url) with Fetch {
     return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,i32>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: self_10, size: 12, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_async_operation.wado//$Closure_2" {  }, func: ref.func "closure/spec_effects_async_operation.wado/$closure_wrapper_1" } };
 }
 
-fn "spec_effects_async_operation.wado/$cm_lift__Fetch_get"($outptr) {
+fn "spec_effects_async_operation.wado/$cm_lift__example:demo/fetch#get"($outptr) {
     let $local_3: i32;
     let $local_4: i32;
     let $local_5: ref "core:prelude/string.wado//String";
@@ -677,7 +677,7 @@ fn "spec_effects_async_operation.wado/$cm_lift__Fetch_get"($outptr) {
     });
 }
 
-fn "spec_effects_async_operation.wado/$cm_wrap_async__Fetch_get"($value) {
+fn "spec_effects_async_operation.wado/$cm_wrap_async__example:demo/fetch#get"($value) {
     let $outptr: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: i64;
@@ -993,7 +993,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -2592,7 +2592,7 @@ fn "spec_effects_async_operation.wado/spec_effects_async_operation.wado/$Closure
     let n_24: i32;
     let new_used_28: i32;
     let start_29: i32;
-    return "spec_effects_async_operation.wado/$cm_wrap_async__Fetch_get"(struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>::Ok" { discriminant: 0, payload_0: local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8; builtin::array_copy<u8>($local_2.repr, 0, global:spec_effects_async_operation.wado::$const_obj_14, 0, 8); $inline_core_prelude_string_wado_String__internal_push_string_9: block {
+    return "spec_effects_async_operation.wado/$cm_wrap_async__example:demo/fetch#get"(struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,i32>::Ok" { discriminant: 0, payload_0: local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8; builtin::array_copy<u8>($local_2.repr, 0, global:spec_effects_async_operation.wado::$const_obj_14, 0, 8); $inline_core_prelude_string_wado_String__internal_push_string_9: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_9 local.tee n_24(url.used) == 0;
         if @unlikely(local.tee new_used_28(8 + n_24) > 24) {
             cold_path;
@@ -2605,11 +2605,11 @@ fn "spec_effects_async_operation.wado/spec_effects_async_operation.wado/$Closure
 }
 
 fn "spec_effects_async_operation.wado/spec_effects_async_operation.wado/$Closure_2::$call$dae[self]"($outptr) {
-    return "spec_effects_async_operation.wado/$cm_lift__Fetch_get"($outptr);
+    return "spec_effects_async_operation.wado/$cm_lift__example:demo/fetch#get"($outptr);
 }
 
 fn "spec_effects_async_operation.wado/spec_effects_async_operation.wado/$Closure_3::$call$dae[self]"($outptr) {
-    return "spec_effects_async_operation.wado/$cm_lift__Fetch_get"($outptr);
+    return "spec_effects_async_operation.wado/$cm_lift__example:demo/fetch#get"($outptr);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {

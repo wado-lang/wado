@@ -15,7 +15,6 @@ use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
 use crate::compiler_item::CompilerItem;
-use crate::component_model::operation_key;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::copies_array_elements;
@@ -42,8 +41,9 @@ use crate::{hashmap, nir};
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 
-/// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
-type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
+/// Effect usage: function ID -> the CM functions it imports, by
+/// `CmFunctionInfo::cm_identifier`
+type EffectUsageMap = IndexMap<FunctionId, IndexSet<String>>;
 
 /// A pending `$Closure_N` `inspect` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
@@ -62,8 +62,8 @@ struct PendingInspectEdge {
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: IndexSet<FunctionId>,
-    /// Effect calls: (`interface_name`, `op_name`)
-    effect_calls: IndexSet<(String, String)>,
+    /// The CM functions this calls, by `CmFunctionInfo::cm_identifier`
+    effect_calls: IndexSet<String>,
     /// Pending `$Closure_N^Inspect::inspect` edges, added to the graph by
     /// `apply_inspect_edges` once the inspectable-signature set is known.
     pending_inspects: Vec<PendingInspectEdge>,
@@ -431,14 +431,12 @@ fn resolve_imports(
     effect_usage: &EffectUsageMap,
 ) {
     // Collect used WASI functions from reachable functions
-    let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for func_id in reachable {
-        if let Some(effects) = effect_usage.get(func_id) {
-            for (interface_name, op_name) in effects {
-                used_wasi_functions.insert(operation_key(interface_name, op_name));
-            }
-        }
-    }
+    let mut used_wasi_functions: IndexSet<String> = reachable
+        .iter()
+        .filter_map(|func_id| effect_usage.get(func_id))
+        .flatten()
+        .cloned()
+        .collect();
 
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.
@@ -460,7 +458,8 @@ fn resolve_imports(
     } else {
         let writes = |stream: AmbientStream| {
             project.provides_ambient_stdio_sink(stream)
-                || used_wasi_functions.contains(stream.write_operation().as_decl_str())
+                || used_wasi_functions
+                    .contains(&stream.write_operation(&project.cm_interface_registry))
         };
         let decided = AmbientStdio {
             stdout: writes(AmbientStream::Stdout),
@@ -471,7 +470,7 @@ fn resolve_imports(
     };
     for stream in AmbientStream::ALL {
         if ambient.writes(stream) && reaches_intrinsic(stream.write_builtin()) {
-            used_wasi_functions.insert(stream.write_operation().into_string());
+            used_wasi_functions.insert(stream.write_operation(&project.cm_interface_registry));
         }
     }
 
@@ -926,55 +925,33 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_call(&mut self, func: &nir::FunctionRef) {
-        let original_callee_module = func.module_source.clone();
-        let func_name = func.name.clone();
-
-        if let Some(call_info) = func.method_info.as_ref() {
+        let callee_id = if let Some(call_info) = func.method_info.as_ref() {
             // Static method call (e.g. `Box::get`, `String^Display::fmt`):
-            // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
-            let callee_id = if func.is_monomorphized() {
+            // `func.name` is `"Struct::method"` or `"Struct^Trait::method"`.
+            if func.is_monomorphized() {
                 FunctionId::Free(FreeFunctionName::new(
                     func.module_source.clone(),
-                    func_name.clone(),
+                    func.name.clone(),
                 ))
             } else {
                 // `full_method_name`, not `method_name`: `function_id_for` keys
                 // on the type arguments too, so a call keyed without them names
                 // no definition and DCE drops a live method.
                 FunctionId::Method(MethodName::new(
-                    original_callee_module,
+                    func.module_source.clone(),
                     call_info.fq_struct_name(),
                     call_info.trait_name.clone(),
                     call_info.full_method_name(),
                 ))
-            };
-            self.analysis.callees.insert(callee_id);
-
-            // Resource method call on a WASI module — record as an effect.
-            let module_path = func.module_path();
-            if module_path.len() >= 2
-                && module_path[0] == "wasi"
-                && let Some((resource_name, method_name)) = func_name.split_once("::")
-            {
-                self.analysis
-                    .effect_calls
-                    .insert((resource_name.to_string(), method_name.to_string()));
             }
         } else {
             // Free function call. `method_info` is the discriminator — a name
             // is not one: a synthesized helper embeds a type mangle, which
             // carries `::` for an associated-type projection
             // (`$value_copy$S::MapSerializer`).
-            let callee_module = original_callee_module.clone();
-            let callee_id = FunctionId::free(&callee_module, &func_name);
-            self.analysis.callees.insert(callee_id);
-
-            if let Some(interface_name) = original_callee_module.interface_name() {
-                self.analysis
-                    .effect_calls
-                    .insert((interface_name, func_name));
-            }
-        }
+            FunctionId::free(&func.module_source, &func.name)
+        };
+        self.analysis.callees.insert(callee_id);
     }
 
     fn record_method_call(&mut self, receiver_type: TypeId, func: &nir::FunctionRef) {
@@ -1185,13 +1162,6 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::Resource { def } => {
-                let name = self.type_table.def_name(def).to_string();
-                // Resource instance method (e.g. `fields.has()`):
-                // recorded as an effect so it lands in
-                // `used_wasi_functions`.
-                self.analysis.effect_calls.insert((name, method_name));
-            }
             ResolvedType::Variant { def } => {
                 let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
@@ -1234,20 +1204,12 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
-        // Only a WASI import is tracked here; a canonical built-in has no
+        // Only a CM import is tracked here; a canonical built-in has no
         // interface to attribute it to.
-        let CmCallTarget::WasiAlias(local_name) = target else {
+        let CmCallTarget::Import(function) = target else {
             return;
         };
-        // Parse the alias (e.g., "wasi:cli/Stdout::write_via_stream")
-        // to extract the interface_name and op_name for WASI import tracking.
-        if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
-            // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-            let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-            (effect.to_string(), op.to_string())
-        }) {
-            self.analysis.effect_calls.insert((interface_name, op_name));
-        }
+        self.analysis.effect_calls.insert(function.clone());
     }
 
     fn record_closure_to_canonical(

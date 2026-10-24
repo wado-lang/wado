@@ -28,7 +28,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//variant_import_mut.wado/$cm_export__run" = fn();  // TypeId(11)
 
@@ -44,7 +44,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
 
-type "functype//variant_import_mut.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//variant_import_mut.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
@@ -54,7 +54,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -64,8 +64,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$1: ref "./variant_in_struct_match_module.wado//Align" = struct.new "./variant_in_struct_match_module.wado//Align" { 1 };
 global global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$0: ref "./variant_in_struct_match_module.wado//Align" = struct.new "./variant_in_struct_match_module.wado//Align" { 0 };
 
-fn "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "variant_import_mut.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "variant_import_mut.wado/$cm_export__run"() {
@@ -82,7 +82,7 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     });
     $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-    $moved_4_8 = "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
+    $moved_4_8 = "variant_import_mut.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
     $sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18;
     $sroa_$pattern_temp_0_1_14_18 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_17, message_4.repr, message_4.used);
@@ -95,7 +95,7 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     });
     $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
     $moved_4_8 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_18 = "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $sroa_$pattern_temp_0_1_14_18);
+    $sroa_$pattern_temp_0_1_14_18 = "variant_import_mut.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $sroa_$pattern_temp_0_1_14_18);
     $sroa_$pattern_temp_0_0_13_17 = $moved_4_8;
     $moved_4_8 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_17, message_4.repr, message_4.used);

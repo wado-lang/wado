@@ -1,0 +1,8 @@
+// Two interfaces share the basename `Trip`, so each is reached by its full
+// name (issue #2421).
+use { "a:x/trip" as Trip, "b:y/trip" as YTrip } from "./sub/wasm_import_cm_two_trips.wat" with { type: "wat" };
+
+test {
+    assert Trip::f() == 1;
+    assert YTrip::g() == 2;
+}
