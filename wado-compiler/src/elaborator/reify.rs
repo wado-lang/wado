@@ -5029,7 +5029,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `&G`, `G` the immutable global holding `text`, minted on its first use
-    /// in the module.
+    /// in the module being emitted, which a replayed trait default body is not
+    /// written in.
     fn template_segment_ref(&mut self, text: &str, span: Span) -> TirExpr {
         let (string_type, segment_type) = {
             let mut tt = self.tysys.type_table.borrow_mut();
@@ -5061,7 +5062,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     param: None,
                     wado_mutable: false,
                     visibility: Visibility::Private,
-                    module_source: self.current_module_source.clone(),
+                    module_source: self.emitted_module_source.clone(),
                     span,
                 };
                 self.pending_template_segments
@@ -5071,7 +5072,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let read = TirExpr::new(
             TirExprKind::GlobalVarGet {
-                module_source: self.current_module_source.clone(),
+                module_source: self.emitted_module_source.clone(),
                 name,
             },
             string_type,

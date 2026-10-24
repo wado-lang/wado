@@ -114,7 +114,8 @@ impl Interpreter<'_> {
     ///
     /// The field env wins where it has an answer — it knows fields no
     /// initializer shows, such as the length body globalization records for a
-    /// hoisted sequence — and otherwise the receiver's own value decides.
+    /// hoisted sequence — and otherwise the receiver's own value decides: the
+    /// global's, where a local only refers to one.
     pub(super) fn field_access_lattice(
         &self,
         body: &Body,
@@ -122,13 +123,17 @@ impl Interpreter<'_> {
         field_index: u32,
         field_name: &str,
     ) -> Lattice {
-        if let Some(key) = self.global_receiver_key(body, inner) {
-            let known = self.global_field(&key, field_name);
-            if !matches!(known, Lattice::Unevaluated) {
-                return known;
+        let receiver = match self.global_receiver_key(body, inner) {
+            Some(key) => {
+                let known = self.global_field(&key, field_name);
+                if !matches!(known, Lattice::Unevaluated) {
+                    return known;
+                }
+                self.global_lattice(&key.0, &key.1)
             }
-        }
-        match self.projected_lattice(body, inner) {
+            None => self.projected_lattice(body, inner),
+        };
+        match receiver {
             Lattice::Const(receiver) => receiver
                 .field(field_index)
                 .cloned()
