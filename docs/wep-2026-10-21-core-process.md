@@ -455,6 +455,10 @@ cannot be taken back.
   option that sets the grace period, which stays at 3 seconds until it is.
 - The compiler's e2e harness does not link `core:process`, so a fixture cannot
   spawn; the stdlib's own tests cover it under `wado test`.
+- A component that spawns imports `core:process`, which no world WASI defines,
+  so only the `wado` host instantiates it. Nothing at compile time says so: an
+  effect the selected world does not import is imported all the same
+  ([Worlds](./spec-worlds.md)).
 - Resources are unlimited. A child can run many children, use memory and CPU
   without bound, and fork without limit. How many children may run at once,
   rlimits and cgroups are all open.
