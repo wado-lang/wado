@@ -264,15 +264,18 @@ pub affine struct WebGpuBackend {
 }
 
 /// Invocations per workgroup of every shader but the product's: a power of
-/// two, as the shaders' reductions halve it.
-global LANES: i32 = 64;
+/// two, as the shaders' reductions halve it, and WebGPU's default limit. A
+/// step over one token runs a row kernel as one workgroup, which waits on its
+/// lanes' walk along the row: Gemma 3 (270M)'s token took 0.90 times the
+/// device time it took at 64.
+global LANES: i32 = 256;
 
 /// The positions one workgroup of `attend_shader` scores, a power of two
 /// dividing `LANES`: the lanes split each position's dot among
 /// `LANES / ATTEND_PART` of them. Fewer positions a part means more parts for
-/// `attend_join_shader` to read: on Gemma 3 (270M)'s 8 tokens from a short
-/// prompt, parts of 8 took 1.02 times as long as parts of 4, and parts of 2
-/// 0.99 times.
+/// `attend_join_shader` to read, and more lanes a dot: on Gemma 3 (270M)'s 8
+/// tokens from a short prompt, the two shaders took 1.46 times as long on the
+/// device with parts of 16 as with parts of 4, and 0.99 times with parts of 2.
 global ATTEND_PART: i32 = 4;
 
 /// The most workgroups one dispatch dimension takes, as WebGPU's default limit
