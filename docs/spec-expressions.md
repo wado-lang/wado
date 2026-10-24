@@ -811,7 +811,7 @@ assert a == 1 && b == 3 && c == 2;
 
 Each target is anything that may stand alone on the left of `=`: a local, a
 field, a subscript, a dereference, or a mutable global. The left side is a flat
-tuple of targets, with no rest. The right side is any expression of a tuple type
+tuple of at least one target, with no rest. The right side is any expression of a tuple type
 with one element per target:
 
 <!-- {"fixture":"destructuring_assign_basic.wado"} -->
