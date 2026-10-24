@@ -127,15 +127,28 @@ impl CallGraph {
     /// Drive a monotone worklist: seed every body function, and each time
     /// `recompute(id)` reports a change, re-enqueue that function's callers.
     /// `recompute` returns whether the function's summary grew.
-    pub fn solve(&self, project: &FlatPackage, mut recompute: impl FnMut(u32) -> bool) {
+    pub fn solve(&self, project: &FlatPackage, recompute: impl FnMut(u32) -> bool) {
+        let bodies = project
+            .functions
+            .iter()
+            .enumerate()
+            .filter(|(_, func)| func.borrow().body.is_some())
+            .map(|(i, _)| i as u32);
+        self.solve_from(bodies, recompute);
+    }
+
+    /// [`Self::solve`], recomputing first only `seeds` and then their callers.
+    pub fn solve_from(
+        &self,
+        seeds: impl IntoIterator<Item = u32>,
+        mut recompute: impl FnMut(u32) -> bool,
+    ) {
         let n = self.callers.len();
         let mut in_queue = vec![false; n];
         let mut queue: VecDeque<u32> = VecDeque::with_capacity(n);
-        for (i, func) in project.functions.iter().enumerate() {
-            if func.borrow().body.is_some() {
-                in_queue[i] = true;
-                queue.push_back(i as u32);
-            }
+        for seed in seeds {
+            in_queue[seed as usize] = true;
+            queue.push_back(seed);
         }
         while let Some(u) = queue.pop_front() {
             in_queue[u as usize] = false;

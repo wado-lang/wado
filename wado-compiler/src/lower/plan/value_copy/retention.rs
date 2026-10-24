@@ -32,7 +32,7 @@ use crate::tir::{
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 /// The destination of a position the callee hands back with its result. The
 /// caller resolves it against the local it binds the result to.
@@ -686,7 +686,9 @@ impl Contributions {
 /// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
     calls: &'a CallRetention,
+    /// Read through [`Self::rows`], which notes the read in `read_rows`.
     rows: &'a FunctorRows,
+    read_rows: Cell<bool>,
     call_graph: &'a CallGraph,
     /// Which of each function's parameters take a function value, by the dense
     /// id the call graph uses.
@@ -694,10 +696,15 @@ struct StoresOracle<'a> {
 }
 
 impl StoresOracle<'_> {
+    fn rows(&self) -> &FunctorRows {
+        self.read_rows.set(true);
+        self.rows
+    }
+
     /// Facts for an indirect (functor) callee: the join over the values the
     /// walk resolved it to, or the callee type's row where it resolved none.
     fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
-        self.rows.row_of(callees, callee.type_id, arity)
+        self.rows().row_of(callees, callee.type_id, arity)
     }
 
     fn functor_params(&self, function: u32) -> &FunctorParams {
@@ -789,9 +796,17 @@ pub fn compute_retention(
     // site the call graph gives no edge to. The worklist settles each round
     // against the rows it was given, and the round is repeated while any row
     // still grows; both lattices only ever gain positions, so this terminates.
+    // A body that read no row walks the same against grown rows, so a later
+    // round starts from the bodies that read one; their callers follow.
+    let mut reads_rows = vec![false; project.functions.len()];
+    let mut seeds: Vec<u32> = (0..)
+        .zip(&project.functions)
+        .filter(|(_, func)| func.borrow().body.is_some())
+        .map(|(id, _)| id)
+        .collect();
     loop {
         let mut round = Contributions::default();
-        call_graph.solve(project, |id| {
+        call_graph.solve_from(seeds, |id| {
             let func = project.functions[id as usize].borrow();
             let Some(body) = &func.body else {
                 return false;
@@ -805,10 +820,11 @@ pub fn compute_retention(
                 let oracle = StoresOracle {
                     calls: &calls,
                     rows: &rows,
+                    read_rows: Cell::new(false),
                     call_graph,
                     functor_params: &functor_params,
                 };
-                facts_of_body(
+                let walked = facts_of_body(
                     &positions,
                     &functor_params[id as usize],
                     None,
@@ -817,7 +833,9 @@ pub fn compute_retention(
                     &carrying,
                     Owner::Named(id),
                     BodyRef::Block(body),
-                )
+                );
+                reads_rows[id as usize] = oracle.read_rows.get();
+                walked
             };
             round.extend(from_body);
             let mut merged = calls
@@ -855,6 +873,7 @@ pub fn compute_retention(
         if !grew {
             break;
         }
+        seeds = (0..).zip(&reads_rows).filter(|&(_, &reads)| reads).map(|(id, _)| id).collect();
     }
 
     for func in &project.functions {
@@ -1291,7 +1310,7 @@ fn facts_of_body(
     }
     for (&position, &at) in functor_params {
         if let Some((local_index, _)) = params.get(position as usize) {
-            let callees = oracle.rows.at_site(owner.site(position), at);
+            let callees = oracle.rows().at_site(owner.site(position), at);
             reaching.insert(*local_index, callees);
         }
     }
@@ -1655,7 +1674,7 @@ impl StoresWalker<'_> {
                     .map(|&position| Site::Named(*function, position))
                     .collect(),
                 Landing::Closure(id) => oracle
-                    .rows
+                    .rows()
                     .mint_functor_params(*id)
                     .into_iter()
                     .flatten()
@@ -1701,7 +1720,7 @@ impl StoresWalker<'_> {
         };
         Some(
             ids.iter()
-                .filter_map(|&id| match self.oracle.rows.target(id) {
+                .filter_map(|&id| match self.oracle.rows().target(id) {
                     Some(MintTarget::Named(function)) => Some(Landing::Named(function)),
                     Some(MintTarget::Closure) => Some(Landing::Closure(id)),
                     Some(MintTarget::Opaque) => Some(Landing::Unfollowed),
