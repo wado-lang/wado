@@ -131,6 +131,19 @@ impl Executor {
         (0..len).filter_map(f).collect()
     }
 
+    /// Drop `items` on the pool. A table the visits built, such as copies of
+    /// whole functions, takes as long to free as to build, and the calling
+    /// thread would free it alone.
+    pub fn drop_all<T: Send>(&self, items: impl IntoIterator<Item = T>) {
+        let items: Vec<T> = items.into_iter().collect();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            pool.install(|| items.into_par_iter().for_each(drop));
+            return;
+        }
+        drop(items);
+    }
+
     /// The indices below `len` where `f` holds, in index order.
     pub fn indices_where(&self, len: usize, f: impl Fn(usize) -> bool + Sync + Send) -> Vec<usize> {
         self.filter_map_indices(len, |i| f(i).then_some(i))
