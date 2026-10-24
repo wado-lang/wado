@@ -3982,7 +3982,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .pack_walk_binding(iterable.type_id)
+            .pack_walk_binding(iterable.type_id, ctx.pack_walks)
             .unwrap_or((TypeTable::UNKNOWN, false));
         // Expansion supplies the index literal per unrolled element.
         let binding_type = if is_enumerate {
@@ -4012,7 +4012,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let mut body = self.reify_block(
             &for_of.body,
-            &mut ctx.enter_enumerate_body(index_binding),
+            &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
             None,
         );
         if !destruct_stmts.is_empty() {
@@ -4030,6 +4030,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unique_id,
                 by_ref,
                 is_enumerate,
+                walk: ctx.pack_walks,
             },
             span,
         )]
@@ -4051,7 +4052,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let elem_type = self
             .tysys
-            .comprehension_pack_elem(iterable.type_id)
+            .comprehension_pack_elem(iterable.type_id, ctx.pack_walks)
             .unwrap_or(TypeTable::UNKNOWN);
         let binding_type = if is_enumerate {
             self.tysys
@@ -4070,7 +4071,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
         let body = self.reify_expr(
             &comp.body,
-            &mut ctx.enter_enumerate_body(index_binding),
+            &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
             None,
         );
 
@@ -4083,6 +4084,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 body: Box::new(body),
                 unique_id,
                 is_enumerate,
+                walk: ctx.pack_walks,
             },
             recorded_type,
             span,
@@ -6020,8 +6022,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `.enumerate()` index: kept as `Index` here and rewritten to the
         // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
         if let Some(elems) = &tuple_elems
-            && ctx.is_variadic_enumerate_index(&index.index)
-            && let Some(elem_type) = self.tysys.pack_element_type(elems)
+            && let Some(walk) = ctx.variadic_enumerate_walk(&index.index)
+            && let Some(elem_type) = self.tysys.pack_element_type(elems, walk)
         {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return TirExpr::new(

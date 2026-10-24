@@ -2470,6 +2470,17 @@ pub fn type_pack_name(name: &str) -> String {
     format!("..{name}")
 }
 
+/// What an element of pack `pack` names itself, bound by a walk inside `walk`
+/// others: the pack's name, marked past the outermost walk so a nested walk's
+/// element reads apart from the one enclosing it.
+pub fn pack_element_name(pack: &str, walk: u32) -> String {
+    if walk == 0 {
+        pack.to_string()
+    } else {
+        format!("{pack}@{walk}")
+    }
+}
+
 /// The `<A, B>` a diagnostic writes after a head; empty for no arguments.
 fn display_type_args(args: &[String]) -> String {
     if args.is_empty() {

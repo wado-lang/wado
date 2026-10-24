@@ -2684,7 +2684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow_mut()
-                .pack_walk_binding(iterable)
+                .pack_walk_binding(iterable, ctx.pack_walks)
                 .expect("variadic for-of requires tuple iterable");
             // Expansion supplies the index literal per unrolled element.
             if is_enumerate {
@@ -2720,6 +2720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
+        let ctx = &mut ctx.enter_pack_walk();
         self.resolve_block(&for_of.body, ctx, None);
     }
 

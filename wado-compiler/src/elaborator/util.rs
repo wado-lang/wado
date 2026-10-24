@@ -896,7 +896,7 @@ pub(super) fn integer_digits(repr: &str) -> Option<&str> {
 pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&String> {
     match table.get(id) {
         ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
-        ResolvedType::PackElement { pack } => bound_param_name(table, *pack),
+        ResolvedType::PackElement { pack, .. } => bound_param_name(table, *pack),
         _ => None,
     }
 }

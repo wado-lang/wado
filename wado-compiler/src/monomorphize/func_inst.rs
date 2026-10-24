@@ -3117,12 +3117,14 @@ impl Monomorphizer {
             unique_id,
             by_ref,
             is_enumerate,
+            walk,
         } = &mut stmt.kind
         else {
             unreachable!()
         };
         let by_ref = *by_ref;
         let is_enumerate = *is_enumerate;
+        let walk = *walk;
 
         // A mapped pack (`[..Case<T, P>]`) substitutes per element from the
         // source pack element `P_k`, not the mapped tuple element, so read its
@@ -3459,6 +3461,8 @@ impl Monomorphizer {
                     // Substitute user body with field type (not pair type)
                     let mut elem_substitution = substitution.clone();
                     elem_substitution.insert(pack_idx, body_pack_type);
+                    elem_substitution
+                        .insert(TypeTable::pack_walk_slot(pack_idx, walk), body_pack_type);
                     let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                     self.substitute_types_in_block(
                         &mut user_body,
@@ -3481,6 +3485,7 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type);
                     elem_substitution.insert(pack_idx, override_ty);
+                    elem_substitution.insert(TypeTable::pack_walk_slot(pack_idx, walk), override_ty);
                     self.pin_binding_types(
                         &mut elem_body,
                         binding_local_idx,
@@ -3674,11 +3679,13 @@ impl Monomorphizer {
             body,
             unique_id,
             is_enumerate,
+            walk,
         } = &mut expr.kind
         else {
             unreachable!()
         };
         let is_enumerate = *is_enumerate;
+        let walk = *walk;
         let uid = *unique_id;
         let binding_local_idx = *binding_local;
         let b_name = binding_name.clone();
@@ -3893,13 +3900,12 @@ impl Monomorphizer {
             );
             if let Some(pack_idx) = pack_index {
                 let mut elem_substitution = substitution.clone();
-                elem_substitution.insert(
-                    pack_idx,
-                    mapped_source_elems
-                        .as_ref()
-                        .and_then(|es| es.get(i).copied())
-                        .unwrap_or(elem_type),
-                );
+                let source_elem = mapped_source_elems
+                    .as_ref()
+                    .and_then(|es| es.get(i).copied())
+                    .unwrap_or(elem_type);
+                elem_substitution.insert(pack_idx, source_elem);
+                elem_substitution.insert(TypeTable::pack_walk_slot(pack_idx, walk), source_elem);
                 // Decide this element's bindings before substituting, so a
                 // nested unroll over the same pack cannot re-map a use of them.
                 self.pin_binding_types(&mut elem_body, binding_local_idx, bind_type, type_table);

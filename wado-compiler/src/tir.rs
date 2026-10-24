@@ -668,9 +668,16 @@ pub enum ResolvedType {
     /// holds: `[v, 7]` is `[T_k, i32]`, where the pack would make it
     /// `[..T, i32]`. It carries the pack's bounds, and unrolling substitutes
     /// each element for it.
+    ///
+    /// Nested walks over one pack bind different elements, so the element is
+    /// also the walk's: `x` and `v` in `for x of t { for v of t { … } }` have
+    /// two types, and `pick::<A>(x, v)` does not unify them.
     PackElement {
         /// The identity [`ResolvedType::TypePack`] this is an element of.
         pack: TypeId,
+        /// How many pack walks enclose the one binding this element: its
+        /// substitution slot is `TypeTable::pack_walk_slot`.
+        walk: u32,
     },
     /// A generic associated type's own parameter (`E` in `type Buf<E> =
     /// List<E>;`), standing in a binding for the argument a projection supplies.
@@ -1254,6 +1261,8 @@ pub enum TirExprKind {
         unique_id: u32,
         /// Whether the binding is the `[index, value]` pair of `.enumerate()`
         is_enumerate: bool,
+        /// The `walk` of the `PackElement` the binding holds
+        walk: u32,
     },
 
     /// Access to a captured variable inside a closure body
@@ -2002,6 +2011,8 @@ pub enum TirStmtKind {
         /// When the iterable is `tuple.enumerate()`, the binding is the pair
         /// `[i32, T_k]`; expansion pairs each element with its index literal.
         is_enumerate: bool,
+        /// The `walk` of the `PackElement` the binding holds
+        walk: u32,
     },
 }
 
