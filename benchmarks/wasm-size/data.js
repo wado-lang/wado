@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792807617702,
+  "lastUpdate": 1792812279108,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70017,6 +70017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e24d3459dc1213f53a7ffcf185d3242ffe4f07c1"
         },
         "date": 1792807617223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f24cf18130ba901b72562c0f030e15b624aed9b6",
+          "message": "Merge pull request #2433 from wado-lang/claude/upbeat-knuth-rwam10\n\nrefactor(prelude)!: a member enters a WaitableSet by insert",
+          "timestamp": "2026-10-24T12:06:49+09:00",
+          "tree_id": "9c6ba5076bdec4e4d15e4a5440557c2672687f29",
+          "url": "https://github.com/wado-lang/wado/commit/f24cf18130ba901b72562c0f030e15b624aed9b6"
+        },
+        "date": 1792812278429,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
