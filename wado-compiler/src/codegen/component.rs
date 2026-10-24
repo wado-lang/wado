@@ -566,8 +566,10 @@ fn emit_cm_val_type(
                 .collect();
             instance_type.ty().defined_type().tuple(elements);
         }
-        Type::Named(named) if enum_export_indices.contains_key(&named.name) => {
-            return ComponentValType::Type(enum_export_indices[&named.name]);
+        Type::Named(named)
+            if let Some(idx) = own_export_idx(named, enum_export_indices, type_gen, project) =>
+        {
+            return ComponentValType::Type(idx);
         }
         Type::Named(named) if resource_handles.contains_key(&named.name) => {
             return ComponentValType::Type(resource_handles[&named.name].own);
@@ -606,6 +608,25 @@ fn shared_cm_val_type(
     type_gen.ast_type_to_cm(&mut sink, ty, registry, &resource_exports)
 }
 
+/// The index the instance exports `named` under, where the emitting interface
+/// declares it. `enum_export_indices` holds that interface's own types by
+/// name, so a same-named type another interface declares is never read there.
+fn own_export_idx(
+    named: &NamedType,
+    enum_export_indices: &IndexMap<String, u32>,
+    type_gen: &CmTypeGen,
+    project: &NirPackage,
+) -> Option<u32> {
+    let emitting = type_gen.interface_hint()?;
+    let source = project
+        .cm_interface_registry
+        .cm_source_of_named_type(named, Some(emitting))?;
+    if source != emitting {
+        return None;
+    }
+    enum_export_indices.get(&named.name).copied()
+}
+
 /// The index of the `error-code` `named` refers to, where the instance already
 /// has it: its own export, or an alias of the one its declaring interface put in
 /// outer scope. A WASI package spells `error-code` once and the others `use`
@@ -620,7 +641,7 @@ fn error_code_idx(
     project: &NirPackage,
     ctx: &ComponentModelContext,
 ) -> Option<u32> {
-    if let Some(&idx) = enum_export_indices.get(ERROR_CODE_WADO_NAME) {
+    if let Some(idx) = own_export_idx(named, enum_export_indices, type_gen, project) {
         return Some(idx);
     }
     let source = project
