@@ -105,24 +105,55 @@ On Linux, seccomp covers what Landlock does not:
   does not reach a descriptor the child inherited.
 - `ptrace`.
 
-On macOS, the policy becomes generated SBPL.
+### Starting a confined child
 
-A confined child starts through a helper, `wado __sandbox-exec`. The host
-re-executes itself single-threaded, the helper applies the confinement, and then
-it execs the program. The parent `wado` runs wasmtime on several threads, and
-`sandbox_init` allocates, which is unsafe between `fork` and `exec` in a
-multithreaded process.
+The parent `wado` runs wasmtime on several threads. Between `fork` and `exec`, a
+multithreaded process may make only async-signal-safe calls: no allocation, no
+lock. Each backend fits the confinement into that rule without re-executing
+`wado`, so a host embedded in another binary, such as the compiler's e2e
+harness, spawns as `wado` does.
 
-Writing the sandbox in-house carries two obligations:
+- Linux confines the child in `pre_exec`. Landlock, seccomp and `close_range`
+  are bare system calls, so the window admits them. Everything they read is
+  built before the fork: the ruleset, the BPF program, and an `O_PATH`
+  descriptor for each rule.
+- macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`,
+  which does not fork. `sandbox_init` compiles the profile and allocates, so it
+  runs in `sandbox-exec`, a single-threaded process of its own, which then execs
+  the program.
 
-- Escape tests run in CI on Linux and on macOS. Each of these must fail: reading
-  a file outside the grants, writing under a read-only subtree, executing a
-  binary outside the grants, executing one through a grandchild, a TCP
-  connection or a UDP datagram when the network is not granted, connecting to a
-  UNIX socket by path, a descendant surviving its group's kill (on Linux), pushing input
-  into an inherited terminal, and escaping through a symbolic link or `..`.
-- The SBPL generator is fuzzed. A path holding `"` or `\` that escapes wrongly
-  rewrites the policy itself.
+Landlock takes each rule as a descriptor rather than a path. The rules for the
+guest's grants come from the descriptors of its preopens, which the host already
+holds, so no path is resolved a second time between the check and the use.
+
+The macOS profile is one fixed SBPL text in the host's source. Each path reaches
+it as a parameter, `-D GRANT_0=/path`, read as `(subpath (param "GRANT_0"))`,
+so no path is ever spliced into SBPL and no escaping can rewrite the policy.
+
+### Descriptors
+
+A child inherits descriptors 0, 1 and 2 and nothing else. Confinement mediates
+what a child opens, never a descriptor it already holds, which keeps the access
+it was opened with whatever the child's grants. Rust's standard library opens
+every descriptor with `O_CLOEXEC`, but the descriptors `wado` itself inherited
+from its parent carry no such flag.
+
+- Linux calls `close_range(3, ~0, 0)` in `pre_exec`, after the confinement.
+- macOS sets `POSIX_SPAWN_CLOEXEC_DEFAULT`, and the spawn's file actions place
+  the child's stdio at 0, 1 and 2. `POSIX_SPAWN_SETPGROUP` gives the child its
+  process group.
+
+### Escape tests
+
+Writing the sandbox in-house obliges escape tests in CI on Linux and on macOS.
+Each of these must fail: reading a file outside the grants, writing under a
+read-only subtree, executing a binary outside the grants, executing one through
+a grandchild, a TCP connection or a UDP datagram when the network is not
+granted, connecting to a UNIX socket by path, a descendant surviving its group's
+kill (on Linux), pushing input into an inherited terminal, escaping through a
+symbolic link or `..`, and reading through a descriptor the host held open
+across the spawn. On macOS, a grant whose path holds `"`, `\` or `)` must
+confine to exactly that path.
 
 ### Where it is offered
 
@@ -218,13 +249,14 @@ child may read more than the guest. It is defined, not open-ended:
 
 ### WIT
 
-The interface ships as `wado:process@0.1.0`, written in the shape a WASI
-proposal takes. Claiming `wasi:` before the subgroup adopts it would promise
-compatibility Wado cannot keep with other hosts. On adoption only the namespace
-changes.
+The interface ships as `core:process@0.1.0`, as `core:eval` and `core:kiln`
+ship theirs, written in the shape a WASI proposal takes. Its WIT sits in
+`lib/core/process/`, with the `wasi:filesystem` WIT it uses under `deps/`.
+Claiming `wasi:` before the subgroup adopts it would promise compatibility Wado
+cannot keep with other hosts. On adoption only the namespace changes.
 
 ```wit
-package wado:process@0.1.0;
+package core:process@0.1.0;
 
 interface types {
     use wasi:filesystem/types@0.3.0.{descriptor};
@@ -322,7 +354,8 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
   `Result<ExitStatus, ProcessError>`, and `kill(&self)` ends it early. There is
   no `detach`: the host kills every child when the guest exits anyway.
 - A pipeline passes one child's `stdout` stream to the next one's `stdin`.
-- `Command::timeout(d: Duration)` sets the timeout. There is no default. A child
+- `Command::timeout(d: Duration)` sets the timeout, in `wasi:clocks`'s
+  `Duration`, the nanoseconds the WIT carries. There is no default. A child
   that runs out ends in `ExitStatus::TimedOut`: `output` returns what it read
   so far along with that status, and `read` fails.
 - Captured output is capped at 64 MiB by default, and
@@ -387,11 +420,12 @@ cannot be taken back.
 ## Roadmap
 
 1. The sandbox layer in `wado-host` with the Linux backend: the policy type, the
-   baseline, Landlock and seccomp, the ABI 6 check, and `wado __sandbox-exec`.
-   Done when the escape tests pass in CI on Linux.
-2. The macOS backend: the SBPL generator and its fuzzer. Done when the escape
-   tests pass in CI on macOS.
-3. `wado:process@0.1.0` in the `wado` host: `get-availability`, spawning,
+   baseline, Landlock and seccomp, the ABI 6 check, the confinement and
+   `close_range` in `pre_exec`. Done when the escape tests pass in CI on Linux.
+2. The macOS backend: the fixed profile, its parameters, and the
+   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
+   macOS.
+3. `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
    streams, the timeout and
    its grace option, killing the process group on drop and on guest exit,
    `--deny-process`, and `denied` for a mapping that is not the same path.
@@ -419,9 +453,8 @@ cannot be taken back.
   guest exits.
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
-- Which open descriptors a child inherits is not stated. A descriptor the host
-  holds open across the spawn keeps the access it was opened with, whatever the
-  child's grants.
+- `sandbox-exec` is marked deprecated in its manual page. macOS still ships it,
+  and nothing public replaces it.
 
 ## Related WEPs
 
