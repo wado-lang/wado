@@ -3,12 +3,14 @@
 ## Context
 
 A string template (`` `Hello, ${name}!` ``) is a `String` expression. This WEP
-fixes what the compiler lowers it to: one buffer, one `Formatter`, no
-intermediate strings. A template with a tag denotes a call on a synthesized
-template type instead, and is
-[Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)'s
-business; what the two share is the per-specifier rendering below, which the
-tagged form reaches through `TemplateHole::fmt`.
+fixed what the compiler lowered it to: one buffer, one `Formatter`, no
+intermediate strings.
+
+Superseded: an untagged template is now the `String::format` call
+[Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md#roadmap)
+specifies, and the lowering below is deleted. What survives is the
+per-specifier rendering, which every template reaches through
+`TemplateHole::fmt`, and the lexical rules for braces and `$`.
 
 ## Decision
 
@@ -34,13 +36,10 @@ $tmpl: {
 One `Formatter` local serves the whole block; the snippets spell out a fresh
 one per interpolation for readability.
 
-An untagged template is sugar for the `String::format` tag. This lowering
-computes what that call computes, written out by the compiler rather than
-reached through `ReflectTemplate`, except that it renders each hole before it
-evaluates the next. It stands until a `String::format` call costs what this lowering
-costs. The
-[Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md#roadmap)
-roadmap carries that work, and then deletes this lowering.
+This lowering computed what a `String::format` call computes, written out by
+the compiler rather than reached through `ReflectTemplate`, except that it
+rendered each hole before it evaluated the next. It stood until a
+`String::format` call cost what it cost, and was then deleted.
 
 ### Format Specifiers
 
@@ -104,9 +103,8 @@ precedes a `{` that should stay literal (`` `\${x}` `` renders `${x}`).
 ## Consequences
 
 - One buffer per template, no intermediate `String` per interpolation.
-- The specifier is resolved at the site, for the untagged form in the emitted
-  block and for the tagged form inside `TemplateHole::fmt`, so no runtime dispatch on a
-  specifier exists anywhere.
+- The specifier is resolved at the site, inside `TemplateHole::fmt`, so no
+  runtime dispatch on a specifier exists anywhere.
 
 ## Related WEPs
 

@@ -743,27 +743,33 @@ pub fn inline_block_label(callee: &str, serial: u32) -> String {
     format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
 }
 
-/// Label the template-string synthesiser stamps on the block wrapping an
-/// expanded `` `...` `` literal.
-pub const TEMPLATE_BLOCK_LABEL: &str = "$tmpl";
+/// What the block binding a template's holes before its tag's call is minted
+/// under.
+const TEMPLATE_BLOCK: &str = "template";
 
-/// Whether `label` marks the block an expanded template string breaks out of.
-/// Shared by the producer (`synthesis::template`) and lowering, which reads it
-/// once into [`crate::nir_arena::BlockRole`]. Passes ask the node from there —
-/// a label is a name, and gets rewritten.
+/// The label of the block binding a template's holes before its tag's call.
 #[must_use]
-pub fn is_template_block(label: &str) -> bool {
-    label == TEMPLATE_BLOCK_LABEL
+pub fn template_block_label(serial: u32) -> String {
+    minted_name(TEMPLATE_BLOCK, serial)
 }
 
-/// Name of the result accumulator local in an expanded template block.
-/// Recognised by the template-hoist optimizer; single-sourced here.
-pub const TEMPLATE_RESULT_LOCAL: &str = "$r";
+/// Whether `label` is one [`template_block_label`] minted. Read before any pass
+/// can rename a label.
+#[must_use]
+pub fn is_template_block(label: &str) -> bool {
+    label
+        .strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix(TEMPLATE_BLOCK))
+        .and_then(|rest| rest.strip_prefix('_'))
+        .is_some_and(|serial| serial.parse::<u32>().is_ok())
+}
 
-/// Name of the `Formatter` local in an expanded template block. Producer-only
-/// today, kept beside its siblings so the template-local convention lives in
-/// one place.
-pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
+/// The local binding hole `k` of the template [`template_block_label`] labels
+/// with `serial`.
+#[must_use]
+pub fn template_hole_local(serial: u32, k: usize) -> String {
+    format!("{INTERNAL_PREFIX}hole_{serial}_{k}")
+}
 
 /// Per-module initializer function the lowering phase synthesises to run a
 /// module's global initializers. The optimizer's liveness / const-object

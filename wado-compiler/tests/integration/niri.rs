@@ -25,7 +25,7 @@ use wado_compiler::nir::{
     NirParam, NirUnaryOp, ParamAbi, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
+    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
     ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind,
     StmtNode, Tracked,
 };
@@ -5134,7 +5134,6 @@ fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
             StmtKind::LabeledBlock {
                 label: label.clone(),
                 block,
-                role: BlockRole::of_label(&label),
             },
         )
     })
@@ -7433,7 +7432,6 @@ fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: Ty
                 label: label.to_string(),
                 block,
                 result_type: type_id,
-                role: BlockRole::of_label(label),
             },
             type_id,
         ))
@@ -7555,10 +7553,10 @@ fn a_region_writing_an_outer_local_is_refused() {
 fn a_labeled_region_folds_through_its_own_break() {
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "$tmpl",
+        "region",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
-            break_stmt_b(Some("$tmpl"), Some(local_expr(0, TypeTable::I32))),
+            break_stmt_b(Some("region"), Some(local_expr(0, TypeTable::I32))),
         ],
         TypeTable::I32,
     );
@@ -7578,7 +7576,7 @@ fn a_region_breaking_to_an_outer_label_is_refused() {
     // Control flow leaves the block, so its value cannot stand for it.
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "$tmpl",
+        "region",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
             break_stmt_b(Some("outer"), Some(local_expr(0, TypeTable::I32))),

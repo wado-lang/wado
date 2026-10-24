@@ -1130,11 +1130,6 @@ storage changes nothing the tag sees: `` String::format`${a} ${bump(&mut a)}` ``
 renders `a` as it was before `bump` ran. A tag may carry effects,
 which the caller declares as for any call, and return any type.
 
-> Not yet implemented: an untagged template renders each hole before it
-> evaluates the next. `` `${r} ${bump(&mut a)}` `` over `r = &a` renders `r`
-> before `bump` writes `a`, and a hole whose rendering traps stops the holes
-> after it from running.
-
 The `String::format` tag renders each hole through its specifier into one
 buffer, and returns it. An untagged template is sugar for it (see
 [Template Strings](#template-strings)), and a program may call it by name.

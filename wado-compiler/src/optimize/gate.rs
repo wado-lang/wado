@@ -38,7 +38,6 @@ pub enum GatedPass {
     ConstFold,
     Sroa,
     Licm,
-    TmplHoist,
     ContainerSroa,
     Inline,
     Dae,
@@ -327,7 +326,6 @@ mod tests {
             GatedPass::ConstFold,
             GatedPass::Sroa,
             GatedPass::Licm,
-            GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
             GatedPass::Inline,
             GatedPass::Dae,
@@ -350,7 +348,6 @@ mod tests {
                 | GatedPass::ConstFold
                 | GatedPass::Sroa
                 | GatedPass::Licm
-                | GatedPass::TmplHoist
                 | GatedPass::ContainerSroa
                 | GatedPass::Inline
                 | GatedPass::Dae

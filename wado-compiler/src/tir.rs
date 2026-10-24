@@ -11,7 +11,6 @@ use crate::builtin_facts::{BuiltinFacts, ParamShape, ReturnShape, SideEffect, St
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
-use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{NamePolicy, RangeKind, RestClause, Visibility};
@@ -1362,16 +1361,6 @@ pub enum TirExprKind {
         payload_type: TypeId,
     },
 
-    /// Unresolved template string expression.
-    ///
-    /// Created by the elaborator with resolved sub-expressions but without
-    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
-    /// expands this into the `$tmpl` labeled block with `String::with_capacity`,
-    /// `push_str`, `Formatter`, and `Display`/inspect calls.
-    TemplateString {
-        parts: Vec<TirTemplatePart>,
-    },
-
     /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///
@@ -1411,18 +1400,6 @@ pub struct TirHandlerBinding {
     /// the handler is evaluated once and one effect's mutations are seen by the
     /// rest. `None` for an explicit `Effect => handler`. Unique per `WithHandler`.
     pub bundle_group: Option<u32>,
-}
-
-/// A part of a resolved template string.
-#[derive(Debug, Clone)]
-pub enum TirTemplatePart {
-    /// A literal string segment.
-    Literal(String),
-    /// An interpolated expression with optional format specifier.
-    Interpolation {
-        expr: Box<TirExpr>,
-        format_spec: Option<TemplateFormatSpec>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

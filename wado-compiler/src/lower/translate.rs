@@ -42,7 +42,7 @@ use crate::nir::{
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
+    Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
@@ -1675,7 +1675,6 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
                 label: label.clone(),
                 block: self.convert_block(block),
-                role: BlockRole::of_label(label),
             },
             TirStmtKind::LetDestructure { pattern, value } => {
                 let value = self.convert_stored_operand(value);
@@ -2299,7 +2298,6 @@ impl FunctionTranslator<'_, '_> {
                 label: label.clone(),
                 block: self.convert_block(block),
                 result_type: *result_type,
-                role: BlockRole::of_label(label),
             },
             TirExprKind::VariantTag { expr } => ExprKind::VariantTag {
                 expr: self.convert_operand(expr),
@@ -2322,9 +2320,6 @@ impl FunctionTranslator<'_, '_> {
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
-            TirExprKind::TemplateString { .. } => unreachable!(
-                "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
-            ),
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),

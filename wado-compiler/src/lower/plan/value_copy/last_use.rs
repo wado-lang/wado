@@ -16,7 +16,7 @@ use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
     FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, capture_source_locals,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 use crate::type_table::TypeTable;
@@ -3284,13 +3284,6 @@ pub(super) fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirEx
             }
         }
         K::TypePackExpansion { call_expr, .. } => out.push(call_expr),
-        K::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    out.push(expr);
-                }
-            }
-        }
         _ => {}
     }
 }

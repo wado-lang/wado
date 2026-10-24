@@ -279,10 +279,10 @@ fn scalarize_function(
         return false;
     }
     // Function-wide alias scan. Loop-local alias detection in
-    // `count_field_accesses_in_expr` only sees the loop body, but
-    // `tmpl_hoist`-style passes hoist a local's `&mut` capture out of
-    // the loop, where the alias is *live* across the loop and writes
-    // through it bypass any HFS scalar. Collect every GC-heap local
+    // `count_field_accesses_in_expr` only sees the loop body, but a
+    // pass may hoist a local's `&mut` capture out of the loop (LICM),
+    // where the alias is *live* across the loop and writes through it
+    // bypass any HFS scalar. Collect every GC-heap local
     // whose address is taken anywhere in the function (read-only, over
     // the arena body) so loop-level scalarization can refuse those
     // candidates.
@@ -541,7 +541,7 @@ fn scalarize_loop(
         // function (e.g. `Formatter { buf: &mut local }` stored in another
         // local, then read inside this loop). Writes through a captured
         // alias bypass the HFS scalar — and since the capture can be
-        // hoisted *out* of the loop by `tmpl_hoist`, the loop-local
+        // hoisted *out* of the loop, the loop-local
         // alias scan in `count_field_accesses_in_expr` does not see it.
         if analysis.aliases.locals.contains(&local_idx) {
             continue;

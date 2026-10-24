@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId, hold_hole, method_param_offset, transpose_tuple_expr,
+    TirUnaryOp, TypeId, hold_hole, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -2409,19 +2409,6 @@ impl Monomorphizer {
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::Local { .. } => {}
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.substitute_types_in_expr(
-                            inner,
-                            substitution,
-                            type_table,
-                            local_count,
-                            locals,
-                        );
-                    }
-                }
-            }
             TirExprKind::WithHandler { .. } => {
                 unreachable!(
                     "WithHandler should be desugared by effect-dispatch synthesis before this phase"

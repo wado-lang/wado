@@ -524,6 +524,8 @@ pub enum CompilerItem {
     /// `String::with_capacity` — the buffer allocation template expansion
     /// emits and the NIR template-hoist recognises.
     StringWithCapacity,
+    /// `String::format` — the tag an untagged template is reified as.
+    StringFormat,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -915,6 +917,7 @@ impl CompilerItem {
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
         Self::StringWithCapacity,
+        Self::StringFormat,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -1204,6 +1207,7 @@ impl CompilerItem {
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
             Self::StringWithCapacity => "string_with_capacity",
+            Self::StringFormat => "string_format",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -1413,6 +1417,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::StringWithCapacity
+            | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -1727,6 +1732,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::StringWithCapacity
+            | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii

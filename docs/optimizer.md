@@ -68,7 +68,7 @@ on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.m
 3. The fixed-point loop: `container_sroa`, `peephole`, `value_copy_demote`,
    `sroa_param`, `sroa_variant_return`, `inline`, `peephole`,
    `let_block_flatten`, `sroa`, `copy_prop`, `dae`, `drve`, `const_folding`,
-   `param_spec`, `licm` (with `condition_implication`), `tmpl_hoist`. Once it
+   `param_spec`, `licm` (with `condition_implication`). Once it
    converges, `inline` releases the callees it held back, and the loop runs
    again.
 4. After the loop, once: `field_scalarize`, `store_load_forward`,
@@ -175,7 +175,6 @@ Loops and fields:
   original, and turn a fill loop into `array.fill`.
 - `unsigned_range_check` — fuse a remaining `0 <= i && i < n` into one unsigned
   compare. It runs after the passes above, which read the two halves apart.
-- `tmpl_hoist` — reuse a template string's buffer across loop iterations.
 - `field_scalarize` — keep hot GC fields in locals across a loop.
 
 Whole program and backend:

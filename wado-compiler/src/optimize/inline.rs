@@ -24,7 +24,7 @@ use crate::name::inline_block_label;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId,
+    Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId,
     StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
@@ -3011,7 +3011,6 @@ fn build_inlined_labeled_block(
             label,
             block: bid,
             result_type,
-            role: BlockRole::Plain,
         },
         type_id: result_type,
         span: call_span,
@@ -3173,9 +3172,8 @@ fn splice_block_into(
             StmtKind::LabeledBlock {
                 label: inner_label,
                 block: inner,
-                role,
             } => {
-                let (inner_label, role) = (inner_label.clone(), *role);
+                let inner_label = inner_label.clone();
                 let inner = *inner;
                 if arena_query::has_break_to(callee, NodeRef::Block(inner), &inner_label) {
                     // The label is broken to, so the block must survive (with its
@@ -3186,7 +3184,6 @@ fn splice_block_into(
                         kind: StmtKind::LabeledBlock {
                             label: ctx.lbl(&inner_label),
                             block: nb,
-                            role,
                         },
                         span,
                     }));
@@ -3265,12 +3262,11 @@ pub(super) fn splice_stmt(
                 body: splice_block(caller, callee, b, ctx),
             }
         }
-        StmtKind::LabeledBlock { label, block, role } => {
-            let (l, b, role) = (label.clone(), *block, *role);
+        StmtKind::LabeledBlock { label, block } => {
+            let (l, b) = (label.clone(), *block);
             StmtKind::LabeledBlock {
                 label: ctx.lbl(&l),
                 block: splice_block(caller, callee, b, ctx),
-                role,
             }
         }
         StmtKind::Break { label, value } => {
@@ -3697,14 +3693,12 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             label,
             block,
             result_type,
-            role,
         } => {
-            let (l, b, rt, role) = (label.clone(), *block, *result_type, *role);
+            let (l, b, rt) = (label.clone(), *block, *result_type);
             ExprKind::LabeledBlock {
                 label: ctx.lbl(&l),
                 block: splice_block(caller, callee, b, ctx),
                 result_type: rt,
-                role,
             }
         }
         ExprKind::VariantTag { expr } => ExprKind::VariantTag {

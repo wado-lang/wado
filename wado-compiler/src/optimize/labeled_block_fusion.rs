@@ -12,7 +12,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{fused_block_label, serial_suffixed, threaded_block_label};
 use crate::nir::{NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
     StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
@@ -1255,14 +1255,12 @@ fn perform_fusion(
         .as_expr()
         .expect("guarded by check_fusion_preconditions");
     let ExprKind::LabeledBlock {
-        block: lb_block,
-        role,
-        ..
+        block: lb_block, ..
     } = &engine.body.exprs[lv].kind
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
-    let (lb_block, role) = (*lb_block, *role);
+    let lb_block = *lb_block;
 
     // Extract the arm blocks from the consumer statement.
     let (arms, result_type) = if let StmtKind::If {
@@ -1322,7 +1320,6 @@ fn perform_fusion(
                 label: fused_label,
                 block: fused_body,
                 result_type,
-                role,
             },
             result_type,
             span,
@@ -1351,7 +1348,6 @@ fn perform_fusion(
             StmtKind::LabeledBlock {
                 label: fused_label,
                 block: fused_body,
-                role,
             },
             span,
         )
@@ -2031,10 +2027,6 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     });
     // Move the scrutinee's LabeledBlock kind onto the match node, killing the
     // vacated node first so the block is never double-claimed.
-    let role = match &engine.body.exprs[plan.scrut].kind {
-        ExprKind::LabeledBlock { role, .. } => *role,
-        _ => BlockRole::Plain,
-    };
     engine.replace_expr_kind(plan.scrut, ExprKind::Dead);
     engine.replace_expr_kind(
         match_id,
@@ -2042,7 +2034,6 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
             label: fused_label,
             block: plan.lb_block,
             result_type: plan.result_type,
-            role,
         },
     );
 }
@@ -2142,7 +2133,6 @@ struct SlotTempSroa {
     temp_local: u32,
     label: String,
     lb_block: BlockId,
-    role: BlockRole,
     /// Statements a `Block` wrapper ran before the labeled block, hoisted out.
     lead: Vec<StmtId>,
     /// Projected slots in field order, each with the local that replaces it.
@@ -2215,13 +2205,12 @@ fn plan_slot_temp_sroa(
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
-        role,
         ..
     } = &body.exprs[lb_expr].kind
     else {
         return None;
     };
-    let (label, lb_block, role) = (label.clone(), *lb_block, *role);
+    let (label, lb_block) = (label.clone(), *lb_block);
 
     // Ordered ahead of the read census below, which walks the whole body.
     if body.falls_through(lb_block) {
@@ -2295,7 +2284,6 @@ fn plan_slot_temp_sroa(
         temp_local,
         label,
         lb_block,
-        role,
         lead,
         slots,
         names: reads.slot_names,
@@ -2324,7 +2312,7 @@ impl SlotExitChecker {
     ///
     /// A `[tag, slots…]` tuple is a carrier `sroa_variant_return` made and
     /// nothing else knows, so an unread element of one is free to drop. Other
-    /// passes recognise a named struct by its shape: `tmpl_hoist` keys on
+    /// passes recognise a named struct by its shape: `string_push` keys on
     /// `String`, whose `repr` a `s.len()` consumer never reads, and taking half
     /// of one leaves the object alive with that shape gone.
     ///
@@ -2406,7 +2394,6 @@ fn perform_slot_temp_sroa(
         StmtKind::LabeledBlock {
             label: plan.label,
             block: plan.lb_block,
-            role: plan.role,
         },
         span,
     );

@@ -32,7 +32,7 @@ use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId,
+    TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -1369,9 +1369,9 @@ fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
     elab_scope(block, Vec::new(), TemporaryScope::Enclosing, tail, cx);
 }
 
-/// Elaborate `block`, the body `target` is reached from. An expanded template
-/// string's block is part of the statement holding the template, as a plain
-/// block is: its temporaries outlive the string it breaks out with.
+/// Elaborate `block`, the body `target` is reached from. The block binding a
+/// template's holes is part of the statement holding the template, as a plain
+/// block is: its temporaries outlive the call the holes are read by.
 fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) -> Flow {
     let temporaries = if label.as_deref().is_some_and(is_template_block) {
         TemporaryScope::Enclosing
@@ -1787,14 +1787,6 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
             elab_expr(iterable, true, cx);
             elab_expr_scope(body, cx);
-        }
-        // A template formats each hole through a reference.
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    elab_expr(inner, false, cx);
-                }
-            }
         }
         TirExprKind::GlobalVarGet { .. } => {}
 

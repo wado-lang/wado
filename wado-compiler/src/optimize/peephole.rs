@@ -14,7 +14,7 @@ use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
 use super::aggregate_forward::AggregateForwardRule;
 use super::closure_devirt::build_closure_devirt;
-use super::const_branch_prune::{BranchPruneRule, PruneMode};
+use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
 use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
@@ -76,7 +76,7 @@ pub(super) fn run_peephole(
     let callees = build_callee_map(project, gate.exec(), |id| pending.contains(&id));
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
+    let branch_prune_rule = BranchPruneRule;
     let aggregate_forward_rule = AggregateForwardRule;
     let bitset_rule = MatchToBitsetRule::new(&type_table, select_id);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);

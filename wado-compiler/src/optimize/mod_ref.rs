@@ -1021,8 +1021,7 @@ mod tests {
     use crate::call_args::CallArgs;
     use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
-        ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
-        StmtNode,
+        ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
     };
     use crate::nir_value_graph::ValueKind;
     use crate::tir::TypeId;
@@ -1943,7 +1942,6 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
-                    role: BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)
@@ -1963,7 +1961,6 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
-                    role: BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)

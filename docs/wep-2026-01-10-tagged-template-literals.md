@@ -307,14 +307,11 @@ impl String {
 }
 ```
 
-Once the roadmap below lands, what a template string compiles to is written in
-Wado, where a reader can see it, and the per-hole rendering is the one piece
-the compiler synthesizes (`TemplateHole::fmt`). Until then the compiler keeps a
-direct lowering for the untagged case
+What a template string compiles to is written in Wado, where a reader can see
+it, and the per-hole rendering is the one piece the compiler synthesizes
+(`TemplateHole::fmt`). It replaced a direct lowering of the untagged case
 ([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
-and the fixtures hold the two forms to the same output over the specifier
-matrix. They part where a hole's rendering reads what a later hole writes, which
-the direct lowering renders before that hole runs.
+which rendered each hole before it evaluated the next.
 
 ### Cost
 
@@ -568,8 +565,8 @@ serial advances on read, so a template nested inside a hole mints its own
   `$hole_get$<shape>$<V>` (one per erased hole type, `match index` over the
   holes of that type, dereferencing a handle field), `$template_segment$<shape>`
   (`match key` over the segment fields) and `$hole_fmt$<shape>`
-  (`match index`, each arm the interpolation `build_template_block` would emit
-  for that hole: `trait_fmt_call` on the hole's value with the `Formatter`
+  (`match index`, each arm rendering its hole:
+  `trait_fmt_call` on the hole's value with the `Formatter`
   `build_formatter_literal` builds over `f.buf`, or `f` itself when the
   specifier sets no field). `$hole_fmt` is minted inline-always: its index is
   a constant at every site `TemplateHole::fmt` reaches once `members()` folds, so the
@@ -644,9 +641,9 @@ synthesis and the fold; then the prelude tags and fixtures.
 
 ## Roadmap
 
-An untagged template is sugar for `String::format`, but the compiler still lowers it on
-a path of its own that renders each hole before it evaluates the next. The items
-below close that, in this order.
+An untagged template is sugar for `String::format`. The compiler first lowered
+it on a path of its own that rendered each hole before it evaluated the next.
+The items below closed that, in this order.
 
 - [x] Open anonymous shapes. A shape whose types mention a type parameter of
   the enclosing item is open. An anonymous shape's identity is its types, so
@@ -757,11 +754,19 @@ below close that, in this order.
   single-hole site still pays its call into `String::format`, which the measurement
   below shows as up to 1.11.
 
-- [ ] One path. An untagged template reifies as the `String::format` call, and
-  the direct lowering (`synthesis::template::build_template_block`) is deleted.
-  Done when no code path builds a `$tmpl` block, and
-  `` `${r} ${bump(&mut a)}` `` over `r = &a` renders what `String::format`
-  renders.
+- [x] One path. An untagged template reifies as the `String::format` call, and
+  the direct lowering (`synthesis::template::build_template_block`) is deleted
+  with `optimize::tmpl_hoist`, which only it fed. Reify resolves the call
+  through the `CompilerItem` registry rather than by name, so it reaches the
+  prelude's `String` under an import that takes the name
+  (`template_string_names_prelude_string.wado`), and mints the shape of a
+  template it synthesizes itself, an `assert`'s failure message. The holes'
+  types are the ones reify settles, so a hole whose type annotate leaves to
+  later inference still renders.
+
+  Done: no code path builds a `$tmpl` block, and `` `${r} ${bump(&mut a)}` ``
+  over `r = &a` renders what `String::format` renders
+  (`template_string_hole_order.wado`).
 
 The cost gap is measured inside the guest by this program, so the runner's
 start-up stays out of it. Run it with `wado run -O2 bench.wado`; each phase

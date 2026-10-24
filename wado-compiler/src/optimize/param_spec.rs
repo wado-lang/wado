@@ -25,7 +25,7 @@ use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
 use super::body_memo::BodyMemo;
-use super::const_branch_prune::{BranchPruneRule, PruneMode};
+use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
@@ -1669,7 +1669,7 @@ impl BranchSettler {
         types: &TypeTable,
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
-        let prune = BranchPruneRule::new(PruneMode::Fixpoint);
+        let prune = BranchPruneRule;
         let mut engine = Engine::new(body, buffers, locals);
         engine.set_value_graph_type_table(types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);

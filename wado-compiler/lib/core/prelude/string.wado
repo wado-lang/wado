@@ -500,6 +500,7 @@ impl String {
     /// The tag an untagged template is sugar for: every hole rendered through
     /// its specifier into one buffer. `` `x=${x}` `` is
     /// `` String::format`x=${x}` ``. See WEP 2026-01-10.
+    #[compiler_item("string_format")]
     pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
         // Where the template is a literal, the segments are constants, so this
         // folds to one: the buffer is sized once, and only a hole rendering
