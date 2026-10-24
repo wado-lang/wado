@@ -15,12 +15,22 @@ fn first_divergence(cases: &List<Case>, actual: &String) -> String {
     return "the outputs differ past the last case";
 }
 
+/// Cases per evaluated program: the compile of one holding them all runs past
+/// `eval`'s time limit at `-O3`.
+global CHUNK: i32 = 200;
+
 test "every value drops once, where the model says" {
-    let cases = Case::all();
-    let source = program(&cases);
-    let out = eval(source).unwrap();
-    assert out.status matches { Exited(0) }, `${out.status:?}\n${out.stderr}\n${source}`;
-    assert out.stdout == expected(&cases), first_divergence(&cases, &out.stdout);
+    let all = Case::all();
+    for let start of (0..<all.len()).step_by(CHUNK) {
+        let mut cases: List<Case> = [];
+        for let i of start..<i32::min(start + CHUNK, all.len()) {
+            cases.push(all[i]);
+        }
+        let source = program(&cases);
+        let out = eval(source).unwrap();
+        assert out.status matches { Exited(0) }, `${out.status:?}\n${out.stderr}\n${source}`;
+        assert out.stdout == expected(&cases), first_divergence(&cases, &out.stdout);
+    }
 }
 
 // One program per case: a rejection stops the whole program, so cases cannot
@@ -28,7 +38,7 @@ test "every value drops once, where the model says" {
 // a move, so only one producer runs.
 test "a read after a move is rejected, and only there" {
     for let case of Case::all() {
-        if !(case.producer matches { Literal } && case.companion matches { None }) {
+        if !(case.producer matches { Literal } && case.companion matches { None } && case.value matches { Tok }) {
             continue;
         }
         let result = eval(read_after_program(&case));
