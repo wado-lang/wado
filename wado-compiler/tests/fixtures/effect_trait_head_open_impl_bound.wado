@@ -1,0 +1,47 @@
+// An open trait's generic impl brings what its parameter's bound brings, when
+// that bound is another open trait: `Model<Loud>` steps with `Stdout` because
+// `Loud`'s `Backend` does, through a generic caller as directly.
+use { println, Stdout } from "core:cli";
+
+trait Backend with _ {
+    fn go(&self) -> i32;
+}
+
+struct Loud {
+}
+
+impl Backend for Loud {
+    fn go(&self) -> i32 with Stdout {
+        println("go");
+        return 1;
+    }
+}
+
+struct Model<B: Backend> {
+    b: B,
+}
+
+trait Gen with _ {
+    fn step(&self) -> i32;
+}
+
+impl<B: Backend> Gen for Model<B> {
+    fn step(&self) -> i32 with _ {
+        return self.b.go();
+    }
+}
+
+fn timed<G: Gen>(g: &G) -> i32 with _ {
+    return g.step();
+}
+
+export fn run() with Stdout {
+    let m = Model { b: Loud {} };
+    println(`${m.step()}`);
+    println(`${timed(&m)}`);
+}
+
+__DATA__
+{
+    "stdout": "go\n1\ngo\n1\n"
+}

@@ -12,7 +12,7 @@ mod testing;
 
 pub use candidates::{Candidates, applies, bound_candidates, candidates};
 pub use coherence::{CoherenceError, coherence_errors, mark_duplicates};
-pub use derive::{derive, pair_comparisons};
+pub use derive::{derive, derive_alongside, pair_comparisons};
 pub use holds::{Holds, comparison_row, holds, holds_with_args, owed};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
