@@ -79,9 +79,11 @@ runs.
   step over one token has 4 query rows, so a workgroup a row left the device idle
   and grew slower with the sequence: at 600 positions a token took 1.9 times
   as long as with the parts. `conformance/webgpu_attention.wado` holds it to `Cpu`.
-- A product of at most four rows, as a step over one token makes, does not
-  run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
-  computes a run of columns, its lanes splitting the inner axis. The lanes
+- A product of at most six rows, as a step over one token or a short prompt
+  makes, does not run in 16 by 16 tiles, which would leave most lanes idle.
+  Each workgroup computes a run of columns, its lanes splitting the inner
+  axis, four rows at a time. Its time grows with the rows, and the tiled
+  product's does not: on GPT-2 (124M) the two meet at about seven. The lanes
   that read the weight together read where it is contiguous: one row's run of
   columns, or one column of a transposed weight, such as Gemma's head.
 - `arg_max` ranks each part of 4096 elements of a lane in a workgroup of its

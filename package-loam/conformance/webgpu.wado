@@ -232,11 +232,13 @@ fn halved<Axes>(t: Tensor<f32, Axes>) -> Tensor<f32, Axes> {
 
 /// Products and a gather by a weight kept for products alone, which the device
 /// holds in bf16 where that loses nothing, and one it must keep in f32: read
-/// along either axis, by a few rows and by a tile's, whole and in chunks.
+/// along either axis, by a few rows, a prompt's and a tile's, whole and in
+/// chunks.
 fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let exact = halved(tensor::<[Long, Col]>([700, 300], 26));
     let inexact = tensor::<[Long, Col]>([700, 300], 27);
     let few = tensor::<[Row, Inner, Long]>([2, 3, 700], 28);
+    let prompt = tensor::<[Row, Inner, Long]>([2, 6, 700], 32);
     let tile = tensor::<[Row, Inner, Long]>([1, 20, 700], 29);
     let one = tensor::<[Row, Inner, Col]>([2, 1, 300], 30);
     let ix: Tensor<i64, [Pick]> = {
@@ -246,6 +248,7 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
     let mut cpu = Cpu {};
     let expected = [
         cpu.matmul_shared(&few, &exact, null).data,
+        cpu.matmul_shared(&prompt, &exact, null).data,
         cpu.matmul_shared(&tile, &exact, null).data,
         cpu.matmul_by_transposed(&one, &exact, null).data,
         cpu.gather_rows::<f32, Long, [Col], [Pick]>(&exact, &ix).data,
@@ -266,6 +269,7 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
         // `inexact`'s.
         assert gpu.kept_bytes() == (105_000 + 210_000) * 4;
         let few_by_b = gpu.matmul_rhs(&gpu.upload(&few), &b, null);
+        let prompt_by_b = gpu.matmul_rhs(&gpu.upload(&prompt), &b, null);
         let tile_by_b = gpu.matmul_rhs(&gpu.upload(&tile), &b, null);
         let across = gpu.matmul_by_rhs_transposed(&gpu.upload(&one), &b, null);
         let gathered = gpu.gather_rhs_rows(&b, &gpu.upload(&ix));
@@ -275,12 +279,13 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
         assert gpu.read_backs() == if limit matches { Some(_) } { 2 } else { 0 };
         let got = [
             gpu.download(&few_by_b).data,
+            gpu.download(&prompt_by_b).data,
             gpu.download(&tile_by_b).data,
             gpu.download(&across).data,
             gpu.download(&gathered).data,
             gpu.download(&few_by_f).data,
         ] as List<List<f32>>;
-        let names = ["few", "tile", "across", "gather", "f32"] as List<String>;
+        let names = ["few", "prompt", "tile", "across", "gather", "f32"] as List<String>;
         for let i of 0..<got.len() {
             println(`${pass}half ${names[i]} ${deviation(&got[i], &expected[i])}`);
         }
@@ -292,15 +297,19 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
 /// chunks, its product across them on the CPU, and its gather in parts.
 global HALF_SPLIT: i32 = 40_000;
 
-/// Products of a few rows, as a model's step over one token makes, by a
-/// matrix read along either axis, whole and in chunks of its inner axis.
+/// Products of a few rows, as a model's step over one token makes, and of a
+/// short prompt's, in more than one block of rows, by a matrix read along
+/// either axis, whole and in chunks of its inner axis.
 fn narrow_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let one = tensor::<[Row, Inner, Col]>([2, 1, 300], 22);
     let three = tensor::<[Row, Inner, Col]>([2, 3, 300], 23);
+    let prompt = tensor::<[Row, Inner, Col]>([2, 6, 300], 31);
     let stored = tensor::<[Long, Col]>([700, 300], 24);
     let on_cpu = Cpu {}.matmul_by_transposed(&one, &stored, null);
+    let prompt_on_cpu = Cpu {}.matmul_by_transposed(&prompt, &stored, null);
     let wide = tensor::<[Col, Long]>([300, 700], 25);
     let shared_on_cpu = Cpu {}.matmul_shared(&three, &wide, null);
+    let prompt_shared_on_cpu = Cpu {}.matmul_shared(&prompt, &wide, null);
     for let limit of [null, Option::Some(NARROW_SPLIT)] as List<Option<i32>> {
         let Some(mut gpu) = WebGpuBackend::new() else {
             return;
@@ -311,14 +320,25 @@ fn narrow_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue,
             pass = "split ";
         }
         let b = gpu.keep(&stored);
+        let w = gpu.keep(&wide);
         let across = gpu.matmul_by_transposed(&gpu.upload(&one), &b, null);
-        let along = gpu.matmul_shared(&gpu.upload(&three), &gpu.keep(&wide), null);
-        let [across, along] = [
+        let along = gpu.matmul_shared(&gpu.upload(&three), &w, null);
+        let prompt_across = gpu.matmul_by_transposed(&gpu.upload(&prompt), &b, null);
+        let prompt_along = gpu.matmul_shared(&gpu.upload(&prompt), &w, null);
+        let [across, along, prompt_across, prompt_along] = [
             gpu.download(&across),
             gpu.download(&along),
+            gpu.download(&prompt_across),
+            gpu.download(&prompt_along),
         ];
         println(`${pass}narrow across ${across.extents:?} ${deviation(&across.data, &on_cpu.data)}`);
         println(`${pass}narrow along ${along.extents:?} ${deviation(&along.data, &shared_on_cpu.data)}`);
+        println(
+            `${pass}narrow prompt across ${prompt_across.extents:?} ${deviation(&prompt_across.data, &prompt_on_cpu.data)}`,
+        );
+        println(
+            `${pass}narrow prompt along ${prompt_along.extents:?} ${deviation(&prompt_along.data, &prompt_shared_on_cpu.data)}`,
+        );
     }
 }
 

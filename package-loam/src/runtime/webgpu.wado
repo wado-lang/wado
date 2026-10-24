@@ -283,9 +283,15 @@ global PENDING: i32 = i32::MAX;
 /// The side of a matrix product's tile, which `product_shader` spells as `16u`.
 global TILE: i32 = 16;
 
-/// The most rows a product runs `narrow_product_shader` for. A tile of 16
-/// rows leaves 15 of 16 lanes idle on a model's step over one token.
+/// The rows `narrow_product_shader` sums at once, a block of them per pass
+/// over the inner axis.
 global NARROW: i32 = 4;
+
+/// The most rows a product runs `narrow_product_shader` for. A tile of 16
+/// rows leaves 15 of 16 lanes idle on a model's step over one token. The
+/// narrow product's time grows with its rows and the tiled one's does not:
+/// on GPT-2 (124M)'s layers on an RTX 4060 Ti the two meet at about 7.
+global NARROW_ROWS: i32 = 6;
 
 /// The invocations of one workgroup of `narrow_product_shader`.
 global NARROW_LANES: i32 = 256;
@@ -1108,7 +1114,7 @@ impl WebGpuBackend {
             extents.push(cols);
         }
         let count = element_count(&batch);
-        let narrow = rows <= NARROW;
+        let narrow = rows <= NARROW_ROWS;
         let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;
         // The fewest columns a workgroup takes, which a wider read only raises.
         let per_group = if narrow { narrow_columns(across, 1) } else { TILE };
@@ -3205,10 +3211,10 @@ ${product_epilogue(op, bindings, batch, continued)}    }
 ${ELEMENTWISE_OPERATORS}`;
 }
 
-/// The WGSL of [`product_shader`]'s product where it has at most `NARROW`
-/// rows, as a model's step over one token has: one workgroup per run of
-/// columns, its lanes splitting the inner axis and their sums added in
-/// workgroup memory. Where `across`, the right matrix is read along its inner
+/// The WGSL of [`product_shader`]'s product where it has at most `NARROW_ROWS`
+/// rows, as a model's step over one token or a short prompt has: one
+/// workgroup per run of columns, its lanes splitting the inner axis and their
+/// sums added in workgroup memory, `NARROW` rows at a time. Where `across`, the right matrix is read along its inner
 /// axis, which is where it is contiguous, as a transposed weight is: a run of
 /// lanes reads one column. Otherwise a run of lanes reads one row's run of
 /// columns. The parameters and `half` are the tiled shader's. Where `width` is
@@ -3233,32 +3239,32 @@ fn narrow_product_shader(
     } else {
         [`group.x * ${lanes * width}u + lid % ${lanes}u * ${width}u`, `lid / ${lanes}u`, `${lanes}u`];
     };
-    let lhs = |k: String| `o${bindings[0]}[u32(a_base + i32(r) * a_row + i32(${k}) * a_inner)]`;
+    let lhs = |k: String| `o${bindings[0]}[u32(a_base + i32(r0 + b) * a_row + i32(${k}) * a_inner)]`;
     let sum = if width == 1 {
-        `            let vb = ${right_wgsl(bindings, half, "k")};
-            for (var r = 0u; r < rows; r++) {
-                sums[r] += ${lhs("k")} * vb;
-            }
+        `                let vb = ${right_wgsl(bindings, half, "k")};
+                for (var b = 0u; b < block; b++) {
+                    sums[b] += ${lhs("k")} * vb;
+                }
 `;
     } else {
-        let pair = `            let w = o${bindings[1]}[${right_index_wgsl("k")} >> 1u];
-            let v0 = bitcast<f32>(w << 16u);
-            let v1 = bitcast<f32>(w & 0xFFFF0000u);
+        let pair = `                let w = o${bindings[1]}[${right_index_wgsl("k")} >> 1u];
+                let v0 = bitcast<f32>(w << 16u);
+                let v1 = bitcast<f32>(w & 0xFFFF0000u);
 `;
         if across {
-            `${pair}            for (var r = 0u; r < rows; r++) {
-                sums[r] += ${lhs("k")} * v0;
-                if k + 1u < inner {
-                    sums[r] += ${lhs("k + 1u")} * v1;
+            `${pair}                for (var b = 0u; b < block; b++) {
+                    sums[b] += ${lhs("k")} * v0;
+                    if k + 1u < inner {
+                        sums[b] += ${lhs("k + 1u")} * v1;
+                    }
                 }
-            }
 `;
         } else {
-            `${pair}            for (var r = 0u; r < rows; r++) {
-                let x = ${lhs("k")};
-                sums[r * 2u] += x * v0;
-                sums[r * 2u + 1u] += x * v1;
-            }
+            `${pair}                for (var b = 0u; b < block; b++) {
+                    let x = ${lhs("k")};
+                    sums[b * 2u] += x * v0;
+                    sums[b * 2u + 1u] += x * v1;
+                }
 `;
         }
     };
@@ -3270,29 +3276,34 @@ var<workgroup> partial: array<f32, ${NARROW * lane_cols * NARROW_LANES}>;
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
 ${product_bases(batch)}    let col = ${col};
     let split = ${split};
-    var sums = array<f32, ${NARROW * lane_cols}>();
-    if col < cols {
-        for (var k = split * ${steps}u; k < inner; k += ${splits * steps}u) {
-${sum}        }
-    }
-    for (var i = 0u; i < ${NARROW * lane_cols}u; i++) {
-        partial[i * ${NARROW_LANES}u + lid] = sums[i];
-    }
-    workgroupBarrier();
-    if split != 0u || col >= cols {
-        return;
-    }
-    let first = col;
-    for (var row = 0u; row < rows; row++) {
-        for (var j = 0u; j < ${lane_cols}u; j++) {
-            let col = first + j;
-            if col < cols {
-                var acc = ${start};
-                for (var s = 0u; s < ${splits}u; s++) {
-                    acc += partial[(row * ${lane_cols}u + j) * ${NARROW_LANES}u + lid + s * ${stride}];
-                }
-${product_epilogue(op, bindings, batch, continued)}            }
+    for (var r0 = 0u; r0 < rows; r0 += ${NARROW}u) {
+        let block = min(rows - r0, ${NARROW}u);
+        var sums = array<f32, ${NARROW * lane_cols}>();
+        if col < cols {
+            for (var k = split * ${steps}u; k < inner; k += ${splits * steps}u) {
+${sum}            }
         }
+        for (var i = 0u; i < ${NARROW * lane_cols}u; i++) {
+            partial[i * ${NARROW_LANES}u + lid] = sums[i];
+        }
+        workgroupBarrier();
+        if split == 0u && col < cols {
+            let first = col;
+            for (var b = 0u; b < block; b++) {
+                let row = r0 + b;
+                for (var j = 0u; j < ${lane_cols}u; j++) {
+                    let col = first + j;
+                    if col < cols {
+                        var acc = ${start};
+                        for (var s = 0u; s < ${splits}u; s++) {
+                            acc += partial[(b * ${lane_cols}u + j) * ${NARROW_LANES}u + lid + s * ${stride}];
+                        }
+${product_epilogue(op, bindings, batch, continued)}                    }
+                }
+            }
+        }
+        // The next block's sums overwrite these.
+        workgroupBarrier();
     }
 }
 ${ELEMENTWISE_OPERATORS}`;
