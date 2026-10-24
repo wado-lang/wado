@@ -1,0 +1,517 @@
+#![stdlib("core:process")]
+//! Run a host program, confined to the guest's own grants.
+//!
+//! A child reads and writes only beneath the directories the guest was
+//! granted, plus a fixed system baseline (the loader, shared libraries,
+//! installed programs), and reaches the network only where the guest does.
+//! Spawning never extends the guest's authority. The host offers it only where
+//! its OS can enforce that, and [`availability`] says whether this one does.
+//! Every other function requires it to answer `Available`, and traps
+//! otherwise. See WEP 2026-10-21 (`core:process`).
+//!
+//! A child's output is bytes, so it comes back as a `ByteList`, never decoded.
+
+use types from "core:process/types.wado";
+use { Child as ChildResource, Input, Spawned } from "core:process/types.wado";
+use { Stdin, Stdout, Stderr } from "wasi:cli";
+
+pub use { Process } from "core:process/process.wado";
+pub use { Availability, ErrorCode, ExitStatus } from "core:process/types.wado";
+pub use { Duration } from "wasi:clocks";
+
+#[synopsis]
+test {
+    if availability() != Availability::Available {
+        return;
+    }
+    let out = cmd`echo hello`.read().unwrap();
+    assert out == b"hello\n";
+}
+
+/// How many bytes `output` and `read` keep of each stream unless a
+/// [`Command::capture_limit`] says otherwise.
+pub global DEFAULT_CAPTURE_LIMIT: i32 = 64 << 20;
+
+/// Whether this host spawns. The answer is fixed for the guest's lifetime.
+pub fn availability() -> Availability with Process {
+    return Process::get_availability();
+}
+
+/// Where one of a child's standard streams goes.
+enum Stdio {
+    Null,
+    Inherit,
+    Piped,
+}
+
+/// A program to run and how: its arguments, environment, streams and timeout.
+///
+/// A child gets no stream of the guest's unless asked: stdin reads nothing,
+/// and its stdout and stderr go nowhere. `output` and `read` pipe what they
+/// read themselves.
+pub struct Command {
+    internal program: String,
+    internal args: List<String>,
+    env: List<[String, String]>,
+    stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
+    timeout: Option<Duration>,
+    capture_limit: i32,
+}
+
+impl Command {
+    /// `program` holding a `/` is a path, relative to where the child starts.
+    /// Any other is looked up on the host's `PATH`.
+    pub fn new(program: String) -> Command {
+        return Command {
+            program,
+            args: [],
+            env: [],
+            stdin: Stdio::Null,
+            stdout: Stdio::Null,
+            stderr: Stdio::Null,
+            timeout: null,
+            capture_limit: DEFAULT_CAPTURE_LIMIT,
+        };
+    }
+
+    pub fn arg(&self, arg: String) -> Command {
+        let mut command = *self;
+        command.args.push(arg);
+        return command;
+    }
+
+    pub fn args(&self, args: List<String>) -> Command {
+        let mut command = *self;
+        command.args.extend(&args);
+        return command;
+    }
+
+    /// Set `key` in the child's environment, over the baseline the host
+    /// gives it (`PATH`, a private `HOME` and `TMPDIR`, the locale). The
+    /// guest's own environment is never passed on.
+    pub fn env(&self, key: String, value: String) -> Command {
+        let mut command = *self;
+        command.env.push([key, value]);
+        return command;
+    }
+
+    /// `spawn` hands the guest the child's stdin as `Child::stdin`.
+    pub fn stdin_piped(&self) -> Command {
+        let mut command = *self;
+        command.stdin = Stdio::Piped;
+        return command;
+    }
+
+    /// `spawn` hands the guest the child's stdout as `Child::stdout`.
+    pub fn stdout_piped(&self) -> Command {
+        let mut command = *self;
+        command.stdout = Stdio::Piped;
+        return command;
+    }
+
+    /// `spawn` hands the guest the child's stderr as `Child::stderr`.
+    pub fn stderr_piped(&self) -> Command {
+        let mut command = *self;
+        command.stderr = Stdio::Piped;
+        return command;
+    }
+
+    /// The child reads the guest's own stdin, which the guest passes on only
+    /// where it holds it.
+    pub fn inherit_stdin(&self) -> Command with Stdin {
+        let mut command = *self;
+        command.stdin = Stdio::Inherit;
+        return command;
+    }
+
+    /// The child writes to the guest's own stdout.
+    pub fn inherit_stdout(&self) -> Command with Stdout {
+        let mut command = *self;
+        command.stdout = Stdio::Inherit;
+        return command;
+    }
+
+    /// The child writes to the guest's own stderr.
+    pub fn inherit_stderr(&self) -> Command with Stderr {
+        let mut command = *self;
+        command.stderr = Stdio::Inherit;
+        return command;
+    }
+
+    /// All three of the guest's own streams.
+    pub fn inherit_stdio(&self) -> Command with (Stdin, Stdout, Stderr) {
+        return self.inherit_stdin().inherit_stdout().inherit_stderr();
+    }
+
+    /// End the child at `timeout`: the host sends its process group
+    /// `SIGTERM`, then `SIGKILL` after a grace period, and it exits
+    /// `ExitStatus::TimedOut`. There is no default.
+    pub fn timeout(&self, timeout: Duration) -> Command {
+        let mut command = *self;
+        command.timeout = Option::Some(timeout);
+        return command;
+    }
+
+    /// The bytes `output` and `read` keep of each stream. Past it, stderr
+    /// keeps its tail, and stdout is an `OutputTooLarge` error: the host
+    /// kills the child the moment stdout passes it.
+    pub fn capture_limit(&self, bytes: i32) -> Command
+        contract bytes >= 0
+    {
+        let mut command = *self;
+        command.capture_limit = bytes;
+        return command;
+    }
+
+    /// Start the child and hand back its piped streams.
+    pub fn spawn(&self) -> Result<Child, ProcessError> with Process {
+        return self.start(self.stdin, self.stdout, self.stderr);
+    }
+
+    /// Run the child to its end, reading stdout and stderr together. A
+    /// timeout is not an error: the status says `TimedOut`, beside what was
+    /// read.
+    pub fn output(&self) -> Result<Output, ProcessError> with Process {
+        let limit = self.capture_limit;
+        let mut child = self.start(self.stdin, Stdio::Piped, Stdio::Piped)?;
+        let captured = capture(&mut child, limit);
+        let status = child.wait()?;
+        if captured.too_large {
+            return Result::Err(child_error(&self.program, ProcessErrorKind::OutputTooLarge));
+        }
+        return Result::Ok(Output { status, stdout: captured.stdout, stderr: captured.stderr });
+    }
+
+    /// Run the child to its end and return how it ended.
+    pub fn status(&self) -> Result<ExitStatus, ProcessError> with Process {
+        let child = self.start(self.stdin, self.stdout, self.stderr)?;
+        return child.wait();
+    }
+
+    /// Run the child to its end and return its stdout. Any end but
+    /// `Exited(0)` is `Failed`, with the stderr read beside it.
+    pub fn read(&self) -> Result<ByteList, ProcessError> with Process {
+        let program = self.program;
+        let out = self.output()?;
+        if out.status != ExitStatus::Exited(0) {
+            return Result::Err(child_error(&program, ProcessErrorKind::Failed([out.status, out.stderr])));
+        }
+        return Result::Ok(out.stdout);
+    }
+
+    fn start(&self, stdin: Stdio, out: Stdio, err: Stdio) -> Result<Child, ProcessError> with Process {
+        let mut writer: Option<StreamWritable<u8>> = null;
+        let input = match stdin {
+            Null => Input::Null,
+            Inherit => Input::Inherit,
+            Piped => {
+                let [rx, tx] = Stream::<u8>::new();
+                writer = Option::Some(tx);
+                Input::Piped(rx)
+            },
+        };
+        let spec = types::Command {
+            program: self.program,
+            args: self.args,
+            env: self.env,
+            stdin: input,
+            stdout: output_mode(out),
+            stderr: output_mode(err),
+            timeout: self.timeout.map(|timeout| timeout as u64),
+        };
+        let Spawned { child, stdout, stderr, exit } = match Process::spawn(spec, null) {
+            Ok(spawned) => spawned,
+            Err(code) => return Result::Err(child_error(&self.program, error_kind(code))),
+        };
+        return Result::Ok(Child {
+            stdin: writer,
+            stdout,
+            stderr,
+            program: self.program,
+            exit: Option::Some(exit),
+            resource: child,
+        });
+    }
+}
+
+fn output_mode(stdio: Stdio) -> types::Output {
+    return match stdio {
+        Null => types::Output::Null,
+        Inherit => types::Output::Inherit,
+        Piped => types::Output::Piped,
+    };
+}
+
+fn error_kind(code: ErrorCode) -> ProcessErrorKind {
+    return match code {
+        NotFound => ProcessErrorKind::NotFound,
+        NotPermitted => ProcessErrorKind::NotPermitted,
+        ResourceExhausted | Io => ProcessErrorKind::Io(code),
+    };
+}
+
+fn child_error(program: &String, kind: ProcessErrorKind) -> ProcessError {
+    return ProcessError { program: *program, kind };
+}
+
+/// A running child. Dropping it kills its process group, and the host kills
+/// every child when the guest exits, so a child never outlives its guest.
+pub affine struct Child {
+    /// Where `Command::stdin_piped` asked for it. Dropping it closes the
+    /// child's stdin.
+    pub stdin: Option<StreamWritable<u8>>,
+    /// Where `Command::stdout_piped` asked for it.
+    pub stdout: Option<Stream<u8>>,
+    /// Where `Command::stderr_piped` asked for it.
+    pub stderr: Option<Stream<u8>>,
+    program: String,
+    exit: Option<Future<Result<ExitStatus, ErrorCode>>>,
+    resource: ChildResource,
+}
+
+impl Child {
+    /// Wait for the child to end. Its streams stay where they are, so read a
+    /// piped stdout first: a child blocked writing to a full pipe never ends.
+    pub fn wait(self) -> Result<ExitStatus, ProcessError> {
+        let mut child = self;
+        let Some(ended) = child.exit.take().unwrap().read() else {
+            unreachable();
+        };
+        return match ended {
+            Ok(status) => Result::Ok(status),
+            Err(code) => Result::Err(child_error(&child.program, ProcessErrorKind::Io(code))),
+        };
+    }
+
+    /// Kill the child's process group now.
+    pub fn kill(&self) {
+        self.resource.kill();
+    }
+}
+
+/// What `Command::output` read, and how the child ended.
+pub struct Output {
+    pub status: ExitStatus,
+    pub stdout: ByteList,
+    pub stderr: ByteList,
+}
+
+struct Captured {
+    stdout: ByteList,
+    stderr: ByteList,
+    too_large: bool,
+}
+
+affine variant Pipe {
+    Out(ReadCopy<u8>),
+    Err(ReadCopy<u8>),
+}
+
+impl Waitable for Pipe;
+
+/// Read `child`'s stdout and stderr together until both end, so a child
+/// filling one pipe never blocks against a parent reading the other.
+fn capture(child: &mut Child, limit: i32) -> Captured {
+    let mut captured = Captured { stdout: [], stderr: [], too_large: false };
+    let mut set = WaitableSet::<Pipe>::new();
+    if let Some(out) = child.stdout.take() {
+        set.insert(Pipe::Out(out.start_read(CAPTURE_CHUNK)));
+    }
+    if let Some(err) = child.stderr.take() {
+        set.insert(Pipe::Err(err.start_read(CAPTURE_CHUNK)));
+    }
+    while !set.is_empty() {
+        match set.wait().member {
+            Out(copy) => {
+                let [end, chunk] = copy.finish();
+                captured.stdout.extend(&(chunk.items as ByteList));
+                if captured.stdout.len() > limit {
+                    captured.too_large = true;
+                    captured.stdout = [];
+                    child.kill();
+                } else if chunk.result == CopyResult::Completed {
+                    set.insert(Pipe::Out(end.start_read(CAPTURE_CHUNK)));
+                }
+            },
+            Err(copy) => {
+                let [end, chunk] = copy.finish();
+                captured.stderr.extend(&(chunk.items as ByteList));
+                if captured.stderr.len() > limit {
+                    captured.stderr = captured.stderr.split_off(captured.stderr.len() - limit);
+                }
+                if chunk.result == CopyResult::Completed {
+                    set.insert(Pipe::Err(end.start_read(CAPTURE_CHUNK)));
+                }
+            },
+        }
+    }
+    return captured;
+}
+
+global CAPTURE_CHUNK: i32 = 65536;
+
+/// Why a program did not run, or did not run as asked. Names the program, as
+/// `FsError` names its path.
+pub struct ProcessError {
+    pub program: String,
+    pub kind: ProcessErrorKind,
+}
+
+pub variant ProcessErrorKind {
+    /// No such program, on `PATH` or at the path given.
+    NotFound,
+    /// The sandbox refused to execute the program: it lies outside the
+    /// grants and the baseline.
+    NotPermitted,
+    Io(ErrorCode),
+    /// `read` only: the child ended other than `Exited(0)`, with what it
+    /// wrote to stderr.
+    Failed([ExitStatus, ByteList]),
+    /// Stdout passed the capture limit, and the child was killed.
+    OutputTooLarge,
+}
+
+impl Display for ProcessError {
+    fn fmt(&self, f: &mut Formatter) {
+        let reason: String = match self.kind {
+            NotFound => "no such program",
+            NotPermitted => "the sandbox refused to execute it",
+            Io(code) => `${code:?}`,
+            Failed([status, stderr]) => `${status:?}: ${String::from_utf8_lossy(stderr)}`,
+            OutputTooLarge => "its stdout passed the capture limit",
+        };
+        f.write_str(`${self.program}: ${reason}`);
+    }
+}
+
+impl Error for ProcessError {
+}
+
+/// One hole of a [`cmd`] template: one argument, or one per element.
+pub variant CmdArgs {
+    One(String),
+    Each(List<String>),
+}
+
+/// What a value is as a [`cmd`] hole.
+pub trait CmdArg with () {
+    fn cmd_args(&self) -> CmdArgs;
+}
+
+impl CmdArg for String {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::One(*self);
+    }
+}
+
+impl CmdArg for List<String> {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::Each(*self);
+    }
+}
+
+impl CmdArg for i32 {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::One(`${*self}`);
+    }
+}
+
+impl CmdArg for i64 {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::One(`${*self}`);
+    }
+}
+
+impl CmdArg for u32 {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::One(`${*self}`);
+    }
+}
+
+impl CmdArg for u64 {
+    fn cmd_args(&self) -> CmdArgs {
+        return CmdArgs::One(`${*self}`);
+    }
+}
+
+/// A `Command` from an argument vector, built without a shell.
+///
+/// Literal text splits on whitespace. A hole is exactly one argument, whatever
+/// it holds, and a `List<String>` hole one per element. Parts with no
+/// whitespace between them join into one argument; a `List<String>` hole
+/// joined to anything is a contract violation. So is literal text holding a
+/// character a shell would treat specially (quotes, `\`, `|`, `&`, `;`, `<`,
+/// `>`, parentheses, braces, `$`, a backtick, `~`, `*`, `?`, brackets, `#`):
+/// here it would mean nothing. A value holding one goes through a hole.
+pub fn cmd<T: ReflectTemplate<Holes = [..V]>, ..V: CmdArg>(t: T) -> Command {
+    let mut words = Words { done: [], word: null, list: null };
+    for let h of ReflectTemplate::<T>::members() {
+        words.literal(&h.lit(&t));
+        match h.get(&t).cmd_args() {
+            One(arg) => words.join(&arg),
+            Each(args) => words.each(args),
+        }
+    }
+    words.literal(&ReflectTemplate::<T>::tail(&t));
+    let mut args = words.finish();
+    assert !args.is_empty(), "a cmd template names a program";
+    let program = args.remove(0);
+    return Command::new(program).args(args);
+}
+
+/// A `cmd` template split into arguments as it is read.
+struct Words {
+    done: List<String>,
+    /// The argument being built, where one is.
+    word: Option<String>,
+    /// A `List<String>` hole read last, which nothing may join.
+    list: Option<List<String>>,
+}
+
+impl Words {
+    fn literal(&mut self, text: &String) {
+        for let c of text.chars() {
+            if c.is_whitespace() {
+                self.end();
+                continue;
+            }
+            assert !is_shell_special(c), "a cmd template's literal text holds a shell metacharacter; pass the value through a hole";
+            self.join(&`${c}`);
+        }
+    }
+
+    fn join(&mut self, part: &String) {
+        assert self.list matches { None }, "a List<String> hole in a cmd template must stand alone";
+        let mut word = self.word.take().unwrap_or("");
+        word.push_str(part);
+        self.word = Option::Some(word);
+    }
+
+    fn each(&mut self, args: List<String>) {
+        assert self.word matches { None } && self.list matches { None }, "a List<String> hole in a cmd template must stand alone";
+        self.list = Option::Some(args);
+    }
+
+    fn end(&mut self) {
+        if let Some(word) = self.word.take() {
+            self.done.push(word);
+        }
+        if let Some(list) = self.list.take() {
+            self.done.extend(&list);
+        }
+    }
+
+    fn finish(&mut self) -> List<String> {
+        self.end();
+        return self.done;
+    }
+}
+
+fn is_shell_special(c: char) -> bool {
+    return match c {
+        '"' | '\'' | '\\' | '|' | '&' | ';' | '<' | '>' | '(' | ')' | '{' | '}' | '$' | '`' | '~' | '*' | '?' | '[' | ']' | '#' => true,
+        _ => false,
+    };
+}

@@ -1,0 +1,112 @@
+use { availability, cmd, Availability, Command, ExitStatus } from "core:process";
+
+test "cmd splits literal text and keeps each hole one argument" {
+    let msg = "fix the bug";
+    let files: List<String> = ["a.txt", "b c.txt"];
+    let dir = "out";
+    let c = cmd`git commit -m ${msg} -- ${files} ${dir}/x.txt`;
+    assert c.program == "git";
+    assert c.args == ["commit", "-m", "fix the bug", "--", "a.txt", "b c.txt", "out/x.txt"];
+}
+
+#[expect_trap]
+test "cmd refuses a shell metacharacter in literal text" {
+    let _ = cmd`git commit -m "fix bug"`;
+}
+
+#[expect_trap]
+test "cmd refuses a list hole joined to text" {
+    let files: List<String> = ["a"];
+    let _ = cmd`rm --file=${files}`;
+}
+
+test "read returns stdout" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let n = 3;
+    assert cmd`echo -n a${n}`.read().unwrap() == b"a3";
+}
+
+test "output reads stdout and stderr together" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "head -c 200000 /dev/zero >&2; echo out; exit 4";
+    let out = cmd`sh -c ${script}`.output().unwrap();
+    assert out.status == ExitStatus::Exited(4);
+    assert out.stdout == b"out\n";
+    assert out.stderr.len() == 200000;
+}
+
+test "read fails on a nonzero exit" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let err = cmd`false`.read().unwrap_err();
+    assert err.program == "false";
+    assert err.kind matches { Failed([Exited(1), _]) };
+}
+
+test "a missing program is NotFound" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let err = Command::new("wado-no-such-program").status().unwrap_err();
+    assert err.kind matches { NotFound };
+}
+
+test "a timeout ends the child" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let status = cmd`sleep 30`.timeout(100_000_000).status().unwrap();
+    assert status == ExitStatus::TimedOut;
+}
+
+test "stdout past the capture limit is OutputTooLarge" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let err = cmd`head -c 100000 /dev/zero`.capture_limit(1000).read().unwrap_err();
+    assert err.kind matches { OutputTooLarge };
+}
+
+test "stderr past the capture limit keeps its tail" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "printf 0123456789 >&2";
+    let out = cmd`sh -c ${script}`.capture_limit(4).output().unwrap();
+    assert out.stderr == b"6789";
+}
+
+test "a piped child reads what the guest writes" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn().unwrap();
+    let stdin = child.stdin.take().unwrap();
+    assert stdin.write_all(b"ping") == CopyResult::Completed;
+    builtin::drop(stdin);
+    let stdout = child.stdout.take().unwrap();
+    assert stdout.read_to_end_bytes() == b"ping";
+    assert child.wait().unwrap() == ExitStatus::Exited(0);
+}
+
+test "the child sees only the guest's grants" {
+    if availability() != Availability::Available {
+        return;
+    }
+    assert cmd`cat /etc/passwd`.status().unwrap() != ExitStatus::Exited(0);
+}
+
+test "the child gets the env it is given and a private HOME" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "printf %s $GREETING; test -d $HOME -a -w $HOME";
+    let out = Command::new("sh").args(["-c", script]).env("GREETING", "hi").output().unwrap();
+    assert out.stdout == b"hi";
+    assert out.status == ExitStatus::Exited(0);
+}
