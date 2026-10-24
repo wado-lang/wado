@@ -14,7 +14,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   / `CompileKnobOpt` carry what the compiler is told: `-O`, `--log-level`,
   `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` / `RuntimeKnobOpt` carry
   what the wasmtime engine is built with: `--collector`, `--gc-heap-initial`,
-  `--report-fuel`.
+  `--report-fuel`, `--deny-process`.
   A subcommand lists the subset it accepts and holds one field per family it
   uses. It declares no field, parse arm, or spec of its own for a shared knob,
   and a new one is added in `knobs.rs` only.
@@ -42,6 +42,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 
 - `compile.rs`, `check.rs`, `run.rs`, `serve.rs`, `test.rs`, `format.rs`, `doc.rs`, `dump.rs`, `wit.rs`, `query.rs` — one subcommand each.
 - `runtime.rs`, `http_hooks.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs. The timezone host and the TLS trust store live in `wado-host`, which the compiler's tests share.
+- `process_host.rs` — the `core:process` host: whether a guest may spawn, and the streams, timeout and kill of each child. `wado-host`'s `sandbox` confines it.
 - `kiln_provider.rs`, `kiln_wit.rs` — how `wado` resolves a Kiln generator to its component. The pipeline and the runtime it feeds live in `wado-host`'s `kiln/`. `check` runs the same pipeline `compile` does, writes included.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.

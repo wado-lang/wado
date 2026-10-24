@@ -36,7 +36,7 @@ wasmtime::component::bindgen!({
     },
 });
 
-use self::core::process::process as spawn;
+use self::core::process::process;
 use self::core::process::types::{self, Availability, Command, ErrorCode, Spawned};
 
 /// Whether a host offers spawning, settled once when it starts, and the grants
@@ -187,7 +187,7 @@ impl types::HostChild for ProcessView<'_> {
     }
 }
 
-impl spawn::Host for ProcessView<'_> {
+impl process::Host for ProcessView<'_> {
     fn get_availability(&mut self) -> wasmtime::Result<Availability> {
         Ok(match &*self.ctx.spawning.0 {
             Answer::Available(_) => Availability::Available,
@@ -197,7 +197,7 @@ impl spawn::Host for ProcessView<'_> {
     }
 }
 
-impl<U> spawn::HostWithStore<U> for ProcessHost {
+impl<U> process::HostWithStore<U> for ProcessHost {
     fn spawn(
         store: Access<'_, U, Self>,
         cmd: Command,
@@ -225,5 +225,5 @@ pub fn add_to_linker<T: Send + 'static>(
     view: fn(&mut T) -> ProcessView<'_>,
 ) -> wasmtime::Result<()> {
     types::add_to_linker::<T, ProcessHost>(linker, view)?;
-    spawn::add_to_linker::<T, ProcessHost>(linker, view)
+    process::add_to_linker::<T, ProcessHost>(linker, view)
 }

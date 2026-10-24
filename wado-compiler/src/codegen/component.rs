@@ -13,7 +13,7 @@ use crate::canonical::{
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
-    CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
+    CmDefined, CmFunctionInfo, CmInterfaceInfo,
     CmInterfaceRegistry, CmTypeGen, CmTypeKind, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
     FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
@@ -625,8 +625,7 @@ fn error_code_idx(
     }
     let source = project
         .cm_interface_registry
-        .cm_source_of_named_type(named, type_gen.interface_hint())
-        .unwrap_or_else(|| CANONICAL_ERROR_CODE_INTERFACE.to_string());
+        .cm_source_of_named_type(named, type_gen.interface_hint())?;
     let outer = error_code_def(project, &source).and_then(|def| ctx.decl_type_idx(def))?;
     instance_type.alias(Alias::Outer {
         kind: ComponentOuterAliasKind::Type,
