@@ -21,22 +21,10 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-<<<<<<< HEAD
-Measured 2026-10-24 with rustc 1.98.1, Zig 0.16.0, wasi-sdk 34.0, and Moonbit
+Measured 2026-10-24 with rustc 1.98.1, Zig 0.17.0, wasi-sdk 34.0, and Moonbit
 0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
 host-dependent, so a row whose toolchain has not moved does not need
 remeasuring.
-||||||| 71e5bb0066b
-Measured 2026-10-22 with rustc 1.98.1, Zig 0.16.0, wasi-sdk 34.0, and Moonbit
-0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
-host-dependent, so a row whose toolchain has not moved does not need
-remeasuring.
-=======
-Measured 2026-10-22 with rustc 1.98.1, wasi-sdk 34.0, and Moonbit 0.1.20260920
-(`peter-jerry-ye/wasi` 0.25.0). The Zig rows were measured 2026-10-24 with Zig
-0.17.0. Sizes are toolchain- but not host-dependent, so a row whose toolchain
-has not moved does not need remeasuring.
->>>>>>> origin/main
 
 ### hello_world
 
