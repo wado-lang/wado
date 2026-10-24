@@ -1038,9 +1038,8 @@ impl WebGpuBackend {
         if count == 0 {
             return;
         }
-        if let Some(source) = self.span_of(&([*from] as List<DeviceTensor>)) && let Some(target) = self.span_of(&([
-            *to,
-        ] as List<DeviceTensor>)) {
+        if let Some(source) = self.span_of(&([*from] as List<DeviceTensor>))
+            && let Some(target) = self.span_of(&([*to] as List<DeviceTensor>)) {
             let [x, y] = grid(count);
             let mut params = element_params(count, x, &to.extents);
             push_view(&mut params, rebased(from, &source), &from.strides);
@@ -1447,9 +1446,8 @@ impl WebGpuBackend {
             most = i32::max(most, words[i] as i32);
         }
         let picked = sliced(data, axis, least, most - least + 1);
-        if let Some(source) = self.span_of(&([picked] as List<DeviceTensor>)) && let Some(target) = self.span_of(&([
-            part,
-        ] as List<DeviceTensor>)) {
+        if let Some(source) = self.span_of(&([picked] as List<DeviceTensor>))
+            && let Some(target) = self.span_of(&([part] as List<DeviceTensor>)) {
             let [x, y] = grid(count);
             let mut params = element_params(count, x, &part.extents);
             let mut across = data.strides;

@@ -353,7 +353,9 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
             return Result::Err(InferError::Undefined(vi.name));
         };
         scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed)?)?;
-        if let Some(element) = element_of(&vi.dtype) && let Some(computed) = scope.primitives.get(vi.name) && element.computed != computed {
+        if let Some(element) = element_of(&vi.dtype)
+            && let Some(computed) = scope.primitives.get(vi.name)
+            && element.computed != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
                 tensor: vi.name,
