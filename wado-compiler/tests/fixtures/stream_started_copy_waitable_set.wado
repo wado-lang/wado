@@ -30,8 +30,8 @@ export fn run() with Stdout {
     let [bytes_rx, bytes_tx] = Stream::<u8>::new();
     let [words_rx, words_tx] = Stream::<i32>::new();
     let mut set = WaitableSet::<Pipe>::new();
-    set.join(Pipe::Bytes(bytes_rx.start_read(16)));
-    set.join(Pipe::Words(words_rx.start_read(16)));
+    set.insert(Pipe::Bytes(bytes_rx.start_read(16)));
+    set.insert(Pipe::Words(words_rx.start_read(16)));
 
     let words = words_tx.start_write([7, 8]);
     report(set.wait());
@@ -49,12 +49,12 @@ export fn run() with Stdout {
     println(`after a dropped copy ${tx.write_all([1])}`);
     tx.drop();
 
-    let [joined_rx, joined_tx] = Stream::<u8>::new();
-    let mut joined = WaitableSet::<ReadCopy<u8>>::new();
-    joined.join(joined_rx.start_read(4));
-    builtin::drop(joined);
-    println(`after a dropped set ${joined_tx.write_all([1])}`);
-    joined_tx.drop();
+    let [held_rx, held_tx] = Stream::<u8>::new();
+    let mut holding = WaitableSet::<ReadCopy<u8>>::new();
+    holding.insert(held_rx.start_read(4));
+    builtin::drop(holding);
+    println(`after a dropped set ${held_tx.write_all([1])}`);
+    held_tx.drop();
 }
 
 __DATA__
