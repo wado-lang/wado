@@ -268,6 +268,8 @@ test "an output the cut cannot take stops the build" {
         "g (float[N, S, 4] X) => (float[N, S, 4] Y, float[N, S, 4] Z) { Y = Relu(X) Z = Neg(Y) }",
     ).unwrap();
     assert `${cut(&mut read_inside, { Y: 1 }).unwrap_err()}` == "last: Y is read inside the graph, which needs all of it";
+    let mut given = read("g (float[N, S, 4] X) => (float[N, S, 4] X) { }").unwrap();
+    assert `${cut(&mut given, { X: 1 }).unwrap_err()}` == "last: no node computes X, which the graph is given";
 }
 
 test "keeping an If's output keeps what its branches read from around them" {

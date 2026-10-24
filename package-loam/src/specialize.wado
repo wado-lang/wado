@@ -165,6 +165,9 @@ pub fn keep_last(
     if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
         return conflict("last", `${*output} is read inside the graph, which needs all of it`);
     }
+    if !graph.nodes.into_iter().any(|n| n.outputs.contains_str(output)) {
+        return conflict("last", `no node computes ${*output}, which the graph is given`);
+    }
     cut_last(graph, shapes, output, axis - rank);
     if let Dims(written) = graph.outputs[at].rank {
         let mut declared = written;

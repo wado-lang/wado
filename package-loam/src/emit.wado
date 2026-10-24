@@ -15,7 +15,6 @@ use {
     case_named,
     element_of,
     is_binary_elementwise,
-    read_counts,
     settled,
     trailing_axes,
 } from "./graph.wado";
@@ -24,6 +23,7 @@ use {
     IfBranch,
     Plan,
     Spread,
+    branch_plan,
     branches,
     branches_of,
     is_alias,
@@ -188,10 +188,7 @@ pub fn emit(
     let kept = kept_literals(&literals, checked);
     let decided = plan(graph, checked, fuse);
     let rhs = decided.rhs;
-    let together = Together {
-        paired: paired_weights(graph, checked, &decided, &rhs, &held),
-        concat: concat_weights(graph, &decided),
-    };
+    let together = Together::of(graph, &decided);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
@@ -458,11 +455,10 @@ fn emit_weights(
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
     prepared.add_generic(BACKEND_BOUND);
-    let elsewhere = together.elsewhere();
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
-        if !elsewhere.contains(vi.name) {
+        if !together.elsewhere.contains(vi.name) {
             prepared.add_pub_field(ident, weight_type(checked, rhs, together, &vi.name));
         }
     }
@@ -511,9 +507,8 @@ fn emit_prepared_fields(
     together: &Together,
     hosts: &HashMap<String, String>,
 ) {
-    let elsewhere = together.elsewhere();
     for let vi of &graph.initializers {
-        if elsewhere.contains(vi.name) {
+        if together.elsewhere.contains(vi.name) {
             continue;
         }
         let ident = names.get(&vi.name);
@@ -540,22 +535,27 @@ fn emit_prepared_fields(
 struct Together {
     paired: HashMap<String, String>,
     concat: HashMap<String, List<String>>,
+    /// The weights held in another's field: each pair's second, and every
+    /// weight of a run but its first.
+    elsewhere: HashSet<String>,
 }
 
 impl Together {
-    /// The weights held in another's field: each pair's second, and every
-    /// weight of a run but its first.
-    fn elsewhere(&self) -> HashSet<String> {
-        let mut held = HashSet::<String>::new();
-        for let [_, second] of self.paired.entries() {
-            held.insert(*second);
+    /// The weights of `graph` the plan `decided` holds together.
+    fn of(graph: &Graph, decided: &Plan) -> Together {
+        let weight_of = product_weights(graph);
+        let paired = paired_weights(decided, &weight_of);
+        let concat = concat_weights(decided, &weight_of);
+        let mut elsewhere = HashSet::<String>::new();
+        for let [_, second] of paired.entries() {
+            elsewhere.insert(*second);
         }
-        for let [_, parts] of self.concat.entries() {
+        for let [_, parts] of concat.entries() {
             for let part of parts[1..<parts.len()].to_list() {
-                held.insert(part);
+                elsewhere.insert(part);
             }
         }
-        return held;
+        return Together { paired, concat, elsewhere };
     }
 
     /// The column axis the weight `tensor` is held under, `n` being its own
@@ -594,8 +594,7 @@ fn product_weights(graph: &Graph) -> HashMap<String, String> {
 
 /// The weights of the products each product kernel computes by weights
 /// concatenated, by the first weight, in the order the plan concatenates them.
-fn concat_weights(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
-    let weight_of = product_weights(graph);
+fn concat_weights(decided: &Plan, weight_of: &HashMap<String, String>) -> HashMap<String, List<String>> {
     let mut concat = HashMap::<String, List<String>>::new();
     for let [_, parts] of decided.concats.entries() {
         let weights: List<String> = parts.into_iter().map(|p| weight_of[*p]).collect();
@@ -706,28 +705,11 @@ fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, together: &Togeth
 }
 
 /// The weights a backend holds in pairs, each pair's first mapped to its
-/// second: the right operands of two products the plan pairs, each held as
-/// stored, read by its product alone, and of one axis list and element.
-fn paired_weights(
-    graph: &Graph,
-    checked: &Checked,
-    decided: &Plan,
-    rhs: &HashMap<String, bool>,
-    held: &HashMap<String, String>,
-) -> HashMap<String, String> {
-    let reads = read_counts(graph);
-    let weight_of = product_weights(graph);
-    let alone = |w: &String| rhs.get(*w) == Option::Some(false) && reads.get(*w) == Option::Some(1);
+/// second: the right operands of two products the plan pairs.
+fn paired_weights(decided: &Plan, weight_of: &HashMap<String, String>) -> HashMap<String, String> {
     let mut paired = HashMap::<String, String>::new();
     for let [x, y] of decided.pairs {
-        let b = weight_of[x];
-        let c = weight_of[y];
-        if alone(&b)
-            && alone(&c)
-            && axis_list(&checked.shapes[b]) == axis_list(&checked.shapes[c])
-            && held[b] == held[c] {
-            paired[b] = c;
-        }
+        paired[weight_of[x]] = weight_of[y];
     }
     return paired;
 }
@@ -1386,7 +1368,7 @@ fn branch_lines(
     }
     let literals = literal_tensors(graph, branch, &inner.scalars);
     let mut lines = owed_checks(branch, symbols)?;
-    lines.extend(&scope_body(graph, branch, &plan(graph, branch, fuse), names, &mut inner, &literals, symbols, fuse)?);
+    lines.extend(&scope_body(graph, branch, &branch_plan(graph, branch, fuse), names, &mut inner, &literals, symbols, fuse)?);
     let mut yielded: List<String> = [];
     for let [i, vi] of graph.outputs.into_iter().enumerate() {
         let from = branch.shapes[vi.name];
@@ -2259,9 +2241,9 @@ impl Term {
             }
         }
         // The plan pairs two products at most in a kernel, each over the
-        // kernel's axes. A second one whose weight is not prepared with the
-        // first's is written and read as any tensor, and so is a product an
-        // epilogue reads under other axes, as a `Gemm`'s bias may rename them.
+        // kernel's axes, by weights held together. A product an epilogue
+        // reads under other axes, as a `Gemm`'s bias may rename them, is
+        // written and read as any tensor.
         assert heads.len() <= 2;
         let under_out = |at: i32| axis_list(&lanes[at].shape) == axis_list(out);
         let written = |lane: &Lane| -> Lane {
@@ -2271,13 +2253,9 @@ impl Term {
             return Lane { ..*lane, source: Source::Tensor(`&${p.call}, null)`) };
         };
         if heads.len() == 2 {
-            if let Some(order) = pair_order(&lanes, heads[0], heads[1], paired) {
-                assert under_out(order[0]) && under_out(order[1]);
-                heads = order;
-            } else {
-                lanes[heads[1]] = written(&lanes[heads[1]]);
-                heads = [heads[0]];
-            }
+            let order = pair_order(&lanes, heads[0], heads[1], paired);
+            assert under_out(order[0]) && under_out(order[1]);
+            heads = order;
         }
         if heads.len() == 1 && !under_out(heads[0]) {
             lanes[heads[0]] = written(&lanes[heads[0]]);
@@ -2328,27 +2306,20 @@ impl Term {
     }
 }
 
-/// The lanes `i` and `j` of two products in the order their weights pair in,
-/// where `paired` prepares the weights together, or `None`. Only products the
-/// plan pairs have paired weights, and those read one left operand.
-fn pair_order(lanes: &List<Lane>, i: i32, j: i32, paired: &HashMap<String, String>) -> Option<List<i32>> {
-    let rhs = |at: i32| match lanes[at].source {
-        Contraction(p) => p.rhs,
-        _ => null,
+/// The lanes `i` and `j` of two products the plan pairs, in the order
+/// `paired` prepares their weights together in.
+fn pair_order(lanes: &List<Lane>, i: i32, j: i32, paired: &HashMap<String, String>) -> List<i32> {
+    let weight = |at: i32| -> String {
+        let Contraction(p) = lanes[at].source else {
+            unreachable();
+        };
+        return p.rhs.unwrap().weight;
     };
-    let [Some(x), Some(y)] = [
-        rhs(i),
-        rhs(j),
-    ] else {
-        return null;
-    };
-    if paired.get(x.weight) == Option::Some(y.weight) {
-        return Option::Some([i, j]);
+    if paired.get(weight(i)) == Option::Some(weight(j)) {
+        return [i, j];
     }
-    if paired.get(y.weight) == Option::Some(x.weight) {
-        return Option::Some([j, i]);
-    }
-    return null;
+    assert paired.get(weight(j)) == Option::Some(weight(i)), "two products in one kernel are paired by the plan";
+    return [j, i];
 }
 
 /// `term`'s lanes added to `lanes`, a lane already there taken once, and its

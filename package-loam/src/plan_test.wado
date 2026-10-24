@@ -502,16 +502,24 @@ g (float[N, 4] X, float[4] B) => (float[N, 4] Y)
     assert p.of(&"R") == written(Reason::Stretched);
 }
 
-test "two products of one left operand pair in one kernel" {
+/// Two products of one left operand, by initializers where `weights` and by
+/// inputs otherwise, and their sum.
+fn two_products_plan(weights: bool) -> Plan {
+    let [inputs, initializers] = if weights {
+        ["", "<float[4, 3] W, float[4, 3] V>"];
+    } else {
+        [", float[4, 3] W, float[4, 3] V", ""];
+    };
     let source = `
-g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
+g (float[N, 4] X${inputs}) => (float[N, 3] Y)
+${initializers}
 {
     P = MatMul(X, W)
     Q = MatMul(X, V)
     Y = Add(P, Q)
 }
 `;
-    let p = plan_of(source, [
+    return plan_of(source, [
         [
             "X",
             ["Batch", "In"],
@@ -525,11 +533,22 @@ g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
             ["In", "Out"],
         ],
     ]);
+}
+
+test "two products of one left operand pair in one kernel" {
+    let p = two_products_plan(true);
     assert p.of(&"Q") == fused("Y");
     assert p.of(&"P") == fused("Y");
     assert p.pairs == [
         ["P", "Q"],
     ];
+}
+
+test "two products by weights no backend holds together do not pair" {
+    let p = two_products_plan(false);
+    assert p.of(&"Q") == fused("Y");
+    assert p.of(&"P") == written(Reason::SecondContraction);
+    assert p.pairs.is_empty();
 }
 
 test "a kernel takes in one contraction, and the second is written" {

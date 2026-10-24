@@ -1167,7 +1167,7 @@ impl WebGpuBackend {
         let fits = count <= MAX_GROUPS
             && rows.div_ceil(TILE) <= MAX_GROUPS
             && cols.div_ceil(per_group) <= MAX_GROUPS
-            && count * rows * cols <= self.max_binding;
+            && count * rows * written <= self.max_binding;
         let epilogue: List<DeviceTensor> = match then {
             Some(e) => e.operands.into_iter().map(|o| o.view).collect(),
             None => [],
@@ -1286,6 +1286,7 @@ impl WebGpuBackend {
         let count = element_count(&batch);
         let across = bv.strides[0] == 1 && bv.strides[1] != 1;
         let per_group = narrow_columns(across, 1, cols);
+        let written = if paired { cols / 2 } else { cols };
         let staged = Staged {
             op: a.op,
             operands: prologue.len(),
@@ -1298,7 +1299,7 @@ impl WebGpuBackend {
             || paired && !across
             || count > MAX_GROUPS
             || cols.div_ceil(per_group) > MAX_GROUPS
-            || count * rows * cols > self.max_binding
+            || count * rows * written > self.max_binding
             || staged_bytes(&staged) + partial_bytes > WORKGROUP_BYTES {
             return null;
         }
@@ -1322,7 +1323,6 @@ impl WebGpuBackend {
         let Some(bound) = self.bindable(&operands) else {
             unreachable();
         };
-        let written = if paired { cols / 2 } else { cols };
         let mut extents = batch;
         extents.push(rows);
         extents.push(written);
@@ -1936,10 +1936,12 @@ impl Backend for WebGpuBackend {
         then: Epilogue<PlacedRead<[..Bs, M, N]>>,
     ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let joined = Option::Some(then);
-        if let Some(out) = self.product_kernel::<[..Bs, M, K], [K, Paired<N>], [..Bs, M, N]>(a, bc, &joined, true) {
+        // Written to the device once, for the parts too.
+        let a = Placed::<f32, [..Bs, M, K]>::Device(self.device_view(a));
+        if let Some(out) = self.product_kernel::<[..Bs, M, K], [K, Paired<N>], [..Bs, M, N]>(&a, bc, &joined, true) {
             return out;
         }
-        return paired_by_parts::<WebGpuBackend, [..Bs], M, K, N>(self, a, bc, joined.unwrap());
+        return paired_by_parts::<WebGpuBackend, [..Bs], M, K, N>(self, &a, bc, joined.unwrap());
     }
 
     fn matmul_rhs_from<..Bs, M, K, N>(

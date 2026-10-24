@@ -172,9 +172,10 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     // `arg_max`es, then four products of a few rows from each limit, then two
     // across weights of few columns and of many, then six reads of a weight
     // kept in bf16 or f32 from each limit, then three paired products, then
-    // three products of a normalization, paired and alone, then both parts of
-    // three concatenated products of one.
-    assert_eq!(lines.len(), 66, "stdout: {stdout}");
+    // two under a binding only half their columns fit, then three products of
+    // a normalization, paired and alone, then both parts of three
+    // concatenated products of one.
+    assert_eq!(lines.len(), 68, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')
