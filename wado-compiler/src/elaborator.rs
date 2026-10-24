@@ -1613,8 +1613,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             for use_item in &use_decl.items {
                 match use_item {
-                    ast::UseItem::Simple { id, name, .. } => {
-                        self.record_use_reference(&source, *id, name);
+                    ast::UseItem::Simple {
+                        id, name, spelling, ..
+                    } => {
+                        if let Some(member) = self.symbols.use_item_member(&source, name, spelling)
+                        {
+                            self.record_use_reference(&source, *id, &member);
+                        }
                     }
                     ast::UseItem::InterfaceFunctions {
                         id,

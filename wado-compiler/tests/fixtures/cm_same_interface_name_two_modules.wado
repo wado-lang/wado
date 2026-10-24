@@ -1,5 +1,5 @@
-// A call finds its binding by `Dom::f` alone, so two `Dom::f` binding
-// different CM functions are rejected.
+// Two interfaces named `Dom` each bind their own `f`: a call finds its binding
+// by the declaration it names, not by `Dom::f`.
 
 use { Dom as ADom } from "./sub/cm_same_interface_name_two_modules_a.wado";
 use { Dom as BDom } from "./sub/cm_same_interface_name_two_modules_b.wado";
@@ -11,6 +11,5 @@ export fn run() with (ADom, BDom) {
 
 __DATA__
 {
-  "compile_error": "`Dom::f` binds `example:b/global#f`, but another `Dom::f` already binds `example:a/global#f`: rename one of the interfaces",
-  "compile_error_codes": ["DUPLICATE_DEFINITION"]
+  "compile_only": true
 }

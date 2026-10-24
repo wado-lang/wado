@@ -391,10 +391,10 @@ test "a .txt file under generator is a generator's input" {
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file | Exposes as                                                                            | Call style                                    |
-| ------------- | ------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Core module   | One free `pub fn` per function export                                                 | `helper(x)` — plain function                  |
-| CM component  | One Wado `interface` per exported CM interface; the default one's functions also free | `Iface::method(x)`, or `method(x)` if default |
+| Imported file | Exposes as                                                   | Call style                                                                      |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Core module   | One free `pub fn` per function export                        | `helper(x)` — plain function                                                    |
+| CM component  | Its exports and non-WASI imports ([Components](#components)) | `Iface::method(x)`, or `method(x)` if default; an import takes a `with` handler |
 
 <!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
 
@@ -444,18 +444,40 @@ any name.
 A component is consumed through the type it carries. No Wado declaration file
 or side-car `.wit` is involved.
 
-- An exported interface becomes a Wado `interface`. Its named types become Wado
-  items of the corresponding kind: a record a `struct`, a variant a `variant`,
-  an enum an `enum`, flags a `flags`, and a type alias a newtype.
+- A component file is one module, as the ES module integration of WebAssembly
+  reads one. Its items are its exports, under the names the component gives
+  them. An exported interface is named by its interface name as a string, which
+  takes `as`: `use { "a:x/trip" as Trip } from "./dup.wasm"`. A module generated
+  from WIT, such as `wasi:cli`, offers each of its interfaces by full name the
+  same way. A full name may leave out its version where the module offers that
+  interface at one version; where it offers two, the version is required.
+- An exported interface becomes a Wado `interface`, also offered under its
+  basename: the last label of its interface name, without the version, in
+  `PascalCase` (`Trip`).
+- An interface's named types become Wado items of the corresponding kind: a
+  record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
+  and a type alias a newtype. Each belongs to its interface, as a type an
+  `interface` declares does ([Effect Definition](./spec-effects.md#effect-definition)),
+  except the default interface's (below).
+- The module's names share one namespace, in three ranks: a plain-named
+  export, then a function or type of the default interface (below), then an
+  interface's basename. Where names of different ranks coincide, the higher
+  rank keeps the name. Importing a name two items of one rank share is an
+  error, and the error names each item the name could mean. A full name reaches
+  an item whatever its rank. A `wasi:*` module is Wado source, so its
+  module-level names are the ones its own `pub use` list gives.
+- A non-WASI interface the component imports is an item of its module too,
+  named by the same rules as an export. An interface name has one declaration
+  in the whole program, so two components importing it name one Wado
+  interface, and their shapes of it must agree. Naming an interface the
+  component both imports and exports is an error.
 - The default interface is the one named after its own package
   (`acme:geo/geo`), which is the interface a Wado library exports
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
-  Each of its functions is also a free function of the module, imported by bare
-  name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. A name two exported default interfaces share is left out,
-  and a world-level function keeps its name over an interface function of the
-  same name. Any other interface, an imported one included, is reached only
-  through its name.
+  Each of its functions is also a free function of the module, and each of its
+  types an item of the module, imported by bare name. So a `use` of a library
+  reads the same whether its source is Wado code or a component. Any other
+  interface, an imported one included, is reached only through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`
@@ -464,6 +486,10 @@ or side-car `.wit` is involved.
   [Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries).
   A `stream<T>` or `future<T>` value is the readable end; the writable end stays
   with whoever created the pair.
+
+> Not yet implemented: an interface offered at two versions, types named
+> through their interface, and one declaration per imported interface name
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 The dependency is statically composed into the output, so the result is one
 self-contained component that runs standalone.

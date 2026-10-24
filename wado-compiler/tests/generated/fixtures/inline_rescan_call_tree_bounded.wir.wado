@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//inline_rescan_call_tree_bounded.wado/f1" = fn(i32) -> i32;  // TypeId(10)
 
@@ -69,7 +69,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//inline_rescan_call_tree_bounded.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
@@ -79,7 +79,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -1126,8 +1126,8 @@ fn "inline_rescan_call_tree_bounded.wado/f13"(x) {
     return ((x_11 * 3) + (((a_4 * 3) + ((((x + 1) * 3) + ((x ^ 16) + 1)) % 10007)) % 10007)) % 10007;
 }
 
-fn "inline_rescan_call_tree_bounded.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "inline_rescan_call_tree_bounded.wado/$cm_export__run"() {
@@ -1196,7 +1196,7 @@ fn "inline_rescan_call_tree_bounded.wado/$cm_export__run"() {
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(((a_62 * 3) + x_6) % 10007, $local_0);
     x_6 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     a_62 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    a_123 = "inline_rescan_call_tree_bounded.wado/$cm_binding__Stdout_write_via_stream"(a_123 = x_6; x_6 = 0; a_123);
+    a_123 = "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_123 = x_6; x_6 = 0; a_123);
     x_6 = a_62;
     a_62 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(x_6, $local_0.repr, $local_0.used);

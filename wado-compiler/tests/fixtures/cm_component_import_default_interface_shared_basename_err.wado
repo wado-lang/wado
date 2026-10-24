@@ -1,0 +1,11 @@
+// `pick` is in two default interfaces that also share the basename `Left`, so
+// neither interface has a name of its own: the report names each by its full
+// name, which a `use` can write.
+use { pick } from "./sub/wasm_import_cm_two_left_defaults.wat" with { type: "wat" };
+
+test {
+    assert pick() == 1;
+}
+
+__DATA__
+{"compile_error": ":4:7: analysis error: 'pick' names more than one item of module './sub/wasm_import_cm_two_left_defaults.wat'; write the one you mean: `\"wado:left/left@0.1.0\"`, `\"acme:left/left@0.1.0\"`", "compile_error_codes": ["IMPORT_NOT_FOUND"]}

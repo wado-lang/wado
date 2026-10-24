@@ -166,9 +166,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(42)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(45)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-bytes" = fn(i64, i32);  // TypeId(45)
 
 type "functype//spec_effects_install.wado/$test_0_installing_handlers" = fn();  // TypeId(46)
 
@@ -176,7 +176,7 @@ type "functype//spec_effects_install.wado/$test_1_a__with__is_an_expression" = f
 
 type "functype//spec_effects_install.wado/mocked" = fn() -> i32;  // TypeId(48)
 
-type "functype//spec_effects_install.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(49)
+type "functype//spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(49)
 
 type "functype//spec_effects_install.wado/$cm_export__$test_0_installing_handlers" = fn();  // TypeId(50)
 
@@ -188,7 +188,7 @@ type "functype//spec_effects_install.wado/$value_copy$core:prelude/string.wado/S
 
 type "functype//spec_effects_install.wado/$test_2_the_body_holds_what_its__with__installs$cold0" = fn(i32);  // TypeId(54)
 
-type "functype//spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(55)
+type "functype//spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(55)
 
 type "functype//core:prelude/fpfmt.wado/u64_bit_len" = fn(u64) -> i32;  // TypeId(56)
 
@@ -338,8 +338,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:random/Random::get_random_bytes from "wasi/wasi:random/Random::get_random_bytes";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/random@0.3.0#get-random-bytes from "wasi/$wasi:random/random@0.3.0#get-random-bytes";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -701,7 +701,7 @@ fn "spec_effects_install.wado/mocked"() {
     }, global:spec_effects_install.wado::$effect_spec_effects_install.wado/B = $local_6, global:spec_effects_install.wado::$effect_spec_effects_install.wado/A = $local_3, $local_2_11;
 }
 
-fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
+fn "spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -710,7 +710,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len) wit
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(max_len, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(max_len, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -805,7 +805,7 @@ condition: mocked() == 3
     unreachable;
 }
 
-fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(max_len) with Random {
+fn "spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -814,7 +814,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(max_le
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(16_i64, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(16_i64, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -1001,7 +1001,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
@@ -1092,7 +1092,7 @@ fn "core:secure_random/bytes$unchecked$dae[n]"() with Random {
             global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_1_12;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: $local_3_14;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(16_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(16_i64);
         }
         unreachable;
     };
@@ -1110,7 +1110,7 @@ fn "core:secure_random/bytes$unchecked$dae[n]"() with Random {
                     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_1_12;
                     break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: $local_3_20;
                 } else {
-                    break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len_17);
+                    break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: "spec_effects_install.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len_17);
                 }
                 unreachable;
             }).repr;

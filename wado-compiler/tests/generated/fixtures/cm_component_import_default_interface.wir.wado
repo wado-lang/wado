@@ -71,19 +71,19 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wado-lang:cm-catalog/CmCatalog::id_string" = fn(i32, i32, i32);  // TypeId(18)
+type "functype//wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-string" = fn(i32, i32, i32);  // TypeId(18)
 
-type "functype//wasi/wado-lang:cm-catalog/CmCatalog::id_record" = fn(f64, f64, i32);  // TypeId(19)
+type "functype//wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-record" = fn(f64, f64, i32);  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 type "functype//cm_component_import_default_interface.wado/$test_0" = fn();  // TypeId(21)
 
 type "functype//cm_component_import_default_interface.wado/$cm_export__$test_0" = fn();  // TypeId(22)
 
-type "functype//cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_string$spec0" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-string$spec0" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
-type "functype//cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_record$spec0" = fn(ref "./sub/cm-catalog.wasm//Point") -> ref "./sub/cm-catalog.wasm//Point";  // TypeId(24)
+type "functype//cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-record$spec0" = fn(ref "./sub/cm-catalog.wasm//Point") -> ref "./sub/cm-catalog.wasm//Point";  // TypeId(24)
 
 type "functype//core:prelude/fpfmt.wado/pow10" = fn(i32) -> u64;  // TypeId(25)
 
@@ -303,9 +303,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wado-lang:cm-catalog/CmCatalog::id_string from "wasi/wado-lang:cm-catalog/CmCatalog::id_string";
-import fn wasi/wado-lang:cm-catalog/CmCatalog::id_record from "wasi/wado-lang:cm-catalog/CmCatalog::id_record";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-string from "wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-string";
+import fn wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-record from "wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-record";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -339,7 +339,7 @@ fn "cm_component_import_default_interface.wado/$test_0"() {
     let b: ref Array<u8>;
     let i: i32;
     let f_44: ref "core:prelude/format.wado//Formatter";
-    $v0_0 = "cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_string$spec0"(global:cm_component_import_default_interface.wado::$const_obj_1);
+    $v0_0 = "cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-string$spec0"(global:cm_component_import_default_interface.wado::$const_obj_1);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
         a = $v0_0.repr;
         a_end = $v0_0.used;
@@ -394,7 +394,7 @@ condition: id_string(\"hello\") == \"hello\"
         "core:rt/panic"($local_4.repr, $local_4.used);
         unreachable;
     }
-    if @unlikely(((local.tee $v0_2("cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_record$spec0"(struct.new "./sub/cm-catalog.wasm//Point" { x: 1, y: 2 })).x == 1) & ($v0_2.y == 2)) == 0) {
+    if @unlikely(((local.tee $v0_2("cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-record$spec0"(struct.new "./sub/cm-catalog.wasm//Point" { x: 1, y: 2 })).x == 1) & ($v0_2.y == 2)) == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(203), used: 0 }), 74);
         b = $local_4.repr;
@@ -437,7 +437,7 @@ fn "cm_component_import_default_interface.wado/$cm_export__$test_0"() {
     "wasi/task-return"(0);
 }
 
-fn "cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_string$spec0"(v) with CmCatalog {
+fn "cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-string$spec0"(v) with CmCatalog {
     let $v_packed: i64;
     let $str_len: i32;
     let bytes_8: ref Array<u8>;
@@ -457,7 +457,7 @@ fn "cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_string$
     };
     $v_packed = builtin::i64_extend_i32_u(ptr_9) | 21474836480_i64;
     ptr_9 = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wado-lang:cm-catalog/CmCatalog::id_string"(builtin::i32_wrap_i64($v_packed), builtin::i32_wrap_i64($v_packed >> 32_i64), ptr_9);
+    "wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-string"(builtin::i32_wrap_i64($v_packed), builtin::i32_wrap_i64($v_packed >> 32_i64), ptr_9);
     i_16 = builtin::load_i32(ptr_9);
     bytes_8 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32(ptr_9 + 4)));
     i_25 = 0;
@@ -477,12 +477,12 @@ fn "cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_string$
     return v;
 }
 
-fn "cm_component_import_default_interface.wado/$cm_binding__CmCatalog_id_record$spec0"(v) with CmCatalog {
+fn "cm_component_import_default_interface.wado/$cm_binding__wado-lang:cm-catalog/cm-catalog@0.0.36#id-record$spec0"(v) with CmCatalog {
     let $outptr: i32;
     let $lifted_result_3: f64;
     let $lifted_result_4: f64;
     $outptr = "mem/realloc"(0, 0, 8, 16);
-    "wasi/wado-lang:cm-catalog/CmCatalog::id_record"(1, 2, $outptr);
+    "wasi/$wado-lang:cm-catalog/cm-catalog@0.0.36#id-record"(1, 2, $outptr);
     $lifted_result_3 = builtin::f64_reinterpret_i64(builtin::load_i64($outptr));
     $lifted_result_4 = builtin::f64_reinterpret_i64(builtin::load_i64($outptr + 8));
     v = struct.new "./sub/cm-catalog.wasm//Point" { x: $lifted_result_3, y: $lifted_result_4 };
@@ -1150,7 +1150,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

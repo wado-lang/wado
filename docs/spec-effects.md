@@ -59,6 +59,13 @@ test {
 }
 ```
 
+An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
+`resource`). Inside the interface a type is named by its own name; outside, only
+through the interface, as `Geo::Point`.
+
+> Not yet implemented: a type declared in an interface
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
+
 ### Default Implementations
 
 An `interface` dispatches differently from a trait, but writes its members exactly as a trait does. An operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation. What answers an operation dispatched with no handler installed is in [With No Handler Installed](#with-no-handler-installed).

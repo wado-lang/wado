@@ -4,9 +4,9 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//wasi/wasi:demo/Api::get_thing" = fn() -> i32;  // TypeId(1)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-thing" = fn() -> i32;  // TypeId(1)
 
-type "functype//wasi/wasi:demo/Fields::id" = fn(i32) -> i32;  // TypeId(2)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#[method]thing.id" = fn(i32) -> i32;  // TypeId(2)
 
 type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_export__run" = fn();  // TypeId(3)
 
@@ -14,28 +14,28 @@ type "functype//wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fi
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
-type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Api_get_thing" = fn() -> i32;  // TypeId(6)
+type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-thing" = fn() -> i32;  // TypeId(6)
 
-type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Fields_id" = fn(i32) -> u32;  // TypeId(7)
+type "functype//cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]thing.id" = fn(i32) -> u32;  // TypeId(7)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Api::get_thing from "wasi/wasi:demo/Api::get_thing";
-import fn wasi/wasi:demo/Fields::id from "wasi/wasi:demo/Fields::id";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-thing from "wasi/$wasi:demo/gfx@0.1.0#get-thing";
+import fn wasi/$wasi:demo/gfx@0.1.0#[method]thing.id from "wasi/$wasi:demo/gfx@0.1.0#[method]thing.id";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields from "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Api_get_thing"() with Api {
-    return "wasi/wasi:demo/Api::get_thing"();
+fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-thing"() with Api {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-thing"();
 }
 
-fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Fields_id"(self) with Fields {
-    return "wasi/wasi:demo/Fields::id"(self);
+fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]thing.id"(self) with Fields {
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]thing.id"(self);
 }
 
 fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_export__run"() {
     let t: i32;
-    drop("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Fields_id"(local.tee t("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__Api_get_thing"())));
+    drop("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]thing.id"(local.tee t("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-thing"())));
     if (t == 0) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = t;

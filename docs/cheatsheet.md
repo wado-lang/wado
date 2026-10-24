@@ -80,6 +80,10 @@ let out = Compress::compress(bytes);
 // The default interface, named after its package (`acme:geo/geo`, what a Wado
 // library exports), also offers its functions by bare name, as source does.
 use { area } from "./geo.wasm" with { type: "wasm" };
+
+// Any interface by its full name; the version may go where only one is offered.
+use { "acme:geo/geo@0.1.0" as Geo } from "./geo.wasm" with { type: "wasm" };
+use { "wasi:cli/stdout" as Out } from "wasi:cli";
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
