@@ -249,10 +249,10 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
             }
         }
     }
-    let mut slice_written = |nodes: &mut List<Node>, values: &List<String>| {
+    let mut slice_written = |into: &mut List<Node>, values: &List<String>| {
         for let v of *values {
             if wanted.remove(v) {
-                nodes.push(slice(&v, sliced_name(&v)));
+                into.push(slice(&v, sliced_name(&v)));
             }
         }
     };
