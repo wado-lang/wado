@@ -47,21 +47,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
-=======
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
-=======
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//assert_eval_order_place_before_write.wado/$cm_export__run" = fn();  // TypeId(15)
 
@@ -103,13 +91,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-<<<<<<< HEAD
-type "functype//assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
-||||||| ed92649a8
-type "functype//assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
-=======
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(35)
->>>>>>> origin/main
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
@@ -123,7 +105,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
-type "functype//assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(42)
+type "functype//assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(43)
 
@@ -143,18 +125,10 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-<<<<<<< HEAD
-fn "assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
-||||||| ed92649a8
-fn "assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
-=======
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
->>>>>>> origin/main
+fn "assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "assert_eval_order_place_before_write.wado/$cm_export__run"() {
@@ -170,26 +144,10 @@ fn "assert_eval_order_place_before_write.wado/$cm_export__run"() {
         unreachable;
     }
     $v1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-<<<<<<< HEAD
-    $cond = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v1; $v1 = 0; $moved_4);
-    $v1 = $cond;
-    $cond = 0;
-    $cond = $v1;
-    $v1 = 0;
-||||||| ed92649a8
-    $cond = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $v1; $v1 = 0; $moved_4);
-    $v1 = $cond;
-    $cond = 0;
-    $cond = $v1;
-    $v1 = 0;
-=======
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "assert_eval_order_place_before_write.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $v1; $v1 = 0; $moved_4);
+    $moved_4 = "assert_eval_order_place_before_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v1; $v1 = 0; $moved_4);
     $v1 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
->>>>>>> origin/main
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("the condition was reordered");
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($v1, $mv_field_2, 27);

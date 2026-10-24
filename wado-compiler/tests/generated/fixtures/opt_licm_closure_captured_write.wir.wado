@@ -49,23 +49,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//opt_licm_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//opt_licm_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//opt_licm_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//opt_licm_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -184,23 +170,6 @@ fn "opt_licm_closure_captured_write.wado/run"() with Stdout {
     }
     $licm_value_21 = $local_5.used;
     $local_5.used = i_4;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $licm_value_21, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $licm_value_21 = builtin::i32_wrap_i64(x >> 32_i64);
-    i_4 = "opt_licm_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_4 = sum; sum = 0; i_4);
-    sum = $licm_value_21;
-    $licm_value_21 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($licm_value_21 = sum; sum = 0; $licm_value_21, $local_5.repr, $local_5.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $licm_value_21, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $licm_value_21 = builtin::i32_wrap_i64(x >> 32_i64);
-    i_4 = "opt_licm_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream"(i_4 = sum; sum = 0; i_4);
-    sum = $licm_value_21;
-    $licm_value_21 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($licm_value_21 = sum; sum = 0; $licm_value_21, $local_5.repr, $local_5.used);
-=======
     arr = $local_5.repr;
     sum = $licm_value_21 + sum;
     b24: block {
@@ -220,11 +189,10 @@ fn "opt_licm_closure_captured_write.wado/run"() with Stdout {
     }
     $licm_value_21 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64(x >> 32_i64);
-    i_4 = "opt_licm_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream"(i_4 = $licm_value_21; $licm_value_21 = 0; i_4);
+    i_4 = "opt_licm_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_4 = $licm_value_21; $licm_value_21 = 0; i_4);
     $licm_value_21 = sum;
     sum = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($licm_value_21, $local_5.repr, $local_5.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($licm_value_21 = i_4; i_4 = 0; $licm_value_21);
 }
 

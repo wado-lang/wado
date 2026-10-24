@@ -50,27 +50,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//opt_licm_aliased_mut_ref_params.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//opt_licm_aliased_mut_ref_params.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//opt_licm_aliased_mut_ref_params.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-||||||| ed92649a8
-type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//opt_licm_aliased_mut_ref_params.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -112,47 +94,7 @@ fn "opt_licm_aliased_mut_ref_params.wado/$cm_export__run"() {
     let $local_2: ref "core:prelude/string.wado//String";
     let is_negative_12: bool;
     let x: i64;
-<<<<<<< HEAD
-    let $moved_4: i32;
-    result = "opt_licm_aliased_mut_ref_params.wado/run_loop"(local.tee n(struct.new "opt_licm_aliased_mut_ref_params.wado//Node" { value: 0, tag: 0 }), n);
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative = result < 0;
-    result = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(result); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, result);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, result);
-    result = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "opt_licm_aliased_mut_ref_params.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = result; result = 0; $moved_4);
-    result = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = result; result = 0; is_negative, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-||||||| ed92649a8
-    let $moved_4: i32;
-    result = "opt_licm_aliased_mut_ref_params.wado/run_loop"(local.tee n(struct.new "opt_licm_aliased_mut_ref_params.wado//Node" { value: 0, tag: 0 }), n);
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative = result < 0;
-    result = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(result); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, result);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, result);
-    result = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "opt_licm_aliased_mut_ref_params.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = result; result = 0; $moved_4);
-    result = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = result; result = 0; is_negative, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-=======
     let arr: ref Array<u8>;
->>>>>>> origin/main
     let q: u64;
     let tens: i32;
     let start_79: i32;
@@ -256,7 +198,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
     is_negative_12 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     result = builtin::i32_wrap_i64(x >> 32_i64);
-    start_79 = "opt_licm_aliased_mut_ref_params.wado/$cm_binding__Stdout_write_via_stream"(start_79 = is_negative_12; is_negative_12 = 0; start_79);
+    start_79 = "opt_licm_aliased_mut_ref_params.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_79 = is_negative_12; is_negative_12 = 0; start_79);
     is_negative_12 = result;
     result = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_12, $local_2.repr, $local_2.used);

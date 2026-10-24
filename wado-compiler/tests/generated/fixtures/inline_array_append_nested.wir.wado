@@ -56,27 +56,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//inline_array_append_nested.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-<<<<<<< HEAD
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-||||||| ed92649a8
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//inline_array_append_nested.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -134,35 +116,6 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, i_7);
     }
     value_9 = $local_1.used;
-<<<<<<< HEAD
-    $local_1.used = i;
-    builtin::array_copy<u8>($local_1.repr, value_9, global:inline_array_append_nested.wado::$const_obj_0, 0, 4);
-    i = local.tee value_9($sroa_c_items_50.used) < 0;
-    value_9 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(value_9); select i64(x < 0_i64, 0_i64 - x, x)));
-    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, i, value_9);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i, x, value_9);
-    value_9 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i = builtin::i32_wrap_i64(x >> 32_i64);
-    used_10 = "inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_10 = value_9; value_9 = 0; used_10);
-    value_9 = i;
-    i = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i = value_9; value_9 = 0; i, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = used_10; used_10 = 0; i);
-||||||| ed92649a8
-    $local_1.used = i;
-    builtin::array_copy<u8>($local_1.repr, value_9, global:inline_array_append_nested.wado::$const_obj_0, 0, 4);
-    i = local.tee value_9($sroa_c_items_50.used) < 0;
-    value_9 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(value_9); select i64(x < 0_i64, 0_i64 - x, x)));
-    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, i, value_9);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i, x, value_9);
-    value_9 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i = builtin::i32_wrap_i64(x >> 32_i64);
-    used_10 = "inline_array_append_nested.wado/$cm_binding__Stdout_write_via_stream"(used_10 = value_9; value_9 = 0; used_10);
-    value_9 = i;
-    i = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i = value_9; value_9 = 0; i, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = used_10; used_10 = 0; i);
-=======
     $local_1.used = i_7;
     builtin::array_copy<u8>(local.tee $load_7($local_1.repr), value_9, global:inline_array_append_nested.wado::$const_obj_0, 0, 4);
     i_7 = local.tee value_9($sroa_c_items_50.used) < 0;
@@ -263,12 +216,11 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
     }
     i_7 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     value_9 = builtin::i32_wrap_i64(x >> 32_i64);
-    used_10 = "inline_array_append_nested.wado/$cm_binding__Stdout_write_via_stream"(used_10 = i_7; i_7 = 0; used_10);
+    used_10 = "inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_10 = i_7; i_7 = 0; used_10);
     i_7 = value_9;
     value_9 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i_7, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_7 = used_10; used_10 = 0; i_7);
->>>>>>> origin/main
 }
 
 fn "inline_array_append_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

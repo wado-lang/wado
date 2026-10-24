@@ -47,23 +47,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//template_string_no_prelude.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//template_string_no_prelude.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//template_string_no_prelude.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//template_string_no_prelude.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -162,23 +148,6 @@ fn "template_string_no_prelude.wado/run"() with Stdout {
         break $inline_count_digits_u64_2: 20;
     };
     start_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"($local_1, start_15, n_0);
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, start_15, x, n_0);
-    n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_15 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used = "template_string_no_prelude.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = n_0; n_0 = 0; new_used);
-    n_0 = start_15;
-    start_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_15 = n_0; n_0 = 0; start_15, $local_1.repr, $local_1.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, start_15, x, n_0);
-    n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_15 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used = "template_string_no_prelude.wado/$cm_binding__Stdout_write_via_stream"(new_used = n_0; n_0 = 0; new_used);
-    n_0 = start_15;
-    start_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_15 = n_0; n_0 = 0; start_15, $local_1.repr, $local_1.used);
-=======
     arr = $local_1.repr;
     n_0 = start_15 + n_0;
     b20: block {
@@ -198,11 +167,10 @@ fn "template_string_no_prelude.wado/run"() with Stdout {
     }
     start_15 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     n_0 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used = "template_string_no_prelude.wado/$cm_binding__Stdout_write_via_stream"(new_used = start_15; start_15 = 0; new_used);
+    new_used = "template_string_no_prelude.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = start_15; start_15 = 0; new_used);
     start_15 = n_0;
     n_0 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_15, $local_1.repr, $local_1.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_15 = new_used; new_used = 0; start_15);
 }
 

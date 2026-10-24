@@ -65,25 +65,11 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//dict_mini.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
-<<<<<<< HEAD
-type "functype//dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(30)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
-||||||| ed92649a8
-type "functype//dict_mini.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(29)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(30)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
-=======
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -165,28 +151,12 @@ fn "dict_mini.wado/run"() with Stdout {
             name_val.used = new_used_43;
             builtin::array_copy<u8>(name_val.repr, start_44, $local_4.repr, 0, n_39);
         };
-<<<<<<< HEAD
-        start_44 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
-        n_39 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-        new_used_43 = "dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_43 = start_44; start_44 = 0; new_used_43);
-        start_44 = n_39;
-        n_39 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"(n_39 = start_44; start_44 = 0; n_39, name_val.repr, name_val.used);
-||||||| ed92649a8
-        start_44 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
-        n_39 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-        new_used_43 = "dict_mini.wado/$cm_binding__Stdout_write_via_stream"(new_used_43 = start_44; start_44 = 0; new_used_43);
-        start_44 = n_39;
-        n_39 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"(n_39 = start_44; start_44 = 0; n_39, name_val.repr, name_val.used);
-=======
         n_39 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
         start_44 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-        new_used_43 = "dict_mini.wado/$cm_binding__Stdout_write_via_stream"(new_used_43 = n_39; n_39 = 0; new_used_43);
+        new_used_43 = "dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_43 = n_39; n_39 = 0; new_used_43);
         n_39 = start_44;
         start_44 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(n_39, name_val.repr, name_val.used);
->>>>>>> origin/main
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_39 = new_used_43; new_used_43 = 0; n_39);
     } else {
     }
@@ -331,29 +301,6 @@ fn "dict_mini.wado/run"() with Stdout {
     }
     new_used_43 = $local_4.used;
     $local_4.used = i_256;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, start_44, $cm_pair_7_177, new_used_43);
-    new_used_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
-    start_44 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-    i_256 = "dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_256 = new_used_43; new_used_43 = 0; i_256);
-    new_used_43 = start_44;
-    start_44 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_44 = new_used_43; new_used_43 = 0; start_44, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_44 = i_256; i_256 = 0; start_44);
-    if ref.is_null(local.tee $match_13($inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___get_spec1_sroa_self_entries_key_repr__9: block -> ref null "core:prelude/string.wado//String" {
-        start_44 = 0;
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, start_44, $cm_pair_7_177, new_used_43);
-    new_used_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
-    start_44 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-    i_256 = "dict_mini.wado/$cm_binding__Stdout_write_via_stream"(i_256 = new_used_43; new_used_43 = 0; i_256);
-    new_used_43 = start_44;
-    start_44 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_44 = new_used_43; new_used_43 = 0; start_44, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_44 = i_256; i_256 = 0; start_44);
-    if ref.is_null(local.tee $match_13($inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___get_spec1_sroa_self_entries_key_repr__9: block -> ref null "core:prelude/string.wado//String" {
-        start_44 = 0;
-=======
     builtin::array_copy<u8>(local.tee a_249($local_4.repr), new_used_43, global:dict_mini.wado::$const_obj_2, 0, 6);
     i_256 = local.tee new_used_43($sroa_dict_entries_169.used) < 0;
     $cm_pair_7_177 = builtin::i64_extend_i32_s(new_used_43);
@@ -453,14 +400,13 @@ fn "dict_mini.wado/run"() with Stdout {
     }
     i_256 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
     new_used_43 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
-    start_44 = "dict_mini.wado/$cm_binding__Stdout_write_via_stream"(start_44 = i_256; i_256 = 0; start_44);
+    start_44 = "dict_mini.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_44 = i_256; i_256 = 0; start_44);
     i_256 = new_used_43;
     new_used_43 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i_256, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_256 = start_44; start_44 = 0; i_256);
     if ref.is_null($inline_dict_mini_wado_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___get_spec1_sroa_self_entries_key_repr__11: block -> ref null "core:prelude/string.wado//String" {
         i_256 = 0;
->>>>>>> origin/main
         a_249 = global:dict_mini.wado::$const_obj_1;
         start_44 = $sroa_dict_entries_169.used;
         $licm_repr_30_260 = $sroa_dict_entries_169.repr;

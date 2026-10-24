@@ -56,29 +56,11 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -114,29 +96,6 @@ fn "contract_trait_effect_hole.wado/run"() with Stdout {
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($contract_arg_1)).env, 1);
         });
     }) < 0;
-<<<<<<< HEAD
-    self_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(self_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    is_negative_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, is_negative_31, self_22);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_31, x_35, self_22);
-    self_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    is_negative_31 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    $moved_4_57 = "contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = self_22; self_22 = 0; $moved_4_57);
-    self_22 = is_negative_31;
-    is_negative_31 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_31 = self_22; self_22 = 0; is_negative_31, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_31 = $moved_4_57; $moved_4_57 = 0; is_negative_31);
-||||||| ed92649a8
-    self_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(self_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    is_negative_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, is_negative_31, self_22);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_31, x_35, self_22);
-    self_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    is_negative_31 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    $moved_4_57 = "contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream"($moved_4_57 = self_22; self_22 = 0; $moved_4_57);
-    self_22 = is_negative_31;
-    is_negative_31 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_31 = self_22; self_22 = 0; is_negative_31, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_31 = $moved_4_57; $moved_4_57 = 0; is_negative_31);
-=======
     x_35 = builtin::i64_extend_i32_s(self_22);
     x_35 = select i64(x_35 < 0_i64, 0_i64 - x_35, x_35);
     self_22 = $inline_count_digits_u64_2: block -> i32 {
@@ -232,35 +191,18 @@ fn "contract_trait_effect_hole.wado/run"() with Stdout {
     if self_22 > is_negative_31 {
         builtin::array_set_u8(arr, is_negative_31, (48 + builtin::i32_wrap_i64(x_35 %u 10_i64)) & 255);
     }
->>>>>>> origin/main
     is_negative_31 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-<<<<<<< HEAD
-    $moved_4_57 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    self_22 = "contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_22 = is_negative_31; is_negative_31 = 0; self_22);
-    is_negative_31 = $moved_4_57;
-    $moved_4_57 = 0;
-    $moved_4_57 = is_negative_31;
-    is_negative_31 = 0;
-||||||| ed92649a8
-    $moved_4_57 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    self_22 = "contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream"(self_22 = is_negative_31; is_negative_31 = 0; self_22);
-    is_negative_31 = $moved_4_57;
-    $moved_4_57 = 0;
-    $moved_4_57 = is_negative_31;
-    is_negative_31 = 0;
-=======
     self_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    start_129 = "contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream"(start_129 = is_negative_31; is_negative_31 = 0; start_129);
+    start_129 = "contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_129 = is_negative_31; is_negative_31 = 0; start_129);
     is_negative_31 = self_22;
     self_22 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_31, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_31 = start_129; start_129 = 0; is_negative_31);
     is_negative_31 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
     start_129 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    self_22 = "contract_trait_effect_hole.wado/$cm_binding__Stdout_write_via_stream"(self_22 = is_negative_31; is_negative_31 = 0; self_22);
+    self_22 = "contract_trait_effect_hole.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_22 = is_negative_31; is_negative_31 = 0; self_22);
     is_negative_31 = start_129;
     start_129 = 0;
->>>>>>> origin/main
     $local_0 = global:contract_trait_effect_hole.wado::$const_obj_0;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"(is_negative_31, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_31 = self_22; self_22 = 0; is_negative_31);

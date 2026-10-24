@@ -76,21 +76,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
-=======
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
-=======
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 type "functype//try_operator.wado/test_try_op_chained" = fn();  // TypeId(21)
 
@@ -156,13 +144,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(52)
 
-<<<<<<< HEAD
-type "functype//try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(51)
-||||||| ed92649a8
-type "functype//try_operator.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(51)
-=======
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(53)
->>>>>>> origin/main
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(54)
 
@@ -200,7 +182,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(70)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
 
-type "functype//try_operator.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(72)
+type "functype//try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(72)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(73)
 
@@ -650,41 +632,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
     cold_path;
     i_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
     $moved_4_215 = builtin::i32_wrap_i64($cm_pair_7_218 >> 32_i64);
-<<<<<<< HEAD
-    i_73 = "try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_73 = a_end_68; a_end_68 = 0; i_73);
-    a_end_68 = $moved_4_215;
-    $moved_4_215 = 0;
-    $moved_4_215 = a_end_68;
-    a_end_68 = 0;
-    b_69 = array.new_data<u8>("result basic ok");
-    "core:rt/write_string_to_stream$spec3$dae[add_newline]"($moved_4_215, b_69, 15);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
-    cold_path;
-    "core:cli/println$spec4"(local.tee b_69(array.new_data<u8>("result from ok")), 14);
-    $moved_4_215 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
-    i_73 = builtin::i32_wrap_i64($cm_pair_7_218 >> 32_i64);
-    a_end_68 = "try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_end_68 = $moved_4_215; $moved_4_215 = 0; a_end_68);
-    $moved_4_215 = i_73;
-    i_73 = 0;
-||||||| ed92649a8
-    i_73 = "try_operator.wado/$cm_binding__Stdout_write_via_stream"(i_73 = a_end_68; a_end_68 = 0; i_73);
-    a_end_68 = $moved_4_215;
-    $moved_4_215 = 0;
-    $moved_4_215 = a_end_68;
-    a_end_68 = 0;
-    b_69 = array.new_data<u8>("result basic ok");
-    "core:rt/write_string_to_stream$spec3$dae[add_newline]"($moved_4_215, b_69, 15);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
-    cold_path;
-    "core:cli/println$spec4"(local.tee b_69(array.new_data<u8>("result from ok")), 14);
-    $moved_4_215 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
-    i_73 = builtin::i32_wrap_i64($cm_pair_7_218 >> 32_i64);
-    a_end_68 = "try_operator.wado/$cm_binding__Stdout_write_via_stream"(a_end_68 = $moved_4_215; $moved_4_215 = 0; a_end_68);
-    $moved_4_215 = i_73;
-    i_73 = 0;
-=======
-    a_end_68 = "try_operator.wado/$cm_binding__Stdout_write_via_stream"(a_end_68 = i_73; i_73 = 0; a_end_68);
->>>>>>> origin/main
+    a_end_68 = "try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_end_68 = i_73; i_73 = 0; a_end_68);
     i_73 = $moved_4_215;
     $moved_4_215 = 0;
     b_69 = array.new_data<u8>("result basic ok");
@@ -694,7 +642,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
     "core:cli/println$spec4"(array.new_data<u8>("result from ok"), 14);
     i_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_218("wasi/stream-new"()));
     a_end_68 = builtin::i32_wrap_i64($cm_pair_7_218 >> 32_i64);
-    $moved_4_215 = "try_operator.wado/$cm_binding__Stdout_write_via_stream"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
+    $moved_4_215 = "try_operator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_215 = i_73; i_73 = 0; $moved_4_215);
     i_73 = a_end_68;
     a_end_68 = 0;
     b_69 = array.new_data<u8>("unit result ok");

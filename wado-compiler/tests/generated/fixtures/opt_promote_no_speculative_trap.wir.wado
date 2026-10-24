@@ -47,19 +47,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//opt_promote_no_speculative_trap.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//opt_promote_no_speculative_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//opt_promote_no_speculative_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-||||||| ed92649a8
-type "functype//opt_promote_no_speculative_trap.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -88,33 +78,6 @@ fn "opt_promote_no_speculative_trap.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_99, new_used_183);
     }
-<<<<<<< HEAD
-    start_59 = $local_32.used;
-    $local_32.used = offset_45;
-    builtin::array_copy<u8>($local_32.repr, start_59, global:opt_promote_no_speculative_trap.wado::$const_obj_0, 0, 1);
-    start_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_99($local_32), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_99.repr, start_59, 0_i64, 1);
-    start_59 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    offset_45 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_promote_no_speculative_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_59; start_59 = 0; $moved_4);
-    start_59 = offset_45;
-    offset_45 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_45 = start_59; start_59 = 0; offset_45, $local_32.repr, $local_32.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_45 = $moved_4; $moved_4 = 0; offset_45);
-||||||| ed92649a8
-    start_59 = $local_32.used;
-    $local_32.used = offset_45;
-    builtin::array_copy<u8>($local_32.repr, start_59, global:opt_promote_no_speculative_trap.wado::$const_obj_0, 0, 1);
-    start_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_99($local_32), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_99.repr, start_59, 0_i64, 1);
-    start_59 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    offset_45 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_promote_no_speculative_trap.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_59; start_59 = 0; $moved_4);
-    start_59 = offset_45;
-    offset_45 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_45 = start_59; start_59 = 0; offset_45, $local_32.repr, $local_32.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_45 = $moved_4; $moved_4 = 0; offset_45);
-=======
     start_184 = $sroa_$f_buf_99.used;
     $sroa_$f_buf_99.used = new_used_183;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_99.repr, start_184, 0_i64, 1);
@@ -134,12 +97,11 @@ fn "opt_promote_no_speculative_trap.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_99.repr, start_184, 0_i64, 1);
     start_184 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     new_used_183 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_promote_no_speculative_trap.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_184; start_184 = 0; $moved_4);
+    $moved_4 = "opt_promote_no_speculative_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_184; start_184 = 0; $moved_4);
     start_184 = new_used_183;
     new_used_183 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_184, $local_32.repr, $local_32.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_184 = $moved_4; $moved_4 = 0; start_184);
->>>>>>> origin/main
 }
 
 fn "opt_promote_no_speculative_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

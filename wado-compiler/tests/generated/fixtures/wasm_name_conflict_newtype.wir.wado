@@ -106,29 +106,11 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//wasm_name_conflict_newtype.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasm_name_conflict_newtype.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
-
-type "functype//wasm_name_conflict_newtype.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(47)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(48)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(49)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
-
-type "functype//wasm_name_conflict_newtype.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(47)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(48)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(49)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(46)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -177,16 +159,8 @@ fn "wasm_name_conflict_newtype.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_21 = $moved_4_58; $moved_4_58 = 0; start_21);
     start_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7_61("wasi/stream-new"()));
     $moved_4_58 = builtin::i32_wrap_i64($cm_pair_7_61 >> 32_i64);
-<<<<<<< HEAD
-    start_21 = "wasm_name_conflict_newtype.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_21 = new_used_20; new_used_20 = 0; start_21);
-    new_used_20 = $moved_4_58;
-||||||| ed92649a8
-    start_21 = "wasm_name_conflict_newtype.wado/$cm_binding__Stdout_write_via_stream"(start_21 = new_used_20; new_used_20 = 0; start_21);
-    new_used_20 = $moved_4_58;
-=======
-    new_used_20 = "wasm_name_conflict_newtype.wado/$cm_binding__Stdout_write_via_stream"(new_used_20 = start_21; start_21 = 0; new_used_20);
+    new_used_20 = "wasm_name_conflict_newtype.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_20 = start_21; start_21 = 0; new_used_20);
     start_21 = $moved_4_58;
->>>>>>> origin/main
     $moved_4_58 = 0;
     $local_4 = global:wasm_name_conflict_newtype.wado::$const_obj_8;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"(start_21, $local_4.repr, $local_4.used);

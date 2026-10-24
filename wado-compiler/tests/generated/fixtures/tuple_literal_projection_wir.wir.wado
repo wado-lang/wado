@@ -50,25 +50,11 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-||||||| ed92649a8
-type "functype//tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-=======
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -174,31 +160,6 @@ fn "tuple_literal_projection_wir.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_137);
     }
     is_negative_11 = $local_1_1.used;
-<<<<<<< HEAD
-    $local_1_1.used = start_127;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_11, x, n_0);
-    n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_11 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_127 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_127 = n_0; n_0 = 0; start_127);
-    n_0 = is_negative_11;
-    is_negative_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11 = n_0; n_0 = 0; is_negative_11, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_127; start_127 = 0; is_negative_11);
-    $local_1_1 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 112, 116), used: 4 }, 1: is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())); start_127 = builtin::i32_wrap_i64(x >> 32_i64); n_0 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0 = is_negative_11; is_negative_11 = 0; n_0); is_negative_11 = start_127; start_127 = 0; start_127 = is_negative_11; is_negative_11 = 0; $local_1_1 = global:tuple_literal_projection_wir.wado::$const_obj_1; "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_127, $local_1_1.repr, $local_1_1.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_127 = n_0; n_0 = 0; start_127); struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } }.0;
-    start_127 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-||||||| ed92649a8
-    $local_1_1.used = start_127;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_11, x, n_0);
-    n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_11 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_127 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(start_127 = n_0; n_0 = 0; start_127);
-    n_0 = is_negative_11;
-    is_negative_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11 = n_0; n_0 = 0; is_negative_11, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_127; start_127 = 0; is_negative_11);
-    $local_1_1 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 112, 116), used: 4 }, 1: is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())); start_127 = builtin::i32_wrap_i64(x >> 32_i64); n_0 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(n_0 = is_negative_11; is_negative_11 = 0; n_0); is_negative_11 = start_127; start_127 = 0; start_127 = is_negative_11; is_negative_11 = 0; $local_1_1 = global:tuple_literal_projection_wir.wado::$const_obj_1; "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_127, $local_1_1.repr, $local_1_1.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_127 = n_0; n_0 = 0; start_127); struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } }.0;
-    start_127 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-=======
     $local_1_1.used = start_137;
     arr = $local_1_1.repr;
     n_0 = is_negative_11 + n_0;
@@ -218,25 +179,16 @@ fn "tuple_literal_projection_wir.wado/run"() with Stdout {
         builtin::array_set_u8(arr, is_negative_11, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
     }
     is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
->>>>>>> origin/main
     n_0 = builtin::i32_wrap_i64(x >> 32_i64);
-<<<<<<< HEAD
-    is_negative_11 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_11 = start_127; start_127 = 0; is_negative_11);
-    start_127 = n_0;
-||||||| ed92649a8
-    is_negative_11 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(is_negative_11 = start_127; start_127 = 0; is_negative_11);
-    start_127 = n_0;
-=======
-    start_137 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(start_137 = is_negative_11; is_negative_11 = 0; start_137);
+    start_137 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_137 = is_negative_11; is_negative_11 = 0; start_137);
     is_negative_11 = n_0;
->>>>>>> origin/main
     n_0 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_137; start_137 = 0; is_negative_11);
-    $local_1_1 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 112, 116), used: 4 }, 1: is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())); start_137 = builtin::i32_wrap_i64(x >> 32_i64); n_0 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(n_0 = is_negative_11; is_negative_11 = 0; n_0); is_negative_11 = start_137; start_137 = 0; $local_1_1 = global:tuple_literal_projection_wir.wado::$const_obj_1; "core:rt/write_string_to_stream$spec0$dae[add_newline]"(is_negative_11, $local_1_1.repr, $local_1_1.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = n_0; n_0 = 0; is_negative_11); struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } }.0;
+    $local_1_1 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 112, 116), used: 4 }, 1: is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())); start_137 = builtin::i32_wrap_i64(x >> 32_i64); n_0 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0 = is_negative_11; is_negative_11 = 0; n_0); is_negative_11 = start_137; start_137 = 0; $local_1_1 = global:tuple_literal_projection_wir.wado::$const_obj_1; "core:rt/write_string_to_stream$spec0$dae[add_newline]"(is_negative_11, $local_1_1.repr, $local_1_1.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = n_0; n_0 = 0; is_negative_11); struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } }.0;
     is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     n_0 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_137 = "tuple_literal_projection_wir.wado/$cm_binding__Stdout_write_via_stream"(start_137 = is_negative_11; is_negative_11 = 0; start_137);
+    start_137 = "tuple_literal_projection_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_137 = is_negative_11; is_negative_11 = 0; start_137);
     is_negative_11 = n_0;
     n_0 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11, $local_1_1.repr, $local_1_1.used);

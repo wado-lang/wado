@@ -90,23 +90,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
-type "functype//array_bounds_elim_panic_block_early_exit.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
-
-type "functype//array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
-
-type "functype//array_bounds_elim_panic_block_early_exit.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(38)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -261,23 +247,6 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
     }
     $sroa_$iter_0_start_39 = $local_3_3.used;
     $local_3_3.used = used;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $sroa_$iter_0_start_39, x, current);
-    current = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_start_39 = builtin::i32_wrap_i64(x >> 32_i64);
-    used = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used = current; current = 0; used);
-    current = $sroa_$iter_0_start_39;
-    $sroa_$iter_0_start_39 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_39 = current; current = 0; $sroa_$iter_0_start_39, $local_3_3.repr, $local_3_3.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $sroa_$iter_0_start_39, x, current);
-    current = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_start_39 = builtin::i32_wrap_i64(x >> 32_i64);
-    used = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__Stdout_write_via_stream"(used = current; current = 0; used);
-    current = $sroa_$iter_0_start_39;
-    $sroa_$iter_0_start_39 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_39 = current; current = 0; $sroa_$iter_0_start_39, $local_3_3.repr, $local_3_3.used);
-=======
     arr = $local_3_3.repr;
     current = $sroa_$iter_0_start_39 + current;
     b29: block {
@@ -297,11 +266,10 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
     }
     $sroa_$iter_0_start_39 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     current = builtin::i32_wrap_i64(x >> 32_i64);
-    used = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__Stdout_write_via_stream"(used = $sroa_$iter_0_start_39; $sroa_$iter_0_start_39 = 0; used);
+    used = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used = $sroa_$iter_0_start_39; $sroa_$iter_0_start_39 = 0; used);
     $sroa_$iter_0_start_39 = current;
     current = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_39, $local_3_3.repr, $local_3_3.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$iter_0_start_39 = used; used = 0; $sroa_$iter_0_start_39);
 }
 

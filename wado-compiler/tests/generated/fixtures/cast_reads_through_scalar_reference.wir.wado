@@ -171,19 +171,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(69)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
 
-type "functype//cast_reads_through_scalar_reference.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(71)
+type "functype//cast_reads_through_scalar_reference.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(71)
 
-<<<<<<< HEAD
-type "functype//cast_reads_through_scalar_reference.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(72)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(73)
-||||||| ed92649a8
-type "functype//cast_reads_through_scalar_reference.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(72)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(73)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(72)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -308,28 +298,12 @@ fn "cast_reads_through_scalar_reference.wado/run"() with Stdout {
     $sroa_$f_buf_293 = $local_5;
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"(struct.new "core:prelude/int128.wado//u128" { low: 5_i64, high: 0_i64 }, $sroa_$f_buf_293, 0);
     $moved_4_245 = builtin::i32_wrap_i64(local.tee $fused_slot_226("wasi/stream-new"()));
-<<<<<<< HEAD
-    start_46 = builtin::i32_wrap_i64($fused_slot_226 >> 32_i64);
-    offset_32 = "cast_reads_through_scalar_reference.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(offset_32 = $moved_4_245; $moved_4_245 = 0; offset_32);
-    $moved_4_245 = start_46;
-    start_46 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_46 = $moved_4_245; $moved_4_245 = 0; start_46, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_46 = offset_32; offset_32 = 0; start_46);
-||||||| ed92649a8
-    start_46 = builtin::i32_wrap_i64($fused_slot_226 >> 32_i64);
-    offset_32 = "cast_reads_through_scalar_reference.wado/$cm_binding__Stdout_write_via_stream"(offset_32 = $moved_4_245; $moved_4_245 = 0; offset_32);
-    $moved_4_245 = start_46;
-    start_46 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_46 = $moved_4_245; $moved_4_245 = 0; start_46, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_46 = offset_32; offset_32 = 0; start_46);
-=======
     offset_32 = builtin::i32_wrap_i64($fused_slot_226 >> 32_i64);
-    start_46 = "cast_reads_through_scalar_reference.wado/$cm_binding__Stdout_write_via_stream"(start_46 = $moved_4_245; $moved_4_245 = 0; start_46);
+    start_46 = "cast_reads_through_scalar_reference.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_46 = $moved_4_245; $moved_4_245 = 0; start_46);
     $moved_4_245 = offset_32;
     offset_32 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_245, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_245 = start_46; start_46 = 0; $moved_4_245);
->>>>>>> origin/main
 }
 
 fn "cast_reads_through_scalar_reference.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

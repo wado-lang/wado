@@ -47,19 +47,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//array_large_literal_dynamic.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//array_large_literal_dynamic.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//array_large_literal_dynamic.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-||||||| ed92649a8
-type "functype//array_large_literal_dynamic.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -181,25 +171,6 @@ fn "array_large_literal_dynamic.wado/run"() with Stdout {
     start_192 = $local_34.used;
     $local_34.used = new_used_191;
     builtin::array_copy<u8>($local_34.repr, start_192, global:array_large_literal_dynamic.wado::$const_obj_0, 0, 7);
-<<<<<<< HEAD
-    start_192 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_445($local_34), 0, 4);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_445.repr, start_192, 9990_i64, 4);
-    start_192 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_191 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "array_large_literal_dynamic.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_192; start_192 = 0; $moved_4);
-    start_192 = new_used_191;
-    new_used_191 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_191 = start_192; start_192 = 0; new_used_191, $local_34.repr, $local_34.used);
-||||||| ed92649a8
-    start_192 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_445($local_34), 0, 4);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_445.repr, start_192, 9990_i64, 4);
-    start_192 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_191 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "array_large_literal_dynamic.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_192; start_192 = 0; $moved_4);
-    start_192 = new_used_191;
-    new_used_191 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_191 = start_192; start_192 = 0; new_used_191, $local_34.repr, $local_34.used);
-=======
     if @unlikely(local.tee start_192(local.tee $sroa_$f_buf_445($local_34).used + 4) > builtin::array_len($sroa_$f_buf_445.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_445, start_192);
@@ -209,11 +180,10 @@ fn "array_large_literal_dynamic.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_445.repr, new_used_191, 9990_i64, 4);
     new_used_191 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     start_192 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "array_large_literal_dynamic.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_191; new_used_191 = 0; $moved_4);
+    $moved_4 = "array_large_literal_dynamic.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_191; new_used_191 = 0; $moved_4);
     new_used_191 = start_192;
     start_192 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_191, $local_34.repr, $local_34.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_191 = $moved_4; $moved_4 = 0; new_used_191);
 }
 

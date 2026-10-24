@@ -85,29 +85,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
-=======
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32, i32);  // TypeId(18)
-||||||| ed92649a8
-type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(18)
-=======
-type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(19)
->>>>>>> origin/main
+type "functype//wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32, i32);  // TypeId(19)
 
-<<<<<<< HEAD
-type "functype//spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(19)
-||||||| ed92649a8
-type "functype//spec_effects_resource.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(19)
-=======
-type "functype//spec_effects_resource.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(20)
->>>>>>> origin/main
+type "functype//spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(20)
 
 type "functype//spec_effects_resource.wado/$cm_export__$test_0" = fn();  // TypeId(21)
 
@@ -224,16 +206,8 @@ fn "spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp
     let arr_16: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 20);
-<<<<<<< HEAD
     "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
-    $result_val = (if local.tee address_family(builtin::load_u8($outptr)) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-||||||| ed92649a8
-    "wasi/wasi:sockets/TcpSocket::create"(address_family, $outptr);
-    $result_val = (if local.tee address_family(builtin::load_u8($outptr)) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-=======
-    "wasi/wasi:sockets/TcpSocket::create"(address_family, $outptr);
     $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
->>>>>>> origin/main
         struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) } };
     } else {
         $local_5 = (if local.tee address_family(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:sockets/types.wado//ErrorCode" {

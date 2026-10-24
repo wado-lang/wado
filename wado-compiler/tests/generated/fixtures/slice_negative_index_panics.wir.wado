@@ -45,21 +45,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
-=======
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
-<<<<<<< HEAD
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
-||||||| ed92649a8
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
-=======
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
->>>>>>> origin/main
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//slice_negative_index_panics.wado/run" = fn();  // TypeId(15)
 
@@ -93,13 +81,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-<<<<<<< HEAD
-type "functype//slice_negative_index_panics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
-||||||| ed92649a8
-type "functype//slice_negative_index_panics.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(29)
-=======
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
->>>>>>> origin/main
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
 
@@ -107,7 +89,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//slice_negative_index_panics.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//slice_negative_index_panics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
@@ -154,29 +136,6 @@ fn "slice_negative_index_panics.wado/run"() with Stdout {
     "slice_negative_index_panics.wado/run$cold0$dae[$contract_arg_3]"($v1_30);
     unreachable;
     is_negative = local.tee $v1_30(builtin::array_get_value<i32>(view.repr, view.start + -1)) < 0;
-<<<<<<< HEAD
-    $v1_30 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($v1_30); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]$spec0$sroa[self.buf]"($local_10, is_negative, $v1_30);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_10.repr, is_negative, x, $v1_30);
-    $v1_30 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "slice_negative_index_panics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v1_30; $v1_30 = 0; $moved_4);
-    $v1_30 = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = $v1_30; $v1_30 = 0; is_negative, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-||||||| ed92649a8
-    $v1_30 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($v1_30); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]$spec0$sroa[self.buf]"($local_10, is_negative, $v1_30);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_10.repr, is_negative, x, $v1_30);
-    $v1_30 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "slice_negative_index_panics.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $v1_30; $v1_30 = 0; $moved_4);
-    $v1_30 = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = $v1_30; $v1_30 = 0; is_negative, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-=======
     x = builtin::i64_extend_i32_s($v1_30);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     $v1_30 = $inline_count_digits_u64_2: block -> i32 {
@@ -259,12 +218,11 @@ fn "slice_negative_index_panics.wado/run"() with Stdout {
     }
     is_negative = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $v1_30 = builtin::i32_wrap_i64(x >> 32_i64);
-    pair = "slice_negative_index_panics.wado/$cm_binding__Stdout_write_via_stream"(pair = is_negative; is_negative = 0; pair);
+    pair = "slice_negative_index_panics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pair = is_negative; is_negative = 0; pair);
     is_negative = $v1_30;
     $v1_30 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative, $local_10.repr, $local_10.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = pair; pair = 0; is_negative);
->>>>>>> origin/main
 }
 
 fn "slice_negative_index_panics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

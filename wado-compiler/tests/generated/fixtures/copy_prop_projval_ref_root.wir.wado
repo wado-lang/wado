@@ -54,27 +54,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//copy_prop_projval_ref_root.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//copy_prop_projval_ref_root.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
-
-type "functype//copy_prop_projval_ref_root.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(25)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
-||||||| ed92649a8
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
-
-type "functype//copy_prop_projval_ref_root.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(25)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -115,67 +97,6 @@ fn "copy_prop_projval_ref_root.wado/$cm_export__run"() {
     let start_79: i32;
     g = struct.new "copy_prop_projval_ref_root.wado//Graph" { a: struct.new "copy_prop_projval_ref_root.wado//Node" { value: 5 }, pad: 0 };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-<<<<<<< HEAD
-    is_negative = local.tee self_6("copy_prop_projval_ref_root.wado/foo"(g, 0)) < 0;
-    self_6 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_6); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, self_6);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, self_6);
-    self_6 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "copy_prop_projval_ref_root.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = self_6; self_6 = 0; $moved_4);
-    self_6 = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = self_6; self_6 = 0; is_negative, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b1: block {
-        l2: loop {
-            break_if b1 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l2;
-||||||| ed92649a8
-    is_negative = local.tee self_6("copy_prop_projval_ref_root.wado/foo"(g, 0)) < 0;
-    self_6 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_6); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, self_6);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, self_6);
-    self_6 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "copy_prop_projval_ref_root.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = self_6; self_6 = 0; $moved_4);
-    self_6 = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = self_6; self_6 = 0; is_negative, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b1: block {
-        l2: loop {
-            break_if b1 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l2;
-=======
     is_negative_12 = local.tee self_6("copy_prop_projval_ref_root.wado/foo"(g, 0)) < 0;
     x = builtin::i64_extend_i32_s(self_6);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -267,7 +188,6 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             self_6 = self_6 - 2;
             x = q;
             continue l24;
->>>>>>> origin/main
         };
     };
     if self_6 > is_negative_12 {
@@ -275,7 +195,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
     is_negative_12 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     self_6 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_79 = "copy_prop_projval_ref_root.wado/$cm_binding__Stdout_write_via_stream"(start_79 = is_negative_12; is_negative_12 = 0; start_79);
+    start_79 = "copy_prop_projval_ref_root.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_79 = is_negative_12; is_negative_12 = 0; start_79);
     is_negative_12 = self_6;
     self_6 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_12, $local_2.repr, $local_2.used);

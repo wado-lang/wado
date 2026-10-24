@@ -79,23 +79,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//effect_handler_continue_cross.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//effect_handler_continue_cross.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -272,23 +258,6 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_19 = $local_2.used;
     $local_2.used = new_used_18;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_19, x, r);
-    r = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_18 = r; r = 0; new_used_18);
-    r = start_19;
-    start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = r; r = 0; start_19, $local_2.repr, $local_2.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_19, x, r);
-    r = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream"(new_used_18 = r; r = 0; new_used_18);
-    r = start_19;
-    start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = r; r = 0; start_19, $local_2.repr, $local_2.used);
-=======
     $load_2 = $local_2.repr;
     r = start_19 + r;
     b30: block {
@@ -308,11 +277,10 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     r = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__Stdout_write_via_stream"(new_used_18 = start_19; start_19 = 0; new_used_18);
+    new_used_18 = "effect_handler_continue_cross.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_18 = start_19; start_19 = 0; new_used_18);
     start_19 = r;
     r = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_19, $local_2.repr, $local_2.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_19 = new_used_18; new_used_18 = 0; start_19);
     global:effect_handler_continue_cross.wado::$effect_effect_handler_continue_cross.wado/Counter = $save_effect_handler_continue_cross.wado/Counter;
 }

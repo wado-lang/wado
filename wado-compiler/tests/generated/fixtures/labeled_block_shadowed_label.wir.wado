@@ -45,23 +45,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//labeled_block_shadowed_label.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//labeled_block_shadowed_label.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
-
-type "functype//labeled_block_shadowed_label.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
-
-type "functype//labeled_block_shadowed_label.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -171,27 +157,6 @@ fn "labeled_block_shadowed_label.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_78);
     }
     is_negative_11 = $local_1.used;
-<<<<<<< HEAD
-    $local_1.used = start_68;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_11, x, acc);
-    acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_11 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_68 = "labeled_block_shadowed_label.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_68 = acc; acc = 0; start_68);
-    acc = is_negative_11;
-    is_negative_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11 = acc; acc = 0; is_negative_11, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_68; start_68 = 0; is_negative_11);
-||||||| ed92649a8
-    $local_1.used = start_68;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_11, x, acc);
-    acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_11 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_68 = "labeled_block_shadowed_label.wado/$cm_binding__Stdout_write_via_stream"(start_68 = acc; acc = 0; start_68);
-    acc = is_negative_11;
-    is_negative_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11 = acc; acc = 0; is_negative_11, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_68; start_68 = 0; is_negative_11);
-=======
     $local_1.used = start_78;
     arr = $local_1.repr;
     acc = is_negative_11 + acc;
@@ -212,12 +177,11 @@ fn "labeled_block_shadowed_label.wado/run"() with Stdout {
     }
     is_negative_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     acc = builtin::i32_wrap_i64(x >> 32_i64);
-    start_78 = "labeled_block_shadowed_label.wado/$cm_binding__Stdout_write_via_stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
+    start_78 = "labeled_block_shadowed_label.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
     is_negative_11 = acc;
     acc = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_78; start_78 = 0; is_negative_11);
->>>>>>> origin/main
 }
 
 fn "labeled_block_shadowed_label.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

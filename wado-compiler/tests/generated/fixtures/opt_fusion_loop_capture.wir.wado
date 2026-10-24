@@ -79,23 +79,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//opt_fusion_loop_capture.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//opt_fusion_loop_capture.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -265,28 +251,12 @@ fn "opt_fusion_loop_capture.wado/run"() with Stdout {
         builtin::array_set_u8(arr, y, (48 + builtin::i32_wrap_i64(x_42 %u 10_i64)) & 255);
     }
     y = builtin::i32_wrap_i64(local.tee x_42("wasi/stream-new"()));
-<<<<<<< HEAD
-    $match_scrut_0 = builtin::i32_wrap_i64(x_42 >> 32_i64);
-    current_26 = "opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(current_26 = y; y = 0; current_26);
-    y = $match_scrut_0;
-    $match_scrut_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($match_scrut_0 = y; y = 0; $match_scrut_0, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($match_scrut_0 = current_26; current_26 = 0; $match_scrut_0);
-||||||| ed92649a8
-    $match_scrut_0 = builtin::i32_wrap_i64(x_42 >> 32_i64);
-    current_26 = "opt_fusion_loop_capture.wado/$cm_binding__Stdout_write_via_stream"(current_26 = y; y = 0; current_26);
-    y = $match_scrut_0;
-    $match_scrut_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($match_scrut_0 = y; y = 0; $match_scrut_0, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($match_scrut_0 = current_26; current_26 = 0; $match_scrut_0);
-=======
     current_26 = builtin::i32_wrap_i64(x_42 >> 32_i64);
-    $sroa_$iter_0_start_56 = "opt_fusion_loop_capture.wado/$cm_binding__Stdout_write_via_stream"($sroa_$iter_0_start_56 = y; y = 0; $sroa_$iter_0_start_56);
+    $sroa_$iter_0_start_56 = "opt_fusion_loop_capture.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_56 = y; y = 0; $sroa_$iter_0_start_56);
     y = current_26;
     current_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(y, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(y = $sroa_$iter_0_start_56; $sroa_$iter_0_start_56 = 0; y);
->>>>>>> origin/main
     if @unlikely(hits != 100) {
         cold_path;
         "opt_fusion_loop_capture.wado/run$cold0"(hits);

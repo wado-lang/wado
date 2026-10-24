@@ -387,16 +387,8 @@ fn "http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(h
     headers = 0;
     headers = trailers;
     trailers = 0;
-<<<<<<< HEAD
     "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
-    $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
-||||||| ed92649a8
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
-    $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
-=======
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
->>>>>>> origin/main
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: $lifted_result_8, 1: $lifted_result_9 };
@@ -423,13 +415,7 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
     path = "http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query"(request);
     $sroa_$pattern_temp_0_0_206 = builtin::i32_wrap_i64(local.tee $cm_pair_183("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_207 = builtin::i32_wrap_i64($cm_pair_183 >> 32_i64);
-<<<<<<< HEAD
-    response = local.tee $local_185("http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"($moved_8 = "http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(); $moved_8, global:http_routing.wado::$const_obj_2, $moved_8 = $sroa_$pattern_temp_0_0_206; $sroa_$pattern_temp_0_0_206 = 0; $moved_8)).0;
-||||||| ed92649a8
-    response = local.tee $local_185("http_routing.wado/$cm_binding__Response_new"($moved_8 = "http_routing.wado/$cm_binding__Fields_new"(); $moved_8, global:http_routing.wado::$const_obj_2, $moved_8 = $sroa_$pattern_temp_0_0_206; $sroa_$pattern_temp_0_0_206 = 0; $moved_8)).0;
-=======
-    response = local.tee $local_185("http_routing.wado/$cm_binding__Response_new"(local.tee $moved_8("http_routing.wado/$cm_binding__Fields_new"()), global:http_routing.wado::$const_obj_2, $moved_8 = $sroa_$pattern_temp_0_0_206; $sroa_$pattern_temp_0_0_206 = 0; $moved_8)).0;
->>>>>>> origin/main
+    response = local.tee $local_185("http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(local.tee $moved_8("http_routing.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:http_routing.wado::$const_obj_2, $moved_8 = $sroa_$pattern_temp_0_0_206; $sroa_$pattern_temp_0_0_206 = 0; $moved_8)).0;
     _tx_future = $local_185.1;
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);

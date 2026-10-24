@@ -91,23 +91,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//opt_fusion_hidden_break.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//opt_fusion_hidden_break.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
-
-type "functype//opt_fusion_hidden_break.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(37)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(38)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
-
-type "functype//opt_fusion_hidden_break.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(37)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(38)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -244,23 +230,6 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
     }
     v_4 = $local_6.used;
     $local_6.used = $mv$r$0;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_6.repr, v_4, x_33, $mv$r$1);
-    $mv$r$1 = builtin::i32_wrap_i64(local.tee x_33("wasi/stream-new"()));
-    v_4 = builtin::i32_wrap_i64(x_33 >> 32_i64);
-    $mv$r$0 = "opt_fusion_hidden_break.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0 = $mv$r$1; $mv$r$1 = 0; $mv$r$0);
-    $mv$r$1 = v_4;
-    v_4 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(v_4 = $mv$r$1; $mv$r$1 = 0; v_4, $local_6.repr, $local_6.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_6.repr, v_4, x_33, $mv$r$1);
-    $mv$r$1 = builtin::i32_wrap_i64(local.tee x_33("wasi/stream-new"()));
-    v_4 = builtin::i32_wrap_i64(x_33 >> 32_i64);
-    $mv$r$0 = "opt_fusion_hidden_break.wado/$cm_binding__Stdout_write_via_stream"($mv$r$0 = $mv$r$1; $mv$r$1 = 0; $mv$r$0);
-    $mv$r$1 = v_4;
-    v_4 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(v_4 = $mv$r$1; $mv$r$1 = 0; v_4, $local_6.repr, $local_6.used);
-=======
     arr = $local_6.repr;
     $mv$r$1 = v_4 + $mv$r$1;
     b27: block {
@@ -280,11 +249,10 @@ fn "opt_fusion_hidden_break.wado/run"() with Stdout {
     }
     v_4 = builtin::i32_wrap_i64(local.tee x_33("wasi/stream-new"()));
     $mv$r$1 = builtin::i32_wrap_i64(x_33 >> 32_i64);
-    $mv$r$0 = "opt_fusion_hidden_break.wado/$cm_binding__Stdout_write_via_stream"($mv$r$0 = v_4; v_4 = 0; $mv$r$0);
+    $mv$r$0 = "opt_fusion_hidden_break.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0 = v_4; v_4 = 0; $mv$r$0);
     v_4 = $mv$r$1;
     $mv$r$1 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(v_4, $local_6.repr, $local_6.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(v_4 = $mv$r$0; $mv$r$0 = 0; v_4);
     if @unlikely(got != 13) {
         cold_path;

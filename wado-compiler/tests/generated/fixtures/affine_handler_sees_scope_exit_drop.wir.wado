@@ -173,23 +173,9 @@ type "functype//wasi/future-drop-writable:s32" = fn(i32);  // TypeId(57)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
 
-type "functype//affine_handler_sees_scope_exit_drop.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(59)
+type "functype//affine_handler_sees_scope_exit_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(59)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(60)
-
-type "functype//affine_handler_sees_scope_exit_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(61)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(62)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(60)
-
-type "functype//affine_handler_sees_scope_exit_drop.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(61)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(62)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(60)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -345,27 +331,6 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_110);
     }
     new_used_25 = $local_4.used;
-<<<<<<< HEAD
-    $local_4.used = start_100;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_25, $cm_pair_5, start_26);
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
-    new_used_25 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    start_100 = "affine_handler_sees_scope_exit_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_100 = start_26; start_26 = 0; start_100);
-    start_26 = new_used_25;
-    new_used_25 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = start_100; start_100 = 0; new_used_25);
-||||||| ed92649a8
-    $local_4.used = start_100;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_25, $cm_pair_5, start_26);
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
-    new_used_25 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    start_100 = "affine_handler_sees_scope_exit_drop.wado/$cm_binding__Stdout_write_via_stream"(start_100 = start_26; start_26 = 0; start_100);
-    start_26 = new_used_25;
-    new_used_25 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = start_100; start_100 = 0; new_used_25);
-=======
     $local_4.used = start_110;
     $load_8 = $local_4.repr;
     start_26 = new_used_25 + start_26;
@@ -386,12 +351,11 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     }
     new_used_25 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
     start_26 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    start_110 = "affine_handler_sees_scope_exit_drop.wado/$cm_binding__Stdout_write_via_stream"(start_110 = new_used_25; new_used_25 = 0; start_110);
+    start_110 = "affine_handler_sees_scope_exit_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_110 = new_used_25; new_used_25 = 0; start_110);
     new_used_25 = start_26;
     start_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = start_110; start_110 = 0; new_used_25);
->>>>>>> origin/main
 }
 
 fn "affine_handler_sees_scope_exit_drop.wado/$effect_dispatch__core:prelude/types.wado/Future<i32>__drop"(self) {

@@ -107,23 +107,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//bug_multi_value_return_block_result.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(43)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//bug_multi_value_return_block_result.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(42)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(43)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -282,27 +268,6 @@ fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_83);
     }
     is_negative_16 = $local_2.used;
-<<<<<<< HEAD
-    $local_2.used = start_73;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_16, x, used_5);
-    used_5 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_16 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_73 = "bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_73 = used_5; used_5 = 0; start_73);
-    used_5 = is_negative_16;
-    is_negative_16 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_16 = used_5; used_5 = 0; is_negative_16, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_16 = start_73; start_73 = 0; is_negative_16);
-||||||| ed92649a8
-    $local_2.used = start_73;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_16, x, used_5);
-    used_5 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_16 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_73 = "bug_multi_value_return_block_result.wado/$cm_binding__Stdout_write_via_stream"(start_73 = used_5; used_5 = 0; start_73);
-    used_5 = is_negative_16;
-    is_negative_16 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_16 = used_5; used_5 = 0; is_negative_16, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_16 = start_73; start_73 = 0; is_negative_16);
-=======
     $local_2.used = start_83;
     arr = $local_2.repr;
     used_5 = is_negative_16 + used_5;
@@ -323,12 +288,11 @@ fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
     }
     is_negative_16 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used_5 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_83 = "bug_multi_value_return_block_result.wado/$cm_binding__Stdout_write_via_stream"(start_83 = is_negative_16; is_negative_16 = 0; start_83);
+    start_83 = "bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_83 = is_negative_16; is_negative_16 = 0; start_83);
     is_negative_16 = used_5;
     used_5 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_16, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_16 = start_83; start_83 = 0; is_negative_16);
->>>>>>> origin/main
 }
 
 fn "bug_multi_value_return_block_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

@@ -126,19 +126,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(54)
+type "functype//tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(54)
 
-<<<<<<< HEAD
-type "functype//tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(55)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(56)
-||||||| ed92649a8
-type "functype//tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(55)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(56)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(55)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -315,43 +305,6 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_214, tens_232);
     }
-<<<<<<< HEAD
-    pair_44 = $tmpl_buf_247.used;
-    $tmpl_buf_247.used = tens_45;
-    builtin::array_copy<u8>($tmpl_buf_247.repr, pair_44, global:tmpl_hoist_fmt_mixed.wado::$const_obj_20, 0, 6);
-    pair_44 = total < 0;
-    total = "core:prelude/primitive.wado/count_digits_u64"(local.tee q_43(q_43 = builtin::i64_extend_i32_s(total); select i64(q_43 < 0_i64, 0_i64 - q_43, q_43)));
-    pair_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_247, pair_44, total);
-    "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_247.repr, pair_44, q_43, total);
-    total = builtin::i32_wrap_i64(local.tee q_43("wasi/stream-new"()));
-    pair_44 = builtin::i32_wrap_i64(q_43 >> 32_i64);
-    tens_45 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tens_45 = total; total = 0; tens_45);
-    total = pair_44;
-    pair_44 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(pair_44 = total; total = 0; pair_44, $tmpl_buf_247.repr, $tmpl_buf_247.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(pair_44 = tens_45; tens_45 = 0; pair_44);
-    pair_44 = 0;
-    tens_45 = 0;
-    $tmpl_buf_247 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-||||||| ed92649a8
-    pair_44 = $tmpl_buf_247.used;
-    $tmpl_buf_247.used = tens_45;
-    builtin::array_copy<u8>($tmpl_buf_247.repr, pair_44, global:tmpl_hoist_fmt_mixed.wado::$const_obj_20, 0, 6);
-    pair_44 = total < 0;
-    total = "core:prelude/primitive.wado/count_digits_u64"(local.tee q_43(q_43 = builtin::i64_extend_i32_s(total); select i64(q_43 < 0_i64, 0_i64 - q_43, q_43)));
-    pair_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_247, pair_44, total);
-    "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_247.repr, pair_44, q_43, total);
-    total = builtin::i32_wrap_i64(local.tee q_43("wasi/stream-new"()));
-    pair_44 = builtin::i32_wrap_i64(q_43 >> 32_i64);
-    tens_45 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(tens_45 = total; total = 0; tens_45);
-    total = pair_44;
-    pair_44 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(pair_44 = total; total = 0; pair_44, $tmpl_buf_247.repr, $tmpl_buf_247.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(pair_44 = tens_45; tens_45 = 0; pair_44);
-    pair_44 = 0;
-    tens_45 = 0;
-    $tmpl_buf_247 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-=======
     pair_231 = $tmpl_buf_214.used;
     $tmpl_buf_214.used = tens_232;
     builtin::array_copy<u8>($tmpl_buf_214.repr, pair_231, global:tmpl_hoist_fmt_mixed.wado::$const_obj_14, 0, 6);
@@ -361,7 +314,7 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_214.repr, pair_231, q_230, total);
     total = builtin::i32_wrap_i64(local.tee q_230("wasi/stream-new"()));
     pair_231 = builtin::i32_wrap_i64(q_230 >> 32_i64);
-    tens_232 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(tens_232 = total; total = 0; tens_232);
+    tens_232 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tens_232 = total; total = 0; tens_232);
     total = pair_231;
     pair_231 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(total, $tmpl_buf_214.repr, $tmpl_buf_214.used);
@@ -369,7 +322,6 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     total = 0;
     tens_232 = 0;
     $tmpl_buf_214 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
->>>>>>> origin/main
     b29: block {
         l30: loop {
             break_if b29 tens_232 >= 5;
@@ -400,31 +352,6 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_214, tens_232);
     }
-<<<<<<< HEAD
-    start_598 = $tmpl_buf_247.used;
-    $tmpl_buf_247.used = tens_45;
-    builtin::array_copy<u8>($tmpl_buf_247.repr, start_598, global:tmpl_hoist_fmt_mixed.wado::$const_obj_18, 0, 7);
-    start_598 = pair_44 < 0;
-    pair_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q_43(q_43 = builtin::i64_extend_i32_s(pair_44); select i64(q_43 < 0_i64, 0_i64 - q_43, q_43)));
-    start_598 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_247, start_598, pair_44);
-    "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_247.repr, start_598, q_43, pair_44);
-    pair_44 = builtin::i32_wrap_i64(local.tee q_43("wasi/stream-new"()));
-    start_598 = builtin::i32_wrap_i64(q_43 >> 32_i64);
-    tens_45 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tens_45 = pair_44; pair_44 = 0; tens_45);
-    pair_44 = start_598;
-||||||| ed92649a8
-    start_598 = $tmpl_buf_247.used;
-    $tmpl_buf_247.used = tens_45;
-    builtin::array_copy<u8>($tmpl_buf_247.repr, start_598, global:tmpl_hoist_fmt_mixed.wado::$const_obj_18, 0, 7);
-    start_598 = pair_44 < 0;
-    pair_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q_43(q_43 = builtin::i64_extend_i32_s(pair_44); select i64(q_43 < 0_i64, 0_i64 - q_43, q_43)));
-    start_598 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_247, start_598, pair_44);
-    "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_247.repr, start_598, q_43, pair_44);
-    pair_44 = builtin::i32_wrap_i64(local.tee q_43("wasi/stream-new"()));
-    start_598 = builtin::i32_wrap_i64(q_43 >> 32_i64);
-    tens_45 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(tens_45 = pair_44; pair_44 = 0; tens_45);
-    pair_44 = start_598;
-=======
     start_598 = $tmpl_buf_214.used;
     $tmpl_buf_214.used = tens_232;
     builtin::array_copy<u8>($tmpl_buf_214.repr, start_598, global:tmpl_hoist_fmt_mixed.wado::$const_obj_12, 0, 7);
@@ -434,9 +361,8 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_214.repr, start_598, q_230, total);
     total = builtin::i32_wrap_i64(local.tee q_230("wasi/stream-new"()));
     start_598 = builtin::i32_wrap_i64(q_230 >> 32_i64);
-    tens_232 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(tens_232 = total; total = 0; tens_232);
+    tens_232 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tens_232 = total; total = 0; tens_232);
     total = start_598;
->>>>>>> origin/main
     start_598 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(total, $tmpl_buf_214.repr, $tmpl_buf_214.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(total = tens_232; tens_232 = 0; total);
@@ -606,16 +532,8 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_214.repr, digit_count_33, x_35, total);
     total = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
     digit_count_33 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-<<<<<<< HEAD
-    start_653 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_653 = start_598; start_598 = 0; start_653);
-    start_598 = digit_count_33;
-||||||| ed92649a8
-    start_653 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(start_653 = start_598; start_598 = 0; start_653);
-    start_598 = digit_count_33;
-=======
-    start_653 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__Stdout_write_via_stream"(start_653 = total; total = 0; start_653);
+    start_653 = "tmpl_hoist_fmt_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_653 = total; total = 0; start_653);
     total = digit_count_33;
->>>>>>> origin/main
     digit_count_33 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(total, $tmpl_buf_214.repr, $tmpl_buf_214.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(total = start_653; start_653 = 0; total);

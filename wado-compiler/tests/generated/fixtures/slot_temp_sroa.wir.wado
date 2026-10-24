@@ -98,23 +98,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//slot_temp_sroa.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//slot_temp_sroa.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//slot_temp_sroa.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(43)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//slot_temp_sroa.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(42)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(43)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -293,23 +279,6 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
     }
     $mv$$match_7$1 = e.used;
     e.used = $mv$$match_7$0;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"(e.repr, $mv$$match_7$1, x, used);
-    used = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $mv$$match_7$1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $mv$$match_7$0 = "slot_temp_sroa.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$$match_7$0 = used; used = 0; $mv$$match_7$0);
-    used = $mv$$match_7$1;
-    $mv$$match_7$1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$match_7$1 = used; used = 0; $mv$$match_7$1, e.repr, e.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"(e.repr, $mv$$match_7$1, x, used);
-    used = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $mv$$match_7$1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $mv$$match_7$0 = "slot_temp_sroa.wado/$cm_binding__Stdout_write_via_stream"($mv$$match_7$0 = used; used = 0; $mv$$match_7$0);
-    used = $mv$$match_7$1;
-    $mv$$match_7$1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$match_7$1 = used; used = 0; $mv$$match_7$1, e.repr, e.used);
-=======
     arr = e.repr;
     used = $mv$$match_7$1 + used;
     b33: block {
@@ -329,11 +298,10 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
     }
     $mv$$match_7$1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used = builtin::i32_wrap_i64(x >> 32_i64);
-    $mv$$match_7$0 = "slot_temp_sroa.wado/$cm_binding__Stdout_write_via_stream"($mv$$match_7$0 = $mv$$match_7$1; $mv$$match_7$1 = 0; $mv$$match_7$0);
+    $mv$$match_7$0 = "slot_temp_sroa.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$$match_7$0 = $mv$$match_7$1; $mv$$match_7$1 = 0; $mv$$match_7$0);
     $mv$$match_7$1 = used;
     used = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($mv$$match_7$1, e.repr, e.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$$match_7$1 = $mv$$match_7$0; $mv$$match_7$0 = 0; $mv$$match_7$1);
 }
 

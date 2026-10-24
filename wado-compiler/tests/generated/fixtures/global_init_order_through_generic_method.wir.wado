@@ -67,27 +67,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//global_init_order_through_generic_method.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
-<<<<<<< HEAD
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
-
-type "functype//global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
-||||||| ed92649a8
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
-
-type "functype//global_init_order_through_generic_method.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(30)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -130,31 +112,6 @@ fn "global_init_order_through_generic_method.wado/$cm_export__run"() {
         "global_init_order_through_generic_method.wado/$initialize_modules$cold0"();
     };
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-<<<<<<< HEAD
-    is_negative = local.tee self_4(global:global_init_order_through_generic_method.wado::HOLD.k) < 0_i64;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee self_4(select i64(self_4 < 0_i64, 0_i64 - self_4, self_4)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, is_negative, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative, self_4, digit_count);
-    digit_count = builtin::i32_wrap_i64(local.tee self_4("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(self_4 >> 32_i64);
-    $moved_4 = "global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = digit_count; digit_count = 0; $moved_4);
-    digit_count = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = digit_count; digit_count = 0; is_negative, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-||||||| ed92649a8
-    is_negative = local.tee self_4(global:global_init_order_through_generic_method.wado::HOLD.k) < 0_i64;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee self_4(select i64(self_4 < 0_i64, 0_i64 - self_4, self_4)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, is_negative, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative, self_4, digit_count);
-    digit_count = builtin::i32_wrap_i64(local.tee self_4("wasi/stream-new"()));
-    is_negative = builtin::i32_wrap_i64(self_4 >> 32_i64);
-    $moved_4 = "global_init_order_through_generic_method.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = digit_count; digit_count = 0; $moved_4);
-    digit_count = is_negative;
-    is_negative = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative = digit_count; digit_count = 0; is_negative, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative = $moved_4; $moved_4 = 0; is_negative);
-=======
     is_negative_11 = local.tee self_4(global:global_init_order_through_generic_method.wado::HOLD.k) < 0_i64;
     self_4 = select i64(self_4 < 0_i64, 0_i64 - self_4, self_4);
     digit_count_13 = $inline_count_digits_u64_1: block -> i32 {
@@ -252,12 +209,11 @@ fn "global_init_order_through_generic_method.wado/$cm_export__run"() {
     }
     is_negative_11 = builtin::i32_wrap_i64(local.tee self_4("wasi/stream-new"()));
     digit_count_13 = builtin::i32_wrap_i64(self_4 >> 32_i64);
-    start_78 = "global_init_order_through_generic_method.wado/$cm_binding__Stdout_write_via_stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
+    start_78 = "global_init_order_through_generic_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
     is_negative_11 = digit_count_13;
     digit_count_13 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_11 = start_78; start_78 = 0; is_negative_11);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

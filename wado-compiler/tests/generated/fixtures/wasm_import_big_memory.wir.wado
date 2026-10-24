@@ -49,23 +49,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//wasm_import_big_memory.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasm_import_big_memory.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
->>>>>>> origin/main
 
 import fn wasm:./sub/wasm_import_big_memory.wat/high_load from "wasm:./sub/wasm_import_big_memory.wat/high_load";
 import fn wasm:./sub/wasm_import_big_memory.wat/high_store from "wasm:./sub/wasm_import_big_memory.wat/high_store";
@@ -180,27 +166,6 @@ fn "wasm_import_big_memory.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_92);
     }
     new_used_13 = $local_0.used;
-<<<<<<< HEAD
-    $local_0.used = start_82;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, new_used_13, x, start_14);
-    start_14 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    new_used_13 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_82 = "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_82 = start_14; start_14 = 0; start_82);
-    start_14 = new_used_13;
-    new_used_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_13 = start_14; start_14 = 0; new_used_13, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_13 = start_82; start_82 = 0; new_used_13);
-||||||| ed92649a8
-    $local_0.used = start_82;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, new_used_13, x, start_14);
-    start_14 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    new_used_13 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_82 = "wasm_import_big_memory.wado/$cm_binding__Stdout_write_via_stream"(start_82 = start_14; start_14 = 0; start_82);
-    start_14 = new_used_13;
-    new_used_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_13 = start_14; start_14 = 0; new_used_13, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_13 = start_82; start_82 = 0; new_used_13);
-=======
     $local_0.used = start_92;
     arr = $local_0.repr;
     start_14 = new_used_13 + start_14;
@@ -221,12 +186,11 @@ fn "wasm_import_big_memory.wado/run"() with Stdout {
     }
     new_used_13 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     start_14 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_92 = "wasm_import_big_memory.wado/$cm_binding__Stdout_write_via_stream"(start_92 = new_used_13; new_used_13 = 0; start_92);
+    start_92 = "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_92 = new_used_13; new_used_13 = 0; start_92);
     new_used_13 = start_14;
     start_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_13, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_13 = start_92; start_92 = 0; new_used_13);
->>>>>>> origin/main
 }
 
 fn "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

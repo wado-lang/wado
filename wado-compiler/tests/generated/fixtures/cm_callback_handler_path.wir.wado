@@ -209,19 +209,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(75)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(76)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(77)
+type "functype//cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(77)
 
-<<<<<<< HEAD
-type "functype//cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(78)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(79)
-||||||| ed92649a8
-type "functype//cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(78)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(79)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(78)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -297,12 +287,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
             call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($local_3_21.op_listen)).env, $local_2_17, listener);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_20;
         } else {
-<<<<<<< HEAD
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen"($local_2_17, "core:rt/cm_callback_key"(listener));
-||||||| ed92649a8
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__Target_listen"($local_2_17, "core:rt/cm_callback_key"(listener));
-=======
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__Target_listen"($local_2_17, $inline_cm_callback_key_0: block -> u32 {
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen"($local_2_17, $inline_cm_callback_key_0: block -> u32 {
                 i = 0;
                 b3: block {
                     l4: loop {
@@ -329,7 +314,6 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
                 self_57.used = i + 1;
                 break $inline_cm_callback_key_0: global:core:rt::CM_CALLBACKS.used - 1;
             });
->>>>>>> origin/main
         }
     };
     $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: block {
@@ -357,31 +341,13 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_4.repr, 0, global:cm_callback_handler_path.wado::$const_obj_0, 0, 5);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(seen.repr, seen.used, $local_5, 256);
-<<<<<<< HEAD
-    $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $local_2_17("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($local_2_17 >> 32_i64);
-    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-||||||| ed92649a8
-    $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $local_2_17("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($local_2_17 >> 32_i64);
-    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-=======
     i = builtin::i32_wrap_i64(local.tee $local_2_17("wasi/stream-new"()));
     $v1_52 = builtin::i32_wrap_i64($local_2_17 >> 32_i64);
-    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i; i = 0; $moved_4);
+    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i; i = 0; $moved_4);
     i = $v1_52;
     $v1_52 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = $moved_4; $moved_4 = 0; i);
->>>>>>> origin/main
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__example:demo/global#target"() with Demo {

@@ -45,23 +45,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//match_char_range_switch.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
-
-type "functype//match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
-
-type "functype//match_char_range_switch.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -234,23 +220,6 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     }
     b3 = $local_4.used;
     $local_4.used = b2_42;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, b3, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    b3 = builtin::i32_wrap_i64(x >> 32_i64);
-    b2_42 = "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(b2_42 = sum; sum = 0; b2_42);
-    sum = b3;
-    b3 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(b3 = sum; sum = 0; b3, $local_4.repr, $local_4.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, b3, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    b3 = builtin::i32_wrap_i64(x >> 32_i64);
-    b2_42 = "match_char_range_switch.wado/$cm_binding__Stdout_write_via_stream"(b2_42 = sum; sum = 0; b2_42);
-    sum = b3;
-    b3 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(b3 = sum; sum = 0; b3, $local_4.repr, $local_4.used);
-=======
     $sroa_$iter_0_repr_85 = $local_4.repr;
     sum = b3 + sum;
     b33: block {
@@ -270,11 +239,10 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     }
     b3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64(x >> 32_i64);
-    b2_42 = "match_char_range_switch.wado/$cm_binding__Stdout_write_via_stream"(b2_42 = b3; b3 = 0; b2_42);
+    b2_42 = "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(b2_42 = b3; b3 = 0; b2_42);
     b3 = sum;
     sum = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(b3, $local_4.repr, $local_4.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(b3 = b2_42; b2_42 = 0; b3);
 }
 

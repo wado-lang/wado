@@ -52,23 +52,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//hfs_match_guarded_arm.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//hfs_match_guarded_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//hfs_match_guarded_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//hfs_match_guarded_arm.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -194,29 +180,6 @@ fn "hfs_match_guarded_arm.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_80);
     }
-<<<<<<< HEAD
-    $hfs_v_431 = $local_2.used;
-    $local_2.used = i_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, $hfs_v_431, x, $match_scrut_0);
-    $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_v_431 = builtin::i32_wrap_i64(x >> 32_i64);
-    i_1 = "hfs_match_guarded_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1 = $match_scrut_0; $match_scrut_0 = 0; i_1);
-    $match_scrut_0 = $hfs_v_431;
-    $hfs_v_431 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_431 = $match_scrut_0; $match_scrut_0 = 0; $hfs_v_431, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_431 = i_1; i_1 = 0; $hfs_v_431);
-||||||| ed92649a8
-    $hfs_v_431 = $local_2.used;
-    $local_2.used = i_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, $hfs_v_431, x, $match_scrut_0);
-    $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_v_431 = builtin::i32_wrap_i64(x >> 32_i64);
-    i_1 = "hfs_match_guarded_arm.wado/$cm_binding__Stdout_write_via_stream"(i_1 = $match_scrut_0; $match_scrut_0 = 0; i_1);
-    $match_scrut_0 = $hfs_v_431;
-    $hfs_v_431 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_431 = $match_scrut_0; $match_scrut_0 = 0; $hfs_v_431, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_431 = i_1; i_1 = 0; $hfs_v_431);
-=======
     i_1 = $local_2.used;
     $local_2.used = start_80;
     arr = $local_2.repr;
@@ -238,12 +201,11 @@ fn "hfs_match_guarded_arm.wado/run"() with Stdout {
     }
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $hfs_v_441 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_80 = "hfs_match_guarded_arm.wado/$cm_binding__Stdout_write_via_stream"(start_80 = i_1; i_1 = 0; start_80);
+    start_80 = "hfs_match_guarded_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_80 = i_1; i_1 = 0; start_80);
     i_1 = $hfs_v_441;
     $hfs_v_441 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i_1, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_1 = start_80; start_80 = 0; i_1);
->>>>>>> origin/main
 }
 
 fn "hfs_match_guarded_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

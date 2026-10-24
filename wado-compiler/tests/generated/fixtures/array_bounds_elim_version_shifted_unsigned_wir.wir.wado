@@ -53,23 +53,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(26)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -202,23 +188,6 @@ fn "array_bounds_elim_version_shifted_unsigned_wir.wado/run"() with Stdout {
     }
     i_13 = $local_1.used;
     $local_1.used = c_12;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i_13, x, total);
-    total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i_13 = builtin::i32_wrap_i64(x >> 32_i64);
-    c_12 = "array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c_12 = total; total = 0; c_12);
-    total = i_13;
-    i_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i_13 = total; total = 0; i_13, $local_1.repr, $local_1.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i_13, x, total);
-    total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i_13 = builtin::i32_wrap_i64(x >> 32_i64);
-    c_12 = "array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"(c_12 = total; total = 0; c_12);
-    total = i_13;
-    i_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i_13 = total; total = 0; i_13, $local_1.repr, $local_1.used);
-=======
     arr = $local_1.repr;
     total = i_13 + total;
     b28: block {
@@ -238,11 +207,10 @@ fn "array_bounds_elim_version_shifted_unsigned_wir.wado/run"() with Stdout {
     }
     i_13 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     total = builtin::i32_wrap_i64(x >> 32_i64);
-    c_12 = "array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__Stdout_write_via_stream"(c_12 = i_13; i_13 = 0; c_12);
+    c_12 = "array_bounds_elim_version_shifted_unsigned_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c_12 = i_13; i_13 = 0; c_12);
     i_13 = total;
     total = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i_13, $local_1.repr, $local_1.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_13 = c_12; c_12 = 0; i_13);
 }
 

@@ -81,23 +81,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
-type "functype//array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
-
-type "functype//array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
-
-type "functype//array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -236,23 +222,6 @@ fn "array_bounds_elim_version_shifted_assoc_wir.wado/run"() with Stdout {
     }
     $contract_arg_0 = $local_1.used;
     $local_1.used = c_14;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, $contract_arg_0, x, total);
-    total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $contract_arg_0 = builtin::i32_wrap_i64(x >> 32_i64);
-    c_14 = "array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c_14 = total; total = 0; c_14);
-    total = $contract_arg_0;
-    $contract_arg_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_0 = total; total = 0; $contract_arg_0, $local_1.repr, $local_1.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, $contract_arg_0, x, total);
-    total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $contract_arg_0 = builtin::i32_wrap_i64(x >> 32_i64);
-    c_14 = "array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__Stdout_write_via_stream"(c_14 = total; total = 0; c_14);
-    total = $contract_arg_0;
-    $contract_arg_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_0 = total; total = 0; $contract_arg_0, $local_1.repr, $local_1.used);
-=======
     arr = $local_1.repr;
     total = $contract_arg_0 + total;
     b30: block {
@@ -272,11 +241,10 @@ fn "array_bounds_elim_version_shifted_assoc_wir.wado/run"() with Stdout {
     }
     $contract_arg_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     total = builtin::i32_wrap_i64(x >> 32_i64);
-    c_14 = "array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__Stdout_write_via_stream"(c_14 = $contract_arg_0; $contract_arg_0 = 0; c_14);
+    c_14 = "array_bounds_elim_version_shifted_assoc_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c_14 = $contract_arg_0; $contract_arg_0 = 0; c_14);
     $contract_arg_0 = total;
     total = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_0, $local_1.repr, $local_1.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($contract_arg_0 = c_14; c_14 = 0; $contract_arg_0);
 }
 

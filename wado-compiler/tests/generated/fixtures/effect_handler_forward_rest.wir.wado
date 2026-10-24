@@ -146,23 +146,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(54)
+type "functype//effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(54)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
-
-type "functype//effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(56)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(57)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
-
-type "functype//effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(56)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(57)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(55)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -342,27 +328,6 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, start_136);
     }
     is_negative_46 = $mv_arg_1.used;
-<<<<<<< HEAD
-    $mv_arg_1.used = start_126;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, is_negative_46, x, $local_3_26);
-    $local_3_26 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_46 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_126 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_126 = $local_3_26; $local_3_26 = 0; start_126);
-    $local_3_26 = is_negative_46;
-    is_negative_46 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_46 = $local_3_26; $local_3_26 = 0; is_negative_46, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_46 = start_126; start_126 = 0; is_negative_46);
-||||||| ed92649a8
-    $mv_arg_1.used = start_126;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, is_negative_46, x, $local_3_26);
-    $local_3_26 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_46 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_126 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(start_126 = $local_3_26; $local_3_26 = 0; start_126);
-    $local_3_26 = is_negative_46;
-    is_negative_46 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_46 = $local_3_26; $local_3_26 = 0; is_negative_46, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_46 = start_126; start_126 = 0; is_negative_46);
-=======
     $mv_arg_1.used = start_136;
     arr = $mv_arg_1.repr;
     $local_3_26 = is_negative_46 + $local_3_26;
@@ -383,12 +348,11 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     }
     is_negative_46 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $local_3_26 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_136 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(start_136 = is_negative_46; is_negative_46 = 0; start_136);
+    start_136 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_136 = is_negative_46; is_negative_46 = 0; start_136);
     is_negative_46 = $local_3_26;
     $local_3_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_46, $mv_arg_1.repr, $mv_arg_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_46 = start_136; start_136 = 0; is_negative_46);
->>>>>>> origin/main
     is_negative_46 = local.tee $load_35(base.lines).used;
     if @unlikely(0 >= is_negative_46) {
         cold_path;
@@ -399,16 +363,8 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: arr = $mv_arg_1.repr; let $array_clone_dst_10: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_10(builtin::array_new<u8>(is_negative_46)), 0, arr, 0, is_negative_46); $array_clone_dst_10, used: is_negative_46 };
     start_136 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $local_3_26 = builtin::i32_wrap_i64(x >> 32_i64);
-<<<<<<< HEAD
-    $moved_4_79 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_79 = start_126; start_126 = 0; $moved_4_79);
-    start_126 = $local_3_26;
-||||||| ed92649a8
-    $moved_4_79 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"($moved_4_79 = start_126; start_126 = 0; $moved_4_79);
-    start_126 = $local_3_26;
-=======
-    tens = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(tens = start_136; start_136 = 0; tens);
+    tens = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tens = start_136; start_136 = 0; tens);
     start_136 = $local_3_26;
->>>>>>> origin/main
     $local_3_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_136, $mv_arg_1.repr, is_negative_46);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_46 = tens; tens = 0; is_negative_46);

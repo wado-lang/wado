@@ -53,27 +53,9 @@ type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#Error
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//opt_bce_len_minus_non_length_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//opt_bce_len_minus_non_length_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-||||||| ed92649a8
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -133,65 +115,6 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     $local_2.used = s;
     builtin::array_copy<u8>(local.tee $load_2($local_2.repr), start_16, global:opt_bce_len_minus_non_length_field.wado::$const_obj_1, 0, 3);
     start_16 = idx < 0;
-<<<<<<< HEAD
-    idx = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(idx); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, start_16, idx);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_16, x, idx);
-    idx = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_16 = builtin::i32_wrap_i64(x >> 32_i64);
-    s = "opt_bce_len_minus_non_length_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(s = idx; idx = 0; s);
-    idx = start_16;
-    start_16 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_16 = idx; idx = 0; start_16, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_16 = s; s = 0; start_16);
-    return;
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b2: block {
-        l3: loop {
-            break_if b2 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l3;
-||||||| ed92649a8
-    idx = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(idx); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, start_16, idx);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_16, x, idx);
-    idx = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_16 = builtin::i32_wrap_i64(x >> 32_i64);
-    s = "opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_write_via_stream"(s = idx; idx = 0; s);
-    idx = start_16;
-    start_16 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_16 = idx; idx = 0; start_16, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_16 = s; s = 0; start_16);
-    return;
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b2: block {
-        l3: loop {
-            break_if b2 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l3;
-=======
     x = builtin::i64_extend_i32_s(idx);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     idx = $inline_count_digits_u64_1: block -> i32 {
@@ -282,7 +205,6 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             idx = idx - 2;
             x = q;
             continue l25;
->>>>>>> origin/main
         };
     };
     if idx > start_16 {
@@ -290,7 +212,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
     start_16 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     idx = builtin::i32_wrap_i64(x >> 32_i64);
-    s = "opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_write_via_stream"(s = start_16; start_16 = 0; s);
+    s = "opt_bce_len_minus_non_length_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(s = start_16; start_16 = 0; s);
     start_16 = idx;
     idx = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_16, $local_2.repr, $local_2.used);

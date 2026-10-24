@@ -52,23 +52,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -193,27 +179,6 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($load_0, $hfs_pos_451);
     }
     $load_1 = $load_0.used;
-<<<<<<< HEAD
-    $load_0.used = $hfs_pos_441;
-    "core:prelude/primitive.wado/write_decimal_digits"($load_0.repr, $load_1, x, count);
-    count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $hfs_pos_441 = "hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_pos_441 = count; count = 0; $hfs_pos_441);
-    count = $load_1;
-    $load_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_1 = count; count = 0; $load_1, $load_0.repr, $load_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_1 = $hfs_pos_441; $hfs_pos_441 = 0; $load_1);
-||||||| ed92649a8
-    $load_0.used = $hfs_pos_441;
-    "core:prelude/primitive.wado/write_decimal_digits"($load_0.repr, $load_1, x, count);
-    count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $hfs_pos_441 = "hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream"($hfs_pos_441 = count; count = 0; $hfs_pos_441);
-    count = $load_1;
-    $load_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_1 = count; count = 0; $load_1, $load_0.repr, $load_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_1 = $hfs_pos_441; $hfs_pos_441 = 0; $load_1);
-=======
     $load_0.used = $hfs_pos_451;
     arr = $load_0.repr;
     count = $load_1 + count;
@@ -234,12 +199,11 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     }
     $load_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     count = builtin::i32_wrap_i64(x >> 32_i64);
-    $hfs_pos_451 = "hfs_inline_break_no_writeback.wado/$cm_binding__Stdout_write_via_stream"($hfs_pos_451 = $load_1; $load_1 = 0; $hfs_pos_451);
+    $hfs_pos_451 = "hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_pos_451 = $load_1; $load_1 = 0; $hfs_pos_451);
     $load_1 = count;
     count = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($load_1, $load_0.repr, $load_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_1 = $hfs_pos_451; $hfs_pos_451 = 0; $load_1);
->>>>>>> origin/main
 }
 
 fn "hfs_inline_break_no_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

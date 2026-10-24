@@ -47,19 +47,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-||||||| ed92649a8
-type "functype//wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -105,40 +95,10 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_267, new_used_371);
     }
-<<<<<<< HEAD
-    start_63 = $local_4.used;
-    $local_4.used = offset_49;
-    builtin::array_copy<u8>($local_4.repr, start_63, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_6, 0, 6);
-    start_63 = builtin::i32_wrap_i64(local.tee $cm_pair_7_215("wasi/stream-new"()));
-    offset_49 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    $moved_4_212 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_212 = start_63; start_63 = 0; $moved_4_212);
-    start_63 = offset_49;
-    offset_49 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_49 = start_63; start_63 = 0; offset_49, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_49 = $moved_4_212; $moved_4_212 = 0; offset_49);
-    offset_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_267(local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_267.repr, offset_49, 10_i64, 2);
-    if @unlikely(local.tee offset_49($local_4.used + 1) > builtin::array_len($local_4.repr)) {
-||||||| ed92649a8
-    start_63 = $local_4.used;
-    $local_4.used = offset_49;
-    builtin::array_copy<u8>($local_4.repr, start_63, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_6, 0, 6);
-    start_63 = builtin::i32_wrap_i64(local.tee $cm_pair_7_215("wasi/stream-new"()));
-    offset_49 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    $moved_4_212 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"($moved_4_212 = start_63; start_63 = 0; $moved_4_212);
-    start_63 = offset_49;
-    offset_49 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_49 = start_63; start_63 = 0; offset_49, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_49 = $moved_4_212; $moved_4_212 = 0; offset_49);
-    offset_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_267(local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_267.repr, offset_49, 10_i64, 2);
-    if @unlikely(local.tee offset_49($local_4.used + 1) > builtin::array_len($local_4.repr)) {
-=======
     start_372 = $sroa_$f_buf_267.used;
     $sroa_$f_buf_267.used = new_used_371;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_267.repr, start_372, 10_i64, 2);
     if @unlikely(local.tee start_372($local_4.used + 1) > builtin::array_len($local_4.repr)) {
->>>>>>> origin/main
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_372);
     }
@@ -154,7 +114,7 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_4.repr, start_372, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_6, 0, 6);
     start_372 = builtin::i32_wrap_i64(local.tee $cm_pair_7_215("wasi/stream-new"()));
     new_used_371 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    $moved_4_212 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"($moved_4_212 = start_372; start_372 = 0; $moved_4_212);
+    $moved_4_212 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_212 = start_372; start_372 = 0; $moved_4_212);
     start_372 = new_used_371;
     new_used_371 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_372, $local_4.repr, $local_4.used);
@@ -196,28 +156,12 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     $local_4.used = start_372;
     builtin::array_copy<u8>($local_4.repr, $moved_4_212, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_3, 0, 7);
     $moved_4_212 = builtin::i32_wrap_i64(local.tee $cm_pair_7_215("wasi/stream-new"()));
-<<<<<<< HEAD
-    offset_49 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    start_63 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_63 = $moved_4_212; $moved_4_212 = 0; start_63);
-    $moved_4_212 = offset_49;
-    offset_49 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_49 = $moved_4_212; $moved_4_212 = 0; offset_49, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_49 = start_63; start_63 = 0; offset_49);
-||||||| ed92649a8
-    offset_49 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    start_63 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(start_63 = $moved_4_212; $moved_4_212 = 0; start_63);
-    $moved_4_212 = offset_49;
-    offset_49 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_49 = $moved_4_212; $moved_4_212 = 0; offset_49, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_49 = start_63; start_63 = 0; offset_49);
-=======
     start_372 = builtin::i32_wrap_i64($cm_pair_7_215 >> 32_i64);
-    new_used_371 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(new_used_371 = $moved_4_212; $moved_4_212 = 0; new_used_371);
+    new_used_371 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_371 = $moved_4_212; $moved_4_212 = 0; new_used_371);
     $moved_4_212 = start_372;
     start_372 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_212, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_212 = new_used_371; new_used_371 = 0; $moved_4_212);
->>>>>>> origin/main
 }
 
 fn "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

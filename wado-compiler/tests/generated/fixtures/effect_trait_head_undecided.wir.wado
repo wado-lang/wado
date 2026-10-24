@@ -43,23 +43,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//effect_trait_head_undecided.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//effect_trait_head_undecided.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
-
-type "functype//effect_trait_head_undecided.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
-
-type "functype//effect_trait_head_undecided.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -80,46 +66,8 @@ fn "effect_trait_head_undecided.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-vi
 
 fn "effect_trait_head_undecided.wado/$cm_export__run"() {
     let $local_1: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
-    let offset: i32;
-    let $moved_4: i32;
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_1_14: i32;
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, offset, 1_i64, 1);
-    offset = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "effect_trait_head_undecided.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = offset; offset = 0; $moved_4);
-    offset = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = offset; offset = 0; $sroa_$pattern_temp_0_1_14, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-||||||| ed92649a8
-    let offset: i32;
-    let $moved_4: i32;
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_1_14: i32;
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, offset, 1_i64, 1);
-    offset = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "effect_trait_head_undecided.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = offset; offset = 0; $moved_4);
-    offset = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = offset; offset = 0; $sroa_$pattern_temp_0_1_14, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-=======
     let arr: ref Array<u8>;
     let t: u64;
->>>>>>> origin/main
     let q: u64;
     let pair: i32;
     let tens: i32;
@@ -152,7 +100,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
     start_135 = builtin::i32_wrap_i64(local.tee t("wasi/stream-new"()));
     new_used_134 = builtin::i32_wrap_i64(t >> 32_i64);
-    pair = "effect_trait_head_undecided.wado/$cm_binding__Stdout_write_via_stream"(pair = start_135; start_135 = 0; pair);
+    pair = "effect_trait_head_undecided.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pair = start_135; start_135 = 0; pair);
     start_135 = new_used_134;
     new_used_134 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_135, $local_1.repr, $local_1.used);

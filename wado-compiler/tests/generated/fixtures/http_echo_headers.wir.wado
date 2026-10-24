@@ -395,16 +395,8 @@ fn "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.n
     headers = 0;
     headers = trailers;
     trailers = 0;
-<<<<<<< HEAD
     "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
-    $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
-||||||| ed92649a8
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
-    $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
-=======
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
->>>>>>> origin/main
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: $lifted_result_8, 1: $lifted_result_9 };
@@ -430,31 +422,13 @@ fn "http_echo_headers.wado/$cm_task_entry__handle"(request) {
     req_headers = "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(request);
     $sroa_$pattern_temp_0_0_201 = builtin::i32_wrap_i64(local.tee $cm_pair_183("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_202 = builtin::i32_wrap_i64($cm_pair_183 >> 32_i64);
-<<<<<<< HEAD
     resp_headers = "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
-    if "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_2) {
-        if local.tee values("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_2)).used > 0 {
-            drop("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(resp_headers, global:http_echo_headers.wado::$const_obj_1, builtin::array_get_value<ref "core:prelude//List<u8>">(values.repr, 0)));
-||||||| ed92649a8
-    resp_headers = "http_echo_headers.wado/$cm_binding__Fields_new"();
-    if "http_echo_headers.wado/$cm_binding__Fields_has$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_2) {
-        if local.tee values("http_echo_headers.wado/$cm_binding__Fields_get$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_2)).used > 0 {
-            drop("http_echo_headers.wado/$cm_binding__Fields_append$spec0"(resp_headers, global:http_echo_headers.wado::$const_obj_1, builtin::array_get_value<ref "core:prelude//List<u8>">(values.repr, 0)));
-=======
-    resp_headers = "http_echo_headers.wado/$cm_binding__Fields_new"();
-    if "http_echo_headers.wado/$cm_binding__Fields_has$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_3) {
-        if local.tee values("http_echo_headers.wado/$cm_binding__Fields_get$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_3)).used > 0 {
-            drop("http_echo_headers.wado/$cm_binding__Fields_append$spec0"(resp_headers, global:http_echo_headers.wado::$const_obj_2, builtin::array_get_value<ref "core:prelude//List<u8>">(values.repr, 0)));
->>>>>>> origin/main
+    if "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_3) {
+        if local.tee values("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec0"(req_headers, global:http_echo_headers.wado::$const_obj_3)).used > 0 {
+            drop("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(resp_headers, global:http_echo_headers.wado::$const_obj_2, builtin::array_get_value<ref "core:prelude//List<u8>">(values.repr, 0)));
         }
     }
-<<<<<<< HEAD
-    response = local.tee $pattern_temp_1("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"($moved_8 = resp_headers; resp_headers = 0; $moved_8, global:http_echo_headers.wado::$const_obj_0, $moved_8 = $sroa_$pattern_temp_0_0_201; $sroa_$pattern_temp_0_0_201 = 0; $moved_8)).0;
-||||||| ed92649a8
-    response = local.tee $pattern_temp_1("http_echo_headers.wado/$cm_binding__Response_new"($moved_8 = resp_headers; resp_headers = 0; $moved_8, global:http_echo_headers.wado::$const_obj_0, $moved_8 = $sroa_$pattern_temp_0_0_201; $sroa_$pattern_temp_0_0_201 = 0; $moved_8)).0;
-=======
-    response = local.tee $pattern_temp_1("http_echo_headers.wado/$cm_binding__Response_new"($moved_8 = resp_headers; resp_headers = 0; $moved_8, global:http_echo_headers.wado::$const_obj_1, $moved_8 = $sroa_$pattern_temp_0_0_201; $sroa_$pattern_temp_0_0_201 = 0; $moved_8)).0;
->>>>>>> origin/main
+    response = local.tee $pattern_temp_1("http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"($moved_8 = resp_headers; resp_headers = 0; $moved_8, global:http_echo_headers.wado::$const_obj_1, $moved_8 = $sroa_$pattern_temp_0_0_201; $sroa_$pattern_temp_0_0_201 = 0; $moved_8)).0;
     _tx_future = $pattern_temp_1.1;
     $sroa_$task_ret_1_204 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_10 = response; response = ref.null none; $moved_10 };
     $moved_8 = 0;
@@ -985,16 +959,8 @@ fn "http_echo_headers.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.app
     };
     $value_packed = builtin::i64_extend_i32_u(i_25) | (builtin::i64_extend_i32_s(ptr_18) << 32_i64);
     ptr_18 = "mem/realloc"(0, 0, 4, 20);
-<<<<<<< HEAD
     "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
-    $result_val = (if local.tee self(builtin::load_u8(ptr_18)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
-||||||| ed92649a8
-    "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
-    $result_val = (if local.tee self(builtin::load_u8(ptr_18)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
-=======
-    "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
     $result_val = (if builtin::load_u8(ptr_18) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
->>>>>>> origin/main
         ref.null none;
     } else if local.tee self(builtin::load_u8(ptr_18 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
         global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0;

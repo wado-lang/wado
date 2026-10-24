@@ -157,63 +157,11 @@ fn "affine_with_handler_generic_moves.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, $moved_4_209, x_18, digit_count_16);
     digit_count_16 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
     $moved_4_209 = builtin::i32_wrap_i64(x_18 >> 32_i64);
-<<<<<<< HEAD
-    digit_count_16 = "affine_with_handler_generic_moves.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_16 = offset_17; offset_17 = 0; digit_count_16);
-    offset_17 = $moved_4_209;
-||||||| ed92649a8
-    digit_count_16 = "affine_with_handler_generic_moves.wado/$cm_binding__Stdout_write_via_stream"(digit_count_16 = offset_17; offset_17 = 0; digit_count_16);
-    offset_17 = $moved_4_209;
-=======
-    offset_17 = "affine_with_handler_generic_moves.wado/$cm_binding__Stdout_write_via_stream"(offset_17 = digit_count_16; digit_count_16 = 0; offset_17);
+    offset_17 = "affine_with_handler_generic_moves.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(offset_17 = digit_count_16; digit_count_16 = 0; offset_17);
     digit_count_16 = $moved_4_209;
->>>>>>> origin/main
     $moved_4_209 = 0;
-<<<<<<< HEAD
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_209 = offset_17; offset_17 = 0; $moved_4_209, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_209 = digit_count_16; digit_count_16 = 0; $moved_4_209);
-    if ref.is_null(x_103) == 0 {
-        $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-        if @unlikely(local.tee $moved_4_209(0 + 5) > builtin::array_len($local_2_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, $moved_4_209);
-        }
-        digit_count_16 = $local_2_2.used;
-        $local_2_2.used = $moved_4_209;
-        builtin::array_copy<u8>($local_2_2.repr, digit_count_16, global:affine_with_handler_generic_moves.wado::$const_obj_2, 0, 5);
-        digit_count_16 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(4); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-        $moved_4_209 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, 0, digit_count_16);
-        "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, $moved_4_209, x_18, digit_count_16);
-        digit_count_16 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
-        $moved_4_209 = builtin::i32_wrap_i64(x_18 >> 32_i64);
-        offset_17 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(offset_17 = digit_count_16; digit_count_16 = 0; offset_17);
-        "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_16 = $moved_4_209; $moved_4_209 = 0; digit_count_16, $local_2_2.repr, $local_2_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(digit_count_16 = offset_17; offset_17 = 0; digit_count_16);
-    }
-||||||| ed92649a8
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_209 = offset_17; offset_17 = 0; $moved_4_209, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_209 = digit_count_16; digit_count_16 = 0; $moved_4_209);
-    if ref.is_null(x_103) == 0 {
-        $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-        if @unlikely(local.tee $moved_4_209(0 + 5) > builtin::array_len($local_2_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, $moved_4_209);
-        }
-        digit_count_16 = $local_2_2.used;
-        $local_2_2.used = $moved_4_209;
-        builtin::array_copy<u8>($local_2_2.repr, digit_count_16, global:affine_with_handler_generic_moves.wado::$const_obj_2, 0, 5);
-        digit_count_16 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(4); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-        $moved_4_209 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, 0, digit_count_16);
-        "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, $moved_4_209, x_18, digit_count_16);
-        digit_count_16 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
-        $moved_4_209 = builtin::i32_wrap_i64(x_18 >> 32_i64);
-        offset_17 = "wasi/wasi:cli/Stdout::write_via_stream"(offset_17 = digit_count_16; digit_count_16 = 0; offset_17);
-        "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_16 = $moved_4_209; $moved_4_209 = 0; digit_count_16, $local_2_2.repr, $local_2_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(digit_count_16 = offset_17; offset_17 = 0; digit_count_16);
-    }
-=======
     "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_16, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(digit_count_16 = offset_17; offset_17 = 0; digit_count_16);
->>>>>>> origin/main
     if ref.is_null($moved_7_110) == 0 {
         $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         if @unlikely(local.tee digit_count_16(0 + 5) > builtin::array_len($local_2_2.repr)) {
@@ -246,7 +194,7 @@ fn "affine_with_handler_generic_moves.wado/run"() with Stdout {
         "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, offset_17, x_18, $moved_4_209);
         $moved_4_209 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
         offset_17 = builtin::i32_wrap_i64(x_18 >> 32_i64);
-        digit_count_16 = "wasi/wasi:cli/Stdout::write_via_stream"(digit_count_16 = $moved_4_209; $moved_4_209 = 0; digit_count_16);
+        digit_count_16 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_16 = $moved_4_209; $moved_4_209 = 0; digit_count_16);
         "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_209 = offset_17; offset_17 = 0; $moved_4_209, $local_2_2.repr, $local_2_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_209 = digit_count_16; digit_count_16 = 0; $moved_4_209);
     }

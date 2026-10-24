@@ -79,23 +79,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//opt_fusion_temp_used_after.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//opt_fusion_temp_used_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//opt_fusion_temp_used_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
-
-type "functype//opt_fusion_temp_used_after.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -228,29 +214,6 @@ fn "opt_fusion_temp_used_after.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, $sroa_slot_36);
     }
-<<<<<<< HEAD
-    $match_scrut_1 = $local_7.used;
-    $local_7.used = current;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, $match_scrut_1, x_32, $match_scrut_0);
-    $match_scrut_0 = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
-    $match_scrut_1 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    current = "opt_fusion_temp_used_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(current = $match_scrut_0; $match_scrut_0 = 0; current);
-    $match_scrut_0 = $match_scrut_1;
-    $match_scrut_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($match_scrut_1 = $match_scrut_0; $match_scrut_0 = 0; $match_scrut_1, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($match_scrut_1 = current; current = 0; $match_scrut_1);
-||||||| ed92649a8
-    $match_scrut_1 = $local_7.used;
-    $local_7.used = current;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, $match_scrut_1, x_32, $match_scrut_0);
-    $match_scrut_0 = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
-    $match_scrut_1 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    current = "opt_fusion_temp_used_after.wado/$cm_binding__Stdout_write_via_stream"(current = $match_scrut_0; $match_scrut_0 = 0; current);
-    $match_scrut_0 = $match_scrut_1;
-    $match_scrut_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($match_scrut_1 = $match_scrut_0; $match_scrut_0 = 0; $match_scrut_1, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($match_scrut_1 = current; current = 0; $match_scrut_1);
-=======
     current = $local_7.used;
     $local_7.used = $sroa_slot_36;
     arr = $local_7.repr;
@@ -272,12 +235,11 @@ fn "opt_fusion_temp_used_after.wado/run"() with Stdout {
     }
     current = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
     $sroa_$iter_0_start_40 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    $sroa_slot_36 = "opt_fusion_temp_used_after.wado/$cm_binding__Stdout_write_via_stream"($sroa_slot_36 = current; current = 0; $sroa_slot_36);
+    $sroa_slot_36 = "opt_fusion_temp_used_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_36 = current; current = 0; $sroa_slot_36);
     current = $sroa_$iter_0_start_40;
     $sroa_$iter_0_start_40 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(current, $local_7.repr, $local_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(current = $sroa_slot_36; $sroa_slot_36 = 0; current);
->>>>>>> origin/main
     if @unlikely(total != 20) {
         cold_path;
         "opt_fusion_temp_used_after.wado/run$cold0"(total);

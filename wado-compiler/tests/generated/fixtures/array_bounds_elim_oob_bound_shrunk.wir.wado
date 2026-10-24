@@ -83,23 +83,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
+type "functype//array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
-
-type "functype//array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
-||||||| ed92649a8
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
-
-type "functype//array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
-=======
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -241,23 +227,6 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     }
     i_1 = $local_3.used;
     $local_3.used = $sroa_arr_used_45;
-<<<<<<< HEAD
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_1, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_arr_used_45 = "array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_arr_used_45 = sum; sum = 0; $sroa_arr_used_45);
-    sum = i_1;
-    i_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i_1 = sum; sum = 0; i_1, $local_3.repr, $local_3.used);
-||||||| ed92649a8
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_1, x, sum);
-    sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    i_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_arr_used_45 = "array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__Stdout_write_via_stream"($sroa_arr_used_45 = sum; sum = 0; $sroa_arr_used_45);
-    sum = i_1;
-    i_1 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i_1 = sum; sum = 0; i_1, $local_3.repr, $local_3.used);
-=======
     arr_62 = $local_3.repr;
     sum = i_1 + sum;
     b26: block {
@@ -277,11 +246,10 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     }
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_arr_used_45 = "array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__Stdout_write_via_stream"($sroa_arr_used_45 = i_1; i_1 = 0; $sroa_arr_used_45);
+    $sroa_arr_used_45 = "array_bounds_elim_oob_bound_shrunk.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_arr_used_45 = i_1; i_1 = 0; $sroa_arr_used_45);
     i_1 = sum;
     sum = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(i_1, $local_3.repr, $local_3.used);
->>>>>>> origin/main
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_1 = $sroa_arr_used_45; $sroa_arr_used_45 = 0; i_1);
 }
 
