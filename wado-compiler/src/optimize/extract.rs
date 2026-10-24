@@ -26,6 +26,7 @@ use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{OpaqueSource, ValuePool, value_kind_to_const};
+use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
@@ -404,7 +405,8 @@ pub(super) fn freeze_pure_arith(
                 phase,
                 include_fields,
             };
-            let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
+            // A displaced node may carry a type DCE has since pruned.
+            let candidates = reachable_exprs(engine.body);
             let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
             for id in candidates {
                 let verdict = classify_candidate(&mut engine, &ctx, id);
