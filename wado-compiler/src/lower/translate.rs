@@ -345,10 +345,10 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
 }
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment writing in place replaces whole.
-fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
+/// assignment writing in place replaces whole, or that live in a `Box`.
+fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) -> IndexSet<u32> {
     struct Scan {
-        deferred: IndexSet<u32>,
+        deferred: IndexMap<u32, tir::TypeId>,
         replaced: IndexSet<u32>,
     }
     impl TirRefVisitor for Scan {
@@ -362,7 +362,7 @@ fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
                 && *type_id != TypeTable::UNIT
                 && value.type_id == TypeTable::UNIT
             {
-                self.deferred.insert(*local_index);
+                self.deferred.insert(*local_index, *type_id);
             }
             self.walk_stmt(stmt);
         }
@@ -380,13 +380,14 @@ fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
         return IndexSet::default();
     };
     let mut scan = Scan {
-        deferred: IndexSet::default(),
+        deferred: IndexMap::default(),
         replaced: IndexSet::default(),
     };
     scan.visit_block(body);
     scan.deferred
-        .intersection(&scan.replaced)
-        .copied()
+        .into_iter()
+        .filter(|&(local, ty)| scan.replaced.contains(&local) || boxed(local, ty))
+        .map(|(local, _)| local)
         .collect()
 }
 
@@ -531,7 +532,9 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 base.value_copy,
             );
         }
-        let guarded_locals = guarded_locals(func);
+        let guarded_locals = guarded_locals(func, |local, ty| {
+            address_taken.contains(&local) && base.box_plan.box_struct_types.contains_key(&ty)
+        });
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
@@ -1578,15 +1581,50 @@ impl FunctionTranslator<'_, '_> {
             TypeTable::UNIT,
             span,
         );
+        let TirExprKind::Assign { target, value } = &assign.kind else {
+            unreachable!("a guarded assignment is an `Assign`");
+        };
+        let TirExprKind::Local { index, name } = &target.kind else {
+            unreachable!("a guarded assignment writes a local");
+        };
+        let boxed = self.box_type_of_local(*index, target.type_id);
+        // A boxed local's first assignment allocates its box; every later one
+        // writes through it, where a reference taken since may read it.
+        let first_write = match boxed {
+            Some(box_type) => {
+                let boxed_value = self.wrap_in_box(self.convert_operand(value), box_type, span);
+                let local = self.alloc_expr(
+                    ExprKind::Local {
+                        index: *index,
+                        name: name.clone(),
+                    },
+                    box_type,
+                    span,
+                );
+                self.alloc_expr(
+                    ExprKind::Assign {
+                        target: local,
+                        value: boxed_value.into(),
+                    },
+                    TypeTable::UNIT,
+                    span,
+                )
+            }
+            None => self.convert_expr_unexpanded(assign),
+        };
         let store = vec![
-            self.alloc_stmt(
-                StmtKind::Expr(self.convert_expr_unexpanded(assign).into()),
-                span,
-            ),
+            self.alloc_stmt(StmtKind::Expr(first_write.into()), span),
             self.alloc_stmt(StmtKind::Expr(raise.into()), span),
         ];
-        let Some(in_place) = self.try_expand_in_place_assign(assign) else {
-            return store;
+        let in_place = match boxed {
+            Some(_) => vec![self.alloc_stmt(
+                StmtKind::Expr(self.convert_expr_unexpanded(assign).into()),
+                span,
+            )],
+            None => match self.try_expand_in_place_assign(assign) {
+                Some(in_place) => in_place,
+                None => return store,
+            },
         };
         let then_block = self.alloc_block(in_place, span);
         let else_block = self.alloc_block(store, span);
@@ -1598,6 +1636,14 @@ impl FunctionTranslator<'_, '_> {
             },
             span,
         )]
+    }
+
+    /// The `Box` a local of type `ty` lives in, where its address is taken.
+    fn box_type_of_local(&self, local: u32, ty: tir::TypeId) -> Option<tir::TypeId> {
+        if !self.address_taken.contains(&local) {
+            return None;
+        }
+        self.base.box_plan.box_struct_types.get(&ty).copied()
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {
@@ -1616,14 +1662,12 @@ impl FunctionTranslator<'_, '_> {
                 storage,
             } => {
                 // Copy first, then box: a boxed local changes only its
-                // storage cell, not its value semantics.
-                let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
-                    && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
-                {
-                    (box_type, Some(box_type))
-                } else {
-                    (*type_id, None)
-                };
+                // storage cell, not its value semantics. A local declared
+                // without a value gets its box at its first assignment
+                // ([`Self::guarded_assign`]).
+                let box_type = self.box_type_of_local(*local_index, *type_id);
+                let effective_type = box_type.unwrap_or(*type_id);
+                let box_wrap_type = box_type.filter(|_| !self.guarded_locals.contains(local_index));
                 let needs_value_copy_wrap = !storage.skips_copy()
                     && !self.share_eligible_locals.contains(local_index)
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))

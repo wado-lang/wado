@@ -1,0 +1,32 @@
+// A local declared without a value whose address is taken lives in a `Box`.
+// The box is allocated by the first assignment, on whichever branch makes it,
+// and every later assignment writes through it, so a reference taken in
+// between reads the new value. The WIR builder used to emit a `struct.new`
+// for the box with no value on the stack.
+use { println, Stdout } from "core:cli";
+
+fn show(r: &i32) -> i32 {
+    return *r;
+}
+
+fn pick(flag: bool) -> i32 {
+    let mut x: i32;
+    if flag {
+        x = 1;
+    } else {
+        x = 2;
+    }
+    let r = &x;
+    x = *r + 10;
+    return show(r);
+}
+
+export fn run() with Stdout {
+    let x: i32;
+    x = 5;
+    println(`${show(&x)}`);
+    println(`${pick(builtin::black_box(true))} ${pick(builtin::black_box(false))}`);
+}
+
+__DATA__
+{"stdout": "5\n11 12\n"}

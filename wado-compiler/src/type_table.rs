@@ -1003,7 +1003,7 @@ impl TypeTable {
     /// predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
-        match self.get(ty) {
+        match self.get(self.representation_head(ty)) {
             ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
