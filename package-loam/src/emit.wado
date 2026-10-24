@@ -15,6 +15,7 @@ use {
     case_named,
     element_of,
     is_binary_elementwise,
+    read_counts,
     settled,
     trailing_axes,
 } from "./graph.wado";
@@ -564,26 +565,37 @@ impl Together {
         if self.paired.contains_key(*tensor) {
             return `Paired<${own}>`;
         }
-        let Some(parts) = self.concat.get(*tensor) else {
-            return own;
+        return match self.concat.get(*tensor) {
+            Some(parts) => concatenated_axis(checked, &parts, n),
+            None => own,
         };
-        let mut joined = own;
-        for let part of parts[1..<parts.len()].to_list() {
-            joined = `Concat<${joined}, ${checked.shapes[part].axes[n].name}>`;
-        }
-        return joined;
     }
+}
+
+/// The axis the tensors `parts` concatenate along their axis `at` into.
+fn concatenated_axis(checked: &Checked, parts: &List<String>, at: i32) -> String {
+    let mut joined = checked.shapes[parts[0]].axes[at].name;
+    for let part of parts[1..<parts.len()].to_list() {
+        joined = `Concat<${joined}, ${checked.shapes[part].axes[at].name}>`;
+    }
+    return joined;
+}
+
+/// The right operand of each matrix product, by the tensor it computes.
+fn product_weights(graph: &Graph) -> HashMap<String, String> {
+    let mut weight_of = HashMap::<String, String>::new();
+    for let node of &graph.nodes {
+        if node.op == "MatMul" || node.op == "Gemm" {
+            weight_of[node.outputs[0]] = node.inputs[1];
+        }
+    }
+    return weight_of;
 }
 
 /// The weights of the products each product kernel computes by weights
 /// concatenated, by the first weight, in the order the plan concatenates them.
 fn concat_weights(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
-    let mut weight_of = HashMap::<String, String>::new();
-    for let node of &graph.nodes {
-        if node.op == "MatMul" {
-            weight_of[node.outputs[0]] = node.inputs[1];
-        }
-    }
+    let weight_of = product_weights(graph);
     let mut concat = HashMap::<String, List<String>>::new();
     for let [_, parts] of decided.concats.entries() {
         let weights: List<String> = parts.into_iter().map(|p| weight_of[*p]).collect();
@@ -703,16 +715,8 @@ fn paired_weights(
     rhs: &HashMap<String, bool>,
     held: &HashMap<String, String>,
 ) -> HashMap<String, String> {
-    let mut reads = HashMap::<String, i32>::new();
-    let mut weight_of = HashMap::<String, String>::new();
-    for let node of &graph.nodes {
-        for let t of node.reads() {
-            reads[t] = reads.get(t).unwrap_or(0) + 1;
-        }
-        if node.op == "MatMul" || node.op == "Gemm" {
-            weight_of[node.outputs[0]] = node.inputs[1];
-        }
-    }
+    let reads = read_counts(graph);
+    let weight_of = product_weights(graph);
     let alone = |w: &String| rhs.get(*w) == Option::Some(false) && reads.get(*w) == Option::Some(1);
     let mut paired = HashMap::<String, String>::new();
     for let [x, y] of decided.pairs {
@@ -1210,11 +1214,7 @@ fn scope_body(
 fn concat_parts(checked: &Checked, parts: &List<String>, names: &Names, exprs: &mut Operands) -> List<String> {
     let mut whole = checked.shapes[parts[0]];
     let last = whole.rank() - 1;
-    let mut columns = whole.axes[last].name;
-    for let part of parts[1..<parts.len()].to_list() {
-        columns = `Concat<${columns}, ${checked.shapes[part].axes[last].name}>`;
-    }
-    whole.axes[last].name = columns;
+    whole.axes[last].name = concatenated_axis(checked, parts, last);
     let operand = `&${names.get(&parts[0])}`;
     let mut views: List<String> = [];
     let mut start = 0;

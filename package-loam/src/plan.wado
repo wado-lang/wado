@@ -13,6 +13,7 @@ use {
     is_binary_elementwise,
     is_unary_operator,
     read_at,
+    read_counts,
     settled,
 } from "./graph.wado";
 use {
@@ -595,12 +596,7 @@ fn concatenated(
     for let [_, head] of heads.entries() {
         members[*head] = members.get(*head).unwrap_or(0) + 1;
     }
-    let mut reads = HashMap::<String, i32>::new();
-    for let node of &graph.nodes {
-        for let t of node.reads() {
-            reads[t] = reads.get(t).unwrap_or(0) + 1;
-        }
-    }
+    let reads = read_counts(graph);
     let mut dtypes = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
         dtypes[vi.name] = vi.dtype;
@@ -620,7 +616,7 @@ fn concatenated(
             by_lhs[lhs] = at_lhs;
         }
     }
-    let joins = |a: &Node, b: &Node| {
+    let concatenates = |a: &Node, b: &Node| {
         let [wa, wb] = [checked.shapes[a.inputs[1]], checked.shapes[b.inputs[1]]];
         let [oa, ob] = [checked.shapes[a.outputs[0]], checked.shapes[b.outputs[0]]];
         if !same_axis(&wa, 0, &wb, 0) || dtypes[a.inputs[1]] != dtypes[b.inputs[1]] || oa.rank() != ob.rank() {
@@ -635,13 +631,13 @@ fn concatenated(
     };
     let mut concats = HashMap::<String, List<String>>::new();
     for let [_, products] of by_lhs.entries() {
-        let mut left = *products;
-        while left.len() >= 2 {
-            let first = &graph.nodes[left[0]];
+        let mut open = *products;
+        while open.len() >= 2 {
+            let first = &graph.nodes[open[0]];
             let mut parts: List<String> = [first.outputs[0]];
             let mut rest: List<i32> = [];
-            for let at of left[1..<left.len()].to_list() {
-                if joins(first, &graph.nodes[at]) {
+            for let at of open[1..<open.len()].to_list() {
+                if concatenates(first, &graph.nodes[at]) {
                     parts.push(graph.nodes[at].outputs[0]);
                 } else {
                     rest.push(at);
@@ -650,7 +646,7 @@ fn concatenated(
             if parts.len() >= 2 {
                 concats[parts[0]] = parts;
             }
-            left = rest;
+            open = rest;
         }
     }
     return concats;
