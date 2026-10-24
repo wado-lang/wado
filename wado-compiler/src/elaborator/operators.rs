@@ -107,7 +107,9 @@ enum Lvalue {
 /// The type the value written to `place` is resolved against. A refused place
 /// still has its value resolved, so the value's own errors are reported too.
 fn write_place_value_type(place: &Result<WritePlace, ()>) -> TypeId {
-    place.as_ref().map_or(TypeTable::ERROR, WritePlace::value_type)
+    place
+        .as_ref()
+        .map_or(TypeTable::ERROR, WritePlace::value_type)
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -1121,8 +1123,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             value => vec![value.span(); targets.len()],
         };
-        for (((target, place), type_id), span) in
-            targets.iter().zip(&places).zip(element_types).zip(element_spans)
+        for (((target, place), type_id), span) in targets
+            .iter()
+            .zip(&places)
+            .zip(element_types)
+            .zip(element_spans)
         {
             self.check_write(target, place, type_id, span, ctx);
         }
@@ -1169,10 +1174,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .then_some("cannot assign through immutable reference")
     }
 
-    /// Whether an `Index` assignment target reaching `check_write`'s general
-    /// path is an assignable place — index-assignable receivers already returned
-    /// there. A read-only `Index` access lowers to `*recv.index(i)` over
-    /// `&Output`, so writing through it is an immutable-reference error; an
+    /// What an `Index` target reaching `check_write`'s general path is: a tuple
+    /// index is a place. A read-only `Index` access lowers to `*recv.index(i)`
+    /// over `&Output`, so writing through it is an immutable-reference error; an
     /// `IndexValue` access is a by-value call and no place at all.
     fn index_target_lvalue(&self, index_expr: &ast::IndexExpr) -> Lvalue {
         if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index_expr.id) {
@@ -1195,15 +1199,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
-    /// is an immutable reference (`&T`). `operand`'s type is read from
-    /// `expression_types`. Inspecting the *operand* type means `*5 = v`
-    /// (operand `5: i32`, already diagnosed by `resolve_unary`) is not
-    /// re-flagged here.
+    /// What `*operand` is as a write target: a place, unless `operand` is an
+    /// immutable reference (`&T`). Inspecting the *operand* type means
+    /// `*5 = v` (operand `5: i32`, already diagnosed by `resolve_unary`) is
+    /// not re-flagged here.
     fn deref_target_lvalue(&self, unary: &ast::UnaryExpr) -> Lvalue {
         // An ERROR-typed operand is not recorded, and was diagnosed already.
         let Some(&operand_type) = self.sem.types.expression_types.get(&unary.expr.id()) else {
-            return Lvalue::Place;
+            return Lvalue::Reported;
         };
         if matches!(
             self.tysys.type_table.borrow().get(operand_type),
@@ -1437,10 +1440,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // classified from the AST + recorded facts.
         let lvalue = match target_ast {
             ast::Expr::FieldAccess(_) => Lvalue::Place,
-            // `WritePlace::IndexAssign` already returned above, so an `Index` target
-            // here is a tuple index (a place), a read-only `Index` /
-            // `IndexValue` trait access (not a place), or an unindexable
-            // receiver (already diagnosed by `resolve_index`).
             ast::Expr::Index(index_expr) => self.index_target_lvalue(index_expr),
             ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.deref_target_lvalue(u),
             // An identifier target classified by the place fact `resolve_ident`
@@ -1450,9 +1449,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // variant / enum / const ident, or a non-ident expression) is not
             // a place.
             ast::Expr::Ident(id) => match self.assign_place_of(id.id) {
-                Some(AssignPlace::Local | AssignPlace::DerefCapture { through_mut_ref: true }) => {
-                    Lvalue::Place
-                }
+                Some(
+                    AssignPlace::Local
+                    | AssignPlace::DerefCapture {
+                        through_mut_ref: true,
+                    },
+                ) => Lvalue::Place,
                 Some(AssignPlace::DerefCapture {
                     through_mut_ref: false,
                 }) => Lvalue::ThroughImmutableRef,
