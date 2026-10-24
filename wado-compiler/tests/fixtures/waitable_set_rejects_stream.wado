@@ -2,7 +2,7 @@
 // no event is ever left for a set to report, and a set of them would wait
 // forever.
 pub fn watch(set: &mut WaitableSet<Stream<u8>>, stream: Stream<u8>) {
-    set.join(stream);
+    set.insert(stream);
 }
 
 export fn run() {
@@ -10,5 +10,5 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": ":4:24: analysis error: type 'Stream<u8>' does not implement trait 'Waitable' required by bound on 'W'; 5:5: no method 'join' found on type 'WaitableSet<Stream<u8>>'"
+    "compile_error": ":4:24: analysis error: type 'Stream<u8>' does not implement trait 'Waitable' required by bound on 'W'; 5:5: no method 'insert' found on type 'WaitableSet<Stream<u8>>'"
 }

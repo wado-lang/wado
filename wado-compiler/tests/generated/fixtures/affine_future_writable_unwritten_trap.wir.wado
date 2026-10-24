@@ -198,7 +198,7 @@ fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$t
         cold_path;
         $drop_spill_6 = struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 1, 1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>$0, 2: $qm_e };
         if @unlikely(($mv$text$used == 0) == 0) {
-            "core:rt/panic"(local.tee b(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever")), 77);
+            "core:rt/panic"(array.new_data<u8>("`FutureWritable<i32>` dropped before its write: its reader would wait forever"), 77);
             unreachable;
         }
         if ref.is_null($sroa_$pattern_temp_0_0_26) == 0 {
@@ -207,7 +207,7 @@ fn "affine_future_writable_unwritten_trap.wado/produce$sroa[return]$spec0"($mv$t
         return $drop_spill_6;
     }
     drop("affine_future_writable_unwritten_trap.wado/$cm_future_write_i32"(i = $mv$text$used; $mv$text$used = 0; i, 1));
-    return local.tee $drop_spill_6(struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $moved_8 = $sroa_$pattern_temp_0_0_26; $sroa_$pattern_temp_0_0_26 = ref.null none; $moved_8 }, 2: ref.null none });
+    return struct.new "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/Future<i32>>, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: 0, 1: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Future<i32>>::Some" { discriminant: 1, payload_0: $moved_8 = $sroa_$pattern_temp_0_0_26; $sroa_$pattern_temp_0_0_26 = ref.null none; $moved_8 }, 2: ref.null none };
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

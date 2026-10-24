@@ -121,25 +121,25 @@ fn "contract_unchecked_call_unchecked.wado/run"() with Stdout {
     $moved_4_47 = "contract_unchecked_call_unchecked.wado/$cm_binding__Stdout_write_via_stream"($moved_4_47 = self_11; self_11 = 0; $moved_4_47);
     self_11 = is_negative_20;
     is_negative_20 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_20 = self_11; self_11 = 0; is_negative_20, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_20 = $moved_4_47; $moved_4_47 = 0; is_negative_20);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_11, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_11 = $moved_4_47; $moved_4_47 = 0; self_11);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    if @unlikely((local.tee $moved_4_47(local.tee is_negative_20(black_box(7)) % 2) == 0) == 0) {
+    if @unlikely((local.tee $moved_4_47(local.tee self_11(black_box(7)) % 2) == 0) == 0) {
         cold_path;
-        "contract_unchecked_call_unchecked.wado/run$cold0"(is_negative_20, $moved_4_47);
+        "contract_unchecked_call_unchecked.wado/run$cold0"(self_11, $moved_4_47);
         unreachable;
     }
-    $moved_4_47 = local.tee is_negative_20(is_negative_20 / 2) < 0;
-    is_negative_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(is_negative_20); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    $moved_4_47 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, $moved_4_47, is_negative_20);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, $moved_4_47, x_24, is_negative_20);
-    is_negative_20 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
+    $moved_4_47 = local.tee self_11(self_11 / 2) < 0;
+    self_11 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_11); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
+    $moved_4_47 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, $moved_4_47, self_11);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, $moved_4_47, x_24, self_11);
+    self_11 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
     $moved_4_47 = builtin::i32_wrap_i64(x_24 >> 32_i64);
-    self_11 = "contract_unchecked_call_unchecked.wado/$cm_binding__Stdout_write_via_stream"(self_11 = is_negative_20; is_negative_20 = 0; self_11);
-    is_negative_20 = $moved_4_47;
+    is_negative_20 = "contract_unchecked_call_unchecked.wado/$cm_binding__Stdout_write_via_stream"(is_negative_20 = self_11; self_11 = 0; is_negative_20);
+    self_11 = $moved_4_47;
     $moved_4_47 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_47 = is_negative_20; is_negative_20 = 0; $moved_4_47, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_47 = self_11; self_11 = 0; $moved_4_47);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_11, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_11 = is_negative_20; is_negative_20 = 0; self_11);
 }
 
 fn "contract_unchecked_call_unchecked.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -465,10 +465,91 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
+    let arr: ref Array<u8>;
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
     is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    x = builtin::i64_extend_i32_s(self);
+    x = select i64(x < 0_i64, 0_i64 - x, x);
+    self = $inline_count_digits_u64_1: block -> i32 {
+        if x <u 100000_i64 {
+            if x <u 100_i64 {
+                if x <u 10_i64 {
+                    break $inline_count_digits_u64_1: 1;
+                }
+                break $inline_count_digits_u64_1: 2;
+            }
+            if x <u 1000_i64 {
+                break $inline_count_digits_u64_1: 3;
+            }
+            if x <u 10000_i64 {
+                break $inline_count_digits_u64_1: 4;
+            }
+            break $inline_count_digits_u64_1: 5;
+        }
+        if x <u 10000000000_i64 {
+            if x <u 10000000_i64 {
+                if x <u 1000000_i64 {
+                    break $inline_count_digits_u64_1: 6;
+                }
+                break $inline_count_digits_u64_1: 7;
+            }
+            if x <u 100000000_i64 {
+                break $inline_count_digits_u64_1: 8;
+            }
+            if x <u 1000000000_i64 {
+                break $inline_count_digits_u64_1: 9;
+            }
+            break $inline_count_digits_u64_1: 10;
+        }
+        if x <u 1000000000000000_i64 {
+            if x <u 1000000000000_i64 {
+                if x <u 100000000000_i64 {
+                    break $inline_count_digits_u64_1: 11;
+                }
+                break $inline_count_digits_u64_1: 12;
+            }
+            if x <u 10000000000000_i64 {
+                break $inline_count_digits_u64_1: 13;
+            }
+            if x <u 100000000000000_i64 {
+                break $inline_count_digits_u64_1: 14;
+            }
+            break $inline_count_digits_u64_1: 15;
+        }
+        if x <u 100000000000000000_i64 {
+            if x <u 10000000000000000_i64 {
+                break $inline_count_digits_u64_1: 16;
+            }
+            break $inline_count_digits_u64_1: 17;
+        }
+        if x <u 1000000000000000000_i64 {
+            break $inline_count_digits_u64_1: 18;
+        }
+        if x <u -8446744073709551616_i64 {
+            break $inline_count_digits_u64_1: 19;
+        }
+        break $inline_count_digits_u64_1: 20;
+    };
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+    arr = f.buf.repr;
+    self = is_negative + self;
+    b61: block {
+        l62: loop {
+            break_if b61 (self - is_negative) < 2;
+            q = x /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, self - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
+            self = self - 2;
+            x = q;
+            continue l62;
+        };
+    };
+    if self > is_negative {
+        builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(self, is_negative, digit_count) {
@@ -541,9 +622,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_20 = self.buf;
         $load_2 = 0;
-        b55: block {
-            l56: loop {
-                break_if b55 $load_2 >= sign_len;
+        b77: block {
+            l78: loop {
+                break_if b77 $load_2 >= sign_len;
                 if @unlikely(local.tee start_26(self_20.used + 1) > builtin::array_len(self_20.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, start_26);
@@ -552,7 +633,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_20.used = start_26;
                 builtin::array_set_u8(self_20.repr, new_used_25, 48);
                 $load_2 = $load_2 + 1;
-                continue l56;
+                continue l78;
             };
         };
         if @unlikely(local.tee $load_2(local.tee self_20(self.buf).used + digit_count) > builtin::array_len(self_20.repr)) {
@@ -595,12 +676,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         $load_2 = self.fill;
         i_220 = 0;
-        b66: block {
-            l67: loop {
-                break_if b66 i_220 >= sign_len;
+        b88: block {
+            l89: loop {
+                break_if b88 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, $load_2);
                 i_220 = i_220 + 1;
-                continue l67;
+                continue l89;
             };
         };
         return start_26;
@@ -610,12 +691,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b69: block {
-            l70: loop {
-                break_if b69 $load_2 >= new_used_25;
+        b91: block {
+            l92: loop {
+                break_if b91 $load_2 >= new_used_25;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, i_220);
                 $load_2 = $load_2 + 1;
-                continue l70;
+                continue l92;
             };
         };
         if is_negative {
@@ -649,12 +730,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b77: block {
-            l78: loop {
-                break_if b77 $load_2 >= start_26;
+        b99: block {
+            l100: loop {
+                break_if b99 $load_2 >= start_26;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, i_220);
                 $load_2 = $load_2 + 1;
-                continue l78;
+                continue l100;
             };
         };
         return new_used_25;
@@ -662,12 +743,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         new_used_25 = self.fill;
         i_220 = 0;
-        b79: block {
-            l80: loop {
-                break_if b79 i_220 >= sign_len;
+        b101: block {
+            l102: loop {
+                break_if b101 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, new_used_25);
                 i_220 = i_220 + 1;
-                continue l80;
+                continue l102;
             };
         };
         if is_negative {

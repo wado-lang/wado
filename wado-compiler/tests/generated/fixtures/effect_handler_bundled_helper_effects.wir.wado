@@ -60,35 +60,31 @@ type "functype//effect_handler_bundled_helper_effects.wado/run" = fn();  // Type
 
 type "functype//effect_handler_bundled_helper_effects.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
+type "functype//core:rt/unreachable" = fn();  // TypeId(21)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_0::$call" = fn(ref "effect_handler_bundled_helper_effects.wado//$Closure_0") -> i32;  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
+type "functype//effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_1::$call" = fn(ref "effect_handler_bundled_helper_effects.wado//$Closure_1") -> i32;  // TypeId(26)
 
-type "functype//effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_0::$call" = fn(ref "effect_handler_bundled_helper_effects.wado//$Closure_0") -> i32;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_1::$call" = fn(ref "effect_handler_bundled_helper_effects.wado//$Closure_1") -> i32;  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
+type "functype//effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
-
-type "functype//effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(33)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(32)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -114,24 +110,26 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     let $load_14: ref Array<u8>;
     let m: ref "effect_handler_bundled_helper_effects.wado//Mock";
     let $local_5: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A";
-    let $local_6: ref "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A";
     let $local_7: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B";
-    let $local_8_8: ref "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B";
     let $local_0_10: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A";
+    let $local_1_11: ref "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A";
     let $local_2_12: i32;
     let $local_0_13: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B";
+    let $local_1_14: ref "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B";
     let new_used_27: i32;
     let start_28: i32;
     let x: i64;
+    let q: u64;
+    let tens: i32;
     m = struct.new "effect_handler_bundled_helper_effects.wado//Mock" { n: 0 };
-    global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = local.tee $local_6(struct.new "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A" { outer: local.tee $local_5(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A), op_a: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//$Closure_0" { $capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_0" } });
-    global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = local.tee $local_8_8(struct.new "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B" { outer: local.tee $local_7(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B), op_b: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//$Closure_1" { $capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_1" } });
+    global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = struct.new "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/A" { outer: local.tee $local_5(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A), op_a: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//$Closure_0" { $capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_0" } };
+    global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = struct.new "effect_handler_bundled_helper_effects.wado//$Dispatch_effect_handler_bundled_helper_effects.wado/B" { outer: local.tee $local_7(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B), op_b: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//$Closure_1" { $capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_1" } };
     $local_2_12 = $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_A__a_2: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A)) == 0) {
-            global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = local.tee $local_6(ref.as_non_null($local_0_10)).outer;
+            global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = local.tee $local_1_11(ref.as_non_null($local_0_10)).outer;
             $local_2_12 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_6.op_a)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_11.op_a)).env);
             };
             global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = $local_0_10;
             break $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_A__a_2: $local_2_12;
@@ -143,9 +141,9 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
         unreachable;
     } + $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_B__b_3: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_13(global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B)) == 0) {
-            global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = local.tee $local_8_8(ref.as_non_null($local_0_13)).outer;
+            global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = local.tee $local_1_14(ref.as_non_null($local_0_13)).outer;
             $local_2_12 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_8_8.op_b)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_14.op_b)).env);
             };
             global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = $local_0_13;
             break $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_B__b_3: $local_2_12;
@@ -166,7 +164,68 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     $mv_arg_1.used = new_used_27;
     builtin::array_copy<u8>(local.tee $load_14($mv_arg_1.repr), start_28, global:effect_handler_bundled_helper_effects.wado::$const_obj_2, 0, 6);
     start_28 = $local_2_12 < 0;
-    $local_2_12 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($local_2_12); select i64(x < 0_i64, 0_i64 - x, x)));
+    x = builtin::i64_extend_i32_s($local_2_12);
+    x = select i64(x < 0_i64, 0_i64 - x, x);
+    $local_2_12 = $inline_count_digits_u64_2: block -> i32 {
+        if x <u 100000_i64 {
+            if x <u 100_i64 {
+                if x <u 10_i64 {
+                    break $inline_count_digits_u64_2: 1;
+                }
+                break $inline_count_digits_u64_2: 2;
+            }
+            if x <u 1000_i64 {
+                break $inline_count_digits_u64_2: 3;
+            }
+            if x <u 10000_i64 {
+                break $inline_count_digits_u64_2: 4;
+            }
+            break $inline_count_digits_u64_2: 5;
+        }
+        if x <u 10000000000_i64 {
+            if x <u 10000000_i64 {
+                if x <u 1000000_i64 {
+                    break $inline_count_digits_u64_2: 6;
+                }
+                break $inline_count_digits_u64_2: 7;
+            }
+            if x <u 100000000_i64 {
+                break $inline_count_digits_u64_2: 8;
+            }
+            if x <u 1000000000_i64 {
+                break $inline_count_digits_u64_2: 9;
+            }
+            break $inline_count_digits_u64_2: 10;
+        }
+        if x <u 1000000000000000_i64 {
+            if x <u 1000000000000_i64 {
+                if x <u 100000000000_i64 {
+                    break $inline_count_digits_u64_2: 11;
+                }
+                break $inline_count_digits_u64_2: 12;
+            }
+            if x <u 10000000000000_i64 {
+                break $inline_count_digits_u64_2: 13;
+            }
+            if x <u 100000000000000_i64 {
+                break $inline_count_digits_u64_2: 14;
+            }
+            break $inline_count_digits_u64_2: 15;
+        }
+        if x <u 100000000000000000_i64 {
+            if x <u 10000000000000000_i64 {
+                break $inline_count_digits_u64_2: 16;
+            }
+            break $inline_count_digits_u64_2: 17;
+        }
+        if x <u 1000000000000000000_i64 {
+            break $inline_count_digits_u64_2: 18;
+        }
+        if x <u -8446744073709551616_i64 {
+            break $inline_count_digits_u64_2: 19;
+        }
+        break $inline_count_digits_u64_2: 20;
+    };
     if start_28 {
         if @unlikely(local.tee start_28($mv_arg_1.used + 1) > builtin::array_len($load_14)) {
             cold_path;
@@ -183,13 +242,29 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     }
     start_28 = $mv_arg_1.used;
     $mv_arg_1.used = new_used_27;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, start_28, x, $local_2_12);
-    $local_2_12 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_28 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_27 = "effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream"(new_used_27 = $local_2_12; $local_2_12 = 0; new_used_27);
-    $local_2_12 = start_28;
-    start_28 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_28 = $local_2_12; $local_2_12 = 0; start_28, $mv_arg_1.repr, $mv_arg_1.used);
+    $load_14 = $mv_arg_1.repr;
+    $local_2_12 = start_28 + $local_2_12;
+    b27: block {
+        l28: loop {
+            break_if b27 ($local_2_12 - start_28) < 2;
+            q = x /u 100_i64;
+            tens = local.tee new_used_27(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_14, $local_2_12 - 1, ((48 + new_used_27) - (tens * 10)) & 255);
+            builtin::array_set_u8($load_14, $local_2_12 - 2, (48 + tens) & 255);
+            $local_2_12 = $local_2_12 - 2;
+            x = q;
+            continue l28;
+        };
+    };
+    if $local_2_12 > start_28 {
+        builtin::array_set_u8($load_14, start_28, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+    }
+    start_28 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $local_2_12 = builtin::i32_wrap_i64(x >> 32_i64);
+    new_used_27 = "effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream"(new_used_27 = start_28; start_28 = 0; new_used_27);
+    start_28 = $local_2_12;
+    $local_2_12 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_28, $mv_arg_1.repr, $mv_arg_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_28 = new_used_27; new_used_27 = 0; start_28);
 }
 
@@ -200,89 +275,6 @@ fn "effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_str
 fn "effect_handler_bundled_helper_effects.wado/$cm_export__run"() {
     "effect_handler_bundled_helper_effects.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b8: block {
-        l9: loop {
-            break_if b8 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l9;
-        };
-    };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
-    }
-}
-
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
-    }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

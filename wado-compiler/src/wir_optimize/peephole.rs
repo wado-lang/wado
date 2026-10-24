@@ -1383,12 +1383,13 @@ enum TeeReach {
 fn fuse_local_tees(instrs: &mut [WirInstr]) -> bool {
     let mut fuser = TeeFuser {
         reach: TeeReach::Fold,
+        only: None,
         changed: false,
     };
     for instr in instrs.iter_mut() {
         fuser.visit_instr(instr);
     }
-    fuser.changed | fuse_local_tee(instrs, TeeReach::Fold)
+    fuser.changed | fuse_local_tee(instrs, TeeReach::Fold, None)
 }
 
 /// Fuse every set-then-get pair left, as the last rewrite before the locals
@@ -1397,6 +1398,30 @@ pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
     for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
         TeeFuser {
             reach: TeeReach::Final,
+            only: None,
+            changed: false,
+        }
+        .visit_body(body);
+    }
+}
+
+/// Fuse the set-then-get pairs of the locals read once, which leaves a tee
+/// nothing reads for the write-only sweep to take back to its value. Before
+/// `coalesce_locals`, since the local goes and so hides no copy, while one
+/// merged into a live range is read elsewhere and keeps its tee.
+pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage) {
+    for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
+        let mut reads = Default::default();
+        for instr in body.iter() {
+            util::count_local_gets(instr, &mut reads);
+        }
+        let once: IndexSet<String> = reads
+            .into_iter()
+            .filter_map(|(name, n)| (n == 1).then_some(name))
+            .collect();
+        TeeFuser {
+            reach: TeeReach::Final,
+            only: Some(&once),
             changed: false,
         }
         .visit_body(body);
@@ -1404,15 +1429,17 @@ pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
 }
 
 /// Fuses in every statement list, dropping the `Nop` each fusion leaves.
-struct TeeFuser {
+struct TeeFuser<'a> {
     reach: TeeReach,
+    /// The locals to fuse, where not every one.
+    only: Option<&'a IndexSet<String>>,
     changed: bool,
 }
 
-impl WirMutVisitor for TeeFuser {
+impl WirMutVisitor for TeeFuser<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         self.walk_body(body);
-        if fuse_local_tee(body, self.reach) {
+        if fuse_local_tee(body, self.reach, self.only) {
             self.changed = true;
             body.retain(|instr| !matches!(instr, WirInstr::Nop));
         }
@@ -1422,12 +1449,19 @@ impl WirMutVisitor for TeeFuser {
 /// Fuse a `local.set` with the next statement's first-evaluated `local.get` of
 /// the same local into one `local.tee`, dropping the read. Order is preserved:
 /// the set value moves to the tee site, the first thing the consumer runs.
-fn fuse_local_tee(instrs: &mut [WirInstr], reach: TeeReach) -> bool {
+fn fuse_local_tee(
+    instrs: &mut [WirInstr],
+    reach: TeeReach,
+    only: Option<&IndexSet<String>>,
+) -> bool {
     let mut changed = false;
     for i in 0..instrs.len() {
         let WirInstr::LocalSet { name, .. } = &instrs[i] else {
             continue;
         };
+        if only.is_some_and(|only| !only.contains(name)) {
+            continue;
+        }
         let name = name.clone();
         let Some(consumer) = util::next_non_nop(instrs, i + 1) else {
             continue;
@@ -1950,7 +1984,7 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body, TeeReach::Fold);
+        fuse_local_tee(&mut body, TeeReach::Fold, None);
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
@@ -1982,7 +2016,7 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body, TeeReach::Fold);
+        fuse_local_tee(&mut body, TeeReach::Fold, None);
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
@@ -2012,7 +2046,7 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body, TeeReach::Fold);
+        fuse_local_tee(&mut body, TeeReach::Fold, None);
         assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
@@ -2029,8 +2063,8 @@ mod tests {
                 value: Some(Box::new(local_get("r", ref_ty(1, true)))),
             },
         ];
-        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
-        assert!(fuse_local_tee(&mut body, TeeReach::Final));
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold, None));
+        assert!(fuse_local_tee(&mut body, TeeReach::Final, None));
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected the return to survive");
@@ -2056,8 +2090,8 @@ mod tests {
                 else_body: None,
             },
         ];
-        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
-        assert!(fuse_local_tee(&mut body, TeeReach::Final));
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold, None));
+        assert!(fuse_local_tee(&mut body, TeeReach::Final, None));
         let WirInstr::If { condition, .. } = &body[1] else {
             panic!("expected the if to survive");
         };
@@ -2078,7 +2112,7 @@ mod tests {
                 body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
             },
         ];
-        assert!(!fuse_local_tee(&mut body, TeeReach::Final));
+        assert!(!fuse_local_tee(&mut body, TeeReach::Final, None));
     }
 
     #[test]
@@ -2094,7 +2128,7 @@ mod tests {
                 body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
             },
         ];
-        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold, None));
         assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
@@ -2112,7 +2146,7 @@ mod tests {
                 value: Some(Box::new(local_get("t", WirType::I32))),
             },
         ];
-        assert!(fuse_local_tee(&mut body, TeeReach::Fold));
+        assert!(fuse_local_tee(&mut body, TeeReach::Fold, None));
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[3] else {
             panic!("expected return");

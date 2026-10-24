@@ -104,7 +104,8 @@ Allocation and aggregates:
   sites reach, unless the body is no bigger than the call. A callee that
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop. A function only
+  back: at its only call site, or at its only site in a loop. Only sites in a
+  function an entry reaches count. A function only
   loops reach runs once per iteration, so its body counts as a loop's. A call
   is tried before its arguments, and a spliced body, arguments included, is
   scanned again for calls to splice, wherever the call it replaced sat.
@@ -220,8 +221,9 @@ settles the locals (step 11).
    `br_if` selection, the calls to a function left empty and the once-flags
    guarding them, and branch hints.
 8. DCE and compaction.
-9. Local coalescing: locals of one Wasm type whose live ranges never overlap
-   share a slot. A local's nullability is settled before it shares one.
+9. Local coalescing: a local read once is first forwarded into its read. Then
+   locals of one Wasm type whose live ranges never overlap share a slot. A
+   local's nullability is settled before it shares one.
 10. Tee fusion: a `local.set` and the read right after it become a
     `local.tee`. A local this leaves unread is removed.
 11. Local settling: a non-null local that Wasm's block-scoped rule sees read

@@ -40,7 +40,7 @@ test "an empty waitable set has nothing to poll" {
     assert ws.poll() matches { None };
 }
 
-/// Members the host does not know, so each is ready the moment it joins.
+/// Members the host does not know, so each is ready the moment it is inserted.
 variant Settled {
     First,
     Second,
@@ -48,11 +48,11 @@ variant Settled {
 
 impl Waitable for Settled;
 
-test "a member ready without the host comes back in join order" {
+test "a member ready without the host comes back in insertion order" {
     let mut ws = WaitableSet::<Settled>::new();
     assert ws.is_empty();
-    ws.join(Settled::First);
-    ws.join(Settled::Second);
+    ws.insert(Settled::First);
+    ws.insert(Settled::Second);
     assert ws.len() == 2;
     let first = ws.poll().unwrap();
     assert first.member matches { First } && first.event matches { Unreported };
@@ -64,7 +64,7 @@ test "a member ready without the host comes back in join order" {
 /// delivered its resolution.
 fn delivered_call() -> AsyncCall<()> with MonotonicClock {
     let mut set = WaitableSet::<AsyncCall<()>>::new();
-    set.join(MonotonicClock::wait_for(1_000_000));
+    set.insert(MonotonicClock::wait_for(1_000_000));
     let ready = set.wait();
     assert ready.event matches { Call(Returned) };
     return ready.member;
@@ -77,7 +77,7 @@ test "a call a set delivered ends by a wait, a drop, or another set" {
     builtin::drop(second);
     builtin::drop(first);
     let mut again = WaitableSet::<AsyncCall<()>>::new();
-    again.join(delivered_call());
+    again.insert(delivered_call());
     let ready = again.wait();
     assert ready.event matches { Call(Returned) };
     ready.member.wait();
@@ -85,8 +85,8 @@ test "a call a set delivered ends by a wait, a drop, or another set" {
 
 test "a set hands back the call that resolved and cancels the rest as it drops" {
     let mut set = WaitableSet::<AsyncCall<()>>::new();
-    set.join(MonotonicClock::wait_for(60_000_000_000));
-    set.join(MonotonicClock::wait_for(1_000_000));
+    set.insert(MonotonicClock::wait_for(60_000_000_000));
+    set.insert(MonotonicClock::wait_for(1_000_000));
     set.wait().member.wait();
     assert set.len() == 1;
 }

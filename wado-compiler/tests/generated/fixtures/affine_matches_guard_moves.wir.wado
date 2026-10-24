@@ -69,13 +69,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:affine_matches_guard_moves.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 114, 111, 112, 32, 49), used: 6 };
 
 fn "affine_matches_guard_moves.wado/run"() with Stdout {
-    let $moved_6_6: ref null "affine_matches_guard_moves.wado//Tok";
     let text: ref "core:prelude/string.wado//String";
     let $moved_4_82: i32;
     let $cm_pair_7_85: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
-    $sroa_$pattern_temp_0_0_9 = $moved_6_6 = struct.new "affine_matches_guard_moves.wado//Tok" { id: 1 }; if ref.is_null($moved_6_6) == 0 {
+    $sroa_$pattern_temp_0_0_9 = if ref.is_null(struct.new "affine_matches_guard_moves.wado//Tok" { id: 1 }) == 0 {
         $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_85("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_85 >> 32_i64);
         $moved_4_82 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
@@ -110,8 +109,8 @@ fn "affine_matches_guard_moves.wado/run"() with Stdout {
     $moved_4_82 = "affine_matches_guard_moves.wado/$cm_binding__Stdout_write_via_stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
     $sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10;
     $sroa_$pattern_temp_0_1_10 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $sroa_$pattern_temp_0_1_10, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_10 = $moved_4_82; $moved_4_82 = 0; $sroa_$pattern_temp_0_1_10);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9 = $moved_4_82; $moved_4_82 = 0; $sroa_$pattern_temp_0_0_9);
 }
 
 fn "affine_matches_guard_moves.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

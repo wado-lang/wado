@@ -36,6 +36,7 @@ use {
     DuplicateFieldPolicy,
     TextKeyDeserializer,
     TextKeySerializer,
+    read_tag,
 } from "core:serde";
 
 use { TreeMap, MapEntriesRefIter } from "core:collections";
@@ -636,6 +637,7 @@ pub struct ValueSeqAccess {
 
 /// Serves both a map and a struct: a `Value` spells them the same way.
 pub struct ValueObjectAccess {
+    fields: &TreeMap<String, Value>,
     entries: MapEntriesRefIter<String, Value>,
     /// The value of the key just read.
     pending: Option<&Value>,
@@ -711,7 +713,7 @@ fn float_of(value: &Value) -> Result<f64, DeserializeError> {
 }
 
 fn object_access(fields: &TreeMap<String, Value>) -> ValueObjectAccess {
-    return ValueObjectAccess { entries: fields.entries(), pending: null };
+    return ValueObjectAccess { fields, entries: fields.entries(), pending: null };
 }
 
 impl ValueDeserializer {
@@ -798,6 +800,14 @@ impl DeserializeStruct for ValueObjectAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
+    }
+
+    /// An object holds a key once, so nothing repeats it.
+    fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
+        let Some(value) = self.fields.get_ref_str(key.as_str_slice()) else {
+            return Result::Err(DeserializeError::missing_field(key));
+        };
+        return read_tag(&mut ValueDeserializer { value }, key);
     }
 }
 
