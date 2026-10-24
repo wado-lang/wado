@@ -1,6 +1,13 @@
 //! The type table: every `TypeId` the compiler interns, and the questions
 //! asked of them.
 
+<<<<<<< HEAD
+||||||| d2733c3d4
+use std::fmt::Write;
+=======
+use std::cell::RefCell;
+use std::fmt::Write;
+>>>>>>> origin/main
 use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
@@ -7253,6 +7260,32 @@ impl Ord for TypeKey {
 impl PartialOrd for TypeKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+/// An answer about each type, computed once per [`TypeKey`] so every id naming
+/// one type shares it. Valid while the facts the answer reads stay fixed.
+pub struct TypeMemo<V> {
+    answers: RefCell<IndexMap<TypeKey, V>>,
+}
+
+impl<V> Default for TypeMemo<V> {
+    fn default() -> Self {
+        Self {
+            answers: RefCell::default(),
+        }
+    }
+}
+
+impl<V: Copy> TypeMemo<V> {
+    /// `compute` may ask this memo of other types: no borrow is held across it.
+    pub fn get_or_compute(&self, key: TypeKey, compute: impl FnOnce() -> V) -> V {
+        if let Some(&answer) = self.answers.borrow().get(&key) {
+            return answer;
+        }
+        let answer = compute();
+        self.answers.borrow_mut().insert(key, answer);
+        answer
     }
 }
 

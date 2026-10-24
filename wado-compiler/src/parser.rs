@@ -2,7 +2,7 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
+    AssertStmt, AssignExpr, AssignTarget, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
     AssociatedTypeDecl, AstId, AstIdSpace, AstVisitor, AttrArg, AttrEntry, AttrItem, AttrObject,
     AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
@@ -3858,6 +3858,33 @@ impl Parser {
     /// Parse assignment expression: `target = value` or `target op= value`
     /// Assignment has lowest precedence and is right-associative
     /// Compound assignments (+=, -=, *=, /=, %=) are desugared to `target = target op value`
+    /// The left side of `=`: a tuple literal is a destructuring assignment's
+    /// flat list of places, so it takes no rest and names at least one.
+    fn assign_target(&mut self, target: Expr) -> AssignTarget {
+        let Expr::TupleLiteral(tuple) = target else {
+            return AssignTarget::Place(target);
+        };
+        if tuple.elements.is_empty() {
+            self.errors.push(self.error_at_span(
+                tuple.span,
+                "a destructuring assignment names at least one target",
+            ));
+        }
+        for place in &tuple.elements {
+            if let Expr::Spread(_, span) = place {
+                self.errors.push(self.error_at_span(
+                    *span,
+                    "a destructuring assignment takes no rest; name each target",
+                ));
+            }
+        }
+        let TupleLiteralExpr { elements, span, .. } = *tuple;
+        AssignTarget::Destructuring {
+            places: elements,
+            span,
+        }
+    }
+
     fn parse_assignment_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         let expr = self.parse_range_expr()?;
@@ -3869,7 +3896,7 @@ impl Parser {
             let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
             return Ok(Expr::Assign(Box::new(AssignExpr {
                 id: self.alloc_ast_id(),
-                target: expr,
+                target: self.assign_target(expr),
                 value,
                 span: start_span,
             })));

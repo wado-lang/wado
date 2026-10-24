@@ -488,6 +488,13 @@ pub trait SpanEmitter {
     fn debug(&self, message: &str);
 }
 
+pub fn in_span<T>(profiler: &dyn SpanEmitter, name: &str, f: impl FnOnce() -> T) -> T {
+    profiler.span_start(name);
+    let result = f();
+    profiler.span_end(name);
+    result
+}
+
 /// No-op implementation for when profiling is not needed.
 pub struct NullSpanEmitter;
 

@@ -1,0 +1,27 @@
+// The right side is evaluated in full before any target is written, and each
+// target's operands are evaluated when that target is assigned, left to right.
+
+fn log(trace: &mut List<String>, entry: String, value: i32) -> i32 {
+    trace.push(entry);
+    return value;
+}
+
+test "the right side before any target, then each target in turn" {
+    let mut trace: List<String> = [];
+    let mut xs: List<i32> = [0, 0, 0];
+    [xs[log(&mut trace, "t0", 0)], xs[log(&mut trace, "t1", 1)]] =
+        [log(&mut trace, "v0", 10), log(&mut trace, "v1", 11)];
+    assert trace == ["v0", "v1", "t0", "t1"];
+    assert xs == [10, 11, 0];
+}
+
+test "a target's operand reads a target assigned before it" {
+    let mut i = 0;
+    let mut xs: List<i32> = [0, 0];
+    [i, xs[i]] = [1, 9];
+    assert i == 1;
+    assert xs == [0, 9];
+}
+
+__DATA__
+{"test": {}}

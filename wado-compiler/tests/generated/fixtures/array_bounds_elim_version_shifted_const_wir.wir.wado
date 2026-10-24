@@ -116,7 +116,7 @@ fn "array_bounds_elim_version_shifted_const_wir.wado/run"() with Stdout {
     let repr: ref Array<i32>;
     let n_12: i32;
     let i: i32;
-    let $ca0: i32;
+    let $ca_1: i32;
     let value_29: i32;
     let $cm_pair_7: i64;
     builtin::array_fill<i32>(local.tee repr(builtin::array_new<i32>(local.tee n_3(black_box(6)))), 0, 1, n_3);
@@ -126,9 +126,9 @@ fn "array_bounds_elim_version_shifted_const_wir.wado/run"() with Stdout {
         b1: block {
             l2: loop {
                 break_if b1 i >= n_12;
-                $ca0 = i + 1;
-                value_29 = builtin::array_get_value<i32>(repr, $ca0) + builtin::array_get_value<i32>(repr, i);
-                builtin::array_set<i32>(repr, $ca0, value_29);
+                $ca_1 = i + 1;
+                value_29 = builtin::array_get_value<i32>(repr, $ca_1) + builtin::array_get_value<i32>(repr, i);
+                builtin::array_set<i32>(repr, $ca_1, value_29);
                 i = i + 1;
                 continue l2;
             };
@@ -137,16 +137,16 @@ fn "array_bounds_elim_version_shifted_const_wir.wado/run"() with Stdout {
         b3: block {
             l4: loop {
                 break_if b3 i >= n_12;
-                value_29 = if @unlikely(local.tee $ca0(i + 1) >= n_3) {
+                value_29 = if @unlikely(local.tee $ca_1(i + 1) >= n_3) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca0, n_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_const_wir.wado:10"), used: 51 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca_1, n_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_const_wir.wado:10"), used: 51 });
                     unreachable;
-                }; builtin::array_get_value<i32>(repr, $ca0) + if @unlikely(i >= n_3) {
+                }; builtin::array_get_value<i32>(repr, $ca_1) + if @unlikely(i >= n_3) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, n_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_const_wir.wado:10"), used: 51 });
                     unreachable;
                 }; builtin::array_get_value<i32>(repr, i);
-                builtin::array_set<i32>(repr, $ca0, value_29);
+                builtin::array_set<i32>(repr, $ca_1, value_29);
                 i = i + 1;
                 continue l4;
             };
@@ -157,11 +157,17 @@ fn "array_bounds_elim_version_shifted_const_wir.wado/run"() with Stdout {
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(repr, n_3, $local_2, 256);
     n_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     value_29 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $ca0 = "array_bounds_elim_version_shifted_const_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($ca0 = n_3; n_3 = 0; $ca0);
+||||||| d2733c3d4
+    $ca0 = "array_bounds_elim_version_shifted_const_wir.wado/$cm_binding__Stdout_write_via_stream"($ca0 = n_3; n_3 = 0; $ca0);
+=======
+    $ca_1 = "array_bounds_elim_version_shifted_const_wir.wado/$cm_binding__Stdout_write_via_stream"($ca_1 = n_3; n_3 = 0; $ca_1);
+>>>>>>> origin/main
     n_3 = value_29;
     value_29 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(n_3, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_3 = $ca0; $ca0 = 0; n_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_3 = $ca_1; $ca_1 = 0; n_3);
 }
 
 fn "array_bounds_elim_version_shifted_const_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

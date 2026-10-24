@@ -1,0 +1,13 @@
+// The right side has one element per target.
+
+export fn run() {
+    let mut a = 1;
+    let mut b = 2;
+    [a, b] = [b, a, 3];
+}
+
+__DATA__
+{
+    "compile_error": ":6:14: analysis error: a destructuring assignment to 2 targets takes a tuple of 2 elements, found '[i32, i32, i32]'",
+    "compile_error_codes": ["TYPE_MISMATCH"]
+}

@@ -293,6 +293,7 @@ See the spec on [tuple literals](./spec-literals.md#tuple-literals) and [list li
 let t = [1, "hello", true];   // [i32, String, bool]
 let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
+[a, b] = [b, a];              // destructuring assignment: the right side first, then each target
 
 // Lists (requires explicit type context)
 let a: List<i32> = [1, 2, 3];           // type annotation

@@ -936,10 +936,18 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&e.right);
         }
         Expr::Unary(e) => v.visit_expr(&e.expr),
-        Expr::Assign(e) => {
-            v.visit_expr(&e.target);
-            v.visit_expr(&e.value);
-        }
+        Expr::Assign(e) => match &e.target {
+            AssignTarget::Place(place) => {
+                v.visit_expr(place);
+                v.visit_expr(&e.value);
+            }
+            AssignTarget::Destructuring { places, .. } => {
+                v.visit_expr(&e.value);
+                for place in places {
+                    v.visit_expr(place);
+                }
+            }
+        },
         Expr::CompoundAssign(e) => {
             v.visit_expr(&e.target);
             v.visit_expr(&e.value);
@@ -3639,13 +3647,33 @@ pub struct TupleComprehensionExpr {
     pub span: Span,
 }
 
-/// Assignment expression: `x = value` or `x.field = value`
+/// Assignment expression: `x = value`, `x.field = value`, or a destructuring
+/// assignment `[a, b] = value`.
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub id: AstId,
-    pub target: Expr,
+    pub target: AssignTarget,
     pub value: Expr,
     pub span: Span,
+}
+
+/// What an assignment writes.
+#[derive(Debug, Clone)]
+pub enum AssignTarget {
+    /// `place = value`.
+    Place(Expr),
+    /// `[p0, p1, …] = value`: each element of `value` to its own place.
+    Destructuring { places: Vec<Expr>, span: Span },
+}
+
+impl AssignExpr {
+    /// The places this assignment writes, in the order it writes them.
+    pub fn places(&self) -> &[Expr] {
+        match &self.target {
+            AssignTarget::Place(place) => std::slice::from_ref(place),
+            AssignTarget::Destructuring { places, .. } => places,
+        }
+    }
 }
 
 /// Compound assignment operators

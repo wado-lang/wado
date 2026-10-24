@@ -1,0 +1,14 @@
+// A refused target stops neither the targets after it nor the value: each
+// reports its own error.
+
+export fn run() {
+    let xs: List<i32> = [1];
+    let ys: List<i32> = [2];
+    [xs[0], ys[0]] = [1, undefined_fn()];
+    xs[0] = undefined_fn();
+}
+
+__DATA__
+{
+    "compile_error": ":7:6: analysis error: cannot assign into immutable 'xs'; 7:13: cannot assign into immutable 'ys'; 7:26: unknown function 'undefined_fn'; 8:5: cannot assign into immutable 'xs'; 8:13: unknown function 'undefined_fn'"
+}
