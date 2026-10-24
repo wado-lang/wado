@@ -4,7 +4,9 @@
 #
 # The models are not in the repository. `package-loam/example/gpt2-124m/
 # fetch.sh` writes the checkpoint and `onnx/decoder_model.onnx`, and
-# `mise run loam-oracle-deps` at the repository root installs onnxruntime.
+# `mise run loam-oracle-deps` at the repository root installs onnxruntime-node.
+# The C++ arm's onnxruntime is Microsoft's release, which
+# `gpt2_124m/fetch_onnxruntime.sh` downloads on first use.
 #
 # `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
 
@@ -32,11 +34,23 @@ if [ -z "${WADO_BIN:-}" ]; then
 fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
+echo "=== Compiling onnxruntime (C++) ==="
+ort=$(gpt2_124m/fetch_onnxruntime.sh)
+mkdir -p build
+c++ -O2 -std=c++17 -I"$ort/include" gpt2_124m/onnxruntime.cpp \
+    -L"$ort/lib" -lonnxruntime -Wl,-rpath,"$ort/lib" -o build/onnxruntime_cpp
+
 echo "=== onnxruntime (CPU) ==="
 node gpt2_124m/onnxruntime.mjs
 
 echo "=== onnxruntime (CPU, 1 thread) ==="
 node gpt2_124m/onnxruntime.mjs 1
+
+echo "=== onnxruntime C++ API (CPU) ==="
+build/onnxruntime_cpp
+
+echo "=== onnxruntime C++ API (CPU, 1 thread) ==="
+build/onnxruntime_cpp 1
 
 echo "=== onnxruntime (WebGPU) ==="
 node gpt2_124m/onnxruntime.mjs webgpu
