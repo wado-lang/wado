@@ -1,0 +1,34 @@
+// A generic newtype's arguments shape its base's, so a static the base
+// supplies is checked at that shape: `Listed`'s `T` sits inside a `List`, and
+// an `i32` argument answers no `T`. One the arguments leave open is reported
+// as for the base itself.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn id(v: T) -> T {
+        return v;
+    }
+
+    fn zero() -> i32 {
+        return 0;
+    }
+}
+
+type Same<T> = Wrap<T>;
+type Listed<T> = Wrap<List<T>>;
+
+test {
+    let a = Listed::id(1);
+    let b = Listed::<i32>::id(1);
+    let c = Listed::<_>::id(1);
+    let d = Same::zero();
+    let e = Listed::<_>::zero();
+}
+
+__DATA__
+{
+    "compile_error": ":24:13: analysis error: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 25:31: type mismatch: expected 'List<i32>', found 'i32'; 26:13: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 27:13: cannot infer type parameter `T` of `Same::zero`; add a turbofish (`Same::<...>::zero()`) or a type annotation; 28:13: cannot infer type parameter `T` of `Listed::zero`; add a turbofish (`Listed::<...>::zero()`) or a type annotation"
+}

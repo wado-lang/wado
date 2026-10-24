@@ -1474,6 +1474,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// `written`, the arguments `target` spells, as the block declaring `sig`
+    /// names its receiver: a newtype calling its base's static passes the
+    /// base's, which a re-shaping one (`type Wl<T> = Wrap<List<T>>`) does not
+    /// share with its own.
+    fn args_at_callee(
+        &mut self,
+        target: TypeId,
+        written: &[TypeId],
+        sig: Option<&MethodSig>,
+    ) -> Vec<TypeId> {
+        if written.is_empty() || !self.applies_written_args(target) {
+            return written.to_vec();
+        }
+        let receiver = self.with_written_args(target, written);
+        self.tysys
+            .receiver_args_at_impl(Some(receiver), &[], sig.and_then(|s| s.declaring_impl))
+            .unwrap_or_else(|| written.to_vec())
+    }
+
     /// Whether `target` is a generic declaration applied to arguments, which
     /// [`Self::with_written_args`] can apply to others.
     fn applies_written_args(&self, target: TypeId) -> bool {
@@ -1859,9 +1878,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for &(i, var) in &receiver_holes {
             declaring_args[i] = var;
         }
+        let callee_args = self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
         self.instantiate_static_params(
             callee_sig.as_ref(),
-            &declaring_args,
+            &callee_args,
             &method_type_args,
             self_in_args,
             &mut param_types,
@@ -1911,33 +1931,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|sig| sig.declaring_impl)
                 .map(|id| self.tysys.type_table.borrow().impl_target_args(id).to_vec())
                 .unwrap_or_default();
+            // Both answer at the callee's link of a newtype chain, so each is
+            // matched against the `_`s as that link spells them.
             let scope_params = self.scope_type_param_ids();
-            for &(i, var) in &receiver_holes {
+            let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
+            let mut infer = InferCtx::new(&self.tysys.type_table, vars);
+            for (j, &spelled) in callee_args.iter().enumerate() {
                 let answer = inferred
                     .as_ref()
-                    .and_then(|impl_args| impl_args.get(i).copied())
-                    .or_else(|| block_target.get(i).copied())
+                    .and_then(|impl_args| impl_args.get(j).copied())
+                    .or_else(|| block_target.get(j).copied())
                     .filter(|&answer| {
                         self.tysys.is_usable_answer(answer)
                             && !self.slot_unanswered(answer, &scope_params)
                     });
                 if let Some(answer) = answer {
+                    infer.add(spelled, answer);
+                }
+            }
+            for (&(i, var), answer) in receiver_holes.iter().zip(infer.solve()) {
+                let answered = answer != var;
+                if answered {
                     self.solve_infer_var(var, answer);
                 }
-                declaring_args[i] = answer.unwrap_or(TypeTable::UNKNOWN);
+                declaring_args[i] = if answered { answer } else { TypeTable::UNKNOWN };
             }
             target_type_id = self.with_written_args(target_type_id, &declaring_args);
+            let callee_args =
+                self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
             // A `_` nothing answered would reach the instance unknown.
             if let Some(sig) = callee_sig.as_ref()
                 && let Some(head) = &head
             {
-                let impl_args = self
-                    .tysys
-                    .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
-                    .unwrap_or_default();
                 let names: Vec<String> = self
-                    .receiver_slots_where(sig, &impl_args, |_, slot| {
-                        slot == Some(&TypeTable::UNKNOWN)
+                    .receiver_slots_where(sig, &callee_args, |s, slot| {
+                        slot.is_some_and(|&t| s.tysys.type_table.borrow().contains_unknown(t))
                     })
                     .into_iter()
                     .map(|(_, name)| name)
@@ -1954,7 +1982,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.instantiate_static_params(
                 callee_sig.as_ref(),
-                &declaring_args,
+                &callee_args,
                 &method_type_args,
                 self_in_args,
                 &mut param_types,
@@ -2297,15 +2325,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let generic_name =
             MethodName::format_local(&receiver_name, trait_name_opt.as_ref(), &static_call.method);
-        let block = match &selected {
-            Some(r) => self.tysys.block_of(r),
-            None => declaration.and_then(|def| self.tysys.declaring_block(def)),
+        let (block, template) = match &selected {
+            Some(r) => (
+                self.tysys.block_of(r),
+                self.tysys.static_template(r, &receiver_name),
+            ),
+            None => (
+                declaration.and_then(|def| self.tysys.declaring_block(def)),
+                declaration.map(|def| self.tysys.signatures.declared_template(def)),
+            ),
         };
         self.enforce_static_block_bounds(block, &struct_type_args, static_call.span);
-        let template = match &selected {
-            Some(r) => self.tysys.static_template(r, &receiver_name),
-            None => declaration.map(|def| self.tysys.signatures.declared_template(def)),
-        };
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
@@ -3438,6 +3468,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
+        let return_type = self.retype_static_to_newtype(
+            &self.impl_target(struct_name),
+            self.tysys.block_of(&method_ref),
+            impl_type_args,
+            return_type,
+        );
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {

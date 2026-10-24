@@ -2001,10 +2001,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     }
-                    let block = resolved
-                        .found()
-                        .and_then(|callee| self.tysys.block_of(&callee.method_ref));
-                    self.enforce_static_block_bounds(block, &impl_type_args_inferred, call.span);
                     let method_ref = resolved
                         .found()
                         .map(|callee| callee.method_ref.clone())
@@ -2017,6 +2013,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 None,
                             )
                         });
+                    let block = self.tysys.block_of(&method_ref);
+                    self.enforce_static_block_bounds(block, &impl_type_args_inferred, call.span);
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
@@ -2068,11 +2066,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let return_type = self.fill_static_method_slots(
+                    let mut return_type = self.fill_static_method_slots(
                         method_ref.method_id,
                         &method_type_args,
                         resolved.return_type(),
                     );
+                    if let Some(key) = &ns_key {
+                        return_type = self.retype_static_to_newtype(
+                            key,
+                            block,
+                            &impl_type_args_inferred,
+                            return_type,
+                        );
+                    }
 
                     let template = self.tysys.static_template(&method_ref, &receiver);
                     let monomorph_info =
@@ -3386,8 +3392,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
-        else {
+        let sig = match self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[]) {
+            Some(sig) => Some(sig),
+            // What `Self::infer_through_newtype` solved: the base's.
+            None => {
+                let key = self.static_receiver_key(prefix, receiver_key);
+                self.newtype_base_target(&key, prefix).and_then(|(base_key, _)| {
+                    self.static_call_sig(prefix, suffix, Some(&base_key), SigChoice::Unique, &[])
+                })
+            }
+        };
+        let Some(sig) = sig else {
             self.report_uninferred_derived_type_args(
                 prefix,
                 suffix,
@@ -4181,7 +4196,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         else {
             let key = self.static_receiver_key(struct_name, receiver_key);
-            return (self.derived_impl_args(&key, method_name, args), vec![]);
+            let derived = self.derived_impl_args(&key, method_name, args);
+            if derived.is_empty()
+                && let Some(base) = self.newtype_base_target(&key, struct_name)
+            {
+                return self.infer_through_newtype(
+                    &key,
+                    base,
+                    StaticCallee {
+                        type_name: struct_name,
+                        method_name,
+                        receiver_key,
+                    },
+                    raw_args,
+                    args,
+                    span,
+                );
+            }
+            return (derived, vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -4221,6 +4253,120 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
         )
+    }
+
+    /// [`Self::infer_static_method_type_args`] on a newtype declaring nothing of
+    /// the name, which calls its base's at `base`: solved there, then held to
+    /// the shape the newtype gives the base's arguments, so
+    /// `type Wl<T> = Wrap<List<T>>` takes a `List<i32>` for `Wrap`'s slot and
+    /// never an `i32`. A slot that shape leaves open comes back as a bare
+    /// variable nothing answers, which the uninferred report then names.
+    fn infer_through_newtype(
+        &mut self,
+        key: &ImplTargetKey,
+        (base_key, base_name): (ImplTargetKey, String),
+        callee: StaticCallee<'_>,
+        raw_args: &[Expr],
+        args: &[TypeId],
+        span: token::Span,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        let receiver = self.resolve_unsited_type_name(callee.type_name, span);
+        let (_, base_args) = self.at_newtype_base(Some(receiver), args);
+        let (inferred, method_args) = self.infer_static_method_type_args(
+            &base_name,
+            callee.method_name,
+            raw_args,
+            &base_args,
+            None,
+            span,
+            Some(&base_key),
+        );
+        match self.newtype_at_base_args(key, &inferred) {
+            Some((_, shaped)) => (shaped, method_args),
+            None => (inferred, method_args),
+        }
+    }
+
+    /// `return_type` as the newtype `key` inherits it from its base's static in
+    /// `block`: the base at `base_args` becomes the newtype (`spec-types`,
+    /// "Method Signature Substitution"). The resolution retypes a newtype
+    /// declaring no parameters itself; one declaring some has to be solved
+    /// from `base_args` first. A block on the newtype itself keeps what it
+    /// wrote.
+    pub(super) fn retype_static_to_newtype(
+        &mut self,
+        key: &ImplTargetKey,
+        block: Option<DefId>,
+        base_args: &[TypeId],
+        return_type: TypeId,
+    ) -> TypeId {
+        let target = block.and_then(|b| self.tysys.type_table.borrow().impl_target_decl(b));
+        if target.is_some() && target == key.decl() {
+            return return_type;
+        }
+        let Some((newtype, _)) = self.newtype_at_base_args(key, base_args) else {
+            return return_type;
+        };
+        if self.tysys.type_table.borrow().contains_infer_var(newtype) {
+            return return_type;
+        }
+        let base = self.tysys.peeled_base(newtype).0;
+        self.tysys
+            .substitute_newtype_in_type(return_type, base, newtype)
+    }
+
+    /// The newtype `key` declares, at the arguments that make its base's
+    /// `base_args`, and the base's arguments as the newtype shapes them. A
+    /// newtype parameter they leave open stays a variable: in the instance,
+    /// and as the whole of each base argument mentioning it.
+    pub(super) fn newtype_at_base_args(
+        &mut self,
+        key: &ImplTargetKey,
+        base_args: &[TypeId],
+    ) -> Option<(TypeId, Vec<TypeId>)> {
+        let def = key.decl()?;
+        let (instance, vars) = match self.lookup_generic_newtype_of_decl(def) {
+            Some(info) => {
+                let arity = info.type_params.len();
+                let vars: Vec<TypeId> = (0..arity).map(|_| self.mint_infer_var()).collect();
+                (self.generic_newtype_instance(def, vars.clone()), vars)
+            }
+            None => (self.lookup_newtype_of_decl(def)?, Vec::new()),
+        };
+        let base = self.tysys.peeled_base(instance).0;
+        let shape = self
+            .tysys
+            .type_table
+            .borrow()
+            .declared_type_args(base)
+            .unwrap_or_default();
+        let scope_params = self.scope_type_param_ids();
+        let mut infer = InferCtx::new(&self.tysys.type_table, vars.clone());
+        for (&spelled, &answer) in shape.iter().zip(base_args) {
+            if self.tysys.is_usable_answer(answer) && !self.slot_unanswered(answer, &scope_params) {
+                infer.add(spelled, answer);
+            }
+        }
+        let solved = infer.solve();
+        for (&var, &answer) in vars.iter().zip(&solved) {
+            self.solve_infer_var(var, answer);
+        }
+        let open = vars.iter().zip(&solved).find(|(var, answer)| var == answer);
+        let shaped = shape
+            .iter()
+            .map(|&spelled| {
+                let answered = self.apply_infer_holes(spelled);
+                match open {
+                    Some((&var, _))
+                        if self.tysys.type_table.borrow().contains_infer_var(answered) =>
+                    {
+                        var
+                    }
+                    _ => answered,
+                }
+            })
+            .collect();
+        Some((self.apply_infer_holes(instance), shaped))
     }
 
     /// The impl level of a derived method called by type path, solved from the
