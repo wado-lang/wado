@@ -21,7 +21,7 @@ a parent feeding a child's stdin while reading its stdout has the same problem.
 ## Decision
 
 A copy is started without waiting for it. The started copy is a value that
-joins a `WaitableSet` like a call does, and finishing it hands back the stream
+enters a `WaitableSet` like a call does, and finishing it hands back the stream
 end with what the copy moved.
 
 ```wado
@@ -29,15 +29,15 @@ affine variant Pipe { Out(ReadCopy<u8>), Err(ReadCopy<u8>) }
 impl Waitable for Pipe;
 
 let mut set = WaitableSet::<Pipe>::new();
-set.join(Pipe::Out(stdout.start_read(4096)));
-set.join(Pipe::Err(stderr.start_read(4096)));
+set.insert(Pipe::Out(stdout.start_read(4096)));
+set.insert(Pipe::Err(stderr.start_read(4096)));
 while !set.is_empty() {
     match set.wait().member {
         Out(copy) => {
             let [end, chunk] = copy.finish();
             out.extend(&chunk.items);
             if chunk.result == CopyResult::Completed {
-                set.join(Pipe::Out(end.start_read(4096)));
+                set.insert(Pipe::Out(end.start_read(4096)));
             }
         },
         Err(copy) => { ... },
@@ -56,7 +56,7 @@ the one Wado's streams already require.
   to `max` elements.
 - `ReadCopy<T>::finish(self) -> [Stream<T>, StreamChunk<T>]` returns the end
   and what the copy moved. It waits for the copy where the copy has not
-  settled, so a program that never joins a set still reads correctly.
+  settled, so a program that never uses a set still reads correctly.
 - `StreamWritable<T>::start_write(self, data: List<T>) -> WriteCopy<T>` and
   `WriteCopy<T>::finish(self) -> [StreamWritable<T>, StreamWrite<T>]` are the
   writing side.
@@ -76,7 +76,7 @@ copy starts with a resource operation, `Stream::begin_read(&self, max)` or
 `StartedWrite<T>`. `start_read` and `start_write` call it and take the end, and
 so do the loops. A handler answers with a copy that has already settled,
 `StartedRead::settled(chunk)` or `StartedWrite::settled(written)`: its data is
-in memory, so it has no host copy to wait on. Such a copy joins a set ready with
+in memory, so it has no host copy to wait on. Such a copy enters a set ready with
 the result the handler gave, and dropping it cancels nothing.
 
 A handler may also answer by starting the copy on another end it holds, which
@@ -113,7 +113,7 @@ waitable set. Holding the end inside the started copy makes both unwritable.
 The host reports a copy's event once. A set that reports it records the packed
 result by handle, as it records a delivered subtask resolution, and `finish`
 reads it there. A copy that did not block at the start holds its result, so it
-joins a set ready with `Copied` and that result, as a copy the host reported
+enters a set ready with `Copied` and that result, as a copy the host reported
 does. Either way one end of stream reads as one event.
 
 ### Dropping

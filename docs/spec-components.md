@@ -157,7 +157,7 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
-- `set.join(call)` moves the call into a `WaitableSet`, so one wait covers
+- `set.insert(call)` moves the call into a `WaitableSet`, so one wait covers
   several calls and streams.
 
 A function or closure that starts an async call also holds the effects these
@@ -203,13 +203,13 @@ with Fetch => &Canned {} do {
 
 #### Waiting on Several
 
-A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
+A `WaitableSet<W>` owns what it waits on. `insert` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
 `Ready<W>` beside the event. `poll` asks without blocking. The event is a
 `ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
 `CopyResult` a started stream copy ended on, or `Unreported` for a member that
 neither has a handle for the host to report nor an event of its own. A member
-whose event is already known joins ready with that event, whether the host
+whose event is already known enters ready with that event, whether the host
 reported it to another set or the call or copy settled as it started. A set
 that drops drops its remaining members first.
 
@@ -235,8 +235,8 @@ impl Waitable for Timer;
 
 fn first_ready() -> String with MonotonicClock {
     let mut set = WaitableSet::<Timer>::new();
-    set.join(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
-    set.join(Timer::Short(MonotonicClock::wait_for(0)));
+    set.insert(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
+    set.insert(Timer::Short(MonotonicClock::wait_for(0)));
     let ready = set.wait();
     let name = match ready.member {
         Short(call) => {
@@ -259,7 +259,7 @@ export fn run() with (Stdout, MonotonicClock) {
 
 The host reports a call's resolution once, but a call a set handed back
 after its resolution still ends as any call does. `wait` returns its result,
-`cancel` and a drop end it, and a set it joins again reports it at once with
+`cancel` and a drop end it, and a set it enters again reports it at once with
 the same event.
 
 #### Handling an Async Operation
