@@ -73,8 +73,20 @@ pub enum Context {
     IfReturn,
 }
 
+/// A second value `s`, declared in the case's body beside `t`. The body's
+/// locals drop in reverse declaration order, so it fixes where `t`'s drop falls
+/// among the body's.
+pub enum Companion {
+    None,
+    /// Declared before `t`.
+    Before,
+    /// Declared after `t`.
+    After,
+}
+
 pub struct Case {
     pub producer: Producer,
+    pub companion: Companion,
     pub consumer: Consumer,
     pub context: Context,
     /// The `flag` the case runs with: whether a conditional context runs the
@@ -169,15 +181,19 @@ impl Context {
 
 impl Case {
     /// Every case: each consumer in each context, and a conditional context
-    /// both taken and skipped.
+    /// both taken and skipped. Where `t` comes from does not bear on the order
+    /// of the body's drops, so only `Literal` takes a companion.
     pub fn all() -> List<Case> {
         let mut cases: List<Case> = [];
         for let producer of Producer::all() {
-            for let consumer of Consumer::all() {
-                for let context of Context::all() {
-                    cases.push(Case { producer, consumer, context, flag: true });
-                    if context.is_conditional() {
-                        cases.push(Case { producer, consumer, context, flag: false });
+            let companions: List<Companion> = if producer matches { Literal } { [None, Before, After] } else { [None] };
+            for let companion of companions {
+                for let consumer of Consumer::all() {
+                    for let context of Context::all() {
+                        cases.push(Case { producer, companion, consumer, context, flag: true });
+                        if context.is_conditional() {
+                            cases.push(Case { producer, companion, consumer, context, flag: false });
+                        }
                     }
                 }
             }
@@ -186,7 +202,7 @@ impl Case {
     }
 
     pub fn label(&self) -> String {
-        return `${self.producer:?}, ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+        return `${self.producer:?} (companion ${self.companion:?}), ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
     }
 
     fn runs_consumer(&self) -> bool {
@@ -204,21 +220,26 @@ impl Case {
 
     /// What the case prints, given that it runs as `case_<index>`.
     pub fn expected(&self, index: i32) -> String {
-        let drop = `drop ${index}\n`;
         let mut out = `case ${index}\nbefore\n`;
-        // The `return` leaves the body, dropping whatever it still holds.
-        if self.context matches { IfReturn } && self.runs_consumer() {
-            out.push_str(&drop);
-            return out;
-        }
         if self.drops_at_consumer() {
-            out.push_str(&drop);
+            out.push_str(`drop ${index}\n`);
         }
-        out.push_str("after\n");
-        if !self.drops_at_consumer() {
-            out.push_str(&drop);
+        // The `return` leaves the body before the marker after the consumer.
+        if !(self.context matches { IfReturn } && self.runs_consumer()) {
+            out.push_str("after\n");
         }
+        out.push_str(&self.body_drops(index));
         return out;
+    }
+
+    /// What the body still holds as it ends, in the reverse of the order it
+    /// declared it. A consumer that binds the value moves it to a local
+    /// declared after both `t` and `s`.
+    fn body_drops(&self, index: i32) -> String {
+        let t = if self.drops_at_consumer() { "" } else { `drop ${index}\n` };
+        let s = if self.companion matches { None } { "" } else { `drop ${companion_id(index)}\n` };
+        let rebound = self.runs_consumer() && self.consumer.moves();
+        return if rebound || self.companion matches { Before } { `${t}${s}` } else { `${s}${t}` };
     }
 
     /// Whether `t` may be read after the consumer: no path reaching that read
@@ -235,7 +256,14 @@ impl Case {
         }
         f.emit_begin(w);
         w.line(`log_stdout("case ${index}");`);
+        let companion = `let s = Tok { id: ${companion_id(index)} };`;
+        if self.companion matches { Before } {
+            w.line(&companion);
+        }
         self.producer.emit(index, w);
+        if self.companion matches { After } {
+            w.line(&companion);
+        }
         w.line("log_stdout(\"before\");");
         let statement = self.consumer.statement();
         match self.context {
@@ -283,6 +311,10 @@ impl Case {
         }
         w.end();
     }
+}
+
+fn companion_id(index: i32) -> i32 {
+    return 100_000 + index;
 }
 
 /// One program running every case in `cases`, in order.

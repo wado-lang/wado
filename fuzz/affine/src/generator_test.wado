@@ -28,7 +28,7 @@ test "every value drops once, where the model says" {
 // a move, so only one producer runs.
 test "a read after a move is rejected, and only there" {
     for let case of Case::all() {
-        if !case.producer matches { Literal } {
+        if !(case.producer matches { Literal } && case.companion matches { None }) {
             continue;
         }
         let result = eval(read_after_program(&case));
