@@ -4249,6 +4249,40 @@ impl TypeTable {
         )
     }
 
+    /// `type_id` with each type `replacements` names replaced by its value,
+    /// wherever it stands.
+    pub fn replace_subterms(&mut self, type_id: TypeId, replacements: &IndexMap<TypeId, TypeId>) -> TypeId {
+        self.subst_rec(
+            type_id,
+            &Leaves {
+                subterms: replacements,
+                ..Leaves::NONE
+            },
+        )
+    }
+
+    /// The tuples `id` is built over that hold one of `packs` as an element,
+    /// the outermost where one holds another.
+    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexSet<TypeId> {
+        let mut found = IndexSet::default();
+        self.collect_tuples_holding(id, packs, &mut found);
+        found
+    }
+
+    fn collect_tuples_holding(&self, id: TypeId, packs: &[TypeId], found: &mut IndexSet<TypeId>) {
+        if self
+            .as_tuple(id)
+            .is_some_and(|elems| elems.iter().any(|e| packs.contains(e)))
+        {
+            found.insert(id);
+            return;
+        }
+        self.any_constituent(id, &mut |t| {
+            self.collect_tuples_holding(t, packs, found);
+            false
+        });
+    }
+
     /// `type_id` with each effect parameter or variable `rows` names replaced
     /// by its row, wherever a function type in it carries one.
     pub fn substitute_effect_rows(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
@@ -4520,6 +4554,9 @@ impl TypeTable {
     fn subst_rec(&mut self, type_id: TypeId, leaves: &Leaves<'_>) -> TypeId {
         if leaves.is_empty() {
             return type_id;
+        }
+        if let Some(&replaced) = leaves.subterms.get(&type_id) {
+            return replaced;
         }
         match self.get(type_id).clone() {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
@@ -7154,6 +7191,7 @@ static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
+static NO_SUBTERMS: IndexMap<TypeId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value
 /// is one whatever its row, so an instance whose arguments differ only in
@@ -7190,6 +7228,8 @@ struct Leaves<'s> {
     rows: &'s EffectRows,
     /// Whether every row is emptied, not just the names `rows` holds.
     erase_rows: bool,
+    /// Whole types replaced wherever they stand, before any leaf inside them.
+    subterms: &'s IndexMap<TypeId, TypeId>,
 }
 
 /// One generic associated type's parameters, and the arguments a projection
@@ -7209,6 +7249,7 @@ impl Leaves<'static> {
         projections: &NO_PROJECTIONS,
         rows: &NO_ROWS,
         erase_rows: false,
+        subterms: &NO_SUBTERMS,
     };
 }
 
@@ -7220,6 +7261,7 @@ impl Leaves<'_> {
             && self.projections.is_empty()
             && self.rows.is_empty()
             && !self.erase_rows
+            && self.subterms.is_empty()
     }
 
     /// `effects` with each parameter or variable this substitution names
