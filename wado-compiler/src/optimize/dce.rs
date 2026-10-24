@@ -409,7 +409,6 @@ fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
 /// from the set of reachable functions and their effect usage.
 fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &Reached) {
-    // Collect used WASI functions from reachable functions
     let mut used_wasi_functions: IndexSet<String> = stored_positions(reachable)
         .flat_map(|pos| graph.analyses[pos].effect_calls.iter().cloned())
         .collect();
