@@ -1255,9 +1255,11 @@ impl FieldSlots {
 
     /// Whether a read `live` holds may take field `top` of `root`.
     fn read_later(&self, root: u32, top: u32, live: &IndexSet<u32>) -> bool {
-        [Some(top), None]
-            .iter()
-            .any(|field| self.ids.get(&(root, *field)).is_some_and(|id| live.contains(id)))
+        [Some(top), None].iter().any(|field| {
+            self.ids
+                .get(&(root, *field))
+                .is_some_and(|id| live.contains(id))
+        })
     }
 
     /// `root.field = v`, `root` a struct of `field_count` fields where that is
@@ -1275,8 +1277,9 @@ impl FieldSlots {
         let Some(count) = field_count else {
             return;
         };
-        let whole = self.id(root, None);
-        if live.swap_remove(&whole) {
+        if let Some(whole) = self.ids.get(&(root, None))
+            && live.swap_remove(whole)
+        {
             for other in (0..count).filter(|&f| f != field) {
                 let id = self.id(root, Some(other));
                 live.insert(id);
