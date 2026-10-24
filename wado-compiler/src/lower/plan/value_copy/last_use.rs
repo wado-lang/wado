@@ -112,6 +112,15 @@ pub fn analyze_ownership(
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
         exits: Vec::new(),
+        reference_locals: all_locals
+            .iter()
+            .copied()
+            .filter(|&l| {
+                func.locals
+                    .get(l as usize)
+                    .is_some_and(|local| place::is_reference(local.type_id, type_table))
+            })
+            .collect(),
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
@@ -760,11 +769,14 @@ impl<'a> Analyzer<'a> {
         rebinds_place: bool,
         live: &IndexSet<u32>,
     ) {
+        // `p.c.n = 9` changes the `Counter` holding `n`, which a binding of
+        // `p.c` shares, not an `i32` that reaches nothing.
+        let written = Some(place::projection_base(place).unwrap_or(place).type_id);
         if let Names::Place(path) = self.resolver.names(place) {
             self.mutations.push(Mutation {
                 path,
                 lands,
-                written: Some(place.type_id),
+                written,
                 rebinds_place,
                 live: live.clone(),
             });
@@ -780,8 +792,11 @@ impl<'a> Analyzer<'a> {
                 };
                 // A root the write cannot land in only produced the handle:
                 // `view.chars().count()` advances the iterator, not `view`.
+                // A reference root's location is its slot, not where its
+                // referent lies.
                 if let Lands::Place(landed) = lands
                     && !path.through_ref
+                    && !self.reference_locals.contains(&path.root)
                     && let Some(location) = self.points_to.location(self.frame, path.root)
                     && !landed.contains(location)
                 {
@@ -790,7 +805,7 @@ impl<'a> Analyzer<'a> {
                 self.mutations.push(Mutation {
                     path,
                     lands,
-                    written: Some(place.type_id),
+                    written,
                     rebinds_place: false,
                     live: live.clone(),
                 });
@@ -1299,6 +1314,7 @@ struct Analyzer<'a> {
     /// This body's frame in `points_to`.
     frame: u32,
     exits: Vec<Exit>,
+    reference_locals: IndexSet<u32>,
     all_locals: IndexSet<u32>,
     /// Place-level move sites found at literals, filtered after the walk.
     place_cands: Vec<PlaceMove<'a>>,
@@ -2005,7 +2021,9 @@ impl<'a> Analyzer<'a> {
             expr: place,
         } = &arg.kind
         else {
+            // A reference handed on is written through, confined or not.
             if let TirExprKind::Local { index, .. } = &arg.kind
+                && !place::is_reference(arg.type_id, self.type_table)
                 && !ref_receiver
                 && callee.is_some_and(|(c, position)| {
                     self.confined_params.is_confined(c, position as usize)
