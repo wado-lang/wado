@@ -23,6 +23,10 @@ impl<T> Wrap<T> {
     fn take(w: Wrap<T>) -> T {
         return w.v;
     }
+
+    fn pair<U>(w: Wrap<T>, u: U) -> T {
+        return w.v;
+    }
 }
 
 type Same<T> = Wrap<T>;
@@ -57,7 +61,13 @@ export fn run() with Stdout {
     let q = Chained::<_>::take(f);
     let r = dep::Same::take(h);
     println(`${j} ${k} ${m} ${n} ${o} ${p} ${q} ${r}`);
+
+    let s = Same::pair(b, "u");
+    let t = Same::<i32>::pair(b, "u");
+    let u = Same::<_>::pair(b, "u");
+    let w = Chained::<i32>::pair::<String>(f, "u");
+    println(`${s} ${t} ${u} ${w}`);
 }
 
 __DATA__
-{"stdout": "1 2 2 2 2 3 4 5 2\n2 2 2 2 2 3 3 5\n"}
+{"stdout": "1 2 2 2 2 3 4 5 2\n2 2 2 2 2 3 3 5\n2 2 2 3\n"}

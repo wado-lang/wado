@@ -650,9 +650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            let ref_kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(receiver));
-            if !self.report_unmet_impl_bound(receiver, ref_kind.as_slice(), span, |s, def| {
-                s.impl_offers_method(def, method_name)
+            if !self.report_unmet_impl_bound(receiver, span, |s, def| {
+                s.impl_offers_method(def, method_name, required_trait)
             }) {
                 let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
                 let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
@@ -1422,45 +1421,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `param_types` read at the receiver's arguments `declaring_args` and the
-    /// method's `method_type_args`, where either list writes any.
+    /// method's `method_type_args`, where either list writes any, and as the
+    /// newtype `inheriting` reads its base's static.
     fn instantiate_static_params(
         &self,
         sig: Option<&MethodSig>,
         declaring_args: &[TypeId],
         method_type_args: &[TypeId],
         self_in_args: bool,
+        inheriting: Option<TypeId>,
         param_types: &mut [TypeId],
     ) {
-        let Some(sig) = sig else {
-            return;
-        };
-        if (declaring_args.is_empty() && method_type_args.is_empty()) || param_types.is_empty() {
-            return;
-        }
-        // `TreeMap::<String, i32>` spells the *target's* arguments;
-        // `impl … for TreeMap<String, V>` numbers only `V`. The declaring
-        // block is what aligns the two.
-        let declaring = sig
-            .declaring_impl
-            .map(|id| self.tysys.signatures.impl_sig(id));
-        let instantiated = sig.instantiate_call_with(
-            &self.tysys.type_table,
-            declaring,
-            declaring_args,
-            method_type_args,
-        );
-        // `param_types` leads with the receiver exactly where the spelling
-        // wrote one, so the instantiated list must start at the same parameter.
-        let skip = if self_in_args {
-            0
-        } else {
-            sig.first_value_param().min(instantiated.param_types.len())
-        };
-        for (param_type, &instantiated_type) in param_types
-            .iter_mut()
-            .zip(&instantiated.param_types[skip..])
+        if let Some(sig) = sig
+            && !(declaring_args.is_empty() && method_type_args.is_empty())
+            && !param_types.is_empty()
         {
-            *param_type = instantiated_type;
+            // `TreeMap::<String, i32>` spells the *target's* arguments;
+            // `impl … for TreeMap<String, V>` numbers only `V`. The declaring
+            // block is what aligns the two.
+            let declaring = sig
+                .declaring_impl
+                .map(|id| self.tysys.signatures.impl_sig(id));
+            let instantiated = sig.instantiate_call_with(
+                &self.tysys.type_table,
+                declaring,
+                declaring_args,
+                method_type_args,
+            );
+            // `param_types` leads with the receiver exactly where the spelling
+            // wrote one, so the instantiated list must start at the same
+            // parameter.
+            let skip = if self_in_args {
+                0
+            } else {
+                sig.first_value_param().min(instantiated.param_types.len())
+            };
+            for (param_type, &instantiated_type) in param_types
+                .iter_mut()
+                .zip(&instantiated.param_types[skip..])
+            {
+                *param_type = instantiated_type;
+            }
+        }
+        if let Some(newtype) = inheriting {
+            self.retype_through_newtype_chain(newtype, param_types);
         }
     }
 
@@ -1875,11 +1879,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &callee_args,
             &method_type_args,
             self_in_args,
+            inherited.then_some(target_type_id),
             &mut param_types,
         );
-        if inherited {
-            self.retype_through_newtype_chain(target_type_id, &mut param_types);
-        }
 
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
@@ -1987,11 +1989,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &callee_args,
                 &method_type_args,
                 self_in_args,
+                inherited.then_some(target_type_id),
                 &mut param_types,
             );
-            if inherited {
-                self.retype_through_newtype_chain(target_type_id, &mut param_types);
-            }
             let mut args = args;
             self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
             args
@@ -2081,16 +2081,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
                 .unwrap_or_default();
-            let declaring = sig
-                .declaring_impl
-                .map(|id| self.tysys.signatures.impl_sig(id));
-            let instantiated = sig.instantiate_call_with(
-                &self.tysys.type_table,
-                declaring,
+            self.instantiate_static_params(
+                Some(&sig),
                 &declaring_args,
                 &method_type_args,
+                self_in_args,
+                inherited.then_some(target_type_id),
+                &mut param_types,
             );
-            param_types = instantiated.param_types;
             self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
         }
 

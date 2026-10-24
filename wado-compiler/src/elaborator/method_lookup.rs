@@ -973,10 +973,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether impl block `def` offers `method_name` to a call: an inherent
     /// block declaring it, or a trait block whose trait declares it and is in
-    /// scope, as the lookup order has it.
-    pub(super) fn impl_offers_method(&self, def: DefId, method_name: &str) -> bool {
+    /// scope, as the lookup order has it. A trait-qualified call is offered
+    /// only blocks of `required`'s trait.
+    pub(super) fn impl_offers_method(
+        &self,
+        def: DefId,
+        method_name: &str,
+        required: Option<&RequiredTrait>,
+    ) -> bool {
         let header = impl_header(&self.tysys.trait_env, &ImplBlockRef(def));
         let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
+        if let Some(required) = required
+            && header.trait_def().map(Resolution::Def) != Some(required.decl)
+        {
+            return false;
+        }
         let Some(trait_) = header.trait_def() else {
             return declares(&header.methods);
         };
@@ -999,17 +1010,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Each link of the receiver's newtype chain is searched in turn, behind
     /// any reference, at the arguments that link spells, as dispatch reaches
-    /// a newtype's base and a reference's pointee. The blocks for references
-    /// searched are those for `ref_kinds`, the ones the site's dispatch reaches.
+    /// a newtype's base and a reference's pointee. Behind a reference only the
+    /// blocks for that reference's kind are searched: dispatch reaches no
+    /// `&X` block from a `&mut X`.
     pub(super) fn report_unmet_impl_bound(
         &mut self,
         receiver: TypeId,
-        ref_kinds: &[RefKind],
         span: Span,
         offers: impl Fn(&Self, DefId) -> bool,
     ) -> bool {
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let mut link = self.tysys.type_table.borrow().peel_refs(receiver);
+        let (ref_kind, mut link) = {
+            let table = self.tysys.type_table.borrow();
+            (
+                RefKind::from_resolved(table.get(receiver)),
+                table.peel_refs(receiver),
+            )
+        };
         loop {
             if let Some(head) = self.tysys.struct_name_for_type(link) {
                 let target = self.impl_target_of(link, &DeclName::new(&head));
@@ -1020,7 +1037,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         table.nominal_def(link),
                     )
                 };
-                let on_ref = ref_kinds.iter().flat_map(|&kind| {
+                let on_ref = ref_kind.into_iter().flat_map(|kind| {
                     trait_env
                         .all_impl_keys(&ImplTargetKey::Ref(kind))
                         .into_iter()
@@ -1117,14 +1134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|&item| self.tysys.compiler_trait_def(item))
             .collect();
-        // `&mut X` coerces to `&X`, so a block for either answers it.
-        let ref_kinds: &[RefKind] =
-            match RefKind::from_resolved(self.tysys.type_table.borrow().get(ty)) {
-                Some(RefKind::Shared) => &[RefKind::Shared],
-                Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
-                None => &[],
-            };
-        self.report_unmet_impl_bound(ty, ref_kinds, span, |s, def| {
+        self.report_unmet_impl_bound(ty, span, |s, def| {
             s.tysys
                 .signatures
                 .impl_trait(def)
@@ -1246,7 +1256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let header = impl_header(&trait_env, &ImplBlockRef(def));
             let declared = match (kind, header.trait_def()) {
                 (ImplKind::Inherent, None) | (ImplKind::Trait, Some(_)) => {
-                    self.impl_offers_method(def, method_name)
+                    self.impl_offers_method(def, method_name, None)
                 }
                 (ImplKind::Inherent, Some(_)) | (ImplKind::Trait, None) => false,
             };
