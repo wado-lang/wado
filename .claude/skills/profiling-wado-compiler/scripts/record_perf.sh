@@ -16,8 +16,12 @@ out=$1
 shift 2
 
 # Ubuntu's /usr/bin/perf is a wrapper that refuses a kernel it has no
-# linux-tools package for, so call the versioned binary directly.
-perf=$(ls /usr/lib/linux-tools-*/perf 2>/dev/null | head -1 || true)
+# linux-tools package for, so call the versioned binary directly: the running
+# kernel's, or else the newest.
+perf=/usr/lib/linux-tools-$(uname -r)/perf
+if [[ ! -x $perf ]]; then
+  perf=$(ls /usr/lib/linux-tools-*/perf 2>/dev/null | sort -V | tail -1 || true)
+fi
 if [[ -z $perf ]]; then
   perf=$(command -v perf || true)
 fi

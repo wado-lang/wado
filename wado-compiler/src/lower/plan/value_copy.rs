@@ -18,8 +18,6 @@ pub mod reach;
 pub mod retention;
 pub mod synthesize;
 
-use std::cell::RefCell;
-
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
@@ -30,7 +28,7 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId,
 };
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -375,25 +373,22 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// asks it of every expression, and each answer walks the type's members.
 pub struct CopyNeeds<'a> {
     pub type_table: &'a TypeTable,
-    answers: RefCell<IndexMap<TypeKey, bool>>,
+    answers: TypeMemo<bool>,
 }
 
 impl<'a> CopyNeeds<'a> {
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
-            answers: RefCell::default(),
+            answers: TypeMemo::default(),
         }
     }
 
     pub fn of(&self, type_id: TypeId) -> bool {
-        let key = self.type_table.type_key(type_id);
-        if let Some(&answer) = self.answers.borrow().get(&key) {
-            return answer;
-        }
-        let answer = needs_value_copy(type_id, self.type_table);
-        self.answers.borrow_mut().insert(key, answer);
-        answer
+        self.answers
+            .get_or_compute(self.type_table.type_key(type_id), || {
+                needs_value_copy(type_id, self.type_table)
+            })
     }
 }
 

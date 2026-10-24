@@ -20,7 +20,6 @@
 //! The solve collapses each cycle of copies into one node, as every node on it
 //! ends with one set, and merges a node fed by one copy alone into its source.
 
-use std::cell::RefCell;
 use std::ops::Range;
 
 mod loc_set;
@@ -44,7 +43,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{TypeKey, TypeMemo, TypeTable};
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.
@@ -247,7 +246,7 @@ struct HoldsHandle<'a> {
     type_table: &'a TypeTable,
     fields: &'a StructFields,
     handle: Handle,
-    known: RefCell<IndexMap<TypeKey, bool>>,
+    known: TypeMemo<bool>,
 }
 
 impl<'a> HoldsHandle<'a> {
@@ -256,18 +255,14 @@ impl<'a> HoldsHandle<'a> {
             type_table,
             fields,
             handle,
-            known: RefCell::default(),
+            known: TypeMemo::default(),
         }
     }
 
     fn of(&self, ty: TypeId) -> bool {
-        let key = self.type_table.type_key(ty);
-        if let Some(&known) = self.known.borrow().get(&key) {
-            return known;
-        }
-        let answer = self.walk(ty, None, &mut IndexSet::default(), 0);
-        self.known.borrow_mut().insert(key, answer);
-        answer
+        self.known.get_or_compute(self.type_table.type_key(ty), || {
+            self.walk(ty, None, &mut IndexSet::default(), 0)
+        })
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -470,6 +465,8 @@ struct Graph {
     locations: Vec<u32>,
     /// Each node's index in `locations`, where it is one.
     location_of: Vec<Option<Loc>>,
+    /// Whether `solve` has put `locations` in node order.
+    numbered: bool,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
     rep: DisjointSets,
@@ -577,6 +574,10 @@ impl Graph {
             return;
         }
         let loc = *self.location_of[loc as usize].get_or_insert_with(|| {
+            assert!(
+                !self.numbered,
+                "every location must be met before solve numbers them"
+            );
             self.locations.push(loc);
             Loc(u32::try_from(self.locations.len() - 1).expect("location count fits u32"))
         });
@@ -832,6 +833,7 @@ impl Graph {
             locs.sort_unstable();
             *set = locs.into_iter().collect();
         }
+        self.numbered = true;
     }
 
     fn solve(&mut self) {

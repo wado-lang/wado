@@ -781,22 +781,22 @@ fn run_optimization_passes(
             // it last ran, so that round would rebuild the state and rewrite
             // nothing.
             macro_rules! gated {
-            (@run $name:expr, $id:expr, $pass:expr) => {
-                run_pass($name, project, profiler, |p| {
-                    gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
-                })
-            };
-            ($name:expr, $id:expr, $pass:expr) => {{
-                record!($name, gated!(@run $name, $id, $pass));
-            }};
-        }
+                (@run $name:expr, $id:expr, $pass:expr) => {
+                    run_pass($name, project, profiler, |p| {
+                        gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
+                    })
+                };
+                ($name:expr, $id:expr, $pass:expr) => {{
+                    record!($name, gated!(@run $name, $id, $pass));
+                }};
+            }
             // Reports changes to the gate but not to `iter_changed` — must never
             // keep the loop alive on its own.
             macro_rules! gate_only {
-            ($name:expr, $id:expr, $pass:expr) => {{
-                gated!(@run $name, $id, $pass);
-            }};
-        }
+                ($name:expr, $id:expr, $pass:expr) => {{
+                    gated!(@run $name, $id, $pass);
+                }};
+            }
             // Container SROA must run before inline in each iteration: inline
             // expands `IndexValue::index_value` and friends into raw
             // `builtin::array_get_value` + field-access pairs, after which the method-call

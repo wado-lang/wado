@@ -64,10 +64,14 @@ for (const text of readFileSync(positionals[0], "utf8").split("\n")) {
     open.push({ name, start: at, node });
     continue;
   }
-  // The host keeps its RSS samples on a stack, so spans nest strictly.
+  // One compile's spans nest strictly; several compiles sharing stderr, as
+  // `wado test` runs them in parallel, interleave theirs.
   const span = open.pop();
   if (span === undefined || span.name !== name) {
-    throw new Error(`span end '${name}' does not close the innermost open span '${span?.name}'`);
+    throw new Error(
+      `span end '${name}' does not close the innermost open span '${span?.name}': ` +
+        "trace one compile at a time (`wado test --parallel 1`)",
+    );
   }
   span.node.wall += at - span.start;
   span.node.count += 1;
