@@ -1869,6 +1869,25 @@ let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem 
 Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 `example/cat.wado`.
 
+### core:process
+
+Runs a host program, confined to the guest's own grants plus a fixed system
+baseline. `availability()` says whether this host can enforce that. The `cmd`
+template splits literal text on spaces and keeps each hole one argument, so
+no shell ever parses it. See [`core:process`](./stdlib-core-process.md).
+
+```wado
+use { cmd, Command, Process } from "core:process";
+
+let head = cmd`git rev-parse HEAD`.read()?;          // ByteList; Err on a nonzero exit
+let out = cmd`git commit -m ${msg} -- ${files}`.output()?;  // status, stdout, stderr
+let status = Command::new("make").arg("test").inherit_stdio().status()?;
+let status = cmd`sleep 30`.timeout(100_000_000).status()?;  // ns; ExitStatus::TimedOut
+
+let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
+child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe
+```
+
 ### core:collections
 
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See

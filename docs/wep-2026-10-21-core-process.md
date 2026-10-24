@@ -112,8 +112,7 @@ On Linux, seccomp covers what Landlock does not:
 The parent `wado` runs wasmtime on several threads. Between `fork` and `exec`, a
 multithreaded process may make only async-signal-safe calls: no allocation, no
 lock. Each backend fits the confinement into that rule without re-executing
-`wado`, so a host embedded in another binary, such as the compiler's e2e
-harness, spawns as `wado` does.
+`wado`, so a host embedded in another binary spawns as `wado` does.
 
 - Linux confines the child in `pre_exec`. Landlock, seccomp and `close_range`
   are bare system calls, so the window admits them. Everything they read is
@@ -381,7 +380,7 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
   and decoding it is the caller's call, so no kind reports bad UTF-8.
 - `ProcessError { program, kind }` names the program as `FsError` names its
   path. The kinds are `NotFound`, `NotPermitted`, `Io(ErrorCode)`,
-  `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only `read` returns
+  `Failed([ExitStatus, ByteList])`, carrying stderr, and `OutputTooLarge`. Only `read` returns
   `Failed`: `output` and `status` hand the exit status back as a value, while
   `read` returns only stdout and has nowhere else to report it.
 
@@ -431,28 +430,31 @@ cannot be taken back.
 
 ## Roadmap
 
-1. The sandbox layer in `wado-host` with the Linux backend: the policy type, the
-   baseline, Landlock and seccomp, the ABI 6 check, the confinement and
-   `close_range` in `pre_exec`. Done when the escape tests pass in CI on Linux.
-2. The macOS backend: the fixed profile, its parameters, and the
-   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
-   macOS.
-3. `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
-   streams, the timeout and
-   its grace option, killing the process group on drop and on guest exit,
-   `--deny-process`, and `denied` for a mapping that is not the same path.
-4. `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`, `status`
-   and `read`, with its stdlib reference and a cheatsheet entry.
-5. Filtering the network per host through a proxy, for the guest and the child
-   together.
-6. WSL2: confirm the Landlock ABI its kernel offers. Done when the escape tests
-   pass under WSL2.
+- [x] The sandbox layer in `wado-host` with the Linux backend: the policy type,
+      the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
+      `close_range` in `pre_exec`. Done when the escape tests pass in CI on
+      Linux.
+- [x] The macOS backend: the fixed profile, its parameters, and the
+      `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
+      macOS.
+- [x] `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
+      streams, the timeout, killing the process group on drop and on guest
+      exit, `--deny-process`, and `denied` for a mapping that is not the same
+      path.
+- [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
+      `status` and `read`, with its stdlib reference and a cheatsheet entry.
+- [ ] Filtering the network per host through a proxy, for the guest and the
+      child together.
+- [ ] WSL2: confirm the Landlock ABI its kernel offers. Done when the escape
+      tests pass under WSL2.
 
 ## Known gaps
 
 - The CLI surface is not named: a flag that adds read paths to the baseline (a
   toolchain under `~/.cargo`, say), a flag that grants the real `HOME`, and the
-  option that sets the grace period.
+  option that sets the grace period, which stays at 3 seconds until it is.
+- The compiler's e2e harness does not link `core:process`, so a fixture cannot
+  spawn; the stdlib's own tests cover it under `wado test`.
 - Resources are unlimited. A child can run many children, use memory and CPU
   without bound, and fork without limit. How many children may run at once,
   rlimits and cgroups are all open.
