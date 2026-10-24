@@ -9,6 +9,24 @@
 
 use { CodeWriter, FnSpec } from "lib:wadopoet";
 
+/// Where the case's `t` comes from.
+pub enum Producer {
+    /// `let t = Tok { … };`.
+    Literal,
+    /// `let t = make(…);`.
+    Returned,
+    /// The case's own parameter.
+    Param,
+    /// `let t = pair.0;`, moved out of a tuple.
+    TupleElement,
+    /// `let t = h.tok;`, moved out of a struct without a `Drop`.
+    Field,
+    /// `let t = match Option::Some(…) { Some(v) => v, None => … };`.
+    MatchArm,
+    /// `let Some(t) = Option::Some(…) else { … };`.
+    LetElse,
+}
+
 /// What the generated statement does with the value `t`.
 pub enum Consumer {
     /// `eat(t);`, whose parameter drops as `eat` returns.
@@ -39,14 +57,54 @@ pub enum Context {
     LoopOnce,
     /// In `blk: { … }`.
     Labeled,
+    /// In `while flag { …; break; }`.
+    While,
+    /// In `if flag { …; return; }`, which leaves before the marker after it.
+    IfReturn,
 }
 
 pub struct Case {
+    pub producer: Producer,
     pub consumer: Consumer,
     pub context: Context,
     /// The `flag` the case runs with: whether a conditional context runs the
     /// consumer.
     pub flag: bool,
+}
+
+impl Producer {
+    pub fn all() -> List<Producer> {
+        return [Literal, Returned, Param, TupleElement, Field, MatchArm, LetElse];
+    }
+
+    fn emit(&self, index: i32, w: &mut CodeWriter) {
+        let tok = `Tok { id: ${index} }`;
+        match self {
+            Literal => w.line(`let t = ${tok};`),
+            Returned => w.line(`let t = make(${index});`),
+            Param => {
+            },
+            TupleElement => {
+                w.line(`let pair = [${tok}, 0];`);
+                w.line("let t = pair.0;");
+            },
+            Field => {
+                w.line(`let h = Holder { tok: ${tok}, n: 0 };`);
+                w.line("let t = h.tok;");
+            },
+            MatchArm => {
+                w.begin(`let t = match Option::Some(${tok})`);
+                w.line("Some(v) => v,");
+                w.line("None => unreachable(),");
+                w.end_with(";");
+            },
+            LetElse => {
+                w.begin(`let Some(t) = Option::Some(${tok}) else`);
+                w.line("unreachable();");
+                w.end_with(";");
+            },
+        }
+    }
 }
 
 impl Consumer {
@@ -79,12 +137,12 @@ impl Consumer {
 
 impl Context {
     pub fn all() -> List<Context> {
-        return [Straight, If, Match, LoopOnce, Labeled];
+        return [Straight, If, Match, LoopOnce, Labeled, While, IfReturn];
     }
 
     /// Whether `flag` decides if the consumer runs.
     pub fn is_conditional(&self) -> bool {
-        return self matches { If | Match };
+        return self matches { If | Match | While | IfReturn };
     }
 
     /// Whether the consumer runs in a block of its own, which ends before the
@@ -99,11 +157,13 @@ impl Case {
     /// both taken and skipped.
     pub fn all() -> List<Case> {
         let mut cases: List<Case> = [];
-        for let consumer of Consumer::all() {
-            for let context of Context::all() {
-                cases.push(Case { consumer, context, flag: true });
-                if context.is_conditional() {
-                    cases.push(Case { consumer, context, flag: false });
+        for let producer of Producer::all() {
+            for let consumer of Consumer::all() {
+                for let context of Context::all() {
+                    cases.push(Case { producer, consumer, context, flag: true });
+                    if context.is_conditional() {
+                        cases.push(Case { producer, consumer, context, flag: false });
+                    }
                 }
             }
         }
@@ -111,14 +171,17 @@ impl Case {
     }
 
     pub fn label(&self) -> String {
-        return `${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+        return `${self.producer:?}, ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+    }
+
+    fn runs_consumer(&self) -> bool {
+        return !self.context.is_conditional() || self.flag;
     }
 
     /// Whether the value drops between the markers around the consumer, rather
     /// than when the case's body ends.
     fn drops_at_consumer(&self) -> bool {
-        let runs = !self.context.is_conditional() || self.flag;
-        if !runs || !self.consumer.moves() {
+        if !self.runs_consumer() || !self.consumer.moves() {
             return false;
         }
         return self.consumer.drops_in_statement() || self.context.opens_block();
@@ -128,6 +191,11 @@ impl Case {
     pub fn expected(&self, index: i32) -> String {
         let drop = `drop ${index}\n`;
         let mut out = `case ${index}\nbefore\n`;
+        // The `return` leaves the body, dropping whatever it still holds.
+        if self.context matches { IfReturn } && self.runs_consumer() {
+            out.push_str(&drop);
+            return out;
+        }
         if self.drops_at_consumer() {
             out.push_str(&drop);
         }
@@ -138,12 +206,21 @@ impl Case {
         return out;
     }
 
-    fn emit(&self, index: i32, w: &mut CodeWriter) {
+    /// Whether `t` may be read after the consumer: no path reaching that read
+    /// moved it.
+    pub fn readable_after(&self) -> bool {
+        return !self.consumer.moves() || self.context matches { IfReturn };
+    }
+
+    fn emit(&self, index: i32, w: &mut CodeWriter, read_after: bool) {
         let mut f = FnSpec::new(`case_${index}`);
         f.add_param("flag", "bool");
+        if self.producer matches { Param } {
+            f.add_param("t", "Tok");
+        }
         f.emit_begin(w);
         w.line(`log_stdout("case ${index}");`);
-        w.line(`let t = Tok { id: ${index} };`);
+        self.producer.emit(index, w);
         w.line("log_stdout(\"before\");");
         let statement = self.consumer.statement();
         match self.context {
@@ -172,14 +249,38 @@ impl Case {
                 w.line(&statement);
                 w.end();
             },
+            While => {
+                w.begin("while flag");
+                w.line(&statement);
+                w.line("break;");
+                w.end();
+            },
+            IfReturn => {
+                w.begin("if flag");
+                w.line(&statement);
+                w.line("return;");
+                w.end();
+            },
         }
         w.line("log_stdout(\"after\");");
+        if read_after {
+            w.line("let _ = look(&t);");
+        }
         w.end();
     }
 }
 
 /// One program running every case in `cases`, in order.
 pub fn program(cases: &List<Case>) -> String {
+    return emit_program(cases, false);
+}
+
+/// [`program`] for `case` alone, reading `t` once the consumer is done.
+pub fn read_after_program(case: &Case) -> String {
+    return emit_program(&[*case], true);
+}
+
+fn emit_program(cases: &List<Case>, read_after: bool) -> String {
     let mut w = CodeWriter::new();
     w.line("use { log_stdout } from \"core:cli\";");
     w.blank();
@@ -193,7 +294,16 @@ pub fn program(cases: &List<Case>) -> String {
     w.end();
     w.end();
     w.blank();
+    w.begin("affine struct Holder");
+    w.line("tok: Tok,");
+    w.line("n: i32,");
+    w.end();
+    w.blank();
     w.line("type Renamed = Tok;");
+    w.blank();
+    w.begin("fn make(id: i32) -> Tok");
+    w.line("return Tok { id };");
+    w.end();
     w.blank();
     w.line("fn eat(t: Tok) {}");
     w.blank();
@@ -202,12 +312,13 @@ pub fn program(cases: &List<Case>) -> String {
     w.end();
     for let i of 0..<cases.len() {
         w.blank();
-        cases[i].emit(i, &mut w);
+        cases[i].emit(i, &mut w, read_after);
     }
     w.blank();
     w.begin("export fn run()");
     for let i of 0..<cases.len() {
-        w.line(`case_${i}(builtin::black_box(${cases[i].flag}));`);
+        let tok = if cases[i].producer matches { Param } { `, Tok { id: ${i} }` } else { "" };
+        w.line(`case_${i}(builtin::black_box(${cases[i].flag})${tok});`);
     }
     w.end();
     return w.to_string();

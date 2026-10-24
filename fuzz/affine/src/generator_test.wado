@@ -1,4 +1,5 @@
-use { Case, program, expected } from "./generator.wado";
+use { Case, Producer, program, read_after_program, expected } from "./generator.wado";
+use { EvalError } from "core:eval";
 use { eval } from "core:eval";
 
 /// The first case whose part of `actual` differs from what it expects.
@@ -20,4 +21,24 @@ test "every value drops once, where the model says" {
     let out = eval(source).unwrap();
     assert out.status matches { Exited(0) }, `${out.status:?}\n${out.stderr}\n${source}`;
     assert out.stdout == expected(&cases), first_divergence(&cases, &out.stdout);
+}
+
+// One program per case: a rejection stops the whole program, so cases cannot
+// share one. The producer does not decide whether the read is reachable after
+// a move, so only one producer runs.
+test "a read after a move is rejected, and only there" {
+    for let case of Case::all() {
+        if !case.producer matches { Literal } {
+            continue;
+        }
+        let result = eval(read_after_program(&case));
+        if case.readable_after() {
+            assert result matches { Ok(_) }, `${case.label()}: ${result:?}`;
+        } else {
+            let Err(EvalError::CompileFailed(failure)) = result else {
+                panic(`${case.label()}: expected a rejection, got ${result:?}`);
+            };
+            assert failure.rendered.contains("affine value `t` used after it was moved"), `${case.label()}: ${failure.rendered}`;
+        }
+    }
 }
