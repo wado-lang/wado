@@ -2062,6 +2062,17 @@ fn run() {
 }
 
 #[test]
+fn test_format_keeps_destructuring_assignment() {
+    let source = "fn run() {\n    [a,b]=[b,a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn run() {\n    [a, b] = [b, a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n"
+    );
+    assert_format_preserves_ast(source);
+}
+
+#[test]
 fn test_format_preserves_all_compound_ops() {
     let source = r"
 fn run() {

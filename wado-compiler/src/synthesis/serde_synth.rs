@@ -97,15 +97,16 @@ pub fn synthesize_serde(project: &mut Package) {
                 // there is nothing here left to generate for it.
                 SynthTrait::Serialize => {}
                 SynthTrait::Deserialize => {
-                    let key = MethodName::format_local(
-                        &module
-                            .type_table
-                            .borrow()
-                            .fq_base_type_name(req.target_type_id),
-                        Some(&names.deserialize),
-                        "deserialize",
-                    );
-                    if existing.contains(&key) {
+                    let target = module
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(req.target_type_id);
+                    let written = |trait_: &FqTraitName, method| {
+                        existing.contains(&MethodName::format_local(&target, Some(trait_), method))
+                    };
+                    if written(&names.deserialize, "deserialize")
+                        || written(&names.field_schema, "lookup")
+                    {
                         continue;
                     }
                     for schema_func in generate_field_schema(module, req, &names) {

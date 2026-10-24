@@ -15,7 +15,7 @@ use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
-    derive, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
+    derive, derive_alongside, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -1650,7 +1650,7 @@ impl SolverBridge {
         schema: TraitDeclId,
         first: ImplId,
     ) {
-        let mirrored: Vec<ImplDef> = program
+        let structs: Vec<ImplDef> = program
             .impls_of(deserialize)
             .filter(|(id, def)| {
                 *id >= first
@@ -1663,14 +1663,9 @@ impl SolverBridge {
                         )
                     )
             })
-            .map(|(_, def)| ImplDef {
-                trait_: Some(schema),
-                ..def.clone()
-            })
+            .map(|(_, def)| def.clone())
             .collect();
-        for def in mirrored {
-            program.push_impl(def);
-        }
+        derive_alongside(program, schema, structs);
     }
 
     /// State each declaration's reflection kinds as facts. A struct's kind

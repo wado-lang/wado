@@ -12,23 +12,7 @@ use crate::hashmap::IndexSet;
 /// Add to `program` the impls of `trait_` that `declarations` derive, in order:
 /// each but those another impl reaches at every instance.
 pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
-    // An impl at other arguments (`Eq<String>`) leaves the defaults, where a
-    // derived impl answers, to derive.
-    let has_impl: IndexSet<TypeDeclId> = program
-        .impls_of(trait_)
-        .map(|(_, def)| def)
-        .filter(|def| at_defaults(program, def))
-        .filter_map(|def| match &def.target {
-            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
-            SolverType::Decl(..)
-            | SolverType::Param(_)
-            | SolverType::Pack(_)
-            | SolverType::Ref { .. }
-            | SolverType::Tuple(_)
-            | SolverType::Projection { .. }
-            | SolverType::AnyRow => None,
-        })
-        .collect();
+    let has_impl = covered_heads(program, trait_);
     program.traits.entry(trait_).or_default().structural = true;
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
@@ -80,6 +64,42 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         program.remove_impls(&unsatisfied);
         standing.retain(|(_, id, _)| !unsatisfied.contains(id));
     }
+}
+
+/// Add an impl of `trait_` at each of `derived`'s targets and bounds, where the
+/// trait is derived together with another: each but those another impl of
+/// `trait_` reaches at every instance, as [`derive`] leaves them.
+pub fn derive_alongside(program: &mut Program, trait_: TraitDeclId, derived: Vec<ImplDef>) {
+    let has_impl = covered_heads(program, trait_);
+    for def in derived {
+        if !matches!(&def.target, SolverType::Decl(head, _) if has_impl.contains(head)) {
+            program.push_impl(ImplDef {
+                trait_: Some(trait_),
+                ..def
+            });
+        }
+    }
+}
+
+/// The heads an impl of `trait_` already answers at every instance. An impl at
+/// other arguments (`Eq<String>`) leaves the defaults, where a derived impl
+/// answers, to derive.
+fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId> {
+    program
+        .impls_of(trait_)
+        .map(|(_, def)| def)
+        .filter(|def| at_defaults(program, def))
+        .filter_map(|def| match &def.target {
+            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
+            SolverType::Decl(..)
+            | SolverType::Param(_)
+            | SolverType::Pack(_)
+            | SolverType::Ref { .. }
+            | SolverType::Tuple(_)
+            | SolverType::Projection { .. }
+            | SolverType::AnyRow => None,
+        })
+        .collect()
 }
 
 /// The declaration's own parameters, as its derived impl's target spells them.
@@ -438,6 +458,18 @@ mod tests {
         p.push_impl(concrete(EQ, decl(POINT)));
         let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// A trait derived alongside another yields to a written impl the same
+    /// way: `Point` writes its own, so only `Wrapper` takes one beside `Eq`.
+    #[test]
+    fn a_written_impl_blocks_derivation_alongside() {
+        let mut p = prelude();
+        p.push_impl(concrete(ORD, decl(POINT)));
+        let derived = vec![concrete(EQ, decl(POINT)), concrete(EQ, decl(WRAPPER))];
+        derive_alongside(&mut p, ORD, derived);
+        let targets: Vec<SolverType> = p.impls_of(ORD).map(|(_, def)| def.target.clone()).collect();
+        assert_eq!(targets, vec![decl(POINT), decl(WRAPPER)]);
     }
 
     /// `impl Eq for Wrapper<i32>` covers one instance: the rest still derive,

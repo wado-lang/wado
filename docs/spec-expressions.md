@@ -792,6 +792,74 @@ on that path.
 
 Rationale: [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md).
 
+### Destructuring Assignment
+
+A tuple of assignment targets on the left of `=` assigns each target its element
+of the right side:
+
+<!-- {"fixture":"destructuring_assign_basic.wado"} -->
+
+```wado
+let mut a = 1;
+let mut b = 2;
+let mut c = 3;
+[a, b] = [b, a];
+assert a == 2 && b == 1;
+[a, b, c] = [b, c, a];
+assert a == 1 && b == 3 && c == 2;
+```
+
+Each target is anything that may stand alone on the left of `=`: a local, a
+field, a subscript, a dereference, or a mutable global. The left side is a flat
+tuple of at least one target, with no rest. The right side is any expression of a tuple type
+with one element per target:
+
+<!-- {"fixture":"destructuring_assign_basic.wado"} -->
+
+```wado
+let mut q = 0;
+let mut r = 0;
+[q, r] = divmod(17, 5);
+assert q == 3 && r == 2;
+```
+
+The tuple of the targets' types is the right side's expected type, so a literal
+on the right takes its target's type:
+
+<!-- {"fixture":"destructuring_assign_basic.wado"} -->
+
+```wado
+let mut big: i64 = 0;
+let mut small: u8 = 0;
+[big, small] = [1 << 40, 255];
+assert big == 1 << 40 && small == 255;
+```
+
+The right side is evaluated in full before any target is written. Then each
+target is assigned in turn, left to right, and a target's operands, such as a
+subscript's container and index, are evaluated when that target is assigned:
+
+<!-- {"fixture":"destructuring_assign_evaluation_order.wado"} -->
+
+```wado
+let mut i = 0;
+let mut xs: List<i32> = [0, 0];
+[i, xs[i]] = [1, 9];
+assert i == 1;
+assert xs == [0, 9];
+```
+
+A right side with another number of elements is an error:
+
+<!-- {"fixture":"destructuring_assign_arity_error.wado"} -->
+
+```wado
+[a, b] = [b, a, 3];
+```
+
+Rationale:
+[WEP: Destructuring Assignment](./wep-2026-10-21-destructuring-assignment.md).
+
 ## Ranges
 
 A range operator builds a range value from two bounds:

@@ -1,0 +1,13 @@
+// A mismatched element of a tuple literal is reported at that element.
+
+export fn run() {
+    let mut a = 0;
+    let mut s = "x";
+    [a, s] = [1, 2];
+}
+
+__DATA__
+{
+    "compile_error": ":6:18: analysis error: type mismatch: expected 'String', found 'i32'",
+    "compile_error_codes": ["TYPE_MISMATCH"]
+}

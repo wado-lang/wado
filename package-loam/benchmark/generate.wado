@@ -1,0 +1,53 @@
+//! Greedy generation, timed the way every arm of these benchmarks times it:
+//! one warmup, then three timed runs, each continuing `PROMPT` by `STEPS`
+//! tokens on a model that keeps nothing from the run before. `harness.hpp` is
+//! the same program for the C++ arms.
+
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
+
+pub global PROMPT: String = "Hello, my name is";
+
+/// The tokens each run generates, which the throughput counts.
+pub global STEPS: i32 = 8;
+
+/// A model as these benchmarks drive it.
+pub affine trait Generator with _ {
+    /// Drops what the last run left behind, such as an attention cache.
+    fn reset(&mut self);
+
+    /// The token the model ranks first after `ids`.
+    fn step(&mut self, ids: &List<i32>) -> i32;
+
+    fn encode(text: &String) -> List<i32>;
+
+    fn decode(ids: &List<i32>) -> String;
+}
+
+/// Continues `PROMPT` on `model` and reports the throughput, then what was
+/// generated, so a divergence between arms shows.
+pub fn timed<affine G: Generator>(name: String, model: &mut G) with (Stdout, MonotonicClock, _) {
+    let ids = G::encode(&PROMPT);
+    let mut b = Benchmark {
+        name,
+        // Fixed rather than calibrated, so every arm times equal work.
+        iterations: 3,
+        work_per_iter: Option::Some(STEPS as f64),
+        unit: "tokens",
+    };
+    let generated = b.run("generate", || continued(model, &ids));
+    let mut all = ids;
+    all.extend(&generated);
+    b.println(`generated = ${generated:?} ${G::decode(&all):?}`);
+}
+
+/// The `STEPS` tokens `model` picks greedily after `ids`.
+fn continued<affine G: Generator>(model: &mut G, ids: &List<i32>) -> List<i32> with _ {
+    model.reset();
+    let mut all = *ids;
+    for let _ of 0..<STEPS {
+        all.push(model.step(&all));
+    }
+    return all[ids.len()..<all.len()].to_list();
+}
