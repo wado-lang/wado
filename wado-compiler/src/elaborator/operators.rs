@@ -5,7 +5,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{
+    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, minted_name,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId};
 use crate::token::Span;
@@ -68,6 +70,22 @@ impl AssignValue<'_> {
         match self {
             Self::Ast(expr) => expr.span(),
             Self::Resolved { span, .. } => *span,
+        }
+    }
+}
+
+/// Where an assignment writes, resolved before the value it takes.
+enum WritePlace {
+    /// `recv[i] = v` through `IndexAssign`, its dispatch already recorded.
+    IndexAssign { output_type: TypeId },
+    Place { target_type: TypeId },
+}
+
+impl WritePlace {
+    fn value_type(&self) -> TypeId {
+        match self {
+            Self::IndexAssign { output_type } => *output_type,
+            Self::Place { target_type } => *target_type,
         }
     }
 }
@@ -1030,29 +1048,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
-    /// Resolve `[t0, t1, …] = value` as `let [$da0, $da1, …] = value;` and
-    /// then `t0 = $da0; t1 = $da1; …`. The tuple of the targets' types is the
-    /// value's expected type, so each target is read for its type first, as
-    /// a compound assignment reads its target.
+    /// Resolve `[t0, t1, …] = value` as `let [$da_0, $da_1, …] = value;` and
+    /// then `t0 = $da_0; t1 = $da_1; …`. The tuple of the types the target
+    /// places take is the value's expected type.
     fn resolve_destructuring_assign(
         &mut self,
         assign: &ast::AssignExpr,
         targets: &[ast::Expr],
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        if let Some(rest) = targets
-            .iter()
-            .find(|target| matches!(target, ast::Expr::Spread(..)))
-        {
-            let _ = self.emit(TypeError::DestructuringRest { span: rest.span() });
-            return TypeTable::ERROR;
-        }
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
-        let target_types: Vec<TypeId> = targets
+        let places: Result<Vec<WritePlace>, ()> = targets
             .iter()
-            .map(|target| self.resolve_expr(target, ctx, None))
+            .map(|target| self.resolve_write_place(target, ctx))
             .collect();
-        let expected = self.tysys.type_table.borrow_mut().make_tuple(target_types);
+        let Ok(places) = places else {
+            return TypeTable::ERROR;
+        };
+        let expected = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_tuple(places.iter().map(WritePlace::value_type).collect());
         let value_type = self.resolve_expr(&assign.value, ctx, Some(expected));
         if value_type == TypeTable::ERROR {
             return TypeTable::ERROR;
@@ -1072,20 +1089,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         };
-        // Reserve reify's `$daN` locals, so both walks allocate the same frame.
+        // Reserve reify's `$da_N` locals, so both walks allocate the same frame.
         let ctx = &mut ctx.enter_scope();
-        for (idx, &type_id) in element_types.iter().enumerate() {
-            let _local_index = ctx.add_local(format!("$da{idx}"), type_id, false, None);
+        for &type_id in &element_types {
+            let name = minted_name("da", ctx.fresh_serial());
+            let _local_index = ctx.add_local(name, type_id, false, None);
         }
-        for (target, type_id) in targets.iter().zip(element_types) {
-            self.assign_to_target(
-                target,
-                AssignValue::Resolved {
-                    type_id,
-                    span: assign.value.span(),
-                },
-                ctx,
-            );
+        for ((target, place), type_id) in targets.iter().zip(&places).zip(element_types) {
+            self.check_write(target, place, type_id, assign.value.span(), ctx);
         }
         TypeTable::UNIT
     }
@@ -1211,12 +1222,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         value: AssignValue<'_>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let Ok(place) = self.resolve_write_place(target_ast, ctx) else {
+            return TypeTable::ERROR;
+        };
+        let value_span = value.span();
+        let value_type = match value {
+            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(place.value_type())),
+            AssignValue::Resolved { type_id, .. } => type_id,
+        };
+        self.check_write(target_ast, &place, value_type, value_span, ctx)
+    }
+
+    /// Resolve the place `target_ast` names, ahead of the value written to it.
+    /// `Err` is the refusal, already reported.
+    fn resolve_write_place(
+        &mut self,
+        target_ast: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> Result<WritePlace, ()> {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
-            let Ok(indexed_type) = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)
-            else {
-                return TypeTable::ERROR;
-            };
+            let indexed_type = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)?;
 
             let indexed_immutable = matches!(
                 self.tysys.type_table.borrow().get(indexed_type),
@@ -1227,14 +1253,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     message: "cannot assign through immutable reference".to_string(),
                     span: target_ast.span(),
                 });
-                return TypeTable::ERROR;
+                return Err(());
             }
             if let Some(binding) = self.place_roots_at_immutable_binding(&index_expr.expr, ctx) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot assign into immutable '{binding}'"),
                     span: target_ast.span(),
                 });
-                return TypeTable::ERROR;
+                return Err(());
             }
 
             // Get base type (unwrap reference if needed)
@@ -1279,18 +1305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     if let Some((trait_info, _)) = assign_info {
-                        // Generate: expr.index_assign(index, value)
-                        let value_span = value.span();
-                        let value_type = match value {
-                            AssignValue::Ast(expr) => {
-                                self.resolve_expr(expr, ctx, Some(trait_info.output_type))
-                            }
-                            AssignValue::Resolved { type_id, .. } => type_id,
-                        };
-
-                        // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value_type, trait_info.output_type, value_span);
-
+                        let output_type = trait_info.output_type;
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let receiver = trait_info.receiver.clone();
                         let mangled_method_name = MethodName::format_local(
@@ -1333,31 +1348,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             },
                         );
 
-                        // Reify rebuilds `arr.index_assign(idx,
-                        // value)` from the recorded `index_assign_dispatch` +
-                        // AST; project only the (unit) result type. `index_type`
-                        // / `value_type` were resolved above for their
-                        // fact-recording side effects.
-                        return TypeTable::UNIT;
+                        return Ok(WritePlace::IndexAssign { output_type });
                     }
                 }
             }
         }
 
-        // Standard assignment handling. Fall through here happens when the
-        // target isn't `Expr::Index`, or when the IndexAssign trait lookup
-        // returned None — `value` was not consumed on either of those paths.
-        let Ok(target_type) = self.resolve_place_receiver(target_ast, target_ast, ctx) else {
-            return TypeTable::ERROR;
-        };
-        let value_span = value.span();
-        let value_type = match value {
-            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
-            AssignValue::Resolved { type_id, .. } => type_id,
-        };
+        // Standard assignment handling: the target isn't `Expr::Index`, or the
+        // IndexAssign trait lookup returned None.
+        let target_type = self.resolve_place_receiver(target_ast, target_ast, ctx)?;
+        Ok(WritePlace::Place { target_type })
+    }
 
+    /// Check that `target_ast`, resolved to `place`, takes a value of
+    /// `value_type`.
+    fn check_write(
+        &mut self,
+        target_ast: &ast::Expr,
+        place: &WritePlace,
+        value_type: TypeId,
+        value_span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
         // Reject &T assigned where non-ref T expected
-        self.typecheck(value_type, target_type, value_span);
+        self.typecheck(value_type, place.value_type(), value_span);
+        // Reify rebuilds `arr.index_assign(idx, value)` from the recorded
+        // `index_assign_dispatch` and the AST.
+        if let WritePlace::IndexAssign { .. } = place {
+            return TypeTable::UNIT;
+        }
 
         // Handle assignment to global variables. The global is recognised
         // from the recorded `AssignPlace::Global` on the target ident, which
@@ -1486,7 +1505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        // Reserve reify's `$caN` locals, resolving each impure sub-piece once
+        // Reserve reify's `$ca_N` locals, resolving each impure sub-piece once
         // (a subscript against its index key type) so the annotate and reify
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
@@ -1498,12 +1517,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut *frame;
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
-        for (idx, hoist) in hoists.iter().enumerate() {
+        for hoist in &hoists {
             let expected = hoist
                 .index_ctx
                 .and_then(|ix| self.compound_index_key_type(ix, ctx));
             let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
-            let _local_index = ctx.add_local(format!("$ca{idx}"), piece_type, false, None);
+            let name = minted_name("ca", ctx.fresh_serial());
+            let _local_index = ctx.add_local(name, piece_type, false, None);
             ctx.compound_hoist_types
                 .insert(hoist.piece.id(), piece_type);
         }
@@ -1535,7 +1555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `a OP1 b OP2 c …` as `(a OP1 b) & (b OP2 c) …`, every operand
-    /// but the last bound once to a `$mK` local, so each evaluates left to right.
+    /// but the last bound once to a `$m_K` local, so each evaluates left to right.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1547,7 +1567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
-        // Enter a fresh scope for the `$mK` bindings so they don't leak
+        // Enter a fresh scope for the `$m_K` bindings so they don't leak
         // into the surrounding function's local namespace.
         let ctx = &mut ctx.enter_scope();
 
@@ -1562,8 +1582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         );
 
-        self.bind_chain_operand(0, first_tir, ctx);
-        self.bind_chain_operand(1, right0_tir, ctx);
+        Self::bind_chain_operand(first_tir, ctx);
+        Self::bind_chain_operand(right0_tir, ctx);
         let mut acc = self.resolve_binary_op(
             first_tir,
             cmp0.op,
@@ -1582,7 +1602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // can't help).
             let right = self.resolve_expr(&cmp.right, ctx, Some(prev));
             if idx != last_idx {
-                self.bind_chain_operand(idx + 1, right, ctx);
+                Self::bind_chain_operand(right, ctx);
             }
             let cmp_type = self.resolve_binary_op(
                 prev,
@@ -1608,10 +1628,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `$mK` local for a comparison-chain operand, in walk order;
+    /// Allocate a `$m_K` local for a comparison-chain operand, in walk order;
     /// reify rebuilds the `Let` itself.
-    fn bind_chain_operand(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
-        let name = format!("$m{idx}");
+    fn bind_chain_operand(type_id: TypeId, ctx: &mut FunctionContext) {
+        let name = minted_name("m", ctx.fresh_serial());
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 

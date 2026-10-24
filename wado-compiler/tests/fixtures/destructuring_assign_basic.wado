@@ -57,5 +57,59 @@ test "the targets' types are the expected type" {
     assert xs.is_empty() && ys.is_empty();
 }
 
+struct Sink {
+    last: i64,
+}
+
+impl IndexAssign<i32> for Sink {
+    type Output = i64;
+    fn index_assign(&mut self, index: i32, value: i64) {
+        self.last = index as i64 + value;
+    }
+}
+
+test "a target that takes IndexAssign alone, and its Output" {
+    let mut s = Sink { last: 0 };
+    let mut b = 0;
+    [s[1], b] = [1 << 40, 6];
+    assert s.last == (1 << 40) + 1 && b == 6;
+}
+
+test "a write inside a closure" {
+    let mut a = 1;
+    let mut b = 2;
+    let mut swap = || {
+        [a, b] = [b, a];
+    };
+    swap();
+    assert a == 2 && b == 1;
+}
+
+global mut DROPS: i32 = 0;
+
+affine struct Conn {
+    id: i32,
+}
+
+impl Drop for Conn {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn pair(a: Conn, b: Conn) -> [Conn, Conn] {
+    return [b, a];
+}
+
+test "affine values move into their targets" {
+    let mut a = Conn { id: 1 };
+    let mut b = Conn { id: 2 };
+    [a, b] = [b, a];
+    assert a.id == 2 && b.id == 1;
+    [a, b] = pair(a, b);
+    assert a.id == 1 && b.id == 2;
+    assert DROPS == 0;
+}
+
 __DATA__
 {"test": {}}

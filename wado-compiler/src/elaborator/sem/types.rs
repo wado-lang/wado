@@ -1166,7 +1166,7 @@ pub(crate) enum DesugarKind {
     IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
-    /// `[a, b] = value` → `let [$da0, $da1] = value; a = $da0; b = $da1;`.
+    /// `[a, b] = value` → `let [$da_0, $da_1] = value; a = $da_0; b = $da_1;`.
     DestructuringAssign,
     /// `container[i].method()` → materialise `let $index_mut_val =
     /// &mut container[i];` + dispatch the method through it

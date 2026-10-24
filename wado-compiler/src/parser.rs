@@ -3824,12 +3824,21 @@ impl Parser {
             self.advance();
             // Right-associative; recover a missing value operand in place.
             let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
-            return Ok(Expr::Assign(Box::new(AssignExpr {
+            let assign = AssignExpr {
                 id: self.alloc_ast_id(),
                 target: expr,
                 value,
                 span: start_span,
-            })));
+            };
+            for target in assign.places() {
+                if let Expr::Spread(_, span) = target {
+                    self.errors.push(self.error_at_span(
+                        *span,
+                        "a destructuring assignment takes no rest; name each target",
+                    ));
+                }
+            }
+            return Ok(Expr::Assign(Box::new(assign)));
         }
 
         if let Some(op) = compound_assign_op(self.peek_kind()) {

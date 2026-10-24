@@ -167,7 +167,7 @@ fn ast_expr_is_place(expr: &ast::Expr) -> bool {
 /// The side-effecting value operands of a compound-assign target — index
 /// subscripts, deref'd references, and owned-value bases (`get_obj().field`) —
 /// each bound once so the inline place skeleton is pure to duplicate. Shared by
-/// reify (binds `let $caN`, overrides) and annotate (reserves the matching
+/// reify (binds `let $ca_N`, overrides) and annotate (reserves the matching
 /// frame slots).
 pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
     match expr {
@@ -207,11 +207,57 @@ fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'
     }
 }
 
-/// The value an assignment writes: written in source, or a destructuring
-/// assignment's element, already bound to its `$daN` local.
-enum WrittenValue<'e> {
-    Ast(&'e ast::Expr),
-    Tir(TirExpr),
+/// Where an assignment writes, reified ahead of the value it takes.
+enum WritePlace {
+    /// `recv[i] = v`, which becomes `recv.index_assign(i, v)`.
+    IndexAssign {
+        receiver: TirExpr,
+        index: TirExpr,
+        dispatch: OperatorDispatch,
+    },
+    /// Any other place; a global's becomes a `GlobalVarSet`.
+    Place(TirExpr),
+}
+
+impl WritePlace {
+    fn value_type(&self) -> Option<TypeId> {
+        match self {
+            Self::IndexAssign { .. } => None,
+            Self::Place(target) => Some(target.type_id),
+        }
+    }
+
+    fn write(self, value: TirExpr, span: Span) -> TirExpr {
+        let target = match self {
+            Self::IndexAssign {
+                receiver,
+                index,
+                dispatch,
+            } => {
+                return build_tir_method_call(
+                    receiver,
+                    dispatch.function_ref,
+                    vec![],
+                    vec![CallArg::new(index, false), CallArg::new(value, false)],
+                    dispatch.return_type,
+                    span,
+                );
+            }
+            Self::Place(target) => target,
+        };
+        let kind = match target.kind {
+            TirExprKind::GlobalVarGet { module_source, name } => TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value: Box::new(value),
+            },
+            _ => TirExprKind::Assign {
+                target: Box::new(target),
+                value: Box::new(value),
+            },
+        };
+        TirExpr::new(kind, TypeTable::UNIT, span)
+    }
 }
 
 /// One reify-side power-assert capture slot. Independent from
@@ -427,7 +473,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) emit_live: Option<&'a IndexSet<AstId>>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
-    /// `let $caN` before the read/write. Reify returns the bound `Local` for
+    /// `let $ca_N` before the read/write. Reify returns the bound `Local` for
     /// those exact nodes so `arr[bump()] += 1` evaluates `bump()` once while
     /// the place skeleton (index calls, field / deref chain) stays inline and
     /// still writes back. Empty outside `reify_compound_assign`.
@@ -2876,7 +2922,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Assign(assign) => match assign.destructuring_targets() {
                 Some(targets) => self.reify_destructuring_assign(assign, targets, ctx),
                 None => {
-                    self.reify_write(&assign.target, WrittenValue::Ast(&assign.value), span, ctx)
+                    self.reify_write(&assign.target, &assign.value, span, ctx)
                 }
             },
             ast::Expr::FieldAccess(field_access) => {
@@ -5263,7 +5309,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self::hoist_block(literal, base_binding)
     }
 
-    /// Bind each collected impure sub-piece to a `let $caN = …;` in `prelude`
+    /// Bind each collected impure sub-piece to a `let $ca_N = …;` in `prelude`
     /// once and register its `AstId` → `Local` override, so every recurrence
     /// in the reified read / write becomes that `Local` read.
     fn bind_compound_hoists(
@@ -5272,11 +5318,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prelude: &mut Vec<TirStmt>,
         ctx: &mut FunctionContext,
     ) {
-        for (counter, hoist) in hoists.iter().enumerate() {
+        for hoist in hoists {
             let value = self.reify_expr(hoist.piece, ctx, None);
             let span = value.span;
             let type_id = value.type_id;
-            let name = format!("$ca{counter}");
+            let name = minted_name("ca", ctx.fresh_serial());
             let index = ctx.add_local(name.clone(), type_id, false, None);
             prelude.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -5370,17 +5416,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// `target = value`. An `IndexAssign` target becomes
-    /// `recv.index_assign(idx, value)`, replaying the dispatch
-    /// `assign_to_target` recorded on the subscript; a global becomes a
-    /// `GlobalVarSet`. A place's operands evaluate before an AST value.
+    /// `target = value`. A place's operands evaluate before the value.
     fn reify_write(
         &mut self,
         target: &ast::Expr,
-        value: WrittenValue<'_>,
+        value: &ast::Expr,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        let place = self.reify_write_place(target, span, ctx);
+        let value = self.reify_expr(value, ctx, place.value_type());
+        place.write(value, span)
+    }
+
+    /// The place `target` names. An `IndexAssign` target replays the
+    /// dispatch `resolve_write_place` recorded on the subscript.
+    fn reify_write_place(
+        &mut self,
+        target: &ast::Expr,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> WritePlace {
         if let ast::Expr::Index(index_expr) = target
             && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
@@ -5392,61 +5448,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 &self.tysys.type_table,
             );
-            let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
-            let value_expr = self.reify_written_value(value, None, ctx);
-            return build_tir_method_call(
+            let index = self.reify_expr(&index_expr.index, ctx, None);
+            return WritePlace::IndexAssign {
                 receiver,
-                dispatch.function_ref,
-                vec![],
-                vec![
-                    CallArg::new(idx_expr, false),
-                    CallArg::new(value_expr, false),
-                ],
-                dispatch.return_type,
-                span,
-            );
+                index,
+                dispatch,
+            };
         }
-        let target = self.reify_expr(target, ctx, None);
-        let value = self.reify_written_value(value, Some(target.type_id), ctx);
-        if let TirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &target.kind
-        {
-            return TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    module_source: module_source.clone(),
-                    name: name.clone(),
-                    value: Box::new(value),
-                },
-                TypeTable::UNIT,
-                span,
-            );
-        }
-        TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
-            },
-            TypeTable::UNIT,
-            span,
-        )
+        WritePlace::Place(self.reify_expr(target, ctx, None))
     }
 
-    fn reify_written_value(
-        &mut self,
-        value: WrittenValue<'_>,
-        expected_type: Option<TypeId>,
-        ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        match value {
-            WrittenValue::Ast(expr) => self.reify_expr(expr, ctx, expected_type),
-            WrittenValue::Tir(expr) => expr,
-        }
-    }
-
-    /// `[t0, t1, …] = value` as `{ let [$da0, $da1, …] = value; t0 = $da0;
-    /// t1 = $da1; … }`: the whole value first, then each target in turn.
+    /// `[t0, t1, …] = value` as `{ let [$da_0, $da_1, …] = value; t0 = $da_0;
+    /// t1 = $da_1; … }`: the whole value first, then each target in turn.
+    /// The target places reify before the value, in the order annotate
+    /// resolved them, so both walks allocate the same frame.
     fn reify_destructuring_assign(
         &mut self,
         assign: &ast::AssignExpr,
@@ -5454,6 +5469,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let span = assign.span;
+        let places: Vec<WritePlace> = targets
+            .iter()
+            .map(|target| self.reify_write_place(target, span, ctx))
+            .collect();
         let value = self.reify_expr(&assign.value, ctx, None);
         let element_types = self
             .tysys
@@ -5465,9 +5484,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let ctx = &mut ctx.enter_scope();
         let bindings: Vec<(String, u32, TypeId)> = element_types
             .into_iter()
-            .enumerate()
-            .map(|(idx, type_id)| {
-                let name = format!("$da{idx}");
+            .map(|type_id| {
+                let name = minted_name("da", ctx.fresh_serial());
                 let index = ctx.add_local(name.clone(), type_id, false, None);
                 (name, index, type_id)
             })
@@ -5487,10 +5505,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::LetDestructure { pattern, value },
             span,
         )];
-        for (target, (name, index, type_id)) in targets.iter().zip(bindings) {
-            let element = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
-            let write = self.reify_write(target, WrittenValue::Tir(element), span, ctx);
-            stmts.push(TirStmt::new(TirStmtKind::Expr(write), span));
+        for (place, (name, index, type_id)) in places.into_iter().zip(bindings) {
+            let element =
+                self.handed_on(TirExpr::new(TirExprKind::Local { index, name }, type_id, span));
+            stmts.push(TirStmt::new(
+                TirStmtKind::Expr(place.write(element, span)),
+                span,
+            ));
         }
         TirExpr::new(
             TirExprKind::Block(TirBlock::new(stmts, span)),
@@ -5500,7 +5521,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
-    /// target sub-expression once: impure value operands bind to `let $caN`
+    /// target sub-expression once: impure value operands bind to `let $ca_N`
     /// while the place skeleton stays inline. Residual: a nested index's
     /// receiver (`m.index(i)` in `m[i][j] += 1`) is still duplicated, so a
     /// side-effecting custom `Index::index` runs twice.
@@ -5524,7 +5545,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = compound.span;
 
         // A nested compound assign keeps its own overrides; the scope keeps
-        // `$caN` names out of the enclosing map.
+        // `$ca_N` names out of the enclosing map.
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
         util::replaced(
@@ -5884,7 +5905,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a comparison chain `a < b < c …` into
-    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
+    /// `let $m_0 = a; let $m_1 = b; ($m_0 < $m_1) & ($m_1 < c) …`.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -5900,8 +5921,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cmp0 = &chain.comparisons[0];
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
-        let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
-        let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
+        let first_ref = Self::bind_chain_operand(first_tir, &mut stmts, chain.span, ctx);
+        let right0_ref = Self::bind_chain_operand(right0_tir, &mut stmts, chain.span, ctx);
 
         let mut acc_tir = self.reify_binary_op(
             cmp0.id,
@@ -5920,7 +5941,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right_tir = if idx == last_idx {
                 raw_right
             } else {
-                Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
+                Self::bind_chain_operand(raw_right, &mut stmts, chain.span, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.reify_binary_op(
@@ -5951,16 +5972,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// `let $mK = value;` pushed onto `stmts`, answered by a read of `$mK`.
+    /// `let $m_K = value;` pushed onto `stmts`, answered by a read of `$m_K`.
     fn bind_chain_operand(
-        idx: usize,
         value: TirExpr,
         stmts: &mut Vec<TirStmt>,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let type_id = value.type_id;
-        let name = format!("$m{idx}");
+        let name = minted_name("m", ctx.fresh_serial());
         let local_index = ctx.add_local(name.clone(), type_id, false, None);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
