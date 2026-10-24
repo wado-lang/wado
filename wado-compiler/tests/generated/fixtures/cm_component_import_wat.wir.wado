@@ -43,7 +43,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/$wado:test/math@0.1.0#add" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wado:test-dependencycda525998f6ec625/math@0.1.0#add" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
@@ -53,9 +53,9 @@ type "functype//cm_component_import_wat.wado/$test_0_a_component_asset_written_a
 
 type "functype//cm_component_import_wat.wado/$test_0_a_component_asset_written_as_wat_is_composed_in$cold1" = fn(u32);  // TypeId(16)
 
-type "functype//cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec0" = fn(i32, i32) -> u32;  // TypeId(17)
+type "functype//cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec0" = fn(i32, i32) -> u32;  // TypeId(17)
 
-type "functype//cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec1" = fn(i32, i32) -> u32;  // TypeId(18)
+type "functype//cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec1" = fn(i32, i32) -> u32;  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
@@ -131,7 +131,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/$wado:test/math@0.1.0#add from "wasi/$wado:test/math@0.1.0#add";
+import fn wasi/$wado:test-dependencycda525998f6ec625/math@0.1.0#add from "wasi/$wado:test-dependencycda525998f6ec625/math@0.1.0#add";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
@@ -143,12 +143,12 @@ global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/strin
 
 fn "cm_component_import_wat.wado/$cm_export__$test_0_a_component_asset_written_as_wat_is_composed_in"() {
     let $v0_0: u32;
-    if @unlikely(local.tee $v0_0("cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec0"(2, 40)) != 42) {
+    if @unlikely(local.tee $v0_0("cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec0"(2, 40)) != 42) {
         cold_path;
         "cm_component_import_wat.wado/$test_0_a_component_asset_written_as_wat_is_composed_in$cold1"($v0_0);
         unreachable;
     }
-    if @unlikely((local.tee $v0_0("cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec1"(0, 0)) == 0) == 0) {
+    if @unlikely((local.tee $v0_0("cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec1"(0, 0)) == 0) == 0) {
         cold_path;
         "cm_component_import_wat.wado/$test_0_a_component_asset_written_as_wat_is_composed_in$cold0"($v0_0);
         unreachable;
@@ -244,12 +244,12 @@ condition: Math::add(2, 40) == 42
     unreachable;
 }
 
-fn "cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec0"(a, b) with Math {
-    return "wasi/$wado:test/math@0.1.0#add"(2, 40);
+fn "cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec0"(a, b) with Math {
+    return "wasi/$wado:test-dependencycda525998f6ec625/math@0.1.0#add"(2, 40);
 }
 
-fn "cm_component_import_wat.wado/$cm_binding__wado:test/math@0.1.0#add$spec1"(a, b) with Math {
-    return "wasi/$wado:test/math@0.1.0#add"(0, 0);
+fn "cm_component_import_wat.wado/$cm_binding__wado:test-dependencycda525998f6ec625/math@0.1.0#add$spec1"(a, b) with Math {
+    return "wasi/$wado:test-dependencycda525998f6ec625/math@0.1.0#add"(0, 0);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

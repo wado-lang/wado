@@ -43,11 +43,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/$wado:test/oracle@0.1.0#answer" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/$wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer" = fn() -> u32;  // TypeId(14)
+type "functype//cm_component_import_no_params.wado/$cm_binding__wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer" = fn() -> u32;  // TypeId(14)
 
 type "functype//cm_component_import_no_params.wado/$cm_export__$test_0_a_zero_parameter_component_export_is_callable" = fn();  // TypeId(15)
 
@@ -127,7 +127,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/$wado:test/oracle@0.1.0#answer from "wasi/$wado:test/oracle@0.1.0#answer";
+import fn wasi/$wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer from "wasi/$wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
@@ -137,13 +137,13 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer"() with Oracle {
-    return "wasi/$wado:test/oracle@0.1.0#answer"();
+fn "cm_component_import_no_params.wado/$cm_binding__wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer"() with Oracle {
+    return "wasi/$wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer"();
 }
 
 fn "cm_component_import_no_params.wado/$cm_export__$test_0_a_zero_parameter_component_export_is_callable"() {
     let $v0: u32;
-    if @unlikely(local.tee $v0("cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer"()) != 42) {
+    if @unlikely(local.tee $v0("cm_component_import_no_params.wado/$cm_binding__wado:test-dependency1133e3e18f8ad0b3/oracle@0.1.0#answer"()) != 42) {
         cold_path;
         "cm_component_import_no_params.wado/$test_0_a_zero_parameter_component_export_is_callable$cold0"($v0);
         unreachable;

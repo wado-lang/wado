@@ -47,11 +47,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/$wado:counter/counter@0.1.0#make" = fn() -> i32;  // TypeId(13)
+type "functype//wasi/$wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make" = fn() -> i32;  // TypeId(13)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter/counter@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_counter.wat//Counter";  // TypeId(15)
+type "functype//cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_counter.wat//Counter";  // TypeId(15)
 
 type "functype//cm_component_import_type_outranks_basename.wado/$cm_export__$test_0" = fn();  // TypeId(16)
 
@@ -133,7 +133,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/$wado:counter/counter@0.1.0#make from "wasi/$wado:counter/counter@0.1.0#make";
+import fn wasi/$wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make from "wasi/$wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
@@ -143,11 +143,11 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter/counter@0.1.0#make"() with $wado:counter/counter@0.1.0 {
+fn "cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make"() with $wado:counter/counter@0.1.0 {
     let $flat: i32;
     let $flat_buf: i32;
     let $struct_result: ref "./sub/wasm_import_cm_counter.wat//Counter";
-    $flat = "wasi/$wado:counter/counter@0.1.0#make"();
+    $flat = "wasi/$wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make"();
     builtin::store_i32(local.tee $flat_buf("mem/realloc"(0, 0, 4, 4)), $flat);
     $struct_result = struct.new "./sub/wasm_import_cm_counter.wat//Counter" { n: builtin::load_i32($flat_buf) };
     drop("mem/realloc"($flat_buf, 4, 4, 0));
@@ -156,12 +156,12 @@ fn "cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter/co
 
 fn "cm_component_import_type_outranks_basename.wado/$cm_export__$test_0"() {
     let $v0_1: u32;
-    if @unlikely(local.tee $v0_1("cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter/counter@0.1.0#make"().n) != 7) {
+    if @unlikely(local.tee $v0_1("cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make"().n) != 7) {
         cold_path;
         "cm_component_import_type_outranks_basename.wado/$test_0$cold1"($v0_1);
         unreachable;
     }
-    if @unlikely(local.tee $v0_1("cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter/counter@0.1.0#make"().n) != 7) {
+    if @unlikely(local.tee $v0_1("cm_component_import_type_outranks_basename.wado/$cm_binding__wado:counter-dependency82f65e62c443ef41/counter@0.1.0#make"().n) != 7) {
         cold_path;
         "cm_component_import_type_outranks_basename.wado/$test_0$cold0"($v0_1);
         unreachable;

@@ -43,15 +43,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/$a:x/trip@0.1.0#f" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/$a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/$b:y/trip@0.1.0#g" = fn() -> i32;  // TypeId(13)
+type "functype//wasi/$b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g" = fn() -> i32;  // TypeId(13)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//cm_component_import_same_basename.wado/$cm_binding__a:x/trip@0.1.0#f" = fn() -> u32;  // TypeId(15)
+type "functype//cm_component_import_same_basename.wado/$cm_binding__a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f" = fn() -> u32;  // TypeId(15)
 
-type "functype//cm_component_import_same_basename.wado/$cm_binding__b:y/trip@0.1.0#g" = fn() -> u32;  // TypeId(16)
+type "functype//cm_component_import_same_basename.wado/$cm_binding__b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g" = fn() -> u32;  // TypeId(16)
 
 type "functype//cm_component_import_same_basename.wado/$cm_export__$test_0" = fn();  // TypeId(17)
 
@@ -133,8 +133,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/$a:x/trip@0.1.0#f from "wasi/$a:x/trip@0.1.0#f";
-import fn wasi/$b:y/trip@0.1.0#g from "wasi/$b:y/trip@0.1.0#g";
+import fn wasi/$a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f from "wasi/$a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f";
+import fn wasi/$b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g from "wasi/$b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
@@ -144,22 +144,22 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "cm_component_import_same_basename.wado/$cm_binding__a:x/trip@0.1.0#f"() with $a:x/trip@0.1.0 {
-    return "wasi/$a:x/trip@0.1.0#f"();
+fn "cm_component_import_same_basename.wado/$cm_binding__a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f"() with $a:x/trip@0.1.0 {
+    return "wasi/$a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f"();
 }
 
-fn "cm_component_import_same_basename.wado/$cm_binding__b:y/trip@0.1.0#g"() with $b:y/trip@0.1.0 {
-    return "wasi/$b:y/trip@0.1.0#g"();
+fn "cm_component_import_same_basename.wado/$cm_binding__b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g"() with $b:y/trip@0.1.0 {
+    return "wasi/$b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g"();
 }
 
 fn "cm_component_import_same_basename.wado/$cm_export__$test_0"() {
     let $v0_0: u32;
-    if @unlikely(local.tee $v0_0("cm_component_import_same_basename.wado/$cm_binding__a:x/trip@0.1.0#f"()) != 1) {
+    if @unlikely(local.tee $v0_0("cm_component_import_same_basename.wado/$cm_binding__a:x-dependency1f90e0b1d8b780e8/trip@0.1.0#f"()) != 1) {
         cold_path;
         "cm_component_import_same_basename.wado/$test_0$cold1"($v0_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0("cm_component_import_same_basename.wado/$cm_binding__b:y/trip@0.1.0#g"()) != 2) {
+    if @unlikely(local.tee $v0_0("cm_component_import_same_basename.wado/$cm_binding__b:y-dependency1f90e0b1d8b780e8/trip@0.1.0#g"()) != 2) {
         cold_path;
         "cm_component_import_same_basename.wado/$test_0$cold0"($v0_0);
         unreachable;

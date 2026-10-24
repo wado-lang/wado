@@ -1,13 +1,7 @@
 //! The type table: every `TypeId` the compiler interns, and the questions
 //! asked of them.
 
-<<<<<<< HEAD
-||||||| d2733c3d4
-use std::fmt::Write;
-=======
 use std::cell::RefCell;
-use std::fmt::Write;
->>>>>>> origin/main
 use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
