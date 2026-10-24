@@ -307,7 +307,14 @@ impl Child {
         if unsafe { libc::killpg(self.pid, signal) } == -1 {
             let err = io::Error::last_os_error();
             // The leader exited and every member is gone; nothing to signal.
-            if err.raw_os_error() == Some(libc::ESRCH) {
+            // Darwin answers EPERM instead when the group holds only zombies,
+            // as it does while `wait` keeps the leader unreaped.
+            let nothing_to_signal = if cfg!(target_os = "macos") {
+                [Some(libc::ESRCH), Some(libc::EPERM)].contains(&err.raw_os_error())
+            } else {
+                err.raw_os_error() == Some(libc::ESRCH)
+            };
+            if nothing_to_signal {
                 return Ok(());
             }
             return Err(err);
