@@ -431,7 +431,12 @@ pub fn materializing_globals(project: &NirPackage, exec: &Executor) -> Materiali
         found
     };
     let per_function = exec.map(&project.functions, |func_rc| {
-        func_rc.borrow().body.as_ref().map(visit).unwrap_or_default()
+        func_rc
+            .borrow()
+            .body
+            .as_ref()
+            .map(visit)
+            .unwrap_or_default()
     });
     let per_global = project
         .globals

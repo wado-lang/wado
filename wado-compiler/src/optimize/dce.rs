@@ -394,19 +394,15 @@ fn extend_reachable_for_optimizer_passes(
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
 fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -> Reached {
-    let roots: Vec<Target> = project
-        .functions
-        .iter()
-        .filter_map(|func_rc| {
-            let func = func_rc.borrow();
-            let is_root = func.is_cm_export
-                || (func.is_export
-                    && project
-                        .wasm_module_sources
-                        .contains_key(&func.module_source));
-            is_root.then(|| graph.target(FunctionId::free(&func.module_source, &func.name)))
-        })
-        .collect();
+    let roots = project.functions.iter().filter_map(|func_rc| {
+        let func = func_rc.borrow();
+        let is_root = func.is_cm_export
+            || (func.is_export
+                && project
+                    .wasm_module_sources
+                    .contains_key(&func.module_source));
+        is_root.then(|| graph.target(FunctionId::free(&func.module_source, &func.name)))
+    });
     compute_reachable(graph, roots)
 }
 
@@ -573,7 +569,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 }
 
 /// `FunctionId` → position in `project.functions`. `function_id_for` is
-/// required to be injective over `project.functions`; `build_analysis_graph`
+/// required to be injective over `project.functions`; `assemble_analysis_graph`
 /// asserts this so a regression in the synthesis layer (e.g. duplicate
 /// emission of a per-signature dispatch stub) trips immediately instead of
 /// silently dropping a function during DCE retain.
@@ -603,7 +599,12 @@ impl AnalysisGraph<'_> {
 
     fn function_id<'s>(&'s self, target: &'s Target) -> &'s FunctionId {
         match target {
-            Target::Stored(pos) => self.func_positions.get_index(*pos).expect("a stored target").0,
+            Target::Stored(pos) => {
+                self.func_positions
+                    .get_index(*pos)
+                    .expect("a stored target")
+                    .0
+            }
             Target::Extern(id) => id,
         }
     }
@@ -722,7 +723,7 @@ fn assemble_analysis_graph<'a>(
 }
 
 /// Add the gated `$Closure_N^Inspect::inspect` edges: one per (caller, struct,
-/// trait) match against the inspectable-signature set computed in Phase 1b.
+/// trait) match against the inspectable-signature set computed in Phase 2b.
 fn apply_inspect_edges(graph: &mut AnalysisGraph, sigs: &InspectableSignatures) {
     for (pos, analysis) in graph.analyses.iter().enumerate() {
         for edge in &analysis.pending_inspects {
@@ -2867,8 +2868,8 @@ mod tests {
         let [run, foo, bar, unused, host] =
             ["run", "foo", "bar", "unused", "host"].map(|name| free_fn(&mut interner, name));
         let graph = graph(
-            &[run, foo, bar.clone(), unused],
-            &[&[free_fn(&mut interner, "foo")], &[bar.clone(), host.clone()], &[], &[bar]],
+            &[run, foo.clone(), bar.clone(), unused],
+            &[&[foo], &[bar.clone(), host.clone()], &[], &[bar]],
         );
         let reachable = compute_reachable(&graph, [Target::Stored(0)]);
         // In the order the walk reached them, which orders what DCE keeps.
