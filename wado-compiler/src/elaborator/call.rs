@@ -655,7 +655,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         // A tuple parameter itself stays, for the unifier to splice the pack
         // across its argument's elements.
-        let held = self.tysys.type_table.borrow().tuples_holding(declared, &open);
+        let held = self
+            .tysys
+            .type_table
+            .borrow()
+            .tuples_holding(declared, &open);
         let mut replacements = IndexMap::default();
         for tuple in held.into_iter().filter(|&t| t != declared) {
             let var = self.mint_infer_var();
@@ -712,7 +716,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .substitute_type_params(tuple, &answers);
-            if !self.tysys.type_table.borrow().mentions_any(answered, &slots) {
+            if !self
+                .tysys
+                .type_table
+                .borrow()
+                .mentions_any(answered, &slots)
+            {
                 self.chain_infer_var(var, answered);
             }
         }

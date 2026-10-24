@@ -4251,7 +4251,11 @@ impl TypeTable {
 
     /// `type_id` with each type `replacements` names replaced by its value,
     /// wherever it stands.
-    pub fn replace_subterms(&mut self, type_id: TypeId, replacements: &IndexMap<TypeId, TypeId>) -> TypeId {
+    pub fn replace_subterms(
+        &mut self,
+        type_id: TypeId,
+        replacements: &IndexMap<TypeId, TypeId>,
+    ) -> TypeId {
         self.subst_rec(
             type_id,
             &Leaves {
