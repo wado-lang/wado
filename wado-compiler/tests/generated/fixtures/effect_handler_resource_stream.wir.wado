@@ -173,9 +173,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(41)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(42)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(43)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
 type "functype//effect_handler_resource_stream.wado/run" = fn();  // TypeId(45)
 
@@ -277,7 +277,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(93)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(94)
 
-type "functype//effect_handler_resource_stream.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> i32;  // TypeId(95)
+type "functype//effect_handler_resource_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(ref null "core:prelude//$Resource") -> i32;  // TypeId(95)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -285,8 +285,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -459,7 +459,7 @@ condition: tx.write_raw_all(payload.as_slice()) == CopyResult::Completed
         unreachable;
     }).0;
     rx_1 = $local_2_166.1;
-    $local_4 = "effect_handler_resource_stream.wado/$cm_binding__Stdout_write_via_stream"(tx_2 = self_27; self_27 = ref.null none; tx_2);
+    $local_4 = "effect_handler_resource_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_2 = self_27; self_27 = ref.null none; tx_2);
     tx_2 = rx_1;
     rx_1 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"(rx_1 = tx_2; tx_2 = ref.null none; rx_1, $local_7.repr, $local_7.used);
@@ -525,8 +525,8 @@ fn "effect_handler_resource_stream.wado/$effect_dispatch__core:prelude/types.wad
     }
 }
 
-fn "effect_handler_resource_stream.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_resource_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_handler_resource_stream.wado/$cm_export__run"() {
@@ -652,7 +652,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     rx = local.tee $pattern_temp_0("effect_handler_resource_stream.wado/$effect_dispatch__core:prelude/types.wado/Stream<u8>__new"()).0;
     tx = $pattern_temp_0.1;
-    written = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = rx; rx = ref.null none; $moved_4.value);
+    written = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = rx; rx = ref.null none; $moved_4.value);
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4 = tx; tx = ref.null none; $moved_4, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = written; written = 0; $mv$message$used);
 }

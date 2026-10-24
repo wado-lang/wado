@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//effect_trait_method_pure_override.wado/run" = fn();  // TypeId(10)
 
@@ -47,7 +47,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//effect_trait_method_pure_override.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//effect_trait_method_pure_override.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -59,7 +59,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -77,7 +77,7 @@ fn "effect_trait_method_pure_override.wado/run"() with Stdout {
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $sroa_$pattern_temp_0_0_13_129 = builtin::i32_wrap_i64(local.tee $cm_pair_7_123("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_130 = builtin::i32_wrap_i64($cm_pair_7_123 >> 32_i64);
-    $moved_4_120 = "effect_trait_method_pure_override.wado/$cm_binding__Stdout_write_via_stream"($moved_4_120 = $sroa_$pattern_temp_0_0_13_129; $sroa_$pattern_temp_0_0_13_129 = 0; $moved_4_120);
+    $moved_4_120 = "effect_trait_method_pure_override.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_120 = $sroa_$pattern_temp_0_0_13_129; $sroa_$pattern_temp_0_0_13_129 = 0; $moved_4_120);
     $sroa_$pattern_temp_0_0_13_129 = $sroa_$pattern_temp_0_1_14_130;
     $sroa_$pattern_temp_0_1_14_130 = 0;
     $sroa_$pattern_temp_0_1_14_130 = $sroa_$pattern_temp_0_0_13_129;
@@ -95,15 +95,15 @@ fn "effect_trait_method_pure_override.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $moved_4_120, 1_i64, 1);
     $moved_4_120 = builtin::i32_wrap_i64(local.tee $cm_pair_7_123("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_130 = builtin::i32_wrap_i64($cm_pair_7_123 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_129 = "effect_trait_method_pure_override.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_129 = $moved_4_120; $moved_4_120 = 0; $sroa_$pattern_temp_0_0_13_129);
+    $sroa_$pattern_temp_0_0_13_129 = "effect_trait_method_pure_override.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_129 = $moved_4_120; $moved_4_120 = 0; $sroa_$pattern_temp_0_0_13_129);
     $moved_4_120 = $sroa_$pattern_temp_0_1_14_130;
     $sroa_$pattern_temp_0_1_14_130 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_130 = $moved_4_120; $moved_4_120 = 0; $sroa_$pattern_temp_0_1_14_130, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_130 = $sroa_$pattern_temp_0_0_13_129; $sroa_$pattern_temp_0_0_13_129 = 0; $sroa_$pattern_temp_0_1_14_130);
 }
 
-fn "effect_trait_method_pure_override.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_trait_method_pure_override.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_trait_method_pure_override.wado/$cm_export__run"() {

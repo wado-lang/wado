@@ -23,9 +23,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//effect_with_underscore.wado/run" = fn();  // TypeId(11)
 
@@ -53,9 +53,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//effect_with_underscore.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(25)
+type "functype//effect_with_underscore.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(25)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
 
@@ -73,8 +73,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -94,7 +94,7 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     let $sroa_$pattern_temp_0_1_14_93: i32;
     $sroa_$pattern_temp_0_0_13_92 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_93 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $moved_4_83 = "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"($moved_4_83 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $moved_4_83);
+    $moved_4_83 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_83 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $moved_4_83);
     $sroa_$pattern_temp_0_0_13_92 = $sroa_$pattern_temp_0_1_14_93;
     $sroa_$pattern_temp_0_1_14_93 = 0;
     $sroa_$pattern_temp_0_1_14_93 = $sroa_$pattern_temp_0_0_13_92;
@@ -105,7 +105,7 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_93 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_1_14_93);
     $sroa_$pattern_temp_0_1_14_93 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $moved_4_83 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_92 = "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_92 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $sroa_$pattern_temp_0_0_13_92);
+    $sroa_$pattern_temp_0_0_13_92 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_92 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $sroa_$pattern_temp_0_0_13_92);
     $sroa_$pattern_temp_0_1_14_93 = $moved_4_83;
     $moved_4_83 = 0;
     $moved_4_83 = $sroa_$pattern_temp_0_1_14_93;
@@ -115,7 +115,7 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_83 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $moved_4_83);
     $moved_4_83 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_92 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_93 = "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_93 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_1_14_93);
+    $sroa_$pattern_temp_0_1_14_93 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_93 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_1_14_93);
     $moved_4_83 = $sroa_$pattern_temp_0_0_13_92;
     $sroa_$pattern_temp_0_0_13_92 = 0;
     $sroa_$pattern_temp_0_0_13_92 = $moved_4_83;
@@ -130,14 +130,14 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_0_13_92, $cm_pair_7_86, $sroa_$pattern_temp_0_1_14_93);
     $sroa_$pattern_temp_0_1_14_93 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_92 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $moved_4_83 = "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"($moved_4_83 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $moved_4_83);
+    $moved_4_83 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_83 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $moved_4_83);
     $sroa_$pattern_temp_0_1_14_93 = $sroa_$pattern_temp_0_0_13_92;
     $sroa_$pattern_temp_0_0_13_92 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_92 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $sroa_$pattern_temp_0_0_13_92, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_92 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_0_13_92);
     $sroa_$pattern_temp_0_0_13_92 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $moved_4_83 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_93 = "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_93 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $sroa_$pattern_temp_0_1_14_93);
+    $sroa_$pattern_temp_0_1_14_93 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_93 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $sroa_$pattern_temp_0_1_14_93);
     $sroa_$pattern_temp_0_0_13_92 = $moved_4_83;
     $moved_4_83 = 0;
     $moved_4_83 = $sroa_$pattern_temp_0_0_13_92;
@@ -147,7 +147,7 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_83 = $sroa_$pattern_temp_0_1_14_93; $sroa_$pattern_temp_0_1_14_93 = 0; $moved_4_83);
     $moved_4_83 = builtin::i32_wrap_i64(local.tee $cm_pair_7_86("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_93 = builtin::i32_wrap_i64($cm_pair_7_86 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_92 = "effect_with_underscore.wado/$cm_binding__Stderr_write_via_stream"($sroa_$pattern_temp_0_0_13_92 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_0_13_92);
+    $sroa_$pattern_temp_0_0_13_92 = "effect_with_underscore.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_92 = $moved_4_83; $moved_4_83 = 0; $sroa_$pattern_temp_0_0_13_92);
     $moved_4_83 = $sroa_$pattern_temp_0_1_14_93;
     $sroa_$pattern_temp_0_1_14_93 = 0;
     $sroa_$pattern_temp_0_1_14_93 = $moved_4_83;
@@ -157,12 +157,12 @@ fn "effect_with_underscore.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_93 = $sroa_$pattern_temp_0_0_13_92; $sroa_$pattern_temp_0_0_13_92 = 0; $sroa_$pattern_temp_0_1_14_93);
 }
 
-fn "effect_with_underscore.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_with_underscore.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "effect_with_underscore.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "effect_with_underscore.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_with_underscore.wado/$cm_export__run"() {

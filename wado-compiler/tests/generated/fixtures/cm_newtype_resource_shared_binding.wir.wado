@@ -292,21 +292,21 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(54)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(56)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(56)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(57)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(57)
 
-type "functype//wasi/wasi:http/Fields::has" = fn(i32, i32, i32) -> i32;  // TypeId(58)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.has" = fn(i32, i32, i32) -> i32;  // TypeId(58)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(59)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(59)
 
-type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(60)
+type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(60)
 
 type "functype//cm_newtype_resource_shared_binding.wado/$cm_export__handle" = fn(i32);  // TypeId(61)
 
 type "functype//cm_newtype_resource_shared_binding.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>") -> ref null "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>";  // TypeId(62)
 
-type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_has$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> bool;  // TypeId(63)
+type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String") -> bool;  // TypeId(63)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(64)
 
@@ -358,7 +358,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(87)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(88)
 
-type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(89)
+type "functype//cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(89)
 
 type "functype//cm_newtype_resource_shared_binding.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(90)
 
@@ -370,10 +370,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::has from "wasi/wasi:http/Fields::has";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.has from "wasi/$wasi:http/types@0.3.0#[method]fields.has";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
@@ -389,11 +389,11 @@ global global:cm_newtype_resource_shared_binding.wado::$const_obj_0: ref "core:p
 global global:cm_newtype_resource_shared_binding.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 109, 97, 114, 107, 101, 114), used: 8 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 
-fn "cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $local_6: ref null "core:prelude//$Resource";
@@ -411,7 +411,7 @@ fn "cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, 
     let $cm_handle_6: i32;
     $cm_handle_6 = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
     headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -438,8 +438,8 @@ fn "cm_newtype_resource_shared_binding.wado/$cm_task_entry__handle"(request) {
     let f_214: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_229: ref Array<u8>;
     let $sroa_$task_ret_1_246: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
-    headers = "cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_new"();
-    if @unlikely((local.tee has_marker("cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_has$spec0"(local.tee trailers("cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_new"()), global:cm_newtype_resource_shared_binding.wado::$const_obj_1)) == 0) == 0) {
+    headers = "cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
+    if @unlikely((local.tee has_marker("cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(local.tee trailers("cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:cm_newtype_resource_shared_binding.wado::$const_obj_1)) == 0) == 0) {
         cold_path;
         $fuse_at_190 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 }), 70);
         $load_0 = $local_9.repr;
@@ -476,7 +476,7 @@ condition: !has_marker
     }
     has_marker = builtin::i32_wrap_i64(local.tee $cm_pair_187("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $fuse_at_190 = builtin::i32_wrap_i64($cm_pair_187 >> 32_i64);
-    $moved_11 = local.tee $pattern_temp_1("cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"($moved_11 = headers; headers = ref.null none; $moved_11, global:cm_newtype_resource_shared_binding.wado::$const_obj_0, offset_198 = has_marker; has_marker = 0; offset_198)).0;
+    $moved_11 = local.tee $pattern_temp_1("cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"($moved_11 = headers; headers = ref.null none; $moved_11, global:cm_newtype_resource_shared_binding.wado::$const_obj_0, offset_198 = has_marker; has_marker = 0; offset_198)).0;
     headers = $pattern_temp_1.1;
     $sroa_$task_ret_1_246 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_13 = $moved_11; $moved_11 = ref.null none; $moved_13 };
     offset_198 = 0;
@@ -876,7 +876,7 @@ fn "cm_newtype_resource_shared_binding.wado/$cm_future_write_core:prelude/types.
     } };
 }
 
-fn "cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_has$spec0"(self, name) with Fields {
+fn "cm_newtype_resource_shared_binding.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(self, name) with Fields {
     let $name_packed: i64;
     let bytes: ref Array<u8>;
     let ptr_6: i32;
@@ -893,7 +893,7 @@ fn "cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_has$spec0"(self,
         };
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_6) | 34359738368_i64;
-    return "wasi/wasi:http/Fields::has"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64));
+    return "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64));
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -999,7 +999,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

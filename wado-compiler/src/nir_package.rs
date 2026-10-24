@@ -195,7 +195,7 @@ pub struct NirPackage {
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: std::sync::Arc<WorldRegistry>,
 
-    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
+    /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
     /// Set by the first DCE; read it through [`Self::ambient_stdio`].
     pub ambient_stdio: Option<AmbientStdio>,

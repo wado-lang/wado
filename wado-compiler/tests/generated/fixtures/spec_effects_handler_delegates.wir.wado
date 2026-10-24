@@ -72,17 +72,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(21)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-bytes" = fn(i64, i32);  // TypeId(21)
 
-type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-u64" = fn() -> i64;  // TypeId(22)
 
 type "functype//spec_effects_handler_delegates.wado/$test_0" = fn();  // TypeId(23)
 
-type "functype//spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(24)
+type "functype//spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(24)
 
-type "functype//spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(25)
+type "functype//spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64" = fn() -> u64;  // TypeId(25)
 
 type "functype//spec_effects_handler_delegates.wado/$cm_export__$test_0" = fn();  // TypeId(26)
 
@@ -90,7 +90,7 @@ type "functype//spec_effects_handler_delegates.wado/$test_0$cold0" = fn(i32);  /
 
 type "functype//spec_effects_handler_delegates.wado/$test_0$cold1" = fn(i32);  // TypeId(28)
 
-type "functype//spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(29)
+type "functype//spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(29)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(30)
 
@@ -156,9 +156,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:random/Random::get_random_bytes from "wasi/wasi:random/Random::get_random_bytes";
-import fn wasi/wasi:random/Random::get_random_u64 from "wasi/wasi:random/Random::get_random_u64";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/random@0.3.0#get-random-bytes from "wasi/$wasi:random/random@0.3.0#get-random-bytes";
+import fn wasi/$wasi:random/random@0.3.0#get-random-u64 from "wasi/$wasi:random/random@0.3.0#get-random-u64";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -187,7 +187,7 @@ fn "spec_effects_handler_delegates.wado/$test_0"() {
             global:spec_effects_handler_delegates.wado::$effect_wasi:random/random.wado/Random = $local_1;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: v;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes$spec0"(4_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(4_i64);
         }
         unreachable;
     }).used) != 4) {
@@ -203,7 +203,7 @@ fn "spec_effects_handler_delegates.wado/$test_0"() {
     }
 }
 
-fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
+fn "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -212,7 +212,7 @@ fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes"(ma
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(max_len, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(max_len, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -237,8 +237,8 @@ fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes"(ma
     return $result;
 }
 
-fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_u64"() with Random {
-    return "wasi/wasi:random/Random::get_random_u64"();
+fn "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"() with Random {
+    return "wasi/$wasi:random/random@0.3.0#get-random-u64"();
 }
 
 fn "spec_effects_handler_delegates.wado/$cm_export__$test_0"() {
@@ -334,7 +334,7 @@ condition: Random::get_random_bytes(4).len() == 4
     unreachable;
 }
 
-fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes$spec0"(max_len) with Random {
+fn "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -343,7 +343,7 @@ fn "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes$spe
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(4_i64, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(4_i64, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -512,7 +512,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -724,7 +724,7 @@ fn "spec_effects_handler_delegates.wado/spec_effects_handler_delegates.wado/$Clo
             global:spec_effects_handler_delegates.wado::$effect_wasi:random/random.wado/Random = $local_1;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: v;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_bytes"(max_len);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len);
         }
         unreachable;
     };
@@ -744,7 +744,7 @@ fn "spec_effects_handler_delegates.wado/spec_effects_handler_delegates.wado/$Clo
             global:spec_effects_handler_delegates.wado::$effect_wasi:random/random.wado/Random = $local_0;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: $local_2;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: "spec_effects_handler_delegates.wado/$cm_binding__Random_get_random_u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: "spec_effects_handler_delegates.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"();
         }
         unreachable;
     };

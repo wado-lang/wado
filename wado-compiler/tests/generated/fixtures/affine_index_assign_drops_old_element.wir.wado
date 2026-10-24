@@ -34,9 +34,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
 type "functype//affine_index_assign_drops_old_element.wado/run" = fn();  // TypeId(14)
 
@@ -74,7 +74,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//affine_index_assign_drops_old_element.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//affine_index_assign_drops_old_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
@@ -86,8 +86,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -118,7 +118,7 @@ fn "affine_index_assign_drops_old_element.wado/run"() with Stdout {
     "core:prelude/array.wado/Array<affine_index_assign_drops_old_element.wado/Tok>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$dae[index]"(list.repr, $moved_9 = value; value = ref.null none; $moved_9);
     used = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "affine_index_assign_drops_old_element.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = used; used = 0; $moved_4);
+    $moved_4 = "affine_index_assign_drops_old_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = used; used = 0; $moved_4);
     used = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     $sroa_$pattern_temp_0_1_14 = used;
@@ -281,7 +281,7 @@ fn "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List
                 $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
                 rx = $sroa_$pattern_temp_0_0_9;
                 tx = $sroa_$pattern_temp_0_1_10;
-                written = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4 = rx; rx = 0; $moved_4);
+                written = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = rx; rx = 0; $moved_4);
                 "core:rt/write_string_to_stream$dae[add_newline]"($moved_5 = tx; tx = 0; $moved_5, $tmpl_buf_58.repr, $tmpl_buf_58.used);
                 "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6 = written; written = 0; $moved_6);
             }
@@ -291,8 +291,8 @@ fn "affine_index_assign_drops_old_element.wado/$drop$core:prelude/list.wado/List
     };
 }
 
-fn "affine_index_assign_drops_old_element.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "affine_index_assign_drops_old_element.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "affine_index_assign_drops_old_element.wado/$cm_export__run"() {
@@ -403,7 +403,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -607,7 +607,7 @@ fn "core:prelude/array.wado/Array<affine_index_assign_drops_old_element.wado/Tok
         "core:prelude/primitive.wado/write_decimal_digits"($local_1_10.repr, start_24, x_37, self_9);
         self_9 = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
         start_24 = builtin::i32_wrap_i64(x_37 >> 32_i64);
-        new_used_23 = "wasi/wasi:cli/Stdout::write_via_stream"(new_used_23 = self_9; self_9 = 0; new_used_23);
+        new_used_23 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(new_used_23 = self_9; self_9 = 0; new_used_23);
         "core:rt/write_string_to_stream$dae[add_newline]"(self_9 = start_24; start_24 = 0; self_9, $local_1_10.repr, $local_1_10.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_9 = new_used_23; new_used_23 = 0; self_9);
         value.n = $moved_3.n;

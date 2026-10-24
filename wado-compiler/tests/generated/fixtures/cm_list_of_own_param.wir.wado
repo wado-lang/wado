@@ -29,15 +29,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#pick" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//cm_list_of_own_param.wado/$cm_binding__Gfx_pick" = fn(ref null "core:prelude//List<cm_list_of_own_param.wado/Device>") -> u32;  // TypeId(14)
+type "functype//cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude//List<cm_list_of_own_param.wado/Device>") -> u32;  // TypeId(14)
 
-type "functype//cm_list_of_own_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(15)
+type "functype//cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(15)
 
 type "functype//cm_list_of_own_param.wado/$cm_export__run" = fn();  // TypeId(16)
 
@@ -63,16 +63,16 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#pick from "wasi/$wasi:demo/gfx@0.1.0#pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-fn "cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(ds) with Gfx {
+fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gfx {
     let $ds_len: i32;
     let $ds_base: i32;
     let $ds_i: i32;
@@ -98,19 +98,19 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(ds) with Gfx {
             continue l2;
         };
     };
-    return "wasi/wasi:demo/Gfx::pick"($ds_base, $ds_len);
+    return "wasi/$wasi:demo/gfx@0.1.0#pick"($ds_base, $ds_len);
 }
 
-fn "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Gfx::get_device"() };
+fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"() };
 }
 
 fn "cm_list_of_own_param.wado/$cm_export__run"() {
     let elements: ref null "Array<cm_list_of_own_param.wado/Device>";
     let used: i32;
     let $moved_2: ref null "Array<cm_list_of_own_param.wado/Device>";
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"())));
-    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null($moved_2 = elements; elements = ref.null none; $moved_2), used: used }));
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"(), "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"())));
+    drop("cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null($moved_2 = elements; elements = ref.null none; $moved_2), used: used }));
     "wasi/task-return"(0);
 }
 
@@ -134,7 +134,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

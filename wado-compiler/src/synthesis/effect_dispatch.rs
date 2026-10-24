@@ -108,7 +108,7 @@ struct EffectMeta {
 /// covering both `effect` and `resource` declarations. Resources participate
 /// in the dispatch protocol identically to effects — same operation list,
 /// same wrapper synthesis, same call-site rewriting against
-/// `$cm_binding__<R>_<op>` adapters — so they share a single index. The
+/// `$cm_binding__*` adapters — so they share a single index. The
 /// `is_resource` flag distinguishes the kinds where it matters (currently
 /// only the wrapper's declared `effects` list).
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {

@@ -37,11 +37,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wado:test/Oracle::answer" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/$wado:test/oracle@0.1.0#answer" = fn() -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//cm_component_import_no_params.wado/$cm_binding__Oracle_answer" = fn() -> u32;  // TypeId(13)
+type "functype//cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer" = fn() -> u32;  // TypeId(13)
 
 type "functype//cm_component_import_no_params.wado/$cm_export__$test_0_a_zero_parameter_component_export_is_callable" = fn();  // TypeId(14)
 
@@ -107,21 +107,21 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wado:test/Oracle::answer from "wasi/wado:test/Oracle::answer";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wado:test/oracle@0.1.0#answer from "wasi/$wado:test/oracle@0.1.0#answer";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-fn "cm_component_import_no_params.wado/$cm_binding__Oracle_answer"() with Oracle {
-    return "wasi/wado:test/Oracle::answer"();
+fn "cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer"() with Oracle {
+    return "wasi/$wado:test/oracle@0.1.0#answer"();
 }
 
 fn "cm_component_import_no_params.wado/$cm_export__$test_0_a_zero_parameter_component_export_is_callable"() {
     let $v0: u32;
-    if @unlikely(local.tee $v0("cm_component_import_no_params.wado/$cm_binding__Oracle_answer"()) != 42) {
+    if @unlikely(local.tee $v0("cm_component_import_no_params.wado/$cm_binding__wado:test/oracle@0.1.0#answer"()) != 42) {
         cold_path;
         "cm_component_import_no_params.wado/$test_0_a_zero_parameter_component_export_is_callable$cold0"($v0);
         unreachable;
@@ -317,7 +317,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

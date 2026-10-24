@@ -123,9 +123,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(28)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(29)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//stream_read_multiple.wado/run" = fn();  // TypeId(32)
 
@@ -201,7 +201,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(67)
 
 type "functype//wasi/stream-cancel-read" = fn(i32) -> u32;  // TypeId(68)
 
-type "functype//stream_read_multiple.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(69)
+type "functype//stream_read_multiple.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(69)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(70)
 
@@ -214,8 +214,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -330,7 +330,7 @@ fn "stream_read_multiple.wado/run"() with Stdout {
     "wasi/stream-drop-readable"($load_4 = $moved_10; $moved_10 = ref.null none; $load_4.value);
     $moved_9 = builtin::i32_wrap_i64(local.tee $cm_pair_15("wasi/stream-new"()));
     ptr = builtin::i32_wrap_i64($cm_pair_15 >> 32_i64);
-    packed = "stream_read_multiple.wado/$cm_binding__Stdout_write_via_stream"(packed = $moved_9; $moved_9 = 0; packed);
+    packed = "stream_read_multiple.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(packed = $moved_9; $moved_9 = 0; packed);
     $moved_9 = ptr;
     ptr = 0;
     ptr = $moved_9;
@@ -341,8 +341,8 @@ fn "stream_read_multiple.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr = packed; packed = 0; ptr);
 }
 
-fn "stream_read_multiple.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "stream_read_multiple.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "stream_read_multiple.wado/$cm_export__run"() {
@@ -555,7 +555,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

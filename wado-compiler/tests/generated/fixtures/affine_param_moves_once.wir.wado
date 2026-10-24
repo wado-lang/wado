@@ -68,17 +68,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:http/Fields::copy_all" = fn(i32, i32);  // TypeId(20)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.copy-all" = fn(i32, i32);  // TypeId(20)
 
 type "functype//affine_param_moves_once.wado/$test_0" = fn();  // TypeId(21)
 
-type "functype//affine_param_moves_once.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(22)
+type "functype//affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(22)
 
-type "functype//affine_param_moves_once.wado/$cm_binding__Fields_copy_all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(23)
+type "functype//affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(23)
 
 type "functype//affine_param_moves_once.wado/$cm_export__$test_0" = fn();  // TypeId(24)
 
@@ -150,9 +150,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::copy_all from "wasi/wasi:http/Fields::copy_all";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.copy-all from "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
@@ -166,9 +166,9 @@ fn "affine_param_moves_once.wado/$test_0"() {
     let x: ref null "core:prelude//$Resource";
     let $moved_1: ref null "core:prelude//$Resource";
     let $drop_spill_2: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
-    x = "affine_param_moves_once.wado/$cm_binding__Fields_new"();
+    x = "affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     $drop_spill_2 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 1, payload_0: $moved_1 = x; x = ref.null none; $moved_1 };
-    if @unlikely(("affine_param_moves_once.wado/$cm_binding__Fields_copy_all"(local.tee x($inline_core_prelude_types_wado_Option_wasi_http_types_wado_Fields___unwrap_0: block -> ref null "core:prelude//$Resource" {
+    if @unlikely(("affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(local.tee x($inline_core_prelude_types_wado_Option_wasi_http_types_wado_Fields___unwrap_0: block -> ref null "core:prelude//$Resource" {
         let $match_scrut_0: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
         if ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(local.tee $match_scrut_0($drop_spill_2)) {
             $moved_1 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($match_scrut_0).payload_0;
@@ -204,11 +204,11 @@ fn "affine_param_moves_once.wado/$test_0"() {
     }
 }
 
-fn "affine_param_moves_once.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "affine_param_moves_once.wado/$cm_binding__Fields_copy_all"(self) with Fields {
+fn "affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(self) with Fields {
     let $outptr: i32;
     let $base_2: i32;
     let $count_3: i32;
@@ -226,7 +226,7 @@ fn "affine_param_moves_once.wado/$cm_binding__Fields_copy_all"(self) with Fields
     let used_28: i32;
     let value_34: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Fields::copy_all"(self.value, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self.value, $outptr);
     $base_2 = builtin::load_i32($outptr);
     $result_4 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i_5 = 0;
@@ -469,7 +469,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

@@ -62,7 +62,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//tuple_destructuring.wado/destruct_for_of" = fn();  // TypeId(18)
 
@@ -108,7 +108,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
@@ -140,7 +140,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -350,7 +350,7 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                 $sroa_$pattern_temp_0_1_14_98 = builtin::i32_wrap_i64($cm_pair_7_91 >> 32_i64);
                 rx_85 = $sroa_$pattern_temp_0_0_13_97;
                 tx_86 = $sroa_$pattern_temp_0_1_14_98;
-                handle_87 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_88 = rx_85; rx_85 = 0; $moved_4_88);
+                handle_87 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_88 = rx_85; rx_85 = 0; $moved_4_88);
                 $moved_5_89 = tx_86;
                 tx_86 = 0;
                 "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_96 = local.tee tx_93($moved_5_89); tx_93 = 0; $moved_3_96, $local_6.repr, $local_6.used);
@@ -377,7 +377,7 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                 $moved_5_89 = builtin::i32_wrap_i64($cm_pair_7_91 >> 32_i64);
                 handle_87 = tx_93;
                 $moved_4_88 = $moved_5_89;
-                rx_85 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(tx_86 = handle_87; handle_87 = 0; tx_86);
+                rx_85 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_86 = handle_87; handle_87 = 0; tx_86);
                 $sroa_$pattern_temp_0_1_14_98 = $moved_4_88;
                 $moved_4_88 = 0;
                 "core:rt/write_string_to_stream$dae[add_newline]"(start_68 = local.tee $sroa_$pattern_temp_0_0_13_97($sroa_$pattern_temp_0_1_14_98); $sroa_$pattern_temp_0_0_13_97 = 0; start_68, name_3.repr, name_3.used);
@@ -410,7 +410,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_179.repr, start_38, 20_i64, 2);
     start_38 = builtin::i32_wrap_i64(local.tee $cm_pair_7_114("wasi/stream-new"()));
     offset_24 = builtin::i32_wrap_i64($cm_pair_7_114 >> 32_i64);
-    $moved_4_111 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_111 = start_38; start_38 = 0; $moved_4_111);
+    $moved_4_111 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_111 = start_38; start_38 = 0; $moved_4_111);
     start_38 = offset_24;
     offset_24 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_24 = start_38; start_38 = 0; offset_24, $local_7.repr, $local_7.used);
@@ -438,7 +438,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_179.repr, start_38, $cm_pair_7_114, $moved_4_111);
         $moved_4_111 = builtin::i32_wrap_i64(local.tee $cm_pair_7_114("wasi/stream-new"()));
         start_38 = builtin::i32_wrap_i64($cm_pair_7_114 >> 32_i64);
-        offset_24 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(offset_24 = $moved_4_111; $moved_4_111 = 0; offset_24);
+        offset_24 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(offset_24 = $moved_4_111; $moved_4_111 = 0; offset_24);
         $moved_4_111 = start_38;
         start_38 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(start_38 = $moved_4_111; $moved_4_111 = 0; start_38, $local_7.repr, $local_7.used);
@@ -446,7 +446,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
     } else {
         start_38 = builtin::i32_wrap_i64(local.tee $cm_pair_7_114("wasi/stream-new"()));
         offset_24 = builtin::i32_wrap_i64($cm_pair_7_114 >> 32_i64);
-        $moved_4_111 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_111 = start_38; start_38 = 0; $moved_4_111);
+        $moved_4_111 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_111 = start_38; start_38 = 0; $moved_4_111);
         start_38 = offset_24;
         offset_24 = 0;
         offset_24 = start_38;
@@ -457,7 +457,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
     }
     offset_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_114("wasi/stream-new"()));
     $moved_4_111 = builtin::i32_wrap_i64($cm_pair_7_114 >> 32_i64);
-    start_38 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(start_38 = offset_24; offset_24 = 0; start_38);
+    start_38 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_38 = offset_24; offset_24 = 0; start_38);
     offset_24 = $moved_4_111;
     $moved_4_111 = 0;
     $moved_4_111 = offset_24;
@@ -495,7 +495,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_161.repr, new_used_18, 20_i64, 2);
     new_used_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_122("wasi/stream-new"()));
     start_19 = builtin::i32_wrap_i64($cm_pair_7_122 >> 32_i64);
-    $moved_4_119 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_119 = new_used_18; new_used_18 = 0; $moved_4_119);
+    $moved_4_119 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_119 = new_used_18; new_used_18 = 0; $moved_4_119);
     new_used_18 = start_19;
     start_19 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = new_used_18; new_used_18 = 0; start_19, $local_2.repr, $local_2.used);
@@ -521,7 +521,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_161.repr, start_19, 200_i64, 3);
     start_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7_122("wasi/stream-new"()));
     $moved_4_119 = builtin::i32_wrap_i64($cm_pair_7_122 >> 32_i64);
-    new_used_18 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(new_used_18 = start_19; start_19 = 0; new_used_18);
+    new_used_18 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_18 = start_19; start_19 = 0; new_used_18);
     start_19 = $moved_4_119;
     $moved_4_119 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_119 = start_19; start_19 = 0; $moved_4_119, $local_2.repr, $local_2.used);
@@ -563,7 +563,7 @@ fn "tuple_destructuring.wado/destruct_nested"() with Stdout {
     builtin::array_copy<u8>($local_3.repr, start_31, global:tuple_destructuring.wado::$const_obj_21, 0, 6);
     start_31 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     offset_17 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_31; start_31 = 0; $moved_4);
+    $moved_4 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_31; start_31 = 0; $moved_4);
     start_31 = offset_17;
     offset_17 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_17 = start_31; start_31 = 0; offset_17, $local_3.repr, $local_3.used);
@@ -590,7 +590,7 @@ fn "tuple_destructuring.wado/destruct_wildcard"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_73.repr, start_30, 3_i64, 1);
     start_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     offset_16 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_30; start_30 = 0; $moved_4);
+    $moved_4 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_30; start_30 = 0; $moved_4);
     start_30 = offset_16;
     offset_16 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_16 = start_30; start_30 = 0; offset_16, $local_2.repr, $local_2.used);
@@ -606,7 +606,7 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_219: i32;
     $sroa_$pattern_temp_0_0_13_218 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_219 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $moved_4_209 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_209 = $sroa_$pattern_temp_0_0_13_218; $sroa_$pattern_temp_0_0_13_218 = 0; $moved_4_209);
+    $moved_4_209 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_209 = $sroa_$pattern_temp_0_0_13_218; $sroa_$pattern_temp_0_0_13_218 = 0; $moved_4_209);
     $sroa_$pattern_temp_0_0_13_218 = $sroa_$pattern_temp_0_1_14_219;
     $sroa_$pattern_temp_0_1_14_219 = 0;
     $sroa_$pattern_temp_0_1_14_219 = $sroa_$pattern_temp_0_0_13_218;
@@ -617,7 +617,7 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_219 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_1_14_219);
     $sroa_$pattern_temp_0_1_14_219 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $moved_4_209 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_218 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_218 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $sroa_$pattern_temp_0_0_13_218);
+    $sroa_$pattern_temp_0_0_13_218 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_218 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $sroa_$pattern_temp_0_0_13_218);
     $sroa_$pattern_temp_0_1_14_219 = $moved_4_209;
     $moved_4_209 = 0;
     $moved_4_209 = $sroa_$pattern_temp_0_1_14_219;
@@ -627,7 +627,7 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_209 = $sroa_$pattern_temp_0_0_13_218; $sroa_$pattern_temp_0_0_13_218 = 0; $moved_4_209);
     $moved_4_209 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_218 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_219 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_219 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_1_14_219);
+    $sroa_$pattern_temp_0_1_14_219 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_219 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_1_14_219);
     $moved_4_209 = $sroa_$pattern_temp_0_0_13_218;
     $sroa_$pattern_temp_0_0_13_218 = 0;
     $sroa_$pattern_temp_0_0_13_218 = $moved_4_209;
@@ -662,14 +662,14 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     });
     $sroa_$pattern_temp_0_1_14_219 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_218 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $moved_4_209 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_209 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $moved_4_209);
+    $moved_4_209 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_209 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $moved_4_209);
     $sroa_$pattern_temp_0_1_14_219 = $sroa_$pattern_temp_0_0_13_218;
     $sroa_$pattern_temp_0_0_13_218 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_218 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $sroa_$pattern_temp_0_0_13_218, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_218 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_0_13_218);
     $sroa_$pattern_temp_0_0_13_218 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $moved_4_209 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_219 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_219 = $sroa_$pattern_temp_0_0_13_218; $sroa_$pattern_temp_0_0_13_218 = 0; $sroa_$pattern_temp_0_1_14_219);
+    $sroa_$pattern_temp_0_1_14_219 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_219 = $sroa_$pattern_temp_0_0_13_218; $sroa_$pattern_temp_0_0_13_218 = 0; $sroa_$pattern_temp_0_1_14_219);
     $sroa_$pattern_temp_0_0_13_218 = $moved_4_209;
     $moved_4_209 = 0;
     $moved_4_209 = $sroa_$pattern_temp_0_0_13_218;
@@ -679,7 +679,7 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_209 = $sroa_$pattern_temp_0_1_14_219; $sroa_$pattern_temp_0_1_14_219 = 0; $moved_4_209);
     $moved_4_209 = builtin::i32_wrap_i64(local.tee $cm_pair_7_212("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_219 = builtin::i32_wrap_i64($cm_pair_7_212 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_218 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_218 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_0_13_218);
+    $sroa_$pattern_temp_0_0_13_218 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_218 = $moved_4_209; $moved_4_209 = 0; $sroa_$pattern_temp_0_0_13_218);
     $moved_4_209 = $sroa_$pattern_temp_0_1_14_219;
     $sroa_$pattern_temp_0_1_14_219 = 0;
     $sroa_$pattern_temp_0_1_14_219 = $moved_4_209;
@@ -709,14 +709,14 @@ fn "tuple_destructuring.wado/destruct_match"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_144.repr, start_46, 10_i64, 2);
     start_46 = builtin::i32_wrap_i64(local.tee $cm_pair_7_96("wasi/stream-new"()));
     offset_32 = builtin::i32_wrap_i64($cm_pair_7_96 >> 32_i64);
-    $moved_4_93 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_93 = start_46; start_46 = 0; $moved_4_93);
+    $moved_4_93 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_93 = start_46; start_46 = 0; $moved_4_93);
     start_46 = offset_32;
     offset_32 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(offset_32 = start_46; start_46 = 0; offset_32, $local_14.repr, $local_14.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(offset_32 = $moved_4_93; $moved_4_93 = 0; offset_32);
     offset_32 = builtin::i32_wrap_i64(local.tee $cm_pair_7_96("wasi/stream-new"()));
     $moved_4_93 = builtin::i32_wrap_i64($cm_pair_7_96 >> 32_i64);
-    start_46 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(start_46 = offset_32; offset_32 = 0; start_46);
+    start_46 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_46 = offset_32; offset_32 = 0; start_46);
     offset_32 = $moved_4_93;
     $moved_4_93 = 0;
     $moved_4_93 = offset_32;
@@ -726,7 +726,7 @@ fn "tuple_destructuring.wado/destruct_match"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_93 = start_46; start_46 = 0; $moved_4_93);
     $moved_4_93 = builtin::i32_wrap_i64(local.tee $cm_pair_7_96("wasi/stream-new"()));
     start_46 = builtin::i32_wrap_i64($cm_pair_7_96 >> 32_i64);
-    offset_32 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(offset_32 = $moved_4_93; $moved_4_93 = 0; offset_32);
+    offset_32 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(offset_32 = $moved_4_93; $moved_4_93 = 0; offset_32);
     $moved_4_93 = start_46;
     start_46 = 0;
     start_46 = $moved_4_93;
@@ -902,7 +902,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     });
     $sroa_y_used_954 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
     start_35 = builtin::i32_wrap_i64(x_87 >> 32_i64);
-    $sroa_x_used_884 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_884 = $sroa_y_used_954; $sroa_y_used_954 = 0; $sroa_x_used_884);
+    $sroa_x_used_884 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_x_used_884 = $sroa_y_used_954; $sroa_y_used_954 = 0; $sroa_x_used_884);
     $sroa_y_used_954 = start_35;
     start_35 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_35 = $sroa_y_used_954; $sroa_y_used_954 = 0; start_35, $local_8_8.repr, $local_8_8.used);
@@ -1019,7 +1019,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     });
     $sroa_y_used_974 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
     $sroa_x_used_884 = builtin::i32_wrap_i64(x_87 >> 32_i64);
-    $sroa_x_used_896 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_896 = $sroa_y_used_974; $sroa_y_used_974 = 0; $sroa_x_used_896);
+    $sroa_x_used_896 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_x_used_896 = $sroa_y_used_974; $sroa_y_used_974 = 0; $sroa_x_used_896);
     $sroa_y_used_974 = $sroa_x_used_884;
     $sroa_x_used_884 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_x_used_884 = $sroa_y_used_974; $sroa_y_used_974 = 0; $sroa_x_used_884, $local_8_8.repr, $local_8_8.used);
@@ -1136,7 +1136,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     });
     $sroa_y_used_994 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
     $sroa_x_used_896 = builtin::i32_wrap_i64(x_87 >> 32_i64);
-    $sroa_x_used_908 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_908 = $sroa_y_used_994; $sroa_y_used_994 = 0; $sroa_x_used_908);
+    $sroa_x_used_908 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_x_used_908 = $sroa_y_used_994; $sroa_y_used_994 = 0; $sroa_x_used_908);
     $sroa_y_used_994 = $sroa_x_used_896;
     $sroa_x_used_896 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_x_used_896 = $sroa_y_used_994; $sroa_y_used_994 = 0; $sroa_x_used_896, $local_8_8.repr, $local_8_8.used);
@@ -1253,7 +1253,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     });
     $sroa_y_used_1014 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
     $sroa_x_used_908 = builtin::i32_wrap_i64(x_87 >> 32_i64);
-    $sroa_x_used_920 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_920 = $sroa_y_used_1014; $sroa_y_used_1014 = 0; $sroa_x_used_920);
+    $sroa_x_used_920 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_x_used_920 = $sroa_y_used_1014; $sroa_y_used_1014 = 0; $sroa_x_used_920);
     $sroa_y_used_1014 = $sroa_x_used_908;
     $sroa_x_used_908 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_x_used_908 = $sroa_y_used_1014; $sroa_y_used_1014 = 0; $sroa_x_used_908, $local_8_8.repr, $local_8_8.used);
@@ -1370,7 +1370,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     });
     $sroa_y_used_1034 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
     $sroa_x_used_920 = builtin::i32_wrap_i64(x_87 >> 32_i64);
-    $sroa_x_used_932 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_932 = $sroa_y_used_1034; $sroa_y_used_1034 = 0; $sroa_x_used_932);
+    $sroa_x_used_932 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_x_used_932 = $sroa_y_used_1034; $sroa_y_used_1034 = 0; $sroa_x_used_932);
     $sroa_y_used_1034 = $sroa_x_used_920;
     $sroa_x_used_920 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_x_used_920 = $sroa_y_used_1034; $sroa_y_used_1034 = 0; $sroa_x_used_920, $local_8_8.repr, $local_8_8.used);
@@ -1384,7 +1384,7 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_131: i32;
     $sroa_$pattern_temp_0_0_13_130 = builtin::i32_wrap_i64(local.tee $cm_pair_7_124("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_131 = builtin::i32_wrap_i64($cm_pair_7_124 >> 32_i64);
-    $moved_4_121 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_121 = $sroa_$pattern_temp_0_0_13_130; $sroa_$pattern_temp_0_0_13_130 = 0; $moved_4_121);
+    $moved_4_121 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_121 = $sroa_$pattern_temp_0_0_13_130; $sroa_$pattern_temp_0_0_13_130 = 0; $moved_4_121);
     $sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131;
     $sroa_$pattern_temp_0_1_14_131 = 0;
     $sroa_$pattern_temp_0_1_14_131 = $sroa_$pattern_temp_0_0_13_130;
@@ -1397,7 +1397,7 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     "tuple_destructuring.wado/destruct_if_let"();
     $sroa_$pattern_temp_0_1_14_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7_124("wasi/stream-new"()));
     $moved_4_121 = builtin::i32_wrap_i64($cm_pair_7_124 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_130 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131; $sroa_$pattern_temp_0_1_14_131 = 0; $sroa_$pattern_temp_0_0_13_130);
+    $sroa_$pattern_temp_0_0_13_130 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131; $sroa_$pattern_temp_0_1_14_131 = 0; $sroa_$pattern_temp_0_0_13_130);
     $sroa_$pattern_temp_0_1_14_131 = $moved_4_121;
     $moved_4_121 = 0;
     $moved_4_121 = $sroa_$pattern_temp_0_1_14_131;
@@ -1407,7 +1407,7 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_121 = $sroa_$pattern_temp_0_0_13_130; $sroa_$pattern_temp_0_0_13_130 = 0; $moved_4_121);
     $moved_4_121 = builtin::i32_wrap_i64(local.tee $cm_pair_7_124("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_130 = builtin::i32_wrap_i64($cm_pair_7_124 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_131 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_131 = $moved_4_121; $moved_4_121 = 0; $sroa_$pattern_temp_0_1_14_131);
+    $sroa_$pattern_temp_0_1_14_131 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_131 = $moved_4_121; $moved_4_121 = 0; $sroa_$pattern_temp_0_1_14_131);
     $moved_4_121 = $sroa_$pattern_temp_0_0_13_130;
     $sroa_$pattern_temp_0_0_13_130 = 0;
     $sroa_$pattern_temp_0_0_13_130 = $moved_4_121;
@@ -1417,7 +1417,7 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131; $sroa_$pattern_temp_0_1_14_131 = 0; $sroa_$pattern_temp_0_0_13_130);
     $sroa_$pattern_temp_0_0_13_130 = builtin::i32_wrap_i64(local.tee $cm_pair_7_124("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_131 = builtin::i32_wrap_i64($cm_pair_7_124 >> 32_i64);
-    $moved_4_121 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($moved_4_121 = $sroa_$pattern_temp_0_0_13_130; $sroa_$pattern_temp_0_0_13_130 = 0; $moved_4_121);
+    $moved_4_121 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_121 = $sroa_$pattern_temp_0_0_13_130; $sroa_$pattern_temp_0_0_13_130 = 0; $moved_4_121);
     $sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131;
     $sroa_$pattern_temp_0_1_14_131 = 0;
     $sroa_$pattern_temp_0_1_14_131 = $sroa_$pattern_temp_0_0_13_130;
@@ -1427,7 +1427,7 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_131 = $moved_4_121; $moved_4_121 = 0; $sroa_$pattern_temp_0_1_14_131);
     $sroa_$pattern_temp_0_1_14_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7_124("wasi/stream-new"()));
     $moved_4_121 = builtin::i32_wrap_i64($cm_pair_7_124 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_130 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131; $sroa_$pattern_temp_0_1_14_131 = 0; $sroa_$pattern_temp_0_0_13_130);
+    $sroa_$pattern_temp_0_0_13_130 = "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_130 = $sroa_$pattern_temp_0_1_14_131; $sroa_$pattern_temp_0_1_14_131 = 0; $sroa_$pattern_temp_0_0_13_130);
     $sroa_$pattern_temp_0_1_14_131 = $moved_4_121;
     $moved_4_121 = 0;
     $moved_4_121 = $sroa_$pattern_temp_0_1_14_131;
@@ -1443,8 +1443,8 @@ fn "tuple_destructuring.wado/run"() with Stdout {
     "tuple_destructuring.wado/destruct_variant"();
 }
 
-fn "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "tuple_destructuring.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "tuple_destructuring.wado/$cm_export__run"() {

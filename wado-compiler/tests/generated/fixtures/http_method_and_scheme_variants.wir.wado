@@ -397,15 +397,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(70)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(71)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(72)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(72)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(73)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(73)
 
-type "functype//wasi/wasi:http/Request::get_method" = fn(i32, i32);  // TypeId(74)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request.get-method" = fn(i32, i32);  // TypeId(74)
 
-type "functype//wasi/wasi:http/Request::get_scheme" = fn(i32, i32);  // TypeId(75)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request.get-scheme" = fn(i32, i32);  // TypeId(75)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(76)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(76)
 
 type "functype//http_method_and_scheme_variants.wado/method_name" = fn(ref "wasi:http/types.wado//Method") -> ref "core:prelude/string.wado//String";  // TypeId(77)
 
@@ -503,13 +503,13 @@ type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(124)
 
-type "functype//http_method_and_scheme_variants.wado/$cm_binding__Request_get_method" = fn(i32) -> ref "wasi:http/types.wado//Method";  // TypeId(125)
+type "functype//http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-method" = fn(i32) -> ref "wasi:http/types.wado//Method";  // TypeId(125)
 
-type "functype//http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme" = fn(i32) -> ref null "wasi:http/types.wado//Scheme";  // TypeId(126)
+type "functype//http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-scheme" = fn(i32) -> ref null "wasi:http/types.wado//Scheme";  // TypeId(126)
 
-type "functype//http_method_and_scheme_variants.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(127)
+type "functype//http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(127)
 
-type "functype//http_method_and_scheme_variants.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(128)
+type "functype//http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(128)
 
 type "functype//http_method_and_scheme_variants.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(129)
 
@@ -523,11 +523,11 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Request::get_method from "wasi/wasi:http/Request::get_method";
-import fn wasi/wasi:http/Request::get_scheme from "wasi/wasi:http/Request::get_scheme";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]request.get-method from "wasi/$wasi:http/types@0.3.0#[method]request.get-method";
+import fn wasi/$wasi:http/types@0.3.0#[method]request.get-scheme from "wasi/$wasi:http/types@0.3.0#[method]request.get-scheme";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -592,7 +592,7 @@ fn "http_method_and_scheme_variants.wado/method_name"(m) {
     });
 }
 
-fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(self) with Request {
+fn "http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-method"(self) with Request {
     let $outptr: i32;
     let $vresult: ref "wasi:http/types.wado//Method";
     let $local_5: i32;
@@ -600,7 +600,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(self) 
     let arr_12: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 12);
-    "wasi/wasi:http/Request::get_method"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request.get-method"(self, $outptr);
     $vresult = (if local.tee self(builtin::load_u8($outptr)) == 0 -> ref "wasi:http/types.wado//Method" {
         global:core:builtin::$unit_case$wasi:http/types.wado//Method$0;
     } else if self == 1 -> ref "wasi:http/types.wado//Method" {
@@ -641,7 +641,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(self) 
     return $vresult;
 }
 
-fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) with Request {
+fn "http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-scheme"(self) with Request {
     let $outptr: i32;
     let $option_result: ref null "wasi:http/types.wado//Scheme";
     let $local_7: i32;
@@ -649,7 +649,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) 
     let arr_14: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 16);
-    "wasi/wasi:http/Request::get_scheme"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request.get-scheme"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = ref.null none;
     if self != 0 {
@@ -680,11 +680,11 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) 
     return $option_result;
 }
 
-fn "http_method_and_scheme_variants.wado/$cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
+fn "http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]fields"();
 }
 
-fn "http_method_and_scheme_variants.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $local_6: ref null "core:prelude//$Resource";
@@ -702,7 +702,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Response_new"(headers, con
     headers = 0;
     headers = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -805,7 +805,7 @@ condition: method_name(custom) == \"PURGE\"
         "core:rt/panic"($local_43.repr, $local_43.used);
         unreachable;
     }
-    $av_1195 = local.tee $local_43("http_method_and_scheme_variants.wado/method_name"(local.tee custom("http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(request)))).used;
+    $av_1195 = local.tee $local_43("http_method_and_scheme_variants.wado/method_name"(local.tee custom("http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-method"(request)))).used;
     $local_43 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = $local_43.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1195)), 0, $array_clone_src_1, 0, $av_1195); $array_clone_dst_2, used: $av_1195 };
     if @unlikely(local.tee i_299($inline_core_prelude_array_wado_seq_eq_u8__83: block -> bool {
         $array_clone_dst_2 = $local_43.repr;
@@ -1004,7 +1004,7 @@ condition: scheme_name(Scheme::Other(\"wss\")) == \"wss\"
         "core:rt/panic"(v_289.repr, v_289.used);
         unreachable;
     }
-    if ref.is_null(local.tee req_scheme("http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(request))) == 0 {
+    if ref.is_null(local.tee req_scheme("http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-scheme"(request))) == 0 {
         v_289 = (if local.tee $av_1195(local.tee $v0_19(ref.as_non_null(req_scheme)).discriminant) == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 116, 116, 112), used: 4 };
         } else if $av_1195 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1146,7 +1146,7 @@ condition: name == \"http\" || name == \"https\"
     $v3 = builtin::i32_wrap_i64($cm_pair_246 >> 32_i64);
     $sroa_$pattern_temp_1_0_1185 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_246("wasi/stream-new"())) };
     offset_306 = builtin::i32_wrap_i64($cm_pair_246 >> 32_i64);
-    $moved_70 = local.tee $local_250("http_method_and_scheme_variants.wado/$cm_binding__Response_new"(i_873 = local.tee $av_1195("http_method_and_scheme_variants.wado/$cm_binding__Fields_new"()); $av_1195 = 0; i_873, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $moved_70 = $sroa_$pattern_temp_1_0_1185; $sroa_$pattern_temp_1_0_1185 = ref.null none; $moved_70 }, i_873 = i_299; i_299 = 0; i_873)).0;
+    $moved_70 = local.tee $local_250("http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(i_873 = local.tee $av_1195("http_method_and_scheme_variants.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()); $av_1195 = 0; i_873, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $moved_70 = $sroa_$pattern_temp_1_0_1185; $sroa_$pattern_temp_1_0_1185 = ref.null none; $moved_70 }, i_873 = i_299; i_299 = 0; i_873)).0;
     $sroa_$pattern_temp_1_0_1185 = $local_250.1;
     $sroa_$task_ret_1_1188 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_72 = $moved_70; $moved_70 = ref.null none; $moved_72 };
     i_873 = 0;
@@ -1688,7 +1688,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

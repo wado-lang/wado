@@ -286,11 +286,11 @@ struct core:prelude//List<u8> {  // TypeId(50)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(51)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(52)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(52)
 
-type "functype//wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(53)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(53)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(54)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(54)
 
 type "functype//http_loop_fresh_resource.wado/$cm_export__handle" = fn(i32);  // TypeId(55)
 
@@ -312,18 +312,18 @@ type "functype//wasi/future-write:val-result<option<own<wasi/http/types.wado#Fie
 
 type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn(i32);  // TypeId(64)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(65)
+type "functype//http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(65)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(66)
+type "functype//http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(66)
 
 type "functype//http_loop_fresh_resource.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(67)
 
-type "functype//http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(68)
+type "functype//http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(68)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::append from "wasi/wasi:http/Fields::append";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.append from "wasi/$wasi:http/types@0.3.0#[method]fields.append";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
@@ -343,11 +343,11 @@ global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$1: ref 
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$2: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 2 };
 global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$3: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 3 };
 
-fn "http_loop_fresh_resource.wado/$cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
+fn "http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]fields"();
 }
 
-fn "http_loop_fresh_resource.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $local_6: ref null "core:prelude//$Resource";
@@ -365,7 +365,7 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Response_new"(headers, contents, 
     headers = 0;
     headers = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -390,9 +390,9 @@ fn "http_loop_fresh_resource.wado/$cm_task_entry__handle"(request) {
     b1: block {
         l2: loop {
             break_if b1 i >= 3;
-            $moved_8 = local.tee scratch("http_loop_fresh_resource.wado/$cm_binding__Fields_new"());
+            $moved_8 = local.tee scratch("http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"());
             scratch = 0;
-            drop("http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"($moved_8, global:http_loop_fresh_resource.wado::$const_obj_4, global:http_loop_fresh_resource.wado::$const_obj_3));
+            drop("http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"($moved_8, global:http_loop_fresh_resource.wado::$const_obj_4, global:http_loop_fresh_resource.wado::$const_obj_3));
             if ($moved_8 == 0) == 0 {
                 let $cm_handle_2: i32;
                 $cm_handle_2 = $moved_8;
@@ -405,7 +405,7 @@ fn "http_loop_fresh_resource.wado/$cm_task_entry__handle"(request) {
     };
     $cm_handle_2 = builtin::i32_wrap_i64(local.tee $cm_pair_184("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     i = builtin::i32_wrap_i64($cm_pair_184 >> 32_i64);
-    response = local.tee $local_186("http_loop_fresh_resource.wado/$cm_binding__Response_new"(scratch = local.tee $moved_8("http_loop_fresh_resource.wado/$cm_binding__Fields_new"()); $moved_8 = 0; scratch, global:http_loop_fresh_resource.wado::$const_obj_2, scratch = $cm_handle_2; $cm_handle_2 = 0; scratch)).0;
+    response = local.tee $local_186("http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(scratch = local.tee $moved_8("http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()); $moved_8 = 0; scratch, global:http_loop_fresh_resource.wado::$const_obj_2, scratch = $cm_handle_2; $cm_handle_2 = 0; scratch)).0;
     _tx_future = $local_186.1;
     $sroa_$task_ret_1_196 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_11 = response; response = ref.null none; $moved_11 };
     scratch = 0;
@@ -805,7 +805,7 @@ fn "http_loop_fresh_resource.wado/$cm_future_write_core:prelude/types.wado/Resul
     } };
 }
 
-fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"(self, name, value) with Fields {
+fn "http_loop_fresh_resource.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
     let $name_packed: i64;
     let $value_packed: i64;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
@@ -840,7 +840,7 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append$spec0"(self, name, 
     };
     $value_packed = builtin::i64_extend_i32_u(i_25) | (builtin::i64_extend_i32_s(ptr_18) << 32_i64);
     ptr_18 = "mem/realloc"(0, 0, 4, 20);
-    "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
     $result_val = (if local.tee self(builtin::load_u8(ptr_18)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
     } else if local.tee self(builtin::load_u8(ptr_18 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {

@@ -165,9 +165,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(29)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//opt_variant_payload_of_constant_construct.wado/run" = fn();  // TypeId(33)
 
@@ -355,7 +355,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(124)
 
 type "functype//core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<opt_variant_payload_of_constant_construct.wado/Record>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(125)
 
-type "functype//opt_variant_payload_of_constant_construct.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(126)
+type "functype//opt_variant_payload_of_constant_construct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(126)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(127)
 
@@ -365,8 +365,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -427,15 +427,15 @@ fn "opt_variant_payload_of_constant_construct.wado/run"() with Stdout {
     "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(v.note, $sroa_$f_buf_75);
     is_negative = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $mv$self_3$0 = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "opt_variant_payload_of_constant_construct.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = is_negative; is_negative = 0; $moved_4);
+    $moved_4 = "opt_variant_payload_of_constant_construct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = is_negative; is_negative = 0; $moved_4);
     is_negative = $mv$self_3$0;
     $mv$self_3$0 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($mv$self_3$0 = is_negative; is_negative = 0; $mv$self_3$0, $mv_arg_1.repr, $mv_arg_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$self_3$0 = $moved_4; $moved_4 = 0; $mv$self_3$0);
 }
 
-fn "opt_variant_payload_of_constant_construct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "opt_variant_payload_of_constant_construct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_variant_payload_of_constant_construct.wado/$cm_export__run"() {
@@ -738,7 +738,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

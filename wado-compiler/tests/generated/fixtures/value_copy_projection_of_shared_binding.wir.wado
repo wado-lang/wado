@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//value_copy_projection_of_shared_binding.wado/run" = fn();  // TypeId(11)
 
@@ -47,7 +47,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//value_copy_projection_of_shared_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -59,7 +59,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -97,14 +97,14 @@ fn "value_copy_projection_of_shared_binding.wado/run"() with Stdout {
     };
     n_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_98("wasi/stream-new"()));
     start_87 = builtin::i32_wrap_i64($cm_pair_7_98 >> 32_i64);
-    new_used_86 = "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(new_used_86 = n_82; n_82 = 0; new_used_86);
+    new_used_86 = "value_copy_projection_of_shared_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_86 = n_82; n_82 = 0; new_used_86);
     n_82 = start_87;
     start_87 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_87 = n_82; n_82 = 0; start_87, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_87 = new_used_86; new_used_86 = 0; start_87);
     start_87 = builtin::i32_wrap_i64(local.tee $cm_pair_7_98("wasi/stream-new"()));
     new_used_86 = builtin::i32_wrap_i64($cm_pair_7_98 >> 32_i64);
-    n_82 = "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(n_82 = start_87; start_87 = 0; n_82);
+    n_82 = "value_copy_projection_of_shared_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_82 = start_87; start_87 = 0; n_82);
     start_87 = new_used_86;
     new_used_86 = 0;
     new_used_86 = start_87;
@@ -114,8 +114,8 @@ fn "value_copy_projection_of_shared_binding.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_86 = n_82; n_82 = 0; new_used_86);
 }
 
-fn "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "value_copy_projection_of_shared_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "value_copy_projection_of_shared_binding.wado/$cm_export__run"() {

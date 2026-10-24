@@ -182,17 +182,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(42)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(45)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(45)
 
-type "functype//wasi/wasi:tls/Connector::new" = fn() -> i32;  // TypeId(46)
+type "functype//wasi/$wasi:tls/client@0.3.0-draft#[constructor]connector" = fn() -> i32;  // TypeId(46)
 
-type "functype//wasi/wasi:tls/Connector::connect" = fn(i32, i32, i32, i32) -> i32;  // TypeId(47)
+type "functype//wasi/$wasi:tls/client@0.3.0-draft#[static]connector.connect" = fn(i32, i32, i32, i32) -> i32;  // TypeId(47)
 
 type "functype//wasi_tls_result_error.wado/run" = fn();  // TypeId(48)
 
-type "functype//wasi_tls_result_error.wado/$cm_lift__Connector_connect" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(49)
+type "functype//wasi_tls_result_error.wado/$cm_lift__wasi:tls/client@0.3.0-draft#[static]connector.connect" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(49)
 
 type "functype//wasi_tls_result_error.wado/$cm_export__run" = fn();  // TypeId(50)
 
@@ -300,11 +300,11 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(101)
 
 type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(102)
 
-type "functype//wasi_tls_result_error.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(103)
+type "functype//wasi_tls_result_error.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(103)
 
-type "functype//wasi_tls_result_error.wado/$cm_binding__Connector_new" = fn() -> i32;  // TypeId(104)
+type "functype//wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[constructor]connector" = fn() -> i32;  // TypeId(104)
 
-type "functype//wasi_tls_result_error.wado/$cm_binding__Connector_connect$spec0" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>";  // TypeId(105)
+type "functype//wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[static]connector.connect$spec0" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>";  // TypeId(105)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(106)
 
@@ -318,10 +318,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:tls/Connector::new from "wasi/wasi:tls/Connector::new";
-import fn wasi/wasi:tls/Connector::connect from "wasi/wasi:tls/Connector::connect";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:tls/client@0.3.0-draft#[constructor]connector from "wasi/$wasi:tls/client@0.3.0-draft#[constructor]connector";
+import fn wasi/$wasi:tls/client@0.3.0-draft#[static]connector.connect from "wasi/$wasi:tls/client@0.3.0-draft#[static]connector.connect";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/tls/types.wado#Error from "wasi/resource-drop:wasi/tls/types.wado#Error";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -352,13 +352,13 @@ fn "wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
         cold_path;
         "wasi_tls_result_error.wado/$initialize_modules$cold0"();
     };
-    conn = "wasi_tls_result_error.wado/$cm_binding__Connector_new"();
+    conn = "wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[constructor]connector"();
     $temp_2 = ref.null none;
-    if local.tee $temp_2("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/$cm_binding__Connector_connect$spec0"($moved_1 = conn; conn = 0; $moved_1, global:wasi_tls_result_error.wado::$const_obj_2))).discriminant == 0 {
+    if local.tee $temp_2("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[static]connector.connect$spec0"($moved_1 = conn; conn = 0; $moved_1, global:wasi_tls_result_error.wado::$const_obj_2))).discriminant == 0 {
         $temp_2 = ref.null none;
         $moved_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
         conn = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
-        $moved_4_9 = "wasi_tls_result_error.wado/$cm_binding__Stdout_write_via_stream"($moved_4_9 = $moved_1; $moved_1 = 0; $moved_4_9);
+        $moved_4_9 = "wasi_tls_result_error.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_9 = $moved_1; $moved_1 = 0; $moved_4_9);
         $moved_1 = conn;
         conn = 0;
         conn = $moved_1;
@@ -377,7 +377,7 @@ fn "wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
         $temp_2 = ref.null none;
         conn = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
         $moved_4_9 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
-        $moved_1 = "wasi_tls_result_error.wado/$cm_binding__Stdout_write_via_stream"($moved_1 = conn; conn = 0; $moved_1);
+        $moved_1 = "wasi_tls_result_error.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_1 = conn; conn = 0; $moved_1);
         conn = $moved_4_9;
         $moved_4_9 = 0;
         $moved_4_9 = conn;
@@ -396,15 +396,15 @@ fn "wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
     }
 }
 
-fn "wasi_tls_result_error.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "wasi_tls_result_error.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "wasi_tls_result_error.wado/$cm_binding__Connector_new"() with Connector {
-    return "wasi/wasi:tls/Connector::new"();
+fn "wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[constructor]connector"() with Connector {
+    return "wasi/$wasi:tls/client@0.3.0-draft#[constructor]connector"();
 }
 
-fn "wasi_tls_result_error.wado/$cm_lift__Connector_connect"($outptr) {
+fn "wasi_tls_result_error.wado/$cm_lift__wasi:tls/client@0.3.0-draft#[static]connector.connect"($outptr) {
     return (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
         global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>$0;
     } else {
@@ -427,7 +427,7 @@ fn "wasi_tls_result_error.wado/$initialize_modules$cold0"() {
     global:wasi_tls_result_error.wado::$modules_initialized = 1;
 }
 
-fn "wasi_tls_result_error.wado/$cm_binding__Connector_connect$spec0"(this, server_name) with Connector {
+fn "wasi_tls_result_error.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[static]connector.connect$spec0"(this, server_name) with Connector {
     let $server_name_packed: i64;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let bytes: ref Array<u8>;
@@ -446,7 +446,7 @@ fn "wasi_tls_result_error.wado/$cm_binding__Connector_connect$spec0"(this, serve
     };
     $server_name_packed = builtin::i64_extend_i32_u(ptr_10) | 47244640256_i64;
     ptr_10 = "mem/realloc"(0, 0, 4, 8);
-    $cm_arg_4 = i = this; this = 0; this = builtin::i32_wrap_i64($server_name_packed); let $cm_arg_4: i32; $cm_arg_4 = builtin::i32_wrap_i64($server_name_packed >> 32_i64); "wasi/wasi:tls/Connector::connect"(i, this, $cm_arg_4, ptr_10) >>u 4;
+    $cm_arg_4 = i = this; this = 0; this = builtin::i32_wrap_i64($server_name_packed); let $cm_arg_4: i32; $cm_arg_4 = builtin::i32_wrap_i64($server_name_packed >> 32_i64); "wasi/$wasi:tls/client@0.3.0-draft#[static]connector.connect"(i, this, $cm_arg_4, ptr_10) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if $cm_arg_4 != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $cm_arg_4 } };
@@ -594,7 +594,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -1657,7 +1657,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 }
 
 fn "wasi_tls_result_error.wado/wasi_tls_result_error.wado/$Closure_1::$call$dae[self]"($outptr) {
-    return "wasi_tls_result_error.wado/$cm_lift__Connector_connect"($outptr);
+    return "wasi_tls_result_error.wado/$cm_lift__wasi:tls/client@0.3.0-draft#[static]connector.connect"($outptr);
 }
 
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {

@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//simd_v128_inspect.wado/run" = fn();  // TypeId(11)
 
@@ -53,7 +53,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
@@ -63,7 +63,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -108,7 +108,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_2.repr, new_used_23, global:simd_v128_inspect.wado::$const_obj_4, 0, 5);
     new_used_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_52("wasi/stream-new"()));
     start_24 = builtin::i32_wrap_i64($cm_pair_7_52 >> 32_i64);
-    $moved_4_49 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"($moved_4_49 = new_used_23; new_used_23 = 0; $moved_4_49);
+    $moved_4_49 = "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_49 = new_used_23; new_used_23 = 0; $moved_4_49);
     new_used_23 = start_24;
     start_24 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_24 = new_used_23; new_used_23 = 0; start_24, $local_2.repr, $local_2.used);
@@ -117,15 +117,15 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$sroa[self.bytes]$spec0$sroa[f.buf]"(v, $local_2);
     start_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_52("wasi/stream-new"()));
     $moved_4_49 = builtin::i32_wrap_i64($cm_pair_7_52 >> 32_i64);
-    new_used_23 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(new_used_23 = start_24; start_24 = 0; new_used_23);
+    new_used_23 = "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_23 = start_24; start_24 = 0; new_used_23);
     start_24 = $moved_4_49;
     $moved_4_49 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_49 = start_24; start_24 = 0; $moved_4_49, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_49 = new_used_23; new_used_23 = 0; $moved_4_49);
 }
 
-fn "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "simd_v128_inspect.wado/$cm_export__run"() {

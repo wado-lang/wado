@@ -5,11 +5,11 @@
 //! is that identity, carried from synthesis through TIR and NIR into WIR;
 //! [`CanonicalIntrinsic::import_name`] renders it at the end of that path.
 
-use std::borrow::Cow;
 use std::fmt;
 
 use crate::defs::{DefId, DefTable};
 use crate::module_source::ModuleSource;
+use crate::name::cm_import_alias;
 
 /// A Component Model type some declaration names: the identity every key
 /// compares.
@@ -425,27 +425,23 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
 /// What a `CmRawCall` invokes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmCallTarget {
-    /// A lowered import, by its local alias name
-    /// (`"wasi:cli/Stdout::write_via_stream"`), and the
-    /// `CmFunctionInfo::cm_identifier` of the function it is.
-    Import {
-        alias: String,
-        function: String,
-    },
+    /// A lowered import, by the `CmFunctionInfo::cm_identifier` of the
+    /// function it is.
+    Import(String),
     Canonical(CanonicalIntrinsic),
 }
 
 impl CmCallTarget {
-    pub fn import_name(&self) -> Cow<'_, str> {
+    pub fn import_name(&self) -> String {
         match self {
-            Self::Import { alias, .. } => Cow::Borrowed(alias),
-            Self::Canonical(intrinsic) => Cow::Owned(intrinsic.import_name()),
+            Self::Import(function) => cm_import_alias(function),
+            Self::Canonical(intrinsic) => intrinsic.import_name(),
         }
     }
 
     pub fn canonical(&self) -> Option<&CanonicalIntrinsic> {
         match self {
-            Self::Import { .. } => None,
+            Self::Import(_) => None,
             Self::Canonical(intrinsic) => Some(intrinsic),
         }
     }

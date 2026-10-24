@@ -30,7 +30,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
 type "functype//opt_ctor_forward_slice.wado/run" = fn();  // TypeId(12)
 
@@ -52,7 +52,7 @@ type "functype//wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode" = f
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
 
-type "functype//opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//opt_ctor_forward_slice.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -60,7 +60,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -79,7 +79,7 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let $sroa_body_repr_18: ref Array<u8>;
     $sroa_$pattern_temp_0_0_16 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_17 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
-    $moved_4 = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_16; $sroa_$pattern_temp_0_0_16 = 0; $moved_4);
+    $moved_4 = "opt_ctor_forward_slice.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_16; $sroa_$pattern_temp_0_0_16 = 0; $moved_4);
     $sroa_body_repr_18 = global:opt_ctor_forward_slice.wado::$const_obj_0;
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         "core:rt/cm_stream_write_raw_all_u8"(local.tee $sroa_$pattern_temp_0_0_16($sroa_$pattern_temp_0_1_17), $sroa_body_repr_18, 0, 5);
@@ -88,8 +88,8 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     drop("opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"($sroa_$pattern_temp_0_0_16 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_16));
 }
 
-fn "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "opt_ctor_forward_slice.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_ctor_forward_slice.wado/$cm_export__run"() {

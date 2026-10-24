@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//comparison_chain_side_effects.wado/run" = fn();  // TypeId(10)
 
@@ -53,7 +53,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
@@ -65,7 +65,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -96,7 +96,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_22.repr, is_negative_43, x_47, self_37);
     self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
+    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     self_37 = is_negative_43;
     is_negative_43 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_43 = self_37; self_37 = 0; is_negative_43, $local_22.repr, $local_22.used);
@@ -111,14 +111,14 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_22.repr, $moved_4_390, x_47, is_negative_43);
     is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    self_37 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
+    self_37 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     is_negative_43 = $moved_4_390;
     $moved_4_390 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_390 = is_negative_43; is_negative_43 = 0; $moved_4_390, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     $moved_4_390 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     self_37 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
+    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     $moved_4_390 = self_37;
     self_37 = 0;
     self_37 = $moved_4_390;
@@ -128,7 +128,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
+    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     self_37 = is_negative_43;
     is_negative_43 = 0;
     is_negative_43 = self_37;
@@ -136,7 +136,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     $local_22 = global:comparison_chain_side_effects.wado::$const_obj_7;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"(is_negative_43, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
-    $moved_4_390 = 0 & (1 < is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64); self_37 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37); is_negative_43 = $moved_4_390; $moved_4_390 = 0; $moved_4_390 = is_negative_43; is_negative_43 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]$spec0"($moved_4_390, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); 2);
+    $moved_4_390 = 0 & (1 < is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64); self_37 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37); is_negative_43 = $moved_4_390; $moved_4_390 = 0; $moved_4_390 = is_negative_43; is_negative_43 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]$spec0"($moved_4_390, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); 2);
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     text_161 = (if $moved_4_390 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -146,14 +146,14 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($local_22, text_161.repr, text_161.used);
     $moved_4_390 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     self_37 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
+    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     $moved_4_390 = self_37;
     self_37 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_37 = $moved_4_390; $moved_4_390 = 0; self_37, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
+    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     self_37 = is_negative_43;
     is_negative_43 = 0;
     is_negative_43 = self_37;
@@ -163,7 +163,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    self_37 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
+    self_37 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     is_negative_43 = $moved_4_390;
     $moved_4_390 = 0;
     $moved_4_390 = is_negative_43;
@@ -173,7 +173,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     $moved_4_390 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     self_37 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
+    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     $moved_4_390 = self_37;
     self_37 = 0;
     self_37 = $moved_4_390;
@@ -181,7 +181,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     $local_22 = global:comparison_chain_side_effects.wado::$const_obj_5;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"(self_37, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
-    is_negative_43 = 3 < self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64); $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); self_37 = is_negative_43; is_negative_43 = 0; is_negative_43 = self_37; self_37 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_4; "core:rt/write_string_to_stream$dae[add_newline]$spec0"(is_negative_43, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43); 4;
+    is_negative_43 = 3 < self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64); $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); self_37 = is_negative_43; is_negative_43 = 0; is_negative_43 = self_37; self_37 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_4; "core:rt/write_string_to_stream$dae[add_newline]$spec0"(is_negative_43, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43); 4;
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     text_161 = (if is_negative_43 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -191,14 +191,14 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($local_22, text_161.repr, text_161.used);
     is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    self_37 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
+    self_37 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     is_negative_43 = $moved_4_390;
     $moved_4_390 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_390 = is_negative_43; is_negative_43 = 0; $moved_4_390, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     $moved_4_390 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     self_37 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
+    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     $moved_4_390 = self_37;
     self_37 = 0;
     self_37 = $moved_4_390;
@@ -208,7 +208,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
     self_37 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     is_negative_43 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
+    $moved_4_390 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_390 = self_37; self_37 = 0; $moved_4_390);
     self_37 = is_negative_43;
     is_negative_43 = 0;
     is_negative_43 = self_37;
@@ -216,7 +216,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     $local_22 = global:comparison_chain_side_effects.wado::$const_obj_2;
     "core:rt/write_string_to_stream$dae[add_newline]$spec0"(is_negative_43, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
-    $moved_4_390 = 0 & (6 == is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64); self_37 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37); is_negative_43 = $moved_4_390; $moved_4_390 = 0; $moved_4_390 = is_negative_43; is_negative_43 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_1; "core:rt/write_string_to_stream$dae[add_newline]$spec0"($moved_4_390, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); 7);
+    $moved_4_390 = 0 & (6 == is_negative_43 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"())); $moved_4_390 = builtin::i32_wrap_i64(x_47 >> 32_i64); self_37 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_37 = is_negative_43; is_negative_43 = 0; self_37); is_negative_43 = $moved_4_390; $moved_4_390 = 0; $moved_4_390 = is_negative_43; is_negative_43 = 0; $local_22 = global:comparison_chain_side_effects.wado::$const_obj_1; "core:rt/write_string_to_stream$dae[add_newline]$spec0"($moved_4_390, $local_22.repr, $local_22.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_390 = self_37; self_37 = 0; $moved_4_390); 7);
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     text_161 = (if $moved_4_390 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -226,15 +226,15 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($local_22, text_161.repr, text_161.used);
     $moved_4_390 = builtin::i32_wrap_i64(local.tee x_47("wasi/stream-new"()));
     self_37 = builtin::i32_wrap_i64(x_47 >> 32_i64);
-    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
+    is_negative_43 = "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_43 = $moved_4_390; $moved_4_390 = 0; is_negative_43);
     $moved_4_390 = self_37;
     self_37 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_37 = $moved_4_390; $moved_4_390 = 0; self_37, $local_22.repr, $local_22.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_37 = is_negative_43; is_negative_43 = 0; self_37);
 }
 
-fn "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "comparison_chain_side_effects.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "comparison_chain_side_effects.wado/$cm_export__run"() {

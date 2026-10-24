@@ -69,7 +69,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
 type "functype//match_or_pattern_compound_guard.wado/shape" = fn(ref "match_or_pattern_compound_guard.wado//Shape") -> i32;  // TypeId(20)
 
@@ -101,7 +101,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
@@ -111,7 +111,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -350,7 +350,7 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
             }
             start_518 = builtin::i32_wrap_i64(local.tee $cm_pair_7_294("wasi/stream-new"()));
             new_used_40 = builtin::i32_wrap_i64($cm_pair_7_294 >> 32_i64);
-            start_518 = "match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream"($moved_4_291 = start_518; start_518 = 0; $moved_4_291);
+            start_518 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_291 = start_518; start_518 = 0; $moved_4_291);
             start_41 = new_used_40;
             new_used_40 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_299 = start_41; start_41 = 0; $moved_3_299, $tmpl_buf_371.repr, $tmpl_buf_371.used);
@@ -401,7 +401,7 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_411.repr, $moved_6_293, $cm_pair_7_294, $moved_3_299);
     $moved_3_299 = builtin::i32_wrap_i64(local.tee $cm_pair_7_294("wasi/stream-new"()));
     $moved_6_293 = builtin::i32_wrap_i64($cm_pair_7_294 >> 32_i64);
-    $moved_4_291 = "match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream"($moved_4_291 = $moved_3_299; $moved_3_299 = 0; $moved_4_291);
+    $moved_4_291 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_291 = $moved_3_299; $moved_3_299 = 0; $moved_4_291);
     $moved_3_299 = $moved_6_293;
     $moved_6_293 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_6_293 = $moved_3_299; $moved_3_299 = 0; $moved_6_293, $tmpl_buf_371.repr, $tmpl_buf_371.used);
@@ -443,7 +443,7 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_411.repr, $moved_4_291, $cm_pair_7_294, $moved_6_293);
     $moved_6_293 = builtin::i32_wrap_i64(local.tee $cm_pair_7_294("wasi/stream-new"()));
     $moved_4_291 = builtin::i32_wrap_i64($cm_pair_7_294 >> 32_i64);
-    $moved_3_299 = "match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream"($moved_3_299 = $moved_6_293; $moved_6_293 = 0; $moved_3_299);
+    $moved_3_299 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3_299 = $moved_6_293; $moved_6_293 = 0; $moved_3_299);
     $moved_6_293 = $moved_4_291;
     $moved_4_291 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_291 = $moved_6_293; $moved_6_293 = 0; $moved_4_291, $tmpl_buf_371.repr, $tmpl_buf_371.used);
@@ -604,7 +604,7 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
             }
             start_518 = builtin::i32_wrap_i64(local.tee q_62("wasi/stream-new"()));
             $vc_payload_0 = builtin::i32_wrap_i64(q_62 >> 32_i64);
-            start_518 = "match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream"(new_used_462 = start_518; start_518 = 0; new_used_462);
+            start_518 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_462 = start_518; start_518 = 0; new_used_462);
             $sroa_$iter_0_index_348 = $vc_payload_0;
             $vc_payload_0 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"(self_44 = $sroa_$iter_0_index_348; $sroa_$iter_0_index_348 = 0; self_44, $tmpl_buf_371.repr, $tmpl_buf_371.used);
@@ -614,8 +614,8 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
     };
 }
 
-fn "match_or_pattern_compound_guard.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "match_or_pattern_compound_guard.wado/$cm_export__run"() {

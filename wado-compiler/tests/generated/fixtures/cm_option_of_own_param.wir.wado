@@ -42,15 +42,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32, i32, i32, i32, i32, i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#pick" = fn(i32, i32, i32, i32, i32, i32, i32, i32) -> i32;  // TypeId(15)
 
-type "functype//cm_option_of_own_param.wado/$cm_binding__Gfx_pick" = fn(ref null "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>", ref null "core:prelude/string.wado//String", ref null "core:prelude//List<u8>") -> u32;  // TypeId(16)
+type "functype//cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick" = fn(ref null "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>", ref null "core:prelude/string.wado//String", ref null "core:prelude//List<u8>") -> u32;  // TypeId(16)
 
-type "functype//cm_option_of_own_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(17)
+type "functype//cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(17)
 
 type "functype//cm_option_of_own_param.wado/$cm_export__run" = fn();  // TypeId(18)
 
@@ -76,9 +76,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#pick from "wasi/$wasi:demo/gfx@0.1.0#pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -87,7 +87,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>$0: ref "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>" = struct.new "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>" { 0 };
 
-fn "cm_option_of_own_param.wado/$cm_binding__Gfx_pick"(d, label, bytes) with Gfx {
+fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label, bytes) with Gfx {
     let $d_disc: i32;
     let $d_inner0: i32;
     let $label_disc: i32;
@@ -153,16 +153,16 @@ fn "cm_option_of_own_param.wado/$cm_binding__Gfx_pick"(d, label, bytes) with Gfx
         i = $local_19;
     } else {
     }
-    return "wasi/wasi:demo/Gfx::pick"($d_disc, $d_inner0, $label_disc, $label_inner0, $label_inner1, self_34, ptr_33, i);
+    return "wasi/$wasi:demo/gfx@0.1.0#pick"($d_disc, $d_inner0, $label_disc, $label_inner0, $label_inner1, self_34, ptr_33, i);
 }
 
-fn "cm_option_of_own_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Gfx::get_device"() };
+fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"() };
 }
 
 fn "cm_option_of_own_param.wado/$cm_export__run"() {
-    drop("cm_option_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some" { discriminant: 1, payload_0: "cm_option_of_own_param.wado/$cm_binding__Gfx_get_device"() }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, ref.null none));
-    drop("cm_option_of_own_param.wado/$cm_binding__Gfx_pick"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>$0, ref.null none, ref.null none));
+    drop("cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(struct.new "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some" { discriminant: 1, payload_0: "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, ref.null none));
+    drop("cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>$0, ref.null none, ref.null none));
     "wasi/task-return"(0);
 }
 
@@ -186,7 +186,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

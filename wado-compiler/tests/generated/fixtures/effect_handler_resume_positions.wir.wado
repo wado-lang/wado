@@ -108,9 +108,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(28)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(29)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//effect_handler_resume_positions.wado/run" = fn();  // TypeId(32)
 
@@ -156,7 +156,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(54)
+type "functype//effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(54)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(55)
 
@@ -166,8 +166,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -270,7 +270,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_321.repr, is_negative_26, x_30, $local_3_21);
     $local_3_21 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4_234 = "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"($moved_4_234 = $local_3_21; $local_3_21 = 0; $moved_4_234);
+    $moved_4_234 = "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_234 = $local_3_21; $local_3_21 = 0; $moved_4_234);
     $local_3_21 = is_negative_26;
     is_negative_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_26 = $local_3_21; $local_3_21 = 0; is_negative_26, $local_1_1.repr, $local_1_1.used);
@@ -316,7 +316,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, $moved_4_234, x_30, is_negative_26);
     is_negative_26 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     $moved_4_234 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $local_3_21 = "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"($local_3_21 = is_negative_26; is_negative_26 = 0; $local_3_21);
+    $local_3_21 = "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_3_21 = is_negative_26; is_negative_26 = 0; $local_3_21);
     is_negative_26 = $moved_4_234;
     $moved_4_234 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_234 = is_negative_26; is_negative_26 = 0; $moved_4_234, $local_1_1.repr, $local_1_1.used);
@@ -369,7 +369,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_321.repr, $moved_4_234, x_30, $local_3_21);
     $local_3_21 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     $moved_4_234 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    is_negative_26 = "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"(is_negative_26 = $local_3_21; $local_3_21 = 0; is_negative_26);
+    is_negative_26 = "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_26 = $local_3_21; $local_3_21 = 0; is_negative_26);
     $local_3_21 = $moved_4_234;
     $moved_4_234 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_234 = $local_3_21; $local_3_21 = 0; $moved_4_234, $local_1_1.repr, $local_1_1.used);
@@ -419,7 +419,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_321.repr, $moved_4_234, x_30, is_negative_26);
     is_negative_26 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     $moved_4_234 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $local_3_21 = "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"($local_3_21 = is_negative_26; is_negative_26 = 0; $local_3_21);
+    $local_3_21 = "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_3_21 = is_negative_26; is_negative_26 = 0; $local_3_21);
     is_negative_26 = $moved_4_234;
     $moved_4_234 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_234 = is_negative_26; is_negative_26 = 0; $moved_4_234, $local_1_1.repr, $local_1_1.used);
@@ -432,7 +432,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, $local_3_21, x_30, $moved_4_234);
     $moved_4_234 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     $local_3_21 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    is_negative_26 = "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"(is_negative_26 = $moved_4_234; $moved_4_234 = 0; is_negative_26);
+    is_negative_26 = "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_26 = $moved_4_234; $moved_4_234 = 0; is_negative_26);
     $moved_4_234 = $local_3_21;
     $local_3_21 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_21 = $moved_4_234; $moved_4_234 = 0; $local_3_21, $local_1_1.repr, $local_1_1.used);
@@ -457,8 +457,8 @@ fn "effect_handler_resume_positions.wado/$effect_dispatch__effect_handler_resume
     }
 }
 
-fn "effect_handler_resume_positions.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_resume_positions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_handler_resume_positions.wado/$cm_export__run"() {
@@ -569,7 +569,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

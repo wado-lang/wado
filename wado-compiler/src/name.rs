@@ -466,23 +466,24 @@ pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
     format!("{INTERNAL_PREFIX}{}", interface.interface_path())
 }
 
-/// `name` as the `homonym`-th function bound under one spelling mints it: the
-/// first keeps it, a later one appends its number.
-pub fn homonym_name(name: &str, homonym: usize) -> String {
-    if homonym == 0 {
-        return name.to_string();
-    }
-    format!("{name}{INTERNAL_PREFIX}{homonym}")
+// A CM import's names are minted from its CM identifier
+// (`wasi:cli/stdout@0.3.0#write-via-stream`, or a world function's bare name),
+// which is what identifies it: a Wado spelling such as `Stdout::write_via_stream`
+// is shared by same-named interfaces.
+
+/// The core function a CM import lowers to.
+pub fn cm_import_alias(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}{cm_identifier}")
 }
 
-/// The binding of the import `method` of `interface`.
-pub fn cm_binding_func_name(interface: &str, method: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_binding__{interface}_{method}")
+/// The binding of a CM import, which its call sites call.
+pub fn cm_binding_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_binding__{cm_identifier}")
 }
 
-/// The lift of the import `method` of `interface`, which `AsyncCall<T>` points to.
-pub fn cm_lift_func_name(interface: &str, method: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_lift__{interface}_{method}")
+/// The lift of an async CM import, which `AsyncCall<T>` points to.
+pub fn cm_lift_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
 }
 
 /// The helper writing a future of the payload type mangled as `payload`.

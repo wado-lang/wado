@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//opt_enum_constant_forward.wado/describe" = fn("opt_enum_constant_forward.wado//enum:ErrorKind", i32) -> i32;  // TypeId(11)
 
@@ -57,7 +57,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
-type "functype//opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//opt_enum_constant_forward.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
 
@@ -67,7 +67,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -103,7 +103,7 @@ fn "opt_enum_constant_forward.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_15, x_19, kind);
     kind = builtin::i32_wrap_i64(local.tee x_19("wasi/stream-new"()));
     is_negative_15 = builtin::i32_wrap_i64(x_19 >> 32_i64);
-    $moved_4_39 = "opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream"($moved_4_39 = kind; kind = 0; $moved_4_39);
+    $moved_4_39 = "opt_enum_constant_forward.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_39 = kind; kind = 0; $moved_4_39);
     kind = is_negative_15;
     is_negative_15 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_15 = kind; kind = 0; is_negative_15, $local_3.repr, $local_3.used);
@@ -115,15 +115,15 @@ fn "opt_enum_constant_forward.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_15, x_19, at);
     at = builtin::i32_wrap_i64(local.tee x_19("wasi/stream-new"()));
     is_negative_15 = builtin::i32_wrap_i64(x_19 >> 32_i64);
-    $moved_4_39 = "opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream"($moved_4_39 = at; at = 0; $moved_4_39);
+    $moved_4_39 = "opt_enum_constant_forward.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_39 = at; at = 0; $moved_4_39);
     at = is_negative_15;
     is_negative_15 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_15 = at; at = 0; is_negative_15, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_15 = $moved_4_39; $moved_4_39 = 0; is_negative_15);
 }
 
-fn "opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "opt_enum_constant_forward.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_enum_constant_forward.wado/$cm_export__run"() {

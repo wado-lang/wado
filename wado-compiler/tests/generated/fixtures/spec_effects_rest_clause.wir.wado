@@ -628,19 +628,19 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(160)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(161)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(162)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(162)
 
-type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(163)
+type "functype//wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32, i32);  // TypeId(163)
 
-type "functype//wasi/wasi:sockets/TcpSocket::get_is_listening" = fn(i32) -> i32;  // TypeId(164)
+type "functype//wasi/$wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening" = fn(i32) -> i32;  // TypeId(164)
 
 type "functype//spec_effects_rest_clause.wado/$test_0" = fn();  // TypeId(165)
 
 type "functype//spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_the_mock_leaves_out" = fn();  // TypeId(166)
 
-type "functype//spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(167)
+type "functype//spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(167)
 
-type "functype//spec_effects_rest_clause.wado/$cm_binding__TcpSocket_get_is_listening" = fn(ref null "core:prelude//$Resource") -> bool;  // TypeId(168)
+type "functype//spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening" = fn(ref null "core:prelude//$Resource") -> bool;  // TypeId(168)
 
 type "functype//spec_effects_rest_clause.wado/$cm_export__$test_0" = fn();  // TypeId(169)
 
@@ -888,9 +888,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:sockets/TcpSocket::create from "wasi/wasi:sockets/TcpSocket::create";
-import fn wasi/wasi:sockets/TcpSocket::get_is_listening from "wasi/wasi:sockets/TcpSocket::get_is_listening";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create from "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create";
+import fn wasi/$wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening from "wasi/$wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/sockets/types.wado#TcpSocket from "wasi/resource-drop:wasi/sockets/types.wado#TcpSocket";
 import fn wasi/task-return from "wasi/task-return";
@@ -1104,7 +1104,7 @@ condition: base.lines == [\"forwarded\"]
             $local_3_115 = ref.null none;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_0: $moved_4_116;
         } else {
-            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_0: "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(0);
+            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_0: "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0);
         }
         unreachable;
     })));
@@ -1167,7 +1167,7 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
             $local_3_20 = ref.null none;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $moved_4_21;
         } else {
-            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(0);
+            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0);
         }
         unreachable;
     })))) -> ref null "core:prelude//$Resource" {
@@ -1220,7 +1220,7 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_18;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__get_is_listening_0: $cm_handle_4;
         } else {
-            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__get_is_listening_0: "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_get_is_listening"($moved_3_13);
+            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__get_is_listening_0: "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening"($moved_3_13);
         }
         unreachable;
     });
@@ -1248,7 +1248,7 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
     global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $save_wasi:sockets/types.wado/TcpSocket;
 }
 
-fn "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(address_family) with TcpSocket {
+fn "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family) with TcpSocket {
     let $outptr: i32;
     let $result_val: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let $local_5: ref "wasi:sockets/types.wado//ErrorCode";
@@ -1258,7 +1258,7 @@ fn "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(address_family)
     let arr_16: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 20);
-    "wasi/wasi:sockets/TcpSocket::create"(address_family, $outptr);
+    "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
     $result_val = (if local.tee address_family(builtin::load_u8($outptr)) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) } };
     } else {
@@ -1319,8 +1319,8 @@ fn "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(address_family)
     return $result_val;
 }
 
-fn "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_get_is_listening"(self) with TcpSocket {
-    return "wasi/wasi:sockets/TcpSocket::get_is_listening"(self.value);
+fn "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening"(self) with TcpSocket {
+    return "wasi/$wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening"(self.value);
 }
 
 fn "spec_effects_rest_clause.wado/$cm_export__$test_0"() {
@@ -1575,7 +1575,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
@@ -3336,7 +3336,7 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_7::$cal
             $local_3 = ref.null none;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $moved_4_13;
         } else {
-            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(0);
+            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0);
         }
         unreachable;
     })))) -> ref null "core:prelude//$Resource" {
@@ -3526,7 +3526,7 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_33::$ca
             $local_3 = ref.null none;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $moved_4_13;
         } else {
-            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__TcpSocket_create"(0);
+            break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: "spec_effects_rest_clause.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0);
         }
         unreachable;
     })))) -> ref null "core:prelude//$Resource" {

@@ -299,11 +299,11 @@ struct core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some {  /
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(55)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(55)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(56)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(56)
 
-type "functype//resource_variant_payload_dropped.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(57)
+type "functype//resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(57)
 
 type "functype//resource_variant_payload_dropped.wado/$cm_export__handle" = fn(i32);  // TypeId(58)
 
@@ -329,13 +329,13 @@ type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.
 
 type "functype//wasi/resource-drop:wasi/http/types.wado#Fields" = fn(i32);  // TypeId(69)
 
-type "functype//resource_variant_payload_dropped.wado/$cm_binding__Response_new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(70)
+type "functype//resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(70)
 
 type "functype//resource_variant_payload_dropped.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(71)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
@@ -349,11 +349,11 @@ global global:resource_variant_payload_dropped.wado::$const_obj_0: ref "core:pre
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 
-fn "resource_variant_payload_dropped.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "resource_variant_payload_dropped.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $local_6: ref null "core:prelude//$Resource";
@@ -371,7 +371,7 @@ fn "resource_variant_payload_dropped.wado/$cm_binding__Response_new"(headers, co
     let $cm_handle_6: i32;
     $cm_handle_6 = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
     headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -396,7 +396,7 @@ fn "resource_variant_payload_dropped.wado/$cm_task_entry__handle"(request) {
     "resource_variant_payload_dropped.wado/hold$spec1$dae[which]"();
     $sroa_$pattern_temp_0_0_182 = builtin::i32_wrap_i64(local.tee $cm_pair_179("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_183 = builtin::i32_wrap_i64($cm_pair_179 >> 32_i64);
-    response = local.tee $pattern_temp_1("resource_variant_payload_dropped.wado/$cm_binding__Response_new"("resource_variant_payload_dropped.wado/$cm_binding__Fields_new"(), global:resource_variant_payload_dropped.wado::$const_obj_0, $moved_5 = $sroa_$pattern_temp_0_0_182; $sroa_$pattern_temp_0_0_182 = 0; $moved_5)).0;
+    response = local.tee $pattern_temp_1("resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:resource_variant_payload_dropped.wado::$const_obj_0, $moved_5 = $sroa_$pattern_temp_0_0_182; $sroa_$pattern_temp_0_0_182 = 0; $moved_5)).0;
     _sent = $pattern_temp_1.1;
     $sroa_$task_ret_1_185 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_6 = response; response = ref.null none; $moved_6 };
     $moved_5 = 0;
@@ -800,8 +800,8 @@ fn "resource_variant_payload_dropped.wado/hold$spec0$dae[which]"() with Fields {
     let held: ref null "resource_variant_payload_dropped.wado//Held";
     let boxed: ref null "resource_variant_payload_dropped.wado//Boxed<wasi:http/types.wado/Fields>";
     let $drop_v_3: ref null "core:prelude//$Resource";
-    held = struct.new "resource_variant_payload_dropped.wado//Held::One" { discriminant: 0, payload_0: "resource_variant_payload_dropped.wado/$cm_binding__Fields_new"() };
-    if ref.is_null(local.tee boxed(struct.new "resource_variant_payload_dropped.wado//Boxed<wasi:http/types.wado/Fields>::Full" { discriminant: 0, payload_0: "resource_variant_payload_dropped.wado/$cm_binding__Fields_new"() })) == 0 {
+    held = struct.new "resource_variant_payload_dropped.wado//Held::One" { discriminant: 0, payload_0: "resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() };
+    if ref.is_null(local.tee boxed(struct.new "resource_variant_payload_dropped.wado//Boxed<wasi:http/types.wado/Fields>::Full" { discriminant: 0, payload_0: "resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() })) == 0 {
         $drop_v_3 = ref.as_non_null(ref.cast "resource_variant_payload_dropped.wado//Boxed<wasi:http/types.wado/Fields>::Full"(boxed).payload_0);
         let $cm_handle_2: i32;
         $cm_handle_2 = $drop_v_3.value;
@@ -819,7 +819,7 @@ fn "resource_variant_payload_dropped.wado/hold$spec1$dae[which]"() with Fields {
     let $load_0: ref null "core:prelude//$Resource";
     let held: ref null "resource_variant_payload_dropped.wado//Held";
     let $drop_v_5: ref null "tuple//[wasi:http/types.wado/Fields, i32]";
-    if ref.is_null(local.tee held(struct.new "resource_variant_payload_dropped.wado//Held::Pair" { discriminant: 1, payload_0: struct.new "tuple//[wasi:http/types.wado/Fields, i32]" { 0: "resource_variant_payload_dropped.wado/$cm_binding__Fields_new"(), 1: 7 } })) == 0 {
+    if ref.is_null(local.tee held(struct.new "resource_variant_payload_dropped.wado//Held::Pair" { discriminant: 1, payload_0: struct.new "tuple//[wasi:http/types.wado/Fields, i32]" { 0: "resource_variant_payload_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), 1: 7 } })) == 0 {
         if ref.is_null(local.tee $load_0(local.tee $drop_v_5(ref.as_non_null(ref.cast "resource_variant_payload_dropped.wado//Held::Pair"(held).payload_0)).0)) == 0 {
             let $cm_handle_2: i32;
             $cm_handle_2 = $load_0.value;

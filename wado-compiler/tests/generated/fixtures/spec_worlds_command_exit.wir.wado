@@ -97,15 +97,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
 
-type "functype//wasi/wasi:cli/Exit::exit_with_code" = fn(i32);  // TypeId(22)
+type "functype//wasi/$wasi:cli/exit@0.3.0#exit-with-code" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//spec_worlds_command_exit.wado/run" = fn();  // TypeId(25)
 
-type "functype//spec_worlds_command_exit.wado/$cm_binding__Exit_exit_with_code" = fn(i32);  // TypeId(26)
+type "functype//spec_worlds_command_exit.wado/$cm_binding__wasi:cli/exit@0.3.0#exit-with-code" = fn(i32);  // TypeId(26)
 
 type "functype//spec_worlds_command_exit.wado/$cm_export__run" = fn();  // TypeId(27)
 
@@ -179,9 +179,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(61)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
 
-type "functype//spec_worlds_command_exit.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(63)
+type "functype//spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(63)
 
-type "functype//spec_worlds_command_exit.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(64)
+type "functype//spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(64)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(65)
 
@@ -195,9 +195,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Exit::exit_with_code from "wasi/wasi:cli/Exit::exit_with_code";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/exit@0.3.0#exit-with-code from "wasi/$wasi:cli/exit@0.3.0#exit-with-code";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -240,7 +240,7 @@ fn "spec_worlds_command_exit.wado/run"() with Stdout, Stderr, Exit {
     }
     $mv$port$1 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
     $mv$port$0 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-    $cond = "spec_worlds_command_exit.wado/$cm_binding__Stdout_write_via_stream"($cond = $mv$port$1; $mv$port$1 = 0; $cond);
+    $cond = "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($cond = $mv$port$1; $mv$port$1 = 0; $cond);
     $mv$port$1 = $mv$port$0;
     $mv$port$0 = 0;
     $mv$port$0 = $mv$port$1;
@@ -251,7 +251,7 @@ fn "spec_worlds_command_exit.wado/run"() with Stdout, Stderr, Exit {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$port$0 = $cond; $cond = 0; $mv$port$0);
     $mv$port$0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
     $cond = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-    $mv$port$1 = "spec_worlds_command_exit.wado/$cm_binding__Stderr_write_via_stream"($mv$port$1 = $mv$port$0; $mv$port$0 = 0; $mv$port$1);
+    $mv$port$1 = "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($mv$port$1 = $mv$port$0; $mv$port$0 = 0; $mv$port$1);
     $mv$port$0 = $cond;
     $cond = 0;
     $cond = $mv$port$0;
@@ -265,16 +265,16 @@ fn "spec_worlds_command_exit.wado/run"() with Stdout, Stderr, Exit {
     "core:cli/println"(array.new_data<u8>("never printed"), 13);
 }
 
-fn "spec_worlds_command_exit.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "spec_worlds_command_exit.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "spec_worlds_command_exit.wado/$cm_binding__Exit_exit_with_code"(status_code) with Exit {
-    "wasi/wasi:cli/Exit::exit_with_code"(status_code);
+fn "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/exit@0.3.0#exit-with-code"(status_code) with Exit {
+    "wasi/$wasi:cli/exit@0.3.0#exit-with-code"(status_code);
 }
 
 fn "spec_worlds_command_exit.wado/$cm_export__run"() {
@@ -331,7 +331,7 @@ fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
     let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "spec_worlds_command_exit.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $mv$message$repr, $mv$message$used);
@@ -339,7 +339,7 @@ fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
 }
 
 fn "core:cli/exit$dae[code]"() with Exit {
-    "spec_worlds_command_exit.wado/$cm_binding__Exit_exit_with_code"(2);
+    "spec_worlds_command_exit.wado/$cm_binding__wasi:cli/exit@0.3.0#exit-with-code"(2);
 }
 
 fn "core:prelude/intparse.wado/split_sign$sroa[return]"($mv$s$repr, $mv$s$start, $mv$s$end) {
@@ -560,7 +560,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

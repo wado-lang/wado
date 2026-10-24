@@ -306,19 +306,19 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(58)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(58)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(59)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(59)
 
-type "functype//wasi/wasi:http/RequestOptions::new" = fn() -> i32;  // TypeId(60)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]request-options" = fn() -> i32;  // TypeId(60)
 
-type "functype//wasi/wasi:http/RequestOptions::get_connect_timeout" = fn(i32, i32);  // TypeId(61)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request-options.get-connect-timeout" = fn(i32, i32);  // TypeId(61)
 
-type "functype//wasi/wasi:http/RequestOptions::get_first_byte_timeout" = fn(i32, i32);  // TypeId(62)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout" = fn(i32, i32);  // TypeId(62)
 
-type "functype//wasi/wasi:http/RequestOptions::get_between_bytes_timeout" = fn(i32, i32);  // TypeId(63)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout" = fn(i32, i32);  // TypeId(63)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(64)
+type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32, i32, i32, i32);  // TypeId(64)
 
 type "functype//http_request_options.wado/$cm_export__handle" = fn(i32);  // TypeId(65)
 
@@ -384,17 +384,17 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(95)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(96)
 
-type "functype//http_request_options.wado/$cm_binding__RequestOptions_new" = fn() -> i32;  // TypeId(97)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]request-options" = fn() -> i32;  // TypeId(97)
 
-type "functype//http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(98)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-connect-timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(98)
 
-type "functype//http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(99)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(99)
 
-type "functype//http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(100)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout" = fn(i32) -> ref "core:prelude/types.wado//Option<u64>";  // TypeId(100)
 
-type "functype//http_request_options.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(101)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(101)
 
-type "functype//http_request_options.wado/$cm_binding__Response_new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(102)
+type "functype//http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(102)
 
 type "functype//http_request_options.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(103)
 
@@ -406,13 +406,13 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/RequestOptions::new from "wasi/wasi:http/RequestOptions::new";
-import fn wasi/wasi:http/RequestOptions::get_connect_timeout from "wasi/wasi:http/RequestOptions::get_connect_timeout";
-import fn wasi/wasi:http/RequestOptions::get_first_byte_timeout from "wasi/wasi:http/RequestOptions::get_first_byte_timeout";
-import fn wasi/wasi:http/RequestOptions::get_between_bytes_timeout from "wasi/wasi:http/RequestOptions::get_between_bytes_timeout";
-import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]request-options from "wasi/$wasi:http/types@0.3.0#[constructor]request-options";
+import fn wasi/$wasi:http/types@0.3.0#[method]request-options.get-connect-timeout from "wasi/$wasi:http/types@0.3.0#[method]request-options.get-connect-timeout";
+import fn wasi/$wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout from "wasi/$wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout";
+import fn wasi/$wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout from "wasi/$wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout";
+import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
@@ -436,15 +436,15 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0: r
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>" { 0 };
 
-fn "http_request_options.wado/$cm_binding__RequestOptions_new"() with RequestOptions {
-    return "wasi/wasi:http/RequestOptions::new"();
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]request-options"() with RequestOptions {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]request-options"();
 }
 
-fn "http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout"(self) with RequestOptions {
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-connect-timeout"(self) with RequestOptions {
     let $outptr: i32;
     let $option_result: ref "core:prelude/types.wado//Option<u64>";
     $outptr = "mem/realloc"(0, 0, 8, 16);
-    "wasi/wasi:http/RequestOptions::get_connect_timeout"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request-options.get-connect-timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
@@ -454,11 +454,11 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout"(s
     return $option_result;
 }
 
-fn "http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout"(self) with RequestOptions {
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout"(self) with RequestOptions {
     let $outptr: i32;
     let $option_result: ref "core:prelude/types.wado//Option<u64>";
     $outptr = "mem/realloc"(0, 0, 8, 16);
-    "wasi/wasi:http/RequestOptions::get_first_byte_timeout"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
@@ -468,11 +468,11 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout
     return $option_result;
 }
 
-fn "http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_timeout"(self) with RequestOptions {
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout"(self) with RequestOptions {
     let $outptr: i32;
     let $option_result: ref "core:prelude/types.wado//Option<u64>";
     $outptr = "mem/realloc"(0, 0, 8, 16);
-    "wasi/wasi:http/RequestOptions::get_between_bytes_timeout"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
@@ -482,11 +482,11 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_time
     return $option_result;
 }
 
-fn "http_request_options.wado/$cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]fields"();
 }
 
-fn "http_request_options.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
+fn "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner0: i32;
     let $local_6: ref null "core:prelude//$Resource";
@@ -504,7 +504,7 @@ fn "http_request_options.wado/$cm_binding__Response_new"(headers, contents, trai
     headers = 0;
     headers = trailers;
     trailers = 0;
-    "wasi/wasi:http/Response::new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
     $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -532,7 +532,7 @@ fn "http_request_options.wado/$cm_task_entry__handle"(request) {
     let f_225: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_308: ref Array<u8>;
     let $sroa_$task_ret_1_353: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
-    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout"(local.tee opts("http_request_options.wado/$cm_binding__RequestOptions_new"()))).discriminant == 0) == 0) {
+    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-connect-timeout"(local.tee opts("http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]request-options"()))).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }), 56);
         $load_1 = $local_13.repr;
@@ -567,7 +567,7 @@ condition: connect matches { None }
         "core:rt/panic"($local_13.repr, $local_13.used);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout"(opts)).discriminant == 0) == 0) {
+    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout"(opts)).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }), 56);
         $load_1 = $local_13.repr;
@@ -602,7 +602,7 @@ condition: first_byte matches { None }
         "core:rt/panic"($local_13.repr, $local_13.used);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_timeout"(opts)).discriminant == 0) == 0) {
+    if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout"(opts)).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }), 56);
         $load_1 = $local_13.repr;
@@ -639,7 +639,7 @@ condition: between matches { None }
     }
     $cond_3 = builtin::i32_wrap_i64(local.tee $cm_pair_194("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     offset_209 = builtin::i32_wrap_i64($cm_pair_194 >> 32_i64);
-    response = local.tee $pattern_temp_1("http_request_options.wado/$cm_binding__Response_new"($moved_19 = "http_request_options.wado/$cm_binding__Fields_new"(); $moved_19, global:http_request_options.wado::$const_obj_3, $moved_19 = $cond_3; $cond_3 = 0; $moved_19)).0;
+    response = local.tee $pattern_temp_1("http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"($moved_19 = "http_request_options.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(); $moved_19, global:http_request_options.wado::$const_obj_3, $moved_19 = $cond_3; $cond_3 = 0; $moved_19)).0;
     _tx_future = $pattern_temp_1.1;
     $sroa_$task_ret_1_353 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_21 = response; response = ref.null none; $moved_21 };
     $moved_19 = 0;
@@ -1147,7 +1147,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

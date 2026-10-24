@@ -115,7 +115,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(29)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
 type "functype//affine_drop_generic_impl.wado/run" = fn();  // TypeId(32)
 
@@ -157,7 +157,7 @@ type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(50)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(51)
 
-type "functype//affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> i32;  // TypeId(52)
+type "functype//affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(ref null "core:prelude//$Resource") -> i32;  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -165,7 +165,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -228,7 +228,7 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         unreachable;
     }).0;
     tx_167 = $moved_3_180.1;
-    start_33 = "affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream"($moved_4_169 = rx_166; rx_166 = ref.null none; $moved_4_169);
+    start_33 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_169 = rx_166; rx_166 = ref.null none; $moved_4_169);
     $moved_4_169 = tx_167;
     tx_167 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_167 = $moved_4_169; $moved_4_169 = ref.null none; tx_167, $local_4.repr, $local_4.used);
@@ -262,7 +262,7 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         unreachable;
     }).0;
     $moved_4_169 = $local_2_179.1;
-    start_33 = "affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream"(rx_166 = tx_167; tx_167 = ref.null none; rx_166);
+    start_33 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_166 = tx_167; tx_167 = ref.null none; rx_166);
     rx_166 = $moved_4_169;
     $moved_4_169 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_169 = rx_166; rx_166 = ref.null none; $moved_4_169, $local_4.repr, $local_4.used);
@@ -301,7 +301,7 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         unreachable;
     }).0;
     rx_166 = $moved_3_180.1;
-    start_33 = "affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream"(tx_167 = $moved_4_169; $moved_4_169 = ref.null none; tx_167);
+    start_33 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_167 = $moved_4_169; $moved_4_169 = ref.null none; tx_167);
     tx_167 = rx_166;
     rx_166 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"(rx_166 = tx_167; tx_167 = ref.null none; rx_166, $local_4.repr, $local_4.used);
@@ -373,7 +373,7 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         unreachable;
     }).0;
     rx_166 = $moved_3_180.1;
-    new_used_32 = "affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream"(tx_167 = $moved_4_169; $moved_4_169 = ref.null none; tx_167);
+    new_used_32 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_167 = $moved_4_169; $moved_4_169 = ref.null none; tx_167);
     tx_167 = rx_166;
     rx_166 = ref.null none;
     "core:rt/write_string_to_stream$dae[add_newline]"(rx_166 = tx_167; tx_167 = ref.null none; rx_166, $local_4.repr, $local_4.used);
@@ -399,8 +399,8 @@ fn "affine_drop_generic_impl.wado/$effect_dispatch__core:prelude/types.wado/Stre
     }
 }
 
-fn "affine_drop_generic_impl.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "affine_drop_generic_impl.wado/$cm_export__run"() {

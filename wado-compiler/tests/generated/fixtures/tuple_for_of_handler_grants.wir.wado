@@ -39,9 +39,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
 type "functype//tuple_for_of_handler_grants.wado/run" = fn();  // TypeId(16)
 
@@ -75,7 +75,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
@@ -85,8 +85,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -128,7 +128,7 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, is_negative_25, x_29, $local_2_20);
     $local_2_20 = builtin::i32_wrap_i64(local.tee x_29("wasi/stream-new"()));
     is_negative_25 = builtin::i32_wrap_i64(x_29 >> 32_i64);
-    $moved_4_54 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"($moved_4_54 = $local_2_20; $local_2_20 = 0; $moved_4_54);
+    $moved_4_54 = "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_54 = $local_2_20; $local_2_20 = 0; $moved_4_54);
     $local_2_20 = is_negative_25;
     is_negative_25 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_25 = $local_2_20; $local_2_20 = 0; is_negative_25, $local_4.repr, $local_4.used);
@@ -155,7 +155,7 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, $moved_4_54, x_29, is_negative_25);
     is_negative_25 = builtin::i32_wrap_i64(local.tee x_29("wasi/stream-new"()));
     $moved_4_54 = builtin::i32_wrap_i64(x_29 >> 32_i64);
-    $local_2_20 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"($local_2_20 = is_negative_25; is_negative_25 = 0; $local_2_20);
+    $local_2_20 = "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_20 = is_negative_25; is_negative_25 = 0; $local_2_20);
     is_negative_25 = $moved_4_54;
     $moved_4_54 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_54 = is_negative_25; is_negative_25 = 0; $moved_4_54, $local_4.repr, $local_4.used);
@@ -163,8 +163,8 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = $save_tuple_for_of_handler_grants.wado/A_9;
 }
 
-fn "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "tuple_for_of_handler_grants.wado/$cm_export__run"() {
@@ -275,7 +275,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

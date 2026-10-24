@@ -216,13 +216,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(57)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(59)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(59)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(60)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(60)
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/run" = fn();  // TypeId(61)
 
-type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(62)
+type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(62)
 
 type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_export__run" = fn();  // TypeId(63)
 
@@ -270,7 +270,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(84)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
 
-type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(86)
+type "functype//affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(86)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(87)
 
@@ -282,8 +282,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -321,7 +321,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
             $local_2_40 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_1: $moved_3_41;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_1: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_1: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     };
@@ -359,7 +359,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
             $local_2_40 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_3: $moved_3_41;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_3: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_3: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     })) == 0 {
@@ -413,7 +413,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, $cm_handle_3, x, start_23);
     start_23 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $cm_handle_3 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_139 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Stdout_write_via_stream"(start_139 = start_23; start_23 = 0; start_139);
+    start_139 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_139 = start_23; start_23 = 0; start_139);
     start_23 = $cm_handle_3;
     $cm_handle_3 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($cm_handle_3 = start_23; start_23 = 0; $cm_handle_3, $local_4.repr, $local_4.used);
@@ -429,7 +429,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
             $moved_3_41 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_6: $local_2_40;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_6: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_6: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     };
@@ -456,7 +456,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     };
     $cm_handle_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     start_139 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_23 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Stdout_write_via_stream"(start_23 = $cm_handle_3; $cm_handle_3 = 0; start_23);
+    start_23 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_23 = $cm_handle_3; $cm_handle_3 = 0; start_23);
     $cm_handle_3 = start_139;
     start_139 = 0;
     start_139 = $cm_handle_3;
@@ -466,12 +466,12 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_139 = start_23; start_23 = 0; start_139);
 }
 
-fn "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "affine_handler_counts_wasi_resource_drop.wado/$cm_export__run"() {
@@ -681,7 +681,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_res
             $local_2 = ref.null none;
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: $moved_3;
         } else {
-            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__Fields_new"();
+            break $inline__effect_dispatch__wasi_http_types_wado_Fields__new_0: "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
         }
         unreachable;
     };

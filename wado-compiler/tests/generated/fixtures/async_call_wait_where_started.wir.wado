@@ -204,15 +204,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(48)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(49)
 
-type "functype//wasi/example:demo/Fetch::get" = fn(i32, i32, i32) -> i32;  // TypeId(50)
+type "functype//wasi/$example:demo/fetch#get" = fn(i32, i32, i32) -> i32;  // TypeId(50)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(51)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(51)
 
 type "functype//async_call_wait_where_started.wado/$test_0" = fn();  // TypeId(52)
 
-type "functype//async_call_wait_where_started.wado/$cm_binding__Fetch_get" = fn(ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(53)
+type "functype//async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get" = fn(ref "core:prelude/string.wado//String") -> ref null "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(53)
 
-type "functype//async_call_wait_where_started.wado/$cm_lift__Fetch_get" = fn(i32) -> i32;  // TypeId(54)
+type "functype//async_call_wait_where_started.wado/$cm_lift__example:demo/fetch#get" = fn(i32) -> i32;  // TypeId(54)
 
 type "functype//async_call_wait_where_started.wado/$cm_wrap_async__Fetch_get" = fn(i32) -> ref null "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(55)
 
@@ -372,8 +372,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Fetch::get from "wasi/example:demo/Fetch::get";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$example:demo/fetch#get from "wasi/$example:demo/fetch#get";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
@@ -420,7 +420,7 @@ fn "async_call_wait_where_started.wado/$test_0"() {
             $local_3_28 = ref.null none;
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: $moved_4_29;
         } else {
-            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url_25);
+            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_25);
         }
         unreachable;
     })) != 4) {
@@ -440,7 +440,7 @@ fn "async_call_wait_where_started.wado/$test_0"() {
             $moved_4_29 = ref.null none;
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_3: $local_3_28;
         } else {
-            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_3: "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url_25);
+            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_3: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_25);
         }
         unreachable;
     };
@@ -539,7 +539,7 @@ condition: finish(Fetch::get(\"/a\")) == 2
             $v0_2 = ref.null none;
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_26: $local_3_28;
         } else {
-            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_26: "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url_25);
+            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_26: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_25);
         }
         unreachable;
     })) != 3) {
@@ -550,7 +550,7 @@ condition: finish(Fetch::get(\"/a\")) == 2
     global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = $save_async_call_wait_where_started.wado/Fetch;
 }
 
-fn "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url) with Fetch {
+fn "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url) with Fetch {
     let $url_packed: i64;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let bytes: ref Array<u8>;
@@ -571,7 +571,7 @@ fn "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url) with Fetch {
     };
     $url_packed = builtin::i64_extend_i32_u(ptr_9) | (builtin::i64_extend_i32_s(self_10) << 32_i64);
     self_10 = "mem/realloc"(0, 0, 4, 4);
-    ptr_9 = "wasi/example:demo/Fetch::get"(builtin::i32_wrap_i64($url_packed), builtin::i32_wrap_i64($url_packed >> 32_i64), self_10) >>u 4;
+    ptr_9 = "wasi/$example:demo/fetch#get"(builtin::i32_wrap_i64($url_packed), builtin::i32_wrap_i64($url_packed >> 32_i64), self_10) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if ptr_9 != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: ptr_9 } };
@@ -579,7 +579,7 @@ fn "async_call_wait_where_started.wado/$cm_binding__Fetch_get"(url) with Fetch {
     return struct.new "core:prelude/types.wado//AsyncCall<i32>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: self_10, size: 4, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "async_call_wait_where_started.wado//$Closure_2" {  }, func: ref.func "closure/async_call_wait_where_started.wado/$closure_wrapper_1" } };
 }
 
-fn "async_call_wait_where_started.wado/$cm_lift__Fetch_get"($outptr) {
+fn "async_call_wait_where_started.wado/$cm_lift__example:demo/fetch#get"($outptr) {
     return builtin::load_i32($outptr);
 }
 
@@ -865,7 +865,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -2379,11 +2379,11 @@ fn "async_call_wait_where_started.wado/async_call_wait_where_started.wado/$Closu
 }
 
 fn "async_call_wait_where_started.wado/async_call_wait_where_started.wado/$Closure_2::$call$dae[self]"($outptr) {
-    return "async_call_wait_where_started.wado/$cm_lift__Fetch_get"($outptr);
+    return "async_call_wait_where_started.wado/$cm_lift__example:demo/fetch#get"($outptr);
 }
 
 fn "async_call_wait_where_started.wado/async_call_wait_where_started.wado/$Closure_3::$call$dae[self]"($outptr) {
-    return "async_call_wait_where_started.wado/$cm_lift__Fetch_get"($outptr);
+    return "async_call_wait_where_started.wado/$cm_lift__example:demo/fetch#get"($outptr);
 }
 
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {

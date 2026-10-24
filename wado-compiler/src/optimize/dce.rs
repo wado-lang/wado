@@ -1211,7 +1211,7 @@ impl<'a> DceWalker<'a> {
     fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
         // Only a WASI import is tracked here; a canonical built-in has no
         // interface to attribute it to.
-        let CmCallTarget::Import { function, .. } = target else {
+        let CmCallTarget::Import(function) = target else {
             return;
         };
         self.analysis.effect_calls.insert(function.clone());

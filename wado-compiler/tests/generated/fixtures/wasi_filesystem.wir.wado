@@ -53,17 +53,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:filesystem/Preopens::get_directories" = fn(i32);  // TypeId(17)
+type "functype//wasi/$wasi:filesystem/preopens@0.3.0#get-directories" = fn(i32);  // TypeId(17)
 
 type "functype//wasi_filesystem.wado/run" = fn();  // TypeId(18)
 
 type "functype//wasi_filesystem.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" = fn(ref null "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(19)
 
-type "functype//wasi_filesystem.wado/$cm_binding__Preopens_get_directories" = fn() -> ref null "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(20)
+type "functype//wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories" = fn() -> ref null "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";  // TypeId(20)
 
 type "functype//wasi_filesystem.wado/$cm_export__run" = fn();  // TypeId(21)
 
@@ -111,7 +111,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
@@ -129,9 +129,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:filesystem/Preopens::get_directories from "wasi/wasi:filesystem/Preopens::get_directories";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:filesystem/preopens@0.3.0#get-directories from "wasi/$wasi:filesystem/preopens@0.3.0#get-directories";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -155,7 +155,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     let start_25: i32;
     let x: i64;
     let start_176: i32;
-    dir_count = local.tee dirs("wasi_filesystem.wado/$cm_binding__Preopens_get_directories"()).used;
+    dir_count = local.tee dirs("wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories"()).used;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     if @unlikely(local.tee new_used_24(0 + 24) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -192,7 +192,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     builtin::array_copy<u8>($local_3.repr, start_25, global:wasi_filesystem.wado::$const_obj_4, 0, 12);
     start_25 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_24 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_176 = "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(start_176 = start_25; start_25 = 0; start_176);
+    start_176 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_176 = start_25; start_25 = 0; start_176);
     start_25 = new_used_24;
     new_used_24 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_24 = start_25; start_25 = 0; new_used_24, $local_3.repr, $local_3.used);
@@ -205,7 +205,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         }; builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).1;
         dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         new_used_24 = builtin::i32_wrap_i64(x >> 32_i64);
-        start_176 = "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(start_176 = dir_count; dir_count = 0; start_176);
+        start_176 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_176 = dir_count; dir_count = 0; start_176);
         dir_count = new_used_24;
         new_used_24 = 0;
         new_used_24 = dir_count;
@@ -217,7 +217,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         if $local_3.used >= 0 {
             new_used_24 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
             start_176 = builtin::i32_wrap_i64(x >> 32_i64);
-            dir_count = "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(dir_count = new_used_24; new_used_24 = 0; dir_count);
+            dir_count = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(dir_count = new_used_24; new_used_24 = 0; dir_count);
             new_used_24 = start_176;
             start_176 = 0;
             start_176 = new_used_24;
@@ -229,7 +229,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     } else {
         start_176 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         dir_count = builtin::i32_wrap_i64(x >> 32_i64);
-        new_used_24 = "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(new_used_24 = start_176; start_176 = 0; new_used_24);
+        new_used_24 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_24 = start_176; start_176 = 0; new_used_24);
         start_176 = dir_count;
         dir_count = 0;
         dir_count = start_176;
@@ -240,7 +240,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     }
     dir_count = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_24 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_176 = "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(start_176 = dir_count; dir_count = 0; start_176);
+    start_176 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_176 = dir_count; dir_count = 0; start_176);
     dir_count = new_used_24;
     new_used_24 = 0;
     new_used_24 = dir_count;
@@ -280,11 +280,11 @@ fn "wasi_filesystem.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/type
     };
 }
 
-fn "wasi_filesystem.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "wasi_filesystem.wado/$cm_binding__Preopens_get_directories"() with Preopens {
+fn "wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories"() with Preopens {
     let $load_3: ref null "core:prelude//$Resource";
     let $outptr: i32;
     let $base: i32;
@@ -301,7 +301,7 @@ fn "wasi_filesystem.wado/$cm_binding__Preopens_get_directories"() with Preopens 
     let value_21: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
     let $moved_3_23: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
     let self_25: ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
-    "wasi/wasi:filesystem/Preopens::get_directories"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/$wasi:filesystem/preopens@0.3.0#get-directories"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -469,7 +469,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

@@ -71,27 +71,27 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(20)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(20)
 
-type "functype//wasi/wasi:http/Fields::copy_all" = fn(i32, i32);  // TypeId(21)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.copy-all" = fn(i32, i32);  // TypeId(21)
 
 type "functype//resource_store_through_mut_ref.wado/replace_with_fresh" = fn(ref null "core:prelude//$Resource");  // TypeId(22)
 
 type "functype//resource_store_through_mut_ref.wado/$test_0" = fn();  // TypeId(23)
 
-type "functype//resource_store_through_mut_ref.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(24)
+type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(24)
 
-type "functype//resource_store_through_mut_ref.wado/$cm_binding__Fields_copy_all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(25)
+type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(ref null "core:prelude//$Resource") -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(25)
 
 type "functype//resource_store_through_mut_ref.wado/$cm_export__$test_0" = fn();  // TypeId(26)
 
 type "functype//resource_store_through_mut_ref.wado/$test_0$cold0" = fn();  // TypeId(27)
 
-type "functype//resource_store_through_mut_ref.wado/$cm_binding__Fields_append$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(28)
+type "functype//resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0" = fn(ref null "core:prelude//$Resource", ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(28)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(29)
 
@@ -145,10 +145,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::append from "wasi/wasi:http/Fields::append";
-import fn wasi/wasi:http/Fields::copy_all from "wasi/wasi:http/Fields::copy_all";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.append from "wasi/$wasi:http/types@0.3.0#[method]fields.append";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.copy-all from "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
@@ -166,7 +166,7 @@ global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$3: ref 
 
 fn "resource_store_through_mut_ref.wado/replace_with_fresh"(r) {
     let $stored_1: ref null "core:prelude//$Resource";
-    $stored_1 = "resource_store_through_mut_ref.wado/$cm_binding__Fields_new"();
+    $stored_1 = "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     if @unlikely(ref.eq(r, $stored_1)) {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         if ref.is_null(global:resource_store_through_mut_ref.wado::$const_obj_0) {
@@ -187,9 +187,9 @@ fn "resource_store_through_mut_ref.wado/replace_with_fresh"(r) {
 
 fn "resource_store_through_mut_ref.wado/$test_0"() {
     let fields: ref null "core:prelude//$Resource";
-    drop("resource_store_through_mut_ref.wado/$cm_binding__Fields_append$spec0"(local.tee fields("resource_store_through_mut_ref.wado/$cm_binding__Fields_new"()), global:resource_store_through_mut_ref.wado::$const_obj_1, global:resource_store_through_mut_ref.wado::$const_obj_2));
+    drop("resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(local.tee fields("resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:resource_store_through_mut_ref.wado::$const_obj_1, global:resource_store_through_mut_ref.wado::$const_obj_2));
     "resource_store_through_mut_ref.wado/replace_with_fresh"(fields);
-    if @unlikely(("resource_store_through_mut_ref.wado/$cm_binding__Fields_copy_all"(fields).used == 0) == 0) {
+    if @unlikely(("resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(fields).used == 0) == 0) {
         cold_path;
         "resource_store_through_mut_ref.wado/$test_0$cold0"();
         unreachable;
@@ -202,11 +202,11 @@ fn "resource_store_through_mut_ref.wado/$test_0"() {
     }
 }
 
-fn "resource_store_through_mut_ref.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
-fn "resource_store_through_mut_ref.wado/$cm_binding__Fields_copy_all"(self) with Fields {
+fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(self) with Fields {
     let $outptr: i32;
     let $base_2: i32;
     let $count_3: i32;
@@ -224,7 +224,7 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__Fields_copy_all"(self) with
     let used_28: i32;
     let value_34: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Fields::copy_all"(self.value, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self.value, $outptr);
     $base_2 = builtin::load_i32($outptr);
     $result_4 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i_5 = 0;
@@ -323,7 +323,7 @@ condition: fields.copy_all().is_empty()
     unreachable;
 }
 
-fn "resource_store_through_mut_ref.wado/$cm_binding__Fields_append$spec0"(self, name, value) with Fields {
+fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
     let $name_packed: i64;
     let $value_packed: i64;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
@@ -359,7 +359,7 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__Fields_append$spec0"(self, 
     };
     $value_packed = builtin::i64_extend_i32_u(i_25) | (builtin::i64_extend_i32_s(ptr_18) << 32_i64);
     ptr_18 = "mem/realloc"(0, 0, 4, 20);
-    "wasi/wasi:http/Fields::append"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self.value, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
     $result_val = (if local.tee i_25(builtin::load_u8(ptr_18)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
     } else if local.tee i_25(builtin::load_u8(ptr_18 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
@@ -500,7 +500,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

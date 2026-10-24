@@ -29,15 +29,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:demo/Api::get_item" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-item" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:demo/Api::submit" = fn(i32, i32);  // TypeId(13)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#submit" = fn(i32, i32);  // TypeId(13)
 
-type "functype//cm_list_of_borrows_param.wado/$cm_binding__Api_get_item" = fn() -> ref null "core:prelude//$Resource";  // TypeId(14)
+type "functype//cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item" = fn() -> ref null "core:prelude//$Resource";  // TypeId(14)
 
-type "functype//cm_list_of_borrows_param.wado/$cm_binding__Api_submit" = fn(ref "core:prelude//List<&cm_list_of_borrows_param.wado/Item>");  // TypeId(15)
+type "functype//cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit" = fn(ref "core:prelude//List<&cm_list_of_borrows_param.wado/Item>");  // TypeId(15)
 
 type "functype//cm_list_of_borrows_param.wado/$cm_export__run" = fn();  // TypeId(16)
 
@@ -65,9 +65,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:demo/Api::get_item from "wasi/wasi:demo/Api::get_item";
-import fn wasi/wasi:demo/Api::submit from "wasi/wasi:demo/Api::submit";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-item from "wasi/$wasi:demo/gfx@0.1.0#get-item";
+import fn wasi/$wasi:demo/gfx@0.1.0#submit from "wasi/$wasi:demo/gfx@0.1.0#submit";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_list_of_borrows_param.wado#Item from "wasi/resource-drop:cm_list_of_borrows_param.wado#Item";
 import fn wasi/task-return from "wasi/task-return";
@@ -75,11 +75,11 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-fn "cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"() with Api {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Api::get_item"() };
+fn "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"() with Api {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-item"() };
 }
 
-fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
+fn "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit"(items) with Api {
     let $items_len: i32;
     let $items_base: i32;
     let $items_i: i32;
@@ -105,15 +105,15 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
             continue l2;
         };
     };
-    "wasi/wasi:demo/Api::submit"($items_base, $items_len);
+    "wasi/$wasi:demo/gfx@0.1.0#submit"($items_base, $items_len);
 }
 
 fn "cm_list_of_borrows_param.wado/$cm_export__run"() {
     let a: ref null "core:prelude//$Resource";
     let elements: ref "Array<&cm_list_of_borrows_param.wado/Item>";
     let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">(local.tee a("cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"()))));
-    "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(struct.new "core:prelude//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: used });
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">(local.tee a("cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"()))));
+    "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit"(struct.new "core:prelude//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: used });
     if ref.is_null(a) == 0 {
         used = a.value;
         a.value = 0;
@@ -142,7 +142,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

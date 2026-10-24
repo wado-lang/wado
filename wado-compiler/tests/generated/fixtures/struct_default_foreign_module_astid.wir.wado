@@ -77,15 +77,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(21)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> i64;  // TypeId(21)
 
 type "functype//struct_default_foreign_module_astid.wado/run" = fn();  // TypeId(22)
 
-type "functype//struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(23)
+type "functype//struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> u64;  // TypeId(23)
 
 type "functype//struct_default_foreign_module_astid.wado/$cm_export__run" = fn();  // TypeId(24)
 
@@ -185,7 +185,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(71)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(72)
 
-type "functype//struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(73)
+type "functype//struct_default_foreign_module_astid.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(73)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(74)
 
@@ -195,9 +195,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicClock::now";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#now from "wasi/$wasi:clocks/monotonic-clock@0.3.0#now";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -249,12 +249,12 @@ fn "struct_default_foreign_module_astid.wado/run"() with Stdout, MonotonicClock 
     }
 }
 
-fn "struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now"() with MonotonicClock {
-    return "wasi/wasi:clocks/MonotonicClock::now"();
+fn "struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() with MonotonicClock {
+    return "wasi/$wasi:clocks/monotonic-clock@0.3.0#now"();
 }
 
-fn "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "struct_default_foreign_module_astid.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "struct_default_foreign_module_astid.wado/$cm_export__run"() {
@@ -969,7 +969,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -1261,7 +1261,7 @@ fn "core:benchmark/report$spec0$dae[label]"(elapsed_ns, iterations, work_per_ite
     builtin::array_copy<u8>($local_9.repr, start_115, global:core:benchmark::$const_obj_74, 0, 6);
     start_115 = builtin::i32_wrap_i64(local.tee elapsed_ns("wasi/stream-new"()));
     iterations = builtin::i32_wrap_i64(elapsed_ns >> 32_i64);
-    $mv$unit$used = "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"($mv$unit$used = start_115; start_115 = 0; $mv$unit$used);
+    $mv$unit$used = "struct_default_foreign_module_astid.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$unit$used = start_115; start_115 = 0; $mv$unit$used);
     start_115 = iterations;
     iterations = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(iterations = start_115; start_115 = 0; iterations, $local_9.repr, $local_9.used);
@@ -1906,7 +1906,7 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
                 continue l220;
             };
         };
-        start_5 = "struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now"();
+        start_5 = "struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"();
         w = 25;
         $av_52 = 1;
         $licm_iterations_52 = self.iterations;
@@ -1918,7 +1918,7 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
                 continue l222;
             };
         };
-        "core:benchmark/report$spec0$dae[label]"("struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now"() - start_5, self.iterations, $mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1.repr, $mv$$pattern_temp_0$1.used);
+        "core:benchmark/report$spec0$dae[label]"("struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() - start_5, self.iterations, $mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1.repr, $mv$$pattern_temp_0$1.used);
         return w;
     }
     w = 25;
@@ -1926,7 +1926,7 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
     start_5 = 0_i64;
     b223: block {
         l224: loop {
-            start_14 = "struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now"();
+            start_14 = "struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"();
             w = 25;
             $av_52 = 1;
             b225: block {
@@ -1937,7 +1937,7 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
                     continue l226;
                 };
             };
-            break_if b223 local.tee start_5("struct_default_foreign_module_astid.wado/$cm_binding__MonotonicClock_now"() - start_14) >=u 1000000000_i64;
+            break_if b223 local.tee start_5("struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() - start_14) >=u 1000000000_i64;
             $av_52 = $licm_iterations_52 >= 1;
             $v2_seen = 0;
             $v3_seen = 0;
@@ -2131,7 +2131,7 @@ fn "core:benchmark/core:benchmark/Benchmark::ensure_header$spec0"(self) with Std
     }
     start_32 = builtin::i32_wrap_i64(local.tee x_53("wasi/stream-new"()));
     new_used_31 = builtin::i32_wrap_i64(x_53 >> 32_i64);
-    has_size = "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"(has_size = start_32; start_32 = 0; has_size);
+    has_size = "struct_default_foreign_module_astid.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(has_size = start_32; start_32 = 0; has_size);
     start_32 = new_used_31;
     new_used_31 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_31 = start_32; start_32 = 0; new_used_31, s_1.repr, s_1.used);

@@ -113,13 +113,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(24)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(25)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(27)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(28)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.append" = fn(i32, i32, i32, i32, i32, i32);  // TypeId(28)
 
-type "functype//wasi/wasi:http/Fields::copy_all" = fn(i32, i32);  // TypeId(29)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]fields.copy-all" = fn(i32, i32);  // TypeId(29)
 
 type "functype//spec_effects_signature_resources.wado/$test_0" = fn();  // TypeId(30)
 
@@ -265,11 +265,11 @@ type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#Error
 
 type "functype//spec_effects_signature_resources.wado/headers_to_map" = fn(i32) -> ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(101)
 
-type "functype//spec_effects_signature_resources.wado/$cm_binding__Fields_copy_all" = fn(i32) -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(102)
+type "functype//spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all" = fn(i32) -> ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";  // TypeId(102)
 
-type "functype//spec_effects_signature_resources.wado/$cm_binding__Fields_new" = fn() -> i32;  // TypeId(103)
+type "functype//spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(103)
 
-type "functype//spec_effects_signature_resources.wado/$cm_binding__Fields_append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(104)
+type "functype//spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(104)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(105)
 
@@ -279,10 +279,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
-import fn wasi/wasi:http/Fields::append from "wasi/wasi:http/Fields::append";
-import fn wasi/wasi:http/Fields::copy_all from "wasi/wasi:http/Fields::copy_all";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.append from "wasi/$wasi:http/types@0.3.0#[method]fields.append";
+import fn wasi/$wasi:http/types@0.3.0#[method]fields.copy-all from "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -327,7 +327,7 @@ fn "spec_effects_signature_resources.wado/headers_to_map"(headers) {
     let $sroa_$iter_0_repr_77: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     let $sroa_$iter_0_index_78: i32;
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    headers = local.tee self_13("spec_effects_signature_resources.wado/$cm_binding__Fields_copy_all"(headers)).used;
+    headers = local.tee self_13("spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(headers)).used;
     $sroa_$iter_0_repr_77 = self_13.repr;
     $sroa_$iter_0_index_78 = 0;
     b0: block {
@@ -417,7 +417,7 @@ fn "spec_effects_signature_resources.wado/$test_0"() {
     "wasi/stream-drop-writable"($moved_3 = local.tee $sroa_$pattern_temp_0_1_73(builtin::i32_wrap_i64($cm_pair_0 >> 32_i64)); $sroa_$pattern_temp_0_1_73 = 0; $moved_3);
     "wasi/stream-drop-readable"($moved_3 = $sroa_$pattern_temp_0_0_72; $sroa_$pattern_temp_0_0_72 = 0; $moved_3);
     "wasi/stream-drop-readable"($moved_3 = $moved_7; $moved_7 = 0; $moved_3);
-    drop("spec_effects_signature_resources.wado/$cm_binding__Fields_append$spec0"(local.tee $moved_3("spec_effects_signature_resources.wado/$cm_binding__Fields_new"()), global:spec_effects_signature_resources.wado::$const_obj_2, global:spec_effects_signature_resources.wado::$const_obj_3));
+    drop("spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(local.tee $moved_3("spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:spec_effects_signature_resources.wado::$const_obj_2, global:spec_effects_signature_resources.wado::$const_obj_3));
     self_16 = "spec_effects_signature_resources.wado/headers_to_map"($moved_3);
     key_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 105, 100), used: 4 };
     if @unlikely(local.tee $moved_7("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::find_index"(local.tee $load_0(self_16.log), self_16.slots, self_16.nkeys, self_16.kids, self_16.lens, self_16.root, self_16.height, key_17.repr, 4)) < 0) {
@@ -486,7 +486,7 @@ condition: headers_to_map(&headers)[\"x-id\"] == \"7\"
     }
 }
 
-fn "spec_effects_signature_resources.wado/$cm_binding__Fields_copy_all"(self) with Fields {
+fn "spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.copy-all"(self) with Fields {
     let $outptr: i32;
     let $count_3: i32;
     let $result_4: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
@@ -503,7 +503,7 @@ fn "spec_effects_signature_resources.wado/$cm_binding__Fields_copy_all"(self) wi
     let used_28: i32;
     let value_34: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Fields::copy_all"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self, $outptr);
     self = builtin::load_i32($outptr);
     $result_4 = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i_5 = 0;
@@ -563,8 +563,8 @@ fn "spec_effects_signature_resources.wado/$cm_binding__Fields_copy_all"(self) wi
     return $result_4;
 }
 
-fn "spec_effects_signature_resources.wado/$cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
+fn "spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return "wasi/$wasi:http/types@0.3.0#[constructor]fields"();
 }
 
 fn "spec_effects_signature_resources.wado/$cm_export__$test_0"() {
@@ -578,7 +578,7 @@ fn "spec_effects_signature_resources.wado/$value_copy$core:prelude/string.wado/S
     return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
-fn "spec_effects_signature_resources.wado/$cm_binding__Fields_append$spec0"(self, name, value) with Fields {
+fn "spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
     let $name_packed: i64;
     let $value_packed: i64;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
@@ -613,7 +613,7 @@ fn "spec_effects_signature_resources.wado/$cm_binding__Fields_append$spec0"(self
     };
     $value_packed = builtin::i64_extend_i32_u(i_25) | (builtin::i64_extend_i32_s(ptr_18) << 32_i64);
     ptr_18 = "mem/realloc"(0, 0, 4, 20);
-    "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), ptr_18);
     $result_val = (if local.tee self(builtin::load_u8(ptr_18)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
     } else if local.tee self(builtin::load_u8(ptr_18 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
@@ -888,7 +888,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

@@ -121,21 +121,21 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(31)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/example:demo/Demo::target" = fn() -> f64;  // TypeId(33)
+type "functype//wasi/$example:demo/global#target" = fn() -> f64;  // TypeId(33)
 
-type "functype//wasi/example:demo/Target::listen" = fn(f64, i32);  // TypeId(34)
+type "functype//wasi/$example:demo/target#listen" = fn(f64, i32);  // TypeId(34)
 
-type "functype//wasi/example:demo/Target::fire" = fn(f64, i32);  // TypeId(35)
+type "functype//wasi/$example:demo/target#fire" = fn(f64, i32);  // TypeId(35)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(37)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(37)
 
 type "functype//cm_callback_handler_path.wado/run" = fn();  // TypeId(38)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Demo_target" = fn() -> u64;  // TypeId(39)
+type "functype//cm_callback_handler_path.wado/$cm_binding__example:demo/global#target" = fn() -> u64;  // TypeId(39)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Target_listen" = fn(u64, i32);  // TypeId(40)
+type "functype//cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen" = fn(u64, i32);  // TypeId(40)
 
 type "functype//cm_callback_handler_path.wado/$cm_callback__call-i32" = fn(u32, i32);  // TypeId(41)
 
@@ -143,9 +143,9 @@ type "functype//cm_callback_handler_path.wado/$cm_export__run" = fn();  // TypeI
 
 type "functype//cm_callback_handler_path.wado/$initialize_modules$cold0" = fn();  // TypeId(43)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0" = fn(u64, i32);  // TypeId(44)
+type "functype//cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec0" = fn(u64, i32);  // TypeId(44)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1" = fn(u64, i32);  // TypeId(45)
+type "functype//cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec1" = fn(u64, i32);  // TypeId(45)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(46)
 
@@ -211,7 +211,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(76)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(77)
 
-type "functype//cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(78)
+type "functype//cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(78)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(79)
 
@@ -221,11 +221,11 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Demo::target from "wasi/example:demo/Demo::target";
-import fn wasi/example:demo/Target::listen from "wasi/example:demo/Target::listen";
-import fn wasi/example:demo/Target::fire from "wasi/example:demo/Target::fire";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$example:demo/global#target from "wasi/$example:demo/global#target";
+import fn wasi/$example:demo/target#listen from "wasi/$example:demo/target#listen";
+import fn wasi/$example:demo/target#fire from "wasi/$example:demo/target#fire";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -276,7 +276,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = $local_0;
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: $local_2_17;
         } else {
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: "cm_callback_handler_path.wado/$cm_binding__Demo_target"();
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: "cm_callback_handler_path.wado/$cm_binding__example:demo/global#target"();
         }
         unreachable;
     };
@@ -288,7 +288,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
             call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($d_cm_callback_handler_path.wado/Target.op_listen)).env, $local_2_17, listener);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_20;
         } else {
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__Target_listen"($local_2_17, "core:rt/cm_callback_key"(listener));
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen"($local_2_17, "core:rt/cm_callback_key"(listener));
         }
     };
     $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: block {
@@ -298,7 +298,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
             call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_cm_callback_handler_path.wado/Target.op_fire)).env, $local_2_17, 1);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_20;
         } else {
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0"($local_2_17, 1);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec0"($local_2_17, 1);
         }
     };
     $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: block {
@@ -307,7 +307,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
             call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_cm_callback_handler_path.wado/Target.op_fire)).env, $local_2_17, 2);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_20;
         } else {
-            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1"($local_2_17, 2);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec1"($local_2_17, 2);
         }
     };
     global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $save_cm_callback_handler_path.wado/Target;
@@ -318,23 +318,23 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(seen.repr, seen.used, $local_5, 256);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $local_2_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($local_2_17 >> 32_i64);
-    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
 }
 
-fn "cm_callback_handler_path.wado/$cm_binding__Demo_target"() with Demo {
-    return builtin::i64_reinterpret_f64("wasi/example:demo/Demo::target"());
+fn "cm_callback_handler_path.wado/$cm_binding__example:demo/global#target"() with Demo {
+    return builtin::i64_reinterpret_f64("wasi/$example:demo/global#target"());
 }
 
-fn "cm_callback_handler_path.wado/$cm_binding__Target_listen"(self, listener) with Target {
-    "wasi/example:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
+fn "cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen"(self, listener) with Target {
+    "wasi/$example:demo/target#listen"(builtin::f64_reinterpret_i64(self), listener);
 }
 
-fn "cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "cm_callback_handler_path.wado/$cm_callback__call-i32"(key, a0) {
@@ -368,12 +368,12 @@ fn "cm_callback_handler_path.wado/$initialize_modules$cold0"() {
     global:cm_callback_handler_path.wado::$modules_initialized = 1;
 }
 
-fn "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0"(self, value) with Target {
-    "wasi/example:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 1);
+fn "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec0"(self, value) with Target {
+    "wasi/$example:demo/target#fire"(builtin::f64_reinterpret_i64(self), 1);
 }
 
-fn "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1"(self, value) with Target {
-    "wasi/example:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 2);
+fn "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec1"(self, value) with Target {
+    "wasi/$example:demo/target#fire"(builtin::f64_reinterpret_i64(self), 2);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -479,7 +479,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

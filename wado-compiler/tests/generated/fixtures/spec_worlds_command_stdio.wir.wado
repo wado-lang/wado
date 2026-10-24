@@ -116,15 +116,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(26)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(29)
+type "functype//wasi/$wasi:cli/stdin@0.3.0#read-via-stream" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
 
 type "functype//spec_worlds_command_stdio.wado/run" = fn();  // TypeId(31)
 
-type "functype//spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream" = fn() -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(32)
+type "functype//spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdin@0.3.0#read-via-stream" = fn() -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(32)
 
 type "functype//spec_worlds_command_stdio.wado/$cm_export__run" = fn();  // TypeId(33)
 
@@ -212,9 +212,9 @@ type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#Error
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(75)
 
-type "functype//spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(76)
+type "functype//spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(76)
 
-type "functype//spec_worlds_command_stdio.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(77)
+type "functype//spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(77)
 
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(78)
 
@@ -225,9 +225,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdin::read_via_stream from "wasi/wasi:cli/Stdin::read_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdin@0.3.0#read-via-stream from "wasi/$wasi:cli/stdin@0.3.0#read-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -265,7 +265,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         cold_path;
         "spec_worlds_command_stdio.wado/$initialize_modules$cold0"();
     };
-    input = local.tee $pattern_temp_0("spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream"()).0;
+    input = local.tee $pattern_temp_0("spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdin@0.3.0#read-via-stream"()).0;
     _done = $pattern_temp_0.1;
     self_12 = input;
     all = $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_3: block -> ref "core:prelude//List<u8>" {
@@ -339,7 +339,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     builder = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: self_75, f: struct.new "canonical//CanonicalClosure_0" { env: f_76, func: ref.func "closure/spec_worlds_command_stdio.wado/$closure_wrapper_0" } });
     packed = builtin::i32_wrap_i64(local.tee $cm_pair_7_130("wasi/stream-new"()));
     ptr = builtin::i32_wrap_i64($cm_pair_7_130 >> 32_i64);
-    new_used_34 = "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"(new_used_34 = packed; packed = 0; new_used_34);
+    new_used_34 = "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_34 = packed; packed = 0; new_used_34);
     packed = ptr;
     ptr = 0;
     ptr = packed;
@@ -388,7 +388,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     builtin::array_copy<u8>(builder.repr, packed, global:spec_worlds_command_stdio.wado::$const_obj_0, 0, 6);
     packed = builtin::i32_wrap_i64(local.tee $cm_pair_7_130("wasi/stream-new"()));
     new_used_34 = builtin::i32_wrap_i64($cm_pair_7_130 >> 32_i64);
-    ptr = "spec_worlds_command_stdio.wado/$cm_binding__Stderr_write_via_stream"(ptr = packed; packed = 0; ptr);
+    ptr = "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(ptr = packed; packed = 0; ptr);
     packed = new_used_34;
     new_used_34 = 0;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_34 = packed; packed = 0; new_used_34, builder.repr, builder.used);
@@ -398,19 +398,19 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     }
 }
 
-fn "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "spec_worlds_command_stdio.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream"() with Stdin {
+fn "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stdin@0.3.0#read-via-stream"() with Stdin {
     let $outptr: i32;
     let $lifted_result_1: ref null "core:prelude//$Resource";
     let $lifted_result_2: ref null "core:prelude//$Resource";
-    "wasi/wasi:cli/Stdin::read_via_stream"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/$wasi:cli/stdin@0.3.0#read-via-stream"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $lifted_result_1 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_2 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -674,7 +674,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

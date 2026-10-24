@@ -100,9 +100,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(39)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(40)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(41)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(42)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
 
 type "functype//math_libm_data_prune.wado/run" = fn();  // TypeId(43)
 
@@ -170,7 +170,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(74)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(75)
 
-type "functype//math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(76)
+type "functype//math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(76)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(77)
 
@@ -207,8 +207,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -275,7 +275,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_sin"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -291,7 +291,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_cos"(x_0), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -307,7 +307,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_tan"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -323,7 +323,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_sin"(huge), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -339,7 +339,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_cos"(huge), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -355,7 +355,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_tan"(huge), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -371,7 +371,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_asin"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -387,7 +387,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_acos"(x_0), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -403,7 +403,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_atan"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -419,7 +419,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_atan2"(x_0, 2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -435,7 +435,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_exp"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -451,7 +451,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_exp2"(x_0), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -467,7 +467,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_exp10"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -483,7 +483,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_sinh"(x_0), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -499,7 +499,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_cosh"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -515,7 +515,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_pow"(x_0, 3.5), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -531,7 +531,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_cbrt"(x_0), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -547,7 +547,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_hypot"(x_0, 2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -563,7 +563,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_sinf"(y_2), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -579,7 +579,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_cosf"(y_2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -595,7 +595,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_tanf"(y_2), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -611,7 +611,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_asinf"(y_2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -627,7 +627,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_acosf"(y_2), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -643,7 +643,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_atanf"(y_2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -659,7 +659,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_atan2f"(y_2, 2_f32), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -675,7 +675,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_expf"(y_2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -691,7 +691,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_exp2f"(y_2), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -707,7 +707,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_exp10f"(y_2), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -723,7 +723,7 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_powf"(y_2, 3.5_f32), $local_3);
     start_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
+    $moved_4_613 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_613 = start_75; start_75 = 0; $moved_4_613);
     start_75 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = start_75; start_75 = 0; new_used_74, $local_3.repr, $local_3.used);
@@ -739,15 +739,15 @@ fn "math_libm_data_prune.wado/run"() with Stdout {
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"("wasm:core:libm.wat/libm_hypotf"(y_2, 2_f32), $local_3);
     $moved_4_613 = builtin::i32_wrap_i64(local.tee $cm_pair_7_616("wasi/stream-new"()));
     new_used_74 = builtin::i32_wrap_i64($cm_pair_7_616 >> 32_i64);
-    start_75 = "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
+    start_75 = "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_75 = $moved_4_613; $moved_4_613 = 0; start_75);
     $moved_4_613 = new_used_74;
     new_used_74 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_74 = $moved_4_613; $moved_4_613 = 0; new_used_74, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_74 = start_75; start_75 = 0; new_used_74);
 }
 
-fn "math_libm_data_prune.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "math_libm_data_prune.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "math_libm_data_prune.wado/$cm_export__run"() {
@@ -1233,7 +1233,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

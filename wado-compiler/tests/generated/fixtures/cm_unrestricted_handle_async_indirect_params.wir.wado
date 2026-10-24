@@ -172,17 +172,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(40)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/example:demo/Dom::touch" = fn(i32, i32) -> i32;  // TypeId(42)
+type "functype//wasi/$example:demo/global#touch" = fn(i32, i32) -> i32;  // TypeId(42)
 
-type "functype//wasi/example:demo/Dom::root" = fn() -> f64;  // TypeId(43)
+type "functype//wasi/$example:demo/global#root" = fn() -> f64;  // TypeId(43)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root" = fn() -> u64;  // TypeId(45)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#root" = fn() -> u64;  // TypeId(45)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch" = fn(u64, i32, i32, i32, i32) -> ref null "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(46)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#touch" = fn(u64, i32, i32, i32, i32) -> ref null "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(46)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch" = fn(i32) -> i32;  // TypeId(47)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__example:demo/global#touch" = fn(i32) -> i32;  // TypeId(47)
 
 type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_export__run" = fn();  // TypeId(48)
 
@@ -308,9 +308,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Dom::touch from "wasi/example:demo/Dom::touch";
-import fn wasi/example:demo/Dom::root from "wasi/example:demo/Dom::root";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$example:demo/global#touch from "wasi/$example:demo/global#touch";
+import fn wasi/$example:demo/global#root from "wasi/$example:demo/global#root";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
@@ -325,11 +325,11 @@ global mut global:cm_unrestricted_handle_async_indirect_params.wado::$modules_in
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" { 0 };
 
-fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root"() with Dom {
-    return builtin::i64_reinterpret_f64("wasi/example:demo/Dom::root"());
+fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#root"() with Dom {
+    return builtin::i64_reinterpret_f64("wasi/$example:demo/global#root"());
 }
 
-fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch"(n, a, b, c, d) with Dom {
+fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#touch"(n, a, b, c, d) with Dom {
     let $async_outptr: i32;
     let $params_buf: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
@@ -339,7 +339,7 @@ fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch"(n,
     builtin::store_i32($params_buf + 12, b);
     builtin::store_i32($params_buf + 16, c);
     builtin::store_i32($params_buf + 20, d);
-    $params_buf = "wasi/example:demo/Dom::touch"($params_buf, $async_outptr) >>u 4;
+    $params_buf = "wasi/$example:demo/global#touch"($params_buf, $async_outptr) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if $params_buf != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $params_buf } };
@@ -347,7 +347,7 @@ fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch"(n,
     return struct.new "core:prelude/types.wado//AsyncCall<i32>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 4, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_unrestricted_handle_async_indirect_params.wado//$Closure_0" {  }, func: ref.func "closure/cm_unrestricted_handle_async_indirect_params.wado/$closure_wrapper_0" } };
 }
 
-fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch"($outptr) {
+fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__example:demo/global#touch"($outptr) {
     return builtin::load_i32($outptr);
 }
 
@@ -362,7 +362,7 @@ fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_export__run"() {
         cold_path;
         "cm_unrestricted_handle_async_indirect_params.wado/$initialize_modules$cold0"();
     };
-    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait$dae[return]"("cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch"("cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root"(), 1, 2, 3, 4));
+    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait$dae[return]"("cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#touch"("cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__example:demo/global#root"(), 1, 2, 3, 4));
     "wasi/task-return"(0);
 }
 
@@ -552,7 +552,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -1577,7 +1577,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 }
 
 fn "cm_unrestricted_handle_async_indirect_params.wado/cm_unrestricted_handle_async_indirect_params.wado/$Closure_0::$call$dae[self]"($outptr) {
-    return "cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch"($outptr);
+    return "cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__example:demo/global#touch"($outptr);
 }
 
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {

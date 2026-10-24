@@ -184,13 +184,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(42)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(45)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for" = fn(i64) -> i32;  // TypeId(45)
 
-type "functype//wasi_newtype_literal.wado/$cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(46)
+type "functype//wasi_newtype_literal.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(46)
 
-type "functype//wasi_newtype_literal.wado/$cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(47)
+type "functype//wasi_newtype_literal.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for" = fn(i32);  // TypeId(47)
 
 type "functype//wasi_newtype_literal.wado/$cm_export__$test_0_literal_coercion_to_duration_via_effect_fn" = fn();  // TypeId(48)
 
@@ -338,8 +338,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:clocks/MonotonicClock::wait_for from "wasi/wasi:clocks/MonotonicClock::wait_for";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for from "wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
@@ -354,10 +354,10 @@ global mut global:wasi_newtype_literal.wado::$modules_initialized: bool = 0;
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" { 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" { 0 };
 
-fn "wasi_newtype_literal.wado/$cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
+fn "wasi_newtype_literal.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for"(how_long) with MonotonicClock {
     let $subtask_handle: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    $subtask_handle = "wasi/wasi:clocks/MonotonicClock::wait_for"(how_long) >>u 4;
+    $subtask_handle = "wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for"(how_long) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
@@ -365,7 +365,7 @@ fn "wasi_newtype_literal.wado/$cm_binding__MonotonicClock_wait_for"(how_long) wi
     return struct.new "core:prelude/types.wado//AsyncCall<()>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0 }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_newtype_literal.wado//$Closure_1" {  }, func: ref.func "closure/wasi_newtype_literal.wado/$closure_wrapper_0" } };
 }
 
-fn "wasi_newtype_literal.wado/$cm_lift__MonotonicClock_wait_for"($outptr) {
+fn "wasi_newtype_literal.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for"($outptr) {
     return nop;
 }
 
@@ -376,7 +376,7 @@ fn "wasi_newtype_literal.wado/$cm_export__$test_0_literal_coercion_to_duration_v
         "core:prelude/types.wado/$initialize_module"();
         global:wasi_newtype_literal.wado::$modules_initialized = 1;
     };
-    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_newtype_literal.wado/$cm_binding__MonotonicClock_wait_for"(0_i64));
+    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_newtype_literal.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for"(0_i64));
     "wasi/task-return"(0);
 }
 
@@ -561,7 +561,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -2048,7 +2048,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 }
 
 fn "wasi_newtype_literal.wado/wasi_newtype_literal.wado/$Closure_1::$call$dae[self]"($outptr) {
-    "wasi_newtype_literal.wado/$cm_lift__MonotonicClock_wait_for"($outptr);
+    "wasi_newtype_literal.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for"($outptr);
 }
 
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {

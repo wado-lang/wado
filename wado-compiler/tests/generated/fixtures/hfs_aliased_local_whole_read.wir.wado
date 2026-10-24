@@ -36,7 +36,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
 
 type "functype//hfs_aliased_local_whole_read.wado/run" = fn();  // TypeId(13)
 
@@ -60,7 +60,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//hfs_aliased_local_whole_read.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//hfs_aliased_local_whole_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
@@ -70,7 +70,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -281,7 +281,7 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
             };
             $load_8 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
             $sroa_item_1_127 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-            $load_8 = "hfs_aliased_local_whole_read.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $load_8; $load_8 = 0; $moved_4);
+            $load_8 = "hfs_aliased_local_whole_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $load_8; $load_8 = 0; $moved_4);
             $sroa_item_0_126 = $sroa_item_1_127;
             $sroa_item_1_127 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = $sroa_item_0_126; $sroa_item_0_126 = 0; $moved_3, $tmpl_buf_133.repr, $tmpl_buf_133.used);
@@ -291,8 +291,8 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
     };
 }
 
-fn "hfs_aliased_local_whole_read.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "hfs_aliased_local_whole_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "hfs_aliased_local_whole_read.wado/$cm_export__run"() {

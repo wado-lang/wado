@@ -93,9 +93,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(25)
+type "functype//wasi/$wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(25)
 
 type "functype//ref_equality.wado/$test_3_mut_ref_equality" = fn();  // TypeId(26)
 
@@ -105,7 +105,7 @@ type "functype//ref_equality.wado/$test_5_primitive_ref_equality" = fn();  // Ty
 
 type "functype//ref_equality.wado/$test_7_a_reference_to_a_resource_is_identical_only_to_its_own_resource" = fn();  // TypeId(29)
 
-type "functype//ref_equality.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(30)
+type "functype//ref_equality.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> ref null "core:prelude//$Resource";  // TypeId(30)
 
 type "functype//ref_equality.wado/$cm_export__$test_0_references_to_equal_values_are_equal" = fn();  // TypeId(31)
 
@@ -287,8 +287,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#Fields from "wasi/resource-drop:wasi/http/types.wado#Fields";
 import fn wasi/task-return from "wasi/task-return";
@@ -641,8 +641,8 @@ fn "ref_equality.wado/$test_7_a_reference_to_a_resource_is_identical_only_to_its
     let f_47: ref "core:prelude/format.wado//Formatter";
     let offset_79: i32;
     let $sroa_s_repr_132: ref Array<u8>;
-    a_0 = "ref_equality.wado/$cm_binding__Fields_new"();
-    b_1 = "ref_equality.wado/$cm_binding__Fields_new"();
+    a_0 = "ref_equality.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
+    b_1 = "ref_equality.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     if @unlikely(local.tee $cond_3(ref.eq(a_0, a_0)) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(141), used: 0 }), 113);
@@ -767,8 +767,8 @@ condition: !ref_eq(&a, &b)
     }
 }
 
-fn "ref_equality.wado/$cm_binding__Fields_new"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:http/Fields::new"() };
+fn "ref_equality.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
 }
 
 fn "ref_equality.wado/$cm_export__$test_0_references_to_equal_values_are_equal"() {
@@ -1910,7 +1910,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

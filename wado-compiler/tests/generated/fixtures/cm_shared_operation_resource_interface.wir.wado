@@ -4,30 +4,25 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(1)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(1)
 
-type "functype//wasi/wasi:demo/GfxAgain::device_again" = fn() -> i32;  // TypeId(2)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#[method]device.id" = fn(i32) -> i32;  // TypeId(2)
 
-type "functype//wasi/wasi:demo/Device::id" = fn(i32) -> i32;  // TypeId(3)
+type "functype//cm_shared_operation_resource_interface.wado/run" = fn();  // TypeId(3)
 
-type "functype//cm_shared_operation_resource_interface.wado/run" = fn();  // TypeId(4)
+type "functype//cm_shared_operation_resource_interface.wado/$cm_export__run" = fn();  // TypeId(4)
 
-type "functype//cm_shared_operation_resource_interface.wado/$cm_export__run" = fn();  // TypeId(5)
+type "functype//wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device" = fn(i32);  // TypeId(5)
 
-type "functype//wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device" = fn(i32);  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
+type "functype//cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(7)
 
-type "functype//cm_shared_operation_resource_interface.wado/$cm_binding__Gfx_get_device" = fn() -> i32;  // TypeId(8)
-
-type "functype//cm_shared_operation_resource_interface.wado/$cm_binding__GfxAgain_device_again" = fn() -> i32;  // TypeId(9)
-
-type "functype//cm_shared_operation_resource_interface.wado/$cm_binding__Device_id" = fn(i32) -> u32;  // TypeId(10)
+type "functype//cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id" = fn(i32) -> u32;  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/GfxAgain::device_again from "wasi/wasi:demo/GfxAgain::device_again";
-import fn wasi/wasi:demo/Device::id from "wasi/wasi:demo/Device::id";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.id from "wasi/$wasi:demo/gfx@0.1.0#[method]device.id";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device from "wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
@@ -35,9 +30,9 @@ import fn wasi/task-return from "wasi/task-return";
 fn "cm_shared_operation_resource_interface.wado/run"() with Gfx, GfxAgain, Device {
     let a: i32;
     let b: i32;
-    a = "cm_shared_operation_resource_interface.wado/$cm_binding__Gfx_get_device"();
-    b = "cm_shared_operation_resource_interface.wado/$cm_binding__GfxAgain_device_again"();
-    drop("cm_shared_operation_resource_interface.wado/$cm_binding__Device_id"(a) + "cm_shared_operation_resource_interface.wado/$cm_binding__Device_id"(b));
+    a = "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"();
+    b = "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"();
+    drop("cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(a) + "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(b));
     if (b == 0) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = b;
@@ -51,16 +46,12 @@ fn "cm_shared_operation_resource_interface.wado/run"() with Gfx, GfxAgain, Devic
     }
 }
 
-fn "cm_shared_operation_resource_interface.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return "wasi/wasi:demo/Gfx::get_device"();
+fn "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-device"();
 }
 
-fn "cm_shared_operation_resource_interface.wado/$cm_binding__GfxAgain_device_again"() with GfxAgain {
-    return "wasi/wasi:demo/GfxAgain::device_again"();
-}
-
-fn "cm_shared_operation_resource_interface.wado/$cm_binding__Device_id"(self) with Device {
-    return "wasi/wasi:demo/Device::id"(self);
+fn "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(self) with Device {
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.id"(self);
 }
 
 fn "cm_shared_operation_resource_interface.wado/$cm_export__run"() {

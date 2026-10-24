@@ -37,11 +37,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:demo/Gfx::get_count" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-count" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//cm_user_module_plain_struct_beside_binding.wado/$cm_binding__Gfx_get_count" = fn(i32) -> i32;  // TypeId(13)
+type "functype//cm_user_module_plain_struct_beside_binding.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count" = fn(i32) -> i32;  // TypeId(13)
 
 type "functype//cm_user_module_plain_struct_beside_binding.wado/$cm_export__run" = fn();  // TypeId(14)
 
@@ -103,21 +103,21 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:demo/Gfx::get_count from "wasi/wasi:demo/Gfx::get_count";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-count from "wasi/$wasi:demo/gfx@0.1.0#get-count";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-fn "cm_user_module_plain_struct_beside_binding.wado/$cm_binding__Gfx_get_count"(x) with Gfx {
-    return "wasi/wasi:demo/Gfx::get_count"(x);
+fn "cm_user_module_plain_struct_beside_binding.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count"(x) with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-count"(x);
 }
 
 fn "cm_user_module_plain_struct_beside_binding.wado/$cm_export__run"() {
     let $v0: i32;
-    if @unlikely(local.tee $v0("cm_user_module_plain_struct_beside_binding.wado/$cm_binding__Gfx_get_count"(1)) < 0) {
+    if @unlikely(local.tee $v0("cm_user_module_plain_struct_beside_binding.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count"(1)) < 0) {
         cold_path;
         "cm_user_module_plain_struct_beside_binding.wado/run$cold0"($v0);
         unreachable;
@@ -313,7 +313,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

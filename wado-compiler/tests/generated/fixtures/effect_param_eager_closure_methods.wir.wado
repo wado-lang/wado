@@ -78,7 +78,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
 
 type "functype//effect_param_eager_closure_methods.wado/run" = fn();  // TypeId(24)
 
@@ -120,7 +120,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
@@ -132,7 +132,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -181,7 +181,7 @@ fn "effect_param_eager_closure_methods.wado/run"() with Stdout {
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(copy.repr, copy.used, $local_6, 256);
     $sroa_self_index_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
     item_20 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
-    $moved_4_45 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"($moved_4_45 = $sroa_self_index_72; $sroa_self_index_72 = 0; $moved_4_45);
+    $moved_4_45 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_45 = $sroa_self_index_72; $sroa_self_index_72 = 0; $moved_4_45);
     $sroa_self_index_72 = item_20;
     item_20 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(item_20 = $sroa_self_index_72; $sroa_self_index_72 = 0; item_20, $local_5.repr, $local_5.used);
@@ -194,15 +194,15 @@ fn "effect_param_eager_closure_methods.wado/run"() with Stdout {
     } }, $local_5);
     item_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
     $moved_4_45 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
-    $sroa_self_index_72 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"($sroa_self_index_72 = item_20; item_20 = 0; $sroa_self_index_72);
+    $sroa_self_index_72 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_self_index_72 = item_20; item_20 = 0; $sroa_self_index_72);
     item_20 = $moved_4_45;
     $moved_4_45 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_45 = item_20; item_20 = 0; $moved_4_45, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_45 = $sroa_self_index_72; $sroa_self_index_72 = 0; $moved_4_45);
 }
 
-fn "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_param_eager_closure_methods.wado/$cm_export__run"() {
@@ -792,7 +792,7 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     }
     start_15 = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
     x = builtin::i32_wrap_i64(x_28 >> 32_i64);
-    new_used_14 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"(new_used_14 = start_15; start_15 = 0; new_used_14);
+    new_used_14 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_14 = start_15; start_15 = 0; new_used_14);
     start_15 = x;
     x = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(x = start_15; start_15 = 0; x, $local_2.repr, $local_2.used);
@@ -806,7 +806,7 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;
@@ -835,7 +835,7 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "effect_param_eager_closure_methods.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     $sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13;

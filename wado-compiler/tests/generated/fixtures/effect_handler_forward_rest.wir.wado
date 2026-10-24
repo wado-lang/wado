@@ -90,9 +90,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(24)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(25)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
 type "functype//effect_handler_forward_rest.wado/run" = fn();  // TypeId(28)
 
@@ -150,7 +150,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(54)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
-type "functype//effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(56)
+type "functype//effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(56)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(57)
 
@@ -160,8 +160,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -273,7 +273,7 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, is_negative_46, x, $local_3_26);
     $local_3_26 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_46 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_126 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(start_126 = $local_3_26; $local_3_26 = 0; start_126);
+    start_126 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_126 = $local_3_26; $local_3_26 = 0; start_126);
     $local_3_26 = is_negative_46;
     is_negative_46 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_46 = $local_3_26; $local_3_26 = 0; is_negative_46, $mv_arg_1.repr, $mv_arg_1.used);
@@ -288,15 +288,15 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_9: ref Array<u8>; $array_clone_src_9 = $mv_arg_1.repr; let $array_clone_dst_10: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_10(builtin::array_new<u8>(is_negative_46)), 0, $array_clone_src_9, 0, is_negative_46); $array_clone_dst_10, used: is_negative_46 };
     start_126 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $local_3_26 = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4_79 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"($moved_4_79 = start_126; start_126 = 0; $moved_4_79);
+    $moved_4_79 = "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_79 = start_126; start_126 = 0; $moved_4_79);
     start_126 = $local_3_26;
     $local_3_26 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_26 = start_126; start_126 = 0; $local_3_26, $mv_arg_1.repr, is_negative_46);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_46 = $moved_4_79; $moved_4_79 = 0; is_negative_46);
 }
 
-fn "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_forward_rest.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_handler_forward_rest.wado/$cm_export__run"() {
@@ -412,7 +412,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
