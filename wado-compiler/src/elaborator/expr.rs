@@ -5618,12 +5618,9 @@ impl TypeSystem {
         &self,
         iterable_type: TypeId,
     ) -> Option<(String, u32, TypeId)> {
-        let (elems, _) = self
-            .type_table
-            .borrow()
-            .as_tuple_through_ref(iterable_type)?;
-        let pack = self.type_table.borrow().pack_in(&elems)?;
         let mut table = self.type_table.borrow_mut();
+        let (elems, _) = table.as_tuple_through_ref(iterable_type)?;
+        let pack = table.pack_in(&elems)?;
         let ResolvedType::TypePack { name, index, .. } = table.get(pack).clone() else {
             unreachable!("`pack_in` answers a pack");
         };
@@ -5632,8 +5629,9 @@ impl TypeSystem {
 
     /// The type one expansion of the pack in `elements` binds.
     pub(super) fn pack_element_type(&self, elements: &[TypeId]) -> Option<TypeId> {
-        let pack = self.type_table.borrow().pack_in(elements)?;
-        Some(self.type_table.borrow_mut().pack_step_type(pack))
+        let mut table = self.type_table.borrow_mut();
+        let pack = table.pack_in(elements)?;
+        Some(table.pack_step_type(pack))
     }
 
     /// Element type at a literal index into a tuple, which may carry a
