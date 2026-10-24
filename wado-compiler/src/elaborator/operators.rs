@@ -94,6 +94,22 @@ impl WritePlace {
     }
 }
 
+/// What `check_write` finds an assignment target to be, past the checks
+/// that return early.
+enum Lvalue {
+    Place,
+    NotAPlace,
+    ThroughImmutableRef,
+    /// Not a place, and its error is reported already.
+    Reported,
+}
+
+/// The type the value written to `place` is resolved against. A refused place
+/// still has its value resolved, so the value's own errors are reported too.
+fn write_place_value_type(place: &Result<WritePlace, ()>) -> TypeId {
+    place.as_ref().map_or(TypeTable::ERROR, WritePlace::value_type)
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_binary(
         &mut self,
@@ -1062,19 +1078,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
-        let places: Result<Vec<WritePlace>, ()> = targets
+        let places: Vec<Result<WritePlace, ()>> = targets
             .iter()
             .map(|target| self.resolve_write_place(target, ctx))
             .collect();
-        let Ok(places) = places else {
-            return TypeTable::ERROR;
-        };
         let expected = self
             .tysys
             .type_table
             .borrow_mut()
-            .make_tuple(places.iter().map(WritePlace::value_type).collect());
+            .make_tuple(places.iter().map(write_place_value_type).collect());
         let value_type = self.resolve_expr(&assign.value, ctx, Some(expected));
+        let Ok(places) = places.into_iter().collect::<Result<Vec<_>, ()>>() else {
+            return TypeTable::ERROR;
+        };
         if value_type == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
@@ -1099,8 +1115,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let name = minted_name("da", ctx.fresh_serial());
             let _local_index = ctx.add_local(name, type_id, false, None);
         }
-        for ((target, place), type_id) in targets.iter().zip(&places).zip(element_types) {
-            self.check_write(target, place, type_id, assign.value.span(), ctx);
+        let element_spans: Vec<Span> = match &assign.value {
+            ast::Expr::TupleLiteral(tuple) if tuple.elements.len() == targets.len() => {
+                tuple.elements.iter().map(ast::Expr::span).collect()
+            }
+            value => vec![value.span(); targets.len()],
+        };
+        for (((target, place), type_id), span) in
+            targets.iter().zip(&places).zip(element_types).zip(element_spans)
+        {
+            self.check_write(target, place, type_id, span, ctx);
         }
         TypeTable::UNIT
     }
@@ -1150,65 +1174,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// there. A read-only `Index` access lowers to `*recv.index(i)` over
     /// `&Output`, so writing through it is an immutable-reference error; an
     /// `IndexValue` access is a by-value call and no place at all.
-    fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
-        let needs_deref = self
-            .sem
-            .types
-            .operator_dispatch
-            .get(&index_expr.id)
-            .map(|d| d.needs_deref);
-        if let Some(needs_deref) = needs_deref {
-            if needs_deref {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: "cannot assign through immutable reference".to_string(),
-                    span: index_expr.span,
-                });
-            }
-            return false;
+    fn index_target_lvalue(&self, index_expr: &ast::IndexExpr) -> Lvalue {
+        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index_expr.id) {
+            return if dispatch.needs_deref {
+                Lvalue::ThroughImmutableRef
+            } else {
+                Lvalue::NotAPlace
+            };
         }
-        let Some(recv_type) = self
-            .sem
-            .types
-            .expression_types
-            .get(&index_expr.expr.id())
-            .copied()
-        else {
-            return false;
+        // An unrecorded receiver is an unindexable one, which `resolve_index`
+        // diagnosed.
+        let Some(&recv_type) = self.sem.types.expression_types.get(&index_expr.expr.id()) else {
+            return Lvalue::Reported;
         };
         let base = self.tysys.through_ref(recv_type);
-        self.tysys.type_table.borrow().is_tuple(base)
+        if self.tysys.type_table.borrow().is_tuple(base) {
+            Lvalue::Place
+        } else {
+            Lvalue::NotAPlace
+        }
     }
 
     /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
-    /// is an immutable reference (`&T`), where the write through it is
-    /// diagnosed here. `operand`'s type is read from `expression_types`.
-    /// Inspecting the *operand*
-    /// type means `*5 = v` (operand `5: i32`, already diagnosed by
-    /// `resolve_unary`) is not re-flagged here.
-    fn deref_target_assignable(&mut self, unary: &ast::UnaryExpr, span: Span) -> bool {
-        let Some(operand_type) = self
-            .sem
-            .types
-            .expression_types
-            .get(&unary.expr.id())
-            .copied()
-        else {
-            // ERROR-typed operand (not recorded): lenient, like the old
-            // `get(ERROR)` arm that did not match `Ref`.
-            return true;
+    /// is an immutable reference (`&T`). `operand`'s type is read from
+    /// `expression_types`. Inspecting the *operand* type means `*5 = v`
+    /// (operand `5: i32`, already diagnosed by `resolve_unary`) is not
+    /// re-flagged here.
+    fn deref_target_lvalue(&self, unary: &ast::UnaryExpr) -> Lvalue {
+        // An ERROR-typed operand is not recorded, and was diagnosed already.
+        let Some(&operand_type) = self.sem.types.expression_types.get(&unary.expr.id()) else {
+            return Lvalue::Place;
         };
-        let is_immutable_ref = matches!(
+        if matches!(
             self.tysys.type_table.borrow().get(operand_type),
             ResolvedType::Ref(_)
-        );
-        if is_immutable_ref {
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign through immutable reference".to_string(),
-                span,
-            });
-            false
+        ) {
+            Lvalue::ThroughImmutableRef
         } else {
-            true
+            Lvalue::Place
         }
     }
 
@@ -1226,13 +1229,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         value: AssignValue<'_>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let Ok(place) = self.resolve_write_place(target_ast, ctx) else {
-            return TypeTable::ERROR;
-        };
+        let place = self.resolve_write_place(target_ast, ctx);
         let value_span = value.span();
         let value_type = match value {
-            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(place.value_type())),
+            AssignValue::Ast(expr) => {
+                self.resolve_expr(expr, ctx, Some(write_place_value_type(&place)))
+            }
             AssignValue::Resolved { type_id, .. } => type_id,
+        };
+        let Ok(place) = place else {
+            return TypeTable::ERROR;
         };
         self.check_write(target_ast, &place, value_type, value_span, ctx)
     }
@@ -1429,60 +1435,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Validate that the target is a valid l-value: each target shape is
         // classified from the AST + recorded facts.
-        let is_valid_lvalue = match target_ast {
-            ast::Expr::FieldAccess(_) => true,
+        let lvalue = match target_ast {
+            ast::Expr::FieldAccess(_) => Lvalue::Place,
             // `WritePlace::IndexAssign` already returned above, so an `Index` target
             // here is a tuple index (a place), a read-only `Index` /
             // `IndexValue` trait access (not a place), or an unindexable
             // receiver (already diagnosed by `resolve_index`).
-            ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
-            // `*x = v`: valid only through a mutable reference. The operand's
-            // type rides on `expression_types`.
-            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-                self.deref_target_assignable(u, target_ast.span())
-            }
+            ast::Expr::Index(index_expr) => self.index_target_lvalue(index_expr),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.deref_target_lvalue(u),
             // An identifier target classified by the place fact `resolve_ident`
             // recorded: a function-frame `Local`, or a `&mut`-captured ident
             // (`*$ref` deref-capture, assignable iff the captured ref is
             // `&mut`). Globals returned above; anything else (function /
             // variant / enum / const ident, or a non-ident expression) is not
             // a place.
-            ast::Expr::Ident(id) => {
-                // Clone to release the `&self` borrow before the diagnostic's
-                // `&mut self.logger` use.
-                match self.assign_place_of(id.id).cloned() {
-                    Some(AssignPlace::Local) => true,
-                    Some(AssignPlace::DerefCapture { through_mut_ref }) => {
-                        if through_mut_ref {
-                            true
-                        } else {
-                            let _ = self.emit(TypeError::CannotMutate {
-                                message: "cannot assign through immutable reference".to_string(),
-                                span: target_ast.span(),
-                            });
-                            false
-                        }
-                    }
-                    _ => false,
+            ast::Expr::Ident(id) => match self.assign_place_of(id.id) {
+                Some(AssignPlace::Local | AssignPlace::DerefCapture { through_mut_ref: true }) => {
+                    Lvalue::Place
                 }
-            }
-            _ => false,
+                Some(AssignPlace::DerefCapture {
+                    through_mut_ref: false,
+                }) => Lvalue::ThroughImmutableRef,
+                _ => Lvalue::NotAPlace,
+            },
+            _ => Lvalue::NotAPlace,
         };
-
-        if !is_valid_lvalue {
-            // Report error for invalid assignment target
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign to an expression that is not a place".to_string(),
-                span: target_ast.span(),
-            });
-            return TypeTable::ERROR;
-        }
-
-        // Reify rebuilds the `Assign` from the AST + recorded
-        // target / value types; project only the (unit) result type. The
-        // target + value were resolved above for their side effects, and the
-        // l-value validation / global-mutability checks already ran.
-        TypeTable::UNIT
+        let message = match lvalue {
+            // Reify rebuilds the `Assign` from the AST and the recorded types.
+            Lvalue::Place => return TypeTable::UNIT,
+            Lvalue::Reported => return TypeTable::ERROR,
+            Lvalue::ThroughImmutableRef => "cannot assign through immutable reference",
+            Lvalue::NotAPlace => "cannot assign to an expression that is not a place",
+        };
+        let _ = self.emit(TypeError::CannotMutate {
+            message: message.to_string(),
+            span: target_ast.span(),
+        });
+        TypeTable::ERROR
     }
 
     /// Resolve `target op= value` as `target = target op value`, TIR-direct. The

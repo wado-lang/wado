@@ -3830,6 +3830,12 @@ impl Parser {
                 value,
                 span: start_span,
             };
+            if assign.places().is_empty() {
+                self.errors.push(self.error_at_span(
+                    assign.target.span(),
+                    "a destructuring assignment names at least one target",
+                ));
+            }
             for target in assign.places() {
                 if let Expr::Spread(_, span) = target {
                     self.errors.push(self.error_at_span(

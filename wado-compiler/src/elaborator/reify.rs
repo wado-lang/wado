@@ -5321,22 +5321,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) {
         for hoist in hoists {
             let value = self.reify_expr(hoist.piece, ctx, None);
-            let span = value.span;
-            let type_id = value.type_id;
             let name = minted_name("ca", ctx.fresh_serial());
-            let index = ctx.add_local(name.clone(), type_id, false, None);
-            prelude.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: name.clone(),
-                    local_index: index,
-                    is_mut: false,
-                    type_id,
-                    value,
-                    storage: LetStorage::Planned,
-                },
-                span,
-            ));
-            let local = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
+            let local = bind_to_local(ctx, name, value, prelude);
             self.compound_overrides.insert(hoist.piece.id(), local);
         }
     }
@@ -5580,31 +5566,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
         // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let recv = self.reify_expr(&index_expr.expr, ctx, None);
-            let idx = self.reify_expr(&index_expr.index, ctx, None);
+            let index = self.reify_expr(&index_expr.index, ctx, None);
 
-            let read = self.build_index_trait_read(&recv, &idx, index_expr, span);
+            let read = self.build_index_trait_read(&recv, &index, index_expr, span);
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
-            let write_recv = adjust_receiver_for_self_kind(
+            let receiver = adjust_receiver_for_self_kind(
                 recv,
-                assign_dispatch.self_kind,
+                dispatch.self_kind,
                 false,
                 span,
                 &self.tysys.type_table,
             );
-            let write = build_tir_method_call(
-                write_recv,
-                assign_dispatch.function_ref,
-                vec![],
-                vec![CallArg::new(idx, false), CallArg::new(combined, false)],
-                assign_dispatch.return_type,
-                span,
-            );
-            return self.wrap_prelude(prelude, write, span);
+            let place = WritePlace::IndexAssign {
+                receiver,
+                index,
+                dispatch,
+            };
+            return self.wrap_prelude(prelude, place.write(combined, span), span);
         }
 
         // General l-values (local, global, field-access, tuple index, deref):
@@ -5613,31 +5596,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let place = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(place.type_id));
         let combined = self.build_compound_combined(place.clone(), rhs, op, compound);
-
-        let write = if let TirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &place.kind
-        {
-            TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    module_source: module_source.clone(),
-                    name: name.clone(),
-                    value: Box::new(combined),
-                },
-                TypeTable::UNIT,
-                span,
-            )
-        } else {
-            TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(place),
-                    value: Box::new(combined),
-                },
-                TypeTable::UNIT,
-                span,
-            )
-        };
+        let write = WritePlace::Place(place).write(combined, span);
         self.wrap_prelude(prelude, write, span)
     }
 
@@ -5925,8 +5884,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cmp0 = &chain.comparisons[0];
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
-        let first_ref = Self::bind_chain_operand(first_tir, &mut stmts, chain.span, ctx);
-        let right0_ref = Self::bind_chain_operand(right0_tir, &mut stmts, chain.span, ctx);
+        let first_ref = Self::bind_chain_operand(first_tir, &mut stmts, ctx);
+        let right0_ref = Self::bind_chain_operand(right0_tir, &mut stmts, ctx);
 
         let mut acc_tir = self.reify_binary_op(
             cmp0.id,
@@ -5945,7 +5904,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right_tir = if idx == last_idx {
                 raw_right
             } else {
-                Self::bind_chain_operand(raw_right, &mut stmts, chain.span, ctx)
+                Self::bind_chain_operand(raw_right, &mut stmts, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.reify_binary_op(
@@ -5980,31 +5939,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn bind_chain_operand(
         value: TirExpr,
         stmts: &mut Vec<TirStmt>,
-        span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let type_id = value.type_id;
         let name = minted_name("m", ctx.fresh_serial());
-        let local_index = ctx.add_local(name.clone(), type_id, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index,
-                is_mut: false,
-                type_id,
-                value,
-                storage: LetStorage::Planned,
-            },
-            span,
-        ));
-        TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name,
-            },
-            type_id,
-            span,
-        )
+        bind_to_local(ctx, name, value, stmts)
     }
 
     /// Reify an `expr[idx]` index expression into one of three shapes: a tuple
