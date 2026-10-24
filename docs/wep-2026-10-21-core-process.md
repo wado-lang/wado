@@ -438,7 +438,7 @@ cannot be taken back.
   the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
   `close_range` in `pre_exec`. Done when the escape tests pass in CI on
   Linux.
-- [ ] The macOS backend: the fixed profile, its parameters, and the
+- [x] The macOS backend: the fixed profile, its parameters, and the
   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
   macOS.
 - [x] `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
