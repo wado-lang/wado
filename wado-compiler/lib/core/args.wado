@@ -123,22 +123,25 @@ pub struct ArgvDeserializer {
     cur_is_option: bool,
     /// The current option's inline `=value` (`null` for `--name` with no `=`).
     cur_inline: Option<String>,
-    /// The current option's name, `-`/`_` folded (for matching further
-    /// occurrences of a repeatable option and for error messages).
+    /// The current option's name, `-`/`_` folded, for matching further
+    /// occurrences of a repeatable option.
     cur_name: String,
+    /// The current option's name as written, for error messages.
+    cur_written: String,
     /// Tokens already claimed by a repeatable option's forward scan, so
     /// `next_field` and value reads skip them instead of reprocessing.
     consumed: List<bool>,
     /// A value injected by a repeatable option's `next_element`, served to the
     /// next `deserialize_*` instead of reading from `tokens` (`null` when idle).
     forced: Option<String>,
-    /// The argv-specific kind of the latest failure this deserializer raised,
-    /// which a `DeserializeError` cannot carry. `record` keeps its message the
-    /// returned error's, so `parse` reports it only for that failure, not for a
-    /// later one after an impl recovered.
-    err: Option<ArgsError>,
-    /// What an unknown case means for the latest variant: a bad value when an
-    /// `--option` named it (`null` for a subcommand, whose unknown case is its own kind).
+    /// The latest failure this deserializer raised, with the argv-specific kind
+    /// a `DeserializeError` cannot carry. `parse` reports it only for that
+    /// failure, not for a later one after an impl recovered.
+    err: Option<[ArgsErrorKind, DeserializeError]>,
+    /// What an unknown case means for the variant being read: a bad value when
+    /// an `--option` named it (`null` for a subcommand, whose unknown case is its
+    /// own kind). A case that matched clears it, as the variant then reads its
+    /// payload or ends.
     unknown_case: Option<ArgsError>,
 }
 
@@ -178,15 +181,16 @@ impl ArgvDeserializer {
     /// The failure `message` names, as `kind` for `parse` and as `as_kind` for
     /// the `Deserialize` code it returns through.
     fn record(&mut self, kind: ArgsErrorKind, as_kind: DeserializeErrorKind, message: String) -> DeserializeError {
-        self.err = Option::Some(ArgsError { kind, message });
-        return DeserializeError { kind: as_kind, message, offset: -1 };
+        let raised = DeserializeError { kind: as_kind, message, offset: -1 };
+        self.err = Option::Some([kind, raised]);
+        return raised;
     }
 
     fn missing_value(&mut self) -> DeserializeError {
         return self.record(
             ArgsErrorKind::MissingValue,
             DeserializeErrorKind::Eof,
-            `missing value for option --${self.cur_name}`,
+            `missing value for option --${self.cur_written}`,
         );
     }
 
@@ -346,6 +350,7 @@ impl DeserializeStruct for ArgvStructAccess {
                     self.de.cur_is_option = true;
                     self.de.cur_inline = lo.inline;
                     self.de.cur_name = lo.folded;
+                    self.de.cur_written = lo.raw;
                     return Result::Ok(Option::Some(idx));
                 }
                 return Result::Err(self.de.record(
@@ -430,6 +435,7 @@ impl DeserializeVariant for ArgvVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        self.de.unknown_case = null;
         // The payload parses from the tokens after the tag, continuing from the
         // shared deserializer state.
         return T::deserialize(self.de);
@@ -443,6 +449,7 @@ impl DeserializeVariant for ArgvVariantAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
+        self.de.unknown_case = null;
         return Result::Ok(());
     }
 }
@@ -572,7 +579,7 @@ impl Deserializer for ArgvDeserializer {
             let tag = self.take_value()?;
             self.unknown_case = Option::Some(ArgsError {
                 kind: ArgsErrorKind::InvalidValue,
-                message: `invalid value for option --${self.cur_name}: '${tag}'`,
+                message: `invalid value for option --${self.cur_written}: '${tag}'`,
             });
             return Result::Ok(ArgvVariantAccess { de: self, tag });
         }
@@ -642,6 +649,7 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         cur_is_option: false,
         cur_inline: null,
         cur_name: "",
+        cur_written: "",
         consumed,
         forced: null,
         err: null,
@@ -653,8 +661,8 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         },
         Err(e) => e,
     };
-    let recorded = if let Some(err) = de.err && err.message == e.message {
-        err;
+    let recorded = if let Some([kind, raised]) = de.err && raised.kind == e.kind && raised.message == e.message {
+        ArgsError { kind, message: raised.message };
     } else if e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
         bad;
     } else {

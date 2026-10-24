@@ -410,6 +410,35 @@ test "an enum option naming no case reports InvalidValue" {
     assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
+struct DryRun {
+    dry_run: String = "",
+    dark_shade: Shade = Shade::Light,
+}
+impl Deserialize for DryRun;
+
+test "an error names the option as written" {
+    let e = parse::<DryRun>(["--dry-run"]).unwrap_err();
+    assert e.message == "dry_run: missing value for option --dry-run";
+    let bad = parse::<DryRun>(["--dark-shade", "indigo"]).unwrap_err();
+    assert bad.message == "dark_shade: invalid value for option --dark-shade: 'indigo'";
+}
+
+flags Feature {
+    Fast,
+    Safe,
+}
+
+struct FeatureOpts {
+    shade: Shade = Shade::Light,
+    features: Feature = Feature::none(),
+}
+impl Deserialize for FeatureOpts;
+
+test "an enum option that named its case is not blamed for a later unknown name" {
+    let e = parse::<FeatureOpts>(["--shade", "light", "--features", "bogus"]).unwrap_err();
+    assert e.message == "features: unknown flag: bogus";
+}
+
 test "an enum option without a value reports MissingValue" {
     let r = parse::<EnumOpts>(["--shade", "--tint", "light"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
