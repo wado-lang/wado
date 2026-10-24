@@ -467,7 +467,9 @@ cannot be taken back.
   without bound, and fork without limit. How many children may run at once,
   rlimits and cgroups are all open.
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
-  outside its grants exists, and its metadata, which Seatbelt hides.
+  outside its grants exists, and its metadata. Seatbelt hides it but for the
+  directories above a grant, which resolving a path stats, and the `/var` link,
+  which dyld stats.
 - A guest directory granted under a different host path turns spawning off, even
   where a mount namespace could present the guest's view to the child.
 - Seatbelt cannot stop a descendant from calling `setsid`. On macOS such a

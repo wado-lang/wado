@@ -295,14 +295,6 @@ jobs:
               head -c 8000 "$report"
               echo
             done
-          base='(version 1)(deny default)(allow process-fork sysctl-read)(allow file-read* process-exec (subpath "/bin") (subpath "/usr") (subpath "/System"))'
-          for extra in '' '(allow file-read*)' '(allow file-read-metadata)' '(allow sysctl*)' \
-            '(allow mach-lookup)' '(allow ipc-posix-shm*)' '(allow process-info*)' '(allow iokit-open)' \
-            '(allow file-write-data (literal "/dev/null"))' '(allow default)'; do
-            status=0
-            sandbox-exec -p "$base$extra" /bin/sh -c 'exit 0' || status=$?
-            echo "with [$extra] -> $status"
-          done
 
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
   # tests it. See `wado-run-webgpu/AGENTS.md`.

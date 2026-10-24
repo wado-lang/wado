@@ -6,6 +6,7 @@
 //! The profile's text holds no path. Each path reaches it as a parameter, so no
 //! path can rewrite the policy, however it is spelled.
 
+use std::collections::BTreeSet;
 use std::ffi::{CString, OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs::File;
@@ -49,6 +50,10 @@ const PROFILE_BASE: &str = r#"(version 1)
 (allow process-fork)
 (allow signal (target same-sandbox))
 (allow sysctl-read)
+; dyld lists `/` and stats the `/var` link while it finds its shared cache, and
+; aborts when it cannot.
+(allow file-read-data (literal "/"))
+(allow file-read-metadata (literal "/var"))
 (allow mach-lookup
     (global-name "com.apple.system.opendirectoryd.libinfo")
     (global-name "com.apple.system.notification_center")
@@ -71,6 +76,9 @@ const PROFILE_NETWORK: &str = r#"(allow system-socket)
 fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     let mut text = PROFILE_BASE.to_owned();
     let mut params = Vec::new();
+    // Resolving a path stats each directory above it, so a grant's ancestors
+    // show their metadata and nothing else.
+    let mut ancestors = BTreeSet::new();
     for rule in policy.rules() {
         let real = match &rule.dir {
             Some(dir) => descriptor_path(dir)?,
@@ -85,21 +93,43 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
                 }
             },
         };
-        let name = format!("P{}", params.len());
         let operations = match rule.access {
             Access::ReadExecute => "file-read* process-exec",
             Access::ReadWrite => "file-read* file-write* process-exec",
         };
-        writeln!(text, "(allow {operations} (subpath (param \"{name}\")))")
-            .expect("writing to a String cannot fail");
-        let mut param = OsString::from(format!("{name}="));
-        param.push(real.as_os_str());
-        params.push(param);
+        allow(&mut text, &mut params, operations, "subpath", &real);
+        ancestors.extend(real.ancestors().skip(1).map(Path::to_path_buf));
+    }
+    for ancestor in &ancestors {
+        allow(
+            &mut text,
+            &mut params,
+            "file-read-metadata",
+            "literal",
+            ancestor,
+        );
     }
     if policy.network() == Network::Granted {
         text.push_str(PROFILE_NETWORK);
     }
     Ok((text, params))
+}
+
+/// Appends a rule allowing `operations` on `path`, which reaches the profile as
+/// a parameter of its own.
+fn allow(
+    text: &mut String,
+    params: &mut Vec<OsString>,
+    operations: &str,
+    filter: &str,
+    path: &Path,
+) {
+    let name = format!("P{}", params.len());
+    writeln!(text, "(allow {operations} ({filter} (param \"{name}\")))")
+        .expect("writing to a String cannot fail");
+    let mut param = OsString::from(format!("{name}="));
+    param.push(path.as_os_str());
+    params.push(param);
 }
 
 /// The real path of the file `file` names, as the kernel records it.
