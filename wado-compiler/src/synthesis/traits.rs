@@ -1624,7 +1624,7 @@ fn generate_template_reflect_impls(
         let (struct_type, member_types, members_tuple_type) = {
             let mut tt = module.type_table.borrow_mut();
             let struct_type = tt.make_struct(target.def);
-            let holes_tuple_type = tt.make_tuple(hole_types.clone());
+            let holes_tuple_type = tt.template_holes_tuple(&hole_types);
             let member_types: Vec<TypeId> = hole_types
                 .iter()
                 .map(|&hole| tt.make_generic_instance(hole_struct_def, vec![struct_type, hole]))

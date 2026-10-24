@@ -3331,6 +3331,23 @@ impl TypeTable {
         }
     }
 
+    /// The `Holes` tuple of a template whose holes have types `holes`. A hole
+    /// typed by a pack holds one step of a walk over it, where a pack in a
+    /// tuple would splice the whole of it.
+    pub fn template_holes_tuple(&mut self, holes: &[TypeId]) -> TypeId {
+        let elems: Vec<TypeId> = holes
+            .iter()
+            .map(|&hole| {
+                if self.is_type_pack(hole) {
+                    self.pack_step_type(hole)
+                } else {
+                    hole
+                }
+            })
+            .collect();
+        self.make_tuple(elems)
+    }
+
     pub fn make_pack_element(&mut self, pack: TypeId) -> TypeId {
         assert!(self.is_type_pack(pack), "a pack element names a type pack");
         self.intern(ResolvedType::PackElement { pack })

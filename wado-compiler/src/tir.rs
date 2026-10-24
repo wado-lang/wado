@@ -508,14 +508,17 @@ impl TemplateShape {
 /// open shape's literal is held once substituted; holding twice is a no-op.
 pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
     let field_ty = tt.hole_field_type(hole_ty);
-    if tt.type_key(field_ty) == tt.type_key(hole_ty)
-        || tt.type_key(field.value.type_id) == tt.type_key(field_ty)
-    {
+    // Monomorphization holds a substituted shape before its instances are
+    // drained, while one generic instance may still be spelled both as a
+    // `GenericInstance` and as its struct.
+    let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
+        tt.type_key(a) == tt.type_key(b) || tt.instance_key(a) == tt.instance_key(b)
+    };
+    if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;
     }
-    assert_eq!(
-        tt.type_key(field.value.type_id),
-        tt.type_key(hole_ty),
+    assert!(
+        same(tt, field.value.type_id, hole_ty),
         "a hole's value has the hole's type"
     );
     let taken = match &field.value.kind {

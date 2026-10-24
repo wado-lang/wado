@@ -1493,7 +1493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let holes = self.tysys.reflect_template_holes(subject)?;
                 return match assoc_name {
                     REFLECT_HOLES_ASSOC => {
-                        Some(self.tysys.type_table.borrow_mut().make_tuple(holes))
+                        Some(self.tysys.type_table.borrow_mut().template_holes_tuple(&holes))
                     }
                     REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
                         CompilerItem::ReflectTemplateHole,

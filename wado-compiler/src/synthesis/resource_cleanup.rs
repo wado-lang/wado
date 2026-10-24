@@ -268,11 +268,22 @@ impl<'a> Resources<'a> {
         carried
     }
 
+    /// Whether `type_id` is a template, whose fields alias its holes: a hole
+    /// that is a place keeps owning what the template reads, and reify binds
+    /// any other hole to a local that owns it.
+    fn is_template(&self, type_id: TypeId) -> bool {
+        self.tt.borrow().template_shape_of_type(type_id).is_some()
+    }
+
     /// The [`Layout`] of `type_id`.
     ///
     /// A reference is opaque, since a referenced place owns nothing, and so is
-    /// an unrestricted resource, which is never dropped.
+    /// an unrestricted resource, which is never dropped, and a template, which
+    /// borrows its holes.
     fn layout(&self, type_id: TypeId) -> Layout<'a> {
+        if self.is_template(type_id) {
+            return Layout::Opaque;
+        }
         let (base, resolved) = {
             let tt = self.tt.borrow();
             let base = tt.representation_head(type_id);
@@ -1766,8 +1777,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         }
 
         TirExprKind::StructLiteral { fields, .. } => {
+            let owns_fields = !cx.resources.is_template(type_id);
             for field in fields {
-                elab_expr(&mut field.value, true, cx);
+                elab_expr(&mut field.value, owns_fields, cx);
             }
         }
         TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
