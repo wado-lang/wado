@@ -1459,19 +1459,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answers `T::Output` where a bare `T: Mul` leaves it abstract. Reached
     /// at `trait_args`, only the bound written at them answers:
     /// `H: Holder<i32, Out = A> + Holder<String, Out = B>` is two answers.
+    /// `base` is the type the bound is read at: the binder, or an element of
+    /// the pack it binds, whose `Self` is the element.
     pub(super) fn frame_projection_of_trait(
         &mut self,
+        base: TypeId,
         base_name: &str,
         trait_: DefId,
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let base = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)?
-            .type_id;
         for (bound, space) in self.bound_closure_of(base_name)? {
             let Some(decl) = self.trait_decl_of(&bound) else {
                 continue;
@@ -1511,7 +1508,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
             return ty;
         }
-        let asked: Vec<(u32, String, ProjectionAnswer)> = {
+        let asked: Vec<(u32, TypeId, String, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
             let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
@@ -1539,13 +1536,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         assoc_name: assoc_name.clone(),
                         answer: TypeTable::UNKNOWN,
                     };
-                    (binders.get(name)?.type_id == *param_id).then(|| (*index, name.clone(), asked))
+                    (binders.get(name)?.type_id == *param_id)
+                        .then(|| (*index, *param_id, name.clone(), asked))
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
-        for (slot, base_name, mut asked) in asked {
+        for (slot, base, base_name, mut asked) in asked {
             if let Some(answer) = self.frame_projection_of_trait(
+                base,
                 &base_name,
                 asked.owning_trait,
                 asked.trait_args.as_deref(),

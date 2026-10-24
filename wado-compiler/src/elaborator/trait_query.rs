@@ -1952,7 +1952,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // answers: another bound on the trait is another instantiation.
             let known = match (at_bound, trait_args.as_deref()) {
                 (true, Some(args)) => self
-                    .frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
+                    .frame_projection_of_trait(
+                        self_type_id,
+                        &self_name,
+                        *declaring,
+                        Some(args),
+                        &decl.name,
+                    )
                     .or_else(|| self.carried_binding(self_type_id, &decl.name)),
                 _ => self.frame_projection(self_type_id, &self_name, &decl.name),
             };

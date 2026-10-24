@@ -458,7 +458,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // say it, as `T: Shl<u32>` does. The dispatch reports two bounds that
         // disagree, so the hint selects nothing.
         let param_name = match self.tysys.type_table.borrow().get(self_type_id) {
-            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
+            ResolvedType::TypeParam { .. } | ResolvedType::PackElement { .. } => {
+                self.tysys.binder_name(self_type_id)
+            }
             _ => None,
         };
         if let Some(param_name) = param_name {

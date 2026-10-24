@@ -4976,8 +4976,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             *answer = TypeTable::ERROR;
             let tt = self.tysys.type_table.borrow();
-            let name = util::bound_param_name(&tt, decl_param)
-                .expect("a struct slot is a type parameter");
+            let name =
+                util::bound_param_name(&tt, decl_param).expect("a struct slot is a type parameter");
             names.push(name.clone());
         }
         if names.is_empty() {
@@ -5612,19 +5612,28 @@ impl TypeSystem {
         Some(Pat::Int { lo, hi, domain })
     }
 
-    /// The pack a comprehension's iterable walks, as [`pack_of`] reads it.
+    /// The pack a comprehension's iterable walks: its `(name, index)` and the
+    /// type one step binds.
     pub(super) fn comprehension_pack(
         &self,
         iterable_type: TypeId,
     ) -> Option<(String, u32, TypeId)> {
-        let type_table = self.type_table.borrow();
-        let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
-        pack_of(&type_table, &elems)
+        let (elems, _) = self
+            .type_table
+            .borrow()
+            .as_tuple_through_ref(iterable_type)?;
+        let pack = self.type_table.borrow().pack_in(&elems)?;
+        let mut table = self.type_table.borrow_mut();
+        let ResolvedType::TypePack { name, index, .. } = table.get(pack).clone() else {
+            unreachable!("`pack_in` answers a pack");
+        };
+        Some((name, index, table.pack_step_type(pack)))
     }
 
     /// The type one expansion of the pack in `elements` binds.
     pub(super) fn pack_element_type(&self, elements: &[TypeId]) -> Option<TypeId> {
-        pack_of(&self.type_table.borrow(), elements).map(|(_, _, elem)| elem)
+        let pack = self.type_table.borrow().pack_in(elements)?;
+        Some(self.type_table.borrow_mut().pack_step_type(pack))
     }
 
     /// Element type at a literal index into a tuple, which may carry a
@@ -5658,19 +5667,6 @@ impl TypeSystem {
         self.comprehension_pack(iterable_type)
             .map(|(_, _, elem)| elem)
     }
-}
-
-/// The pack in `elements`: its `(name, index)` and the type one expansion binds,
-/// a mapped pack's (`[..Option<F>]`) mapped element as the variadic for-of binds it.
-fn pack_of(table: &TypeTable, elements: &[TypeId]) -> Option<(String, u32, TypeId)> {
-    elements.iter().find_map(|&e| match table.get(e) {
-        ResolvedType::TypePack {
-            name,
-            index,
-            mapped_elem,
-        } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
-        _ => None,
-    })
 }
 
 /// The values an integer literal may take at `prim`. `char` is included:

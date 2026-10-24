@@ -3302,14 +3302,8 @@ impl TypeTable {
     /// packs sit a level down. `None` where `iterable` is no tuple.
     pub fn pack_walk_binding(&mut self, iterable: TypeId) -> Option<(TypeId, bool)> {
         let (elems, by_ref) = self.as_tuple_through_ref(iterable)?;
-        let element = match elems.iter().find(|&&e| self.is_type_pack(e)) {
-            Some(&pack) => match self.get(pack) {
-                ResolvedType::TypePack {
-                    mapped_elem: Some(elem),
-                    ..
-                } => *elem,
-                _ => self.make_pack_element(pack),
-            },
+        let element = match self.pack_in(&elems) {
+            Some(pack) => self.pack_step_type(pack),
             None => elems[0],
         };
         let bound = if by_ref {
@@ -3318,6 +3312,23 @@ impl TypeTable {
             element
         };
         Some((bound, by_ref))
+    }
+
+    /// The pack among a tuple's `elems`.
+    pub fn pack_in(&self, elems: &[TypeId]) -> Option<TypeId> {
+        elems.iter().copied().find(|&e| self.is_type_pack(e))
+    }
+
+    /// The type one step of a walk over `pack` binds: a mapped pack's
+    /// (`[..Option<F>]`) mapped element, or an element of an identity pack.
+    pub fn pack_step_type(&mut self, pack: TypeId) -> TypeId {
+        match self.get(pack) {
+            ResolvedType::TypePack {
+                mapped_elem: Some(elem),
+                ..
+            } => *elem,
+            _ => self.make_pack_element(pack),
+        }
     }
 
     pub fn make_pack_element(&mut self, pack: TypeId) -> TypeId {
