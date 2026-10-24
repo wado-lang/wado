@@ -461,10 +461,6 @@ pub enum CompilerItem {
     /// into the element's storage where a reference to it may be read after
     /// (WEP 2026-10-13).
     ListIndexAssign,
-    /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
-    /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
-    /// call it.
-    ListFromTuple,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
     /// `Reflect::type_name` — the declaration's name, for every kind.
@@ -890,7 +886,6 @@ impl CompilerItem {
         Self::ListLen,
         Self::ListIndexValue,
         Self::ListIndexAssign,
-        Self::ListFromTuple,
         Self::ListFromLeBytes,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
@@ -1144,7 +1139,6 @@ impl CompilerItem {
             Self::ListLen => "list_len",
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
-            Self::ListFromTuple => "list_from_tuple",
             Self::ListFromLeBytes => "list_from_le_bytes",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
@@ -1392,7 +1386,6 @@ impl CompilerItem {
             | Self::ListLen
             | Self::ListIndexValue
             | Self::ListIndexAssign
-            | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
@@ -1705,7 +1698,6 @@ impl CompilerItem {
             | Self::ListLen
             | Self::ListIndexValue
             | Self::ListIndexAssign
-            | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
