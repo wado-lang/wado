@@ -7,7 +7,7 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncCell, FuncId, FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
@@ -293,8 +293,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
         let Some(id) = func.id else {
             continue;
         };
-        let descriptor = FunctionRef::from_resolved(&func, func.module_source.clone());
-        let builtin = match descriptor.intrinsic() {
+        let builtin = match func.intrinsic() {
             Some("array_get_value" | "array_get_value_u8") => CtfeBuiltin::ArrayGet,
             Some("array_len") => CtfeBuiltin::ArrayLen,
             Some("array_new") => CtfeBuiltin::ArrayNew,
@@ -375,16 +374,23 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 /// The globals stored in one place and read only under it. One derivation for
 /// the fold and the remark alike, which must agree on what a store means.
 #[must_use]
-pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
+pub fn materializing_globals(project: &NirPackage, exec: &Executor) -> MaterializingGlobals {
     enum Step {
         Enter(NodeRef),
         /// Leave the blocks claimed since the enclosing set was this deep.
         Leave(usize),
     }
 
-    let mut claimed = MaterializingGlobals::default();
-    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
-    let mut visit = |body: &Body| {
+    /// One body's claims, in the order its walk made them, and the globals it
+    /// mentions outside a claim.
+    #[derive(Default)]
+    struct Found {
+        claimed: Vec<GlobalKey>,
+        loose: Vec<GlobalKey>,
+    }
+
+    let visit = |body: &Body| {
+        let mut found = Found::default();
         let mut enclosing: Vec<GlobalKey> = Vec::new();
         let mut stack = vec![Step::Enter(NodeRef::Block(body.root()))];
         while let Some(step) = stack.pop() {
@@ -405,9 +411,9 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
                         // with its own block while the outer block's readers
                         // stay, and read the first store's value.
                         if enclosing.contains(&key) {
-                            loose.insert(key.clone());
+                            found.loose.push(key.clone());
                         }
-                        claimed.insert(key.clone());
+                        found.claimed.push(key.clone());
                         enclosing.push(key);
                     }
                 }
@@ -418,20 +424,24 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
                 && let Some(key) = region::global_mention(body, e)
                 && !enclosing.contains(&key)
             {
-                loose.insert(key);
+                found.loose.push(key);
             }
             body.for_each_child(node, |c| stack.push(Step::Enter(c)));
         }
+        found
     };
-    for func_rc in &project.functions {
-        if let Some(body) = func_rc.borrow().body.as_ref() {
-            visit(body);
-        }
-    }
-    for global in &project.globals {
-        if let Some(declared) = global.init.declared() {
-            visit(declared.body());
-        }
+    let per_function = exec.map(&project.functions, |func_rc| {
+        func_rc.borrow().body.as_ref().map(visit).unwrap_or_default()
+    });
+    let per_global = project
+        .globals
+        .iter()
+        .filter_map(|global| Some(visit(global.init.declared()?.body())));
+    let mut claimed = MaterializingGlobals::default();
+    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
+    for found in per_function.into_iter().chain(per_global) {
+        claimed.extend(found.claimed);
+        loose.extend(found.loose);
     }
     claimed.retain(|key| !loose.contains(key));
     claimed

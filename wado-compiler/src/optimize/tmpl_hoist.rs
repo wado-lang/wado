@@ -13,7 +13,7 @@ use std::cell::Cell;
 
 use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId,
     StmtKind,
@@ -64,8 +64,7 @@ impl<'t> TmplIdents<'t> {
             if f.compiler_item == Some(CompilerItem::StringWithCapacity) {
                 with_capacity.insert(id);
             }
-            let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
-            match descriptor.intrinsic() {
+            match f.intrinsic() {
                 Some("array_new") => {
                     array_new.insert(id);
                 }

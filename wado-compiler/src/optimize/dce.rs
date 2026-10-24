@@ -430,12 +430,7 @@ fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &
         .iter()
         .enumerate()
         .filter(|(pos, _)| reachable.contains(&Target::Stored(*pos)))
-        .map(|(_, func)| func.borrow())
-        .filter_map(|func| {
-            FunctionRef::from_resolved(&func, func.module_source.clone())
-                .intrinsic()
-                .map(str::to_string)
-        })
+        .filter_map(|(_, func)| func.borrow().intrinsic().map(str::to_string))
         .collect();
     let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 

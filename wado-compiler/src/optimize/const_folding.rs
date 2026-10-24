@@ -395,7 +395,7 @@ fn build_global_view(
     exec: &Executor,
 ) -> GlobalView {
     let mut view = GlobalView {
-        materializing: materializing_globals(project),
+        materializing: materializing_globals(project, exec),
         values: maps.declared_globals.clone(),
         fields: GlobalFieldEnv::default(),
     };

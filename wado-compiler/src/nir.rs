@@ -832,6 +832,10 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup::from(self).intrinsic()
+    }
+
     /// Different after any edit to the body or the locals.
     pub fn version(&self) -> (Option<[(u64, u64); 10]>, (u64, u64)) {
         (self.body.as_ref().map(Body::version), self.locals.version())
