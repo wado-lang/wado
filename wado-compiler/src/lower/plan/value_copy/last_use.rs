@@ -110,6 +110,11 @@ pub fn analyze_ownership(
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
         exits: Vec::new(),
+        field_slots: FieldSlots {
+            first: u32::try_from(all_locals.len()).unwrap(),
+            ids: IndexMap::default(),
+            imprecise: false,
+        },
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
@@ -159,10 +164,22 @@ pub fn analyze_ownership(
         .place_cands
         .iter()
         .filter(|site| {
+            // The base still reads its other fields, which the field slots
+            // settle, so it is no second reader of the one moved.
+            let base_rereads = site.fields_only.then_some(site.base);
+            let slots_settle = !site.fields_only || !a.field_slots.imprecise;
             fresh.contains(&site.base)
+                && slots_settle
                 && !a.aliases_live.contains(&site.base)
                 && !a.place_escaped(site.base, site.top)
-                && !storage_shared(&paths, &released, site.base, site.top, None, &site.live)
+                && !storage_shared(
+                    &paths,
+                    &released,
+                    site.base,
+                    site.top,
+                    base_rereads,
+                    &site.live,
+                )
         })
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
@@ -240,6 +257,8 @@ struct PlaceMove<'a> {
     top: Option<u32>,
     node: &'a TirExpr,
     live: IndexSet<u32>,
+    /// Whether `base` is read again after the site, through other fields only.
+    fields_only: bool,
 }
 
 /// An assignment to a place of an in-place type, and the locals live after it:
@@ -278,8 +297,9 @@ struct ShareInputs<'a> {
 
 /// Whether the storage at `root`, narrowed to the field `top` names, is
 /// reachable through one of `readers` too: two chains that meet share storage,
-/// whichever end is walked. `taker` is the binding being handed that storage,
-/// which is not a second reader of it.
+/// whichever end is walked. `taker` is a reader that is not a second reader of
+/// it: the binding being handed that storage, or `root` itself where it reads
+/// only its other fields again.
 ///
 /// Both ends ask what each name holds now, so a `released` edge is walked
 /// through without counting its source: that name is rebound before it is
@@ -1207,6 +1227,89 @@ struct Exit {
     continue_live: Option<IndexSet<u32>>,
 }
 
+/// The fields of each local a later read may take, as ids past every local in a
+/// live set. A local in the set says its storage is read again; these say which
+/// of its fields that read reaches, so a field read out of a live local still
+/// moves where the field is overwritten before any read takes it.
+struct FieldSlots {
+    first: u32,
+    ids: IndexMap<(u32, FieldReach), u32>,
+    /// Whether a `break` or `continue` with no target on the exit stack resumed
+    /// with every local live, which names no slot.
+    imprecise: bool,
+}
+
+/// What one read of a local takes of its fields.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum FieldReach {
+    Field(u32),
+    /// Every field but those overwritten between the read and the point the
+    /// live set describes, in ascending order.
+    AllBut(Vec<u32>),
+}
+
+impl FieldSlots {
+    fn id(&mut self, root: u32, reach: FieldReach) -> u32 {
+        let next = self.first + u32::try_from(self.ids.len()).unwrap();
+        *self.ids.entry((root, reach)).or_insert(next)
+    }
+
+    fn whole(&mut self, root: u32) -> u32 {
+        self.id(root, FieldReach::AllBut(Vec::new()))
+    }
+
+    fn field(&mut self, root: u32, field: u32) -> u32 {
+        self.id(root, FieldReach::Field(field))
+    }
+
+    /// Whether a read `live` holds may take field `top` of `root`.
+    fn read_later(&self, root: u32, top: u32, live: &IndexSet<u32>) -> bool {
+        self.ids.iter().any(|((r, reach), id)| {
+            *r == root
+                && live.contains(id)
+                && match reach {
+                    FieldReach::Field(f) => *f == top,
+                    FieldReach::AllBut(skipped) => !skipped.contains(&top),
+                }
+        })
+    }
+
+    /// `root.field = v`: no read after it takes the field it replaces.
+    fn overwrite(&mut self, root: u32, field: u32, live: &mut IndexSet<u32>) {
+        let own = self.field(root, field);
+        live.swap_remove(&own);
+        let widened: Vec<(u32, Vec<u32>)> = self
+            .ids
+            .iter()
+            .filter_map(|((r, reach), id)| match reach {
+                FieldReach::AllBut(skipped)
+                    if *r == root && live.contains(id) && !skipped.contains(&field) =>
+                {
+                    let mut skipped = skipped.clone();
+                    skipped.push(field);
+                    skipped.sort_unstable();
+                    Some((*id, skipped))
+                }
+                _ => None,
+            })
+            .collect();
+        for (id, skipped) in widened {
+            live.swap_remove(&id);
+            let narrower = self.id(root, FieldReach::AllBut(skipped));
+            live.insert(narrower);
+        }
+    }
+
+    /// `root` rebound whole: no read after it takes a field it held before.
+    fn kill(&self, root: u32, live: &mut IndexSet<u32>) {
+        for ((r, _), id) in &self.ids {
+            if *r == root {
+                live.swap_remove(id);
+            }
+        }
+    }
+}
+
 struct Analyzer<'a> {
     /// Which parameter positions each named callee may persist a reference to
     /// (position 0 is the receiver), and where it puts the ones it bounds, so
@@ -1272,6 +1375,7 @@ struct Analyzer<'a> {
     frame: u32,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
+    field_slots: FieldSlots,
     /// Place-level move sites found at literals, filtered after the walk.
     place_cands: Vec<PlaceMove<'a>>,
     /// Locals bound by a `LetStorage::Taken` `let` — storage handed over by the
@@ -1371,10 +1475,12 @@ impl<'a> Analyzer<'a> {
             }
         }
         self.read_base(index, live, record);
+        live.insert(self.field_slots.whole(index));
     }
 
     /// A read that hands on a projection rather than the local. The storage is
     /// read, so an earlier value-read is not final, but nothing takes the local.
+    /// The caller names which of its fields the read takes.
     fn read_base(&mut self, index: u32, live: &mut IndexSet<u32>, record: bool) {
         if record && live.contains(&index) {
             self.non_final.insert(index);
@@ -1386,7 +1492,14 @@ impl<'a> Analyzer<'a> {
     /// default walk already made; share-side it consumes nothing.
     fn walk_place_base(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => self.read_base(*index, live, record),
+            TirExprKind::Local { index, .. } => {
+                self.read_base(*index, live, record);
+                live.insert(self.field_slots.whole(*index));
+            }
+            TirExprKind::FieldAccess { .. } if let Some((root, Some(top))) = as_materialize(expr) => {
+                self.read_base(root, live, record);
+                live.insert(self.field_slots.field(root, top));
+            }
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
@@ -1443,7 +1556,13 @@ impl<'a> Analyzer<'a> {
         match &place.kind {
             TirExprKind::Local { index, .. } => {
                 live.insert(*index);
+                live.insert(self.field_slots.whole(*index));
                 Some(*index)
+            }
+            TirExprKind::FieldAccess { .. } if let Some((root, Some(top))) = as_materialize(place) => {
+                live.insert(root);
+                live.insert(self.field_slots.field(root, top));
+                Some(root)
             }
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
@@ -1460,6 +1579,7 @@ impl<'a> Analyzer<'a> {
             {
                 self.walk_expr(place, live, record);
                 live.insert(projected.root);
+                live.insert(self.field_slots.whole(projected.root));
                 Some(projected.root)
             }
             // A reference to a non-place (a fresh temporary) escapes nothing.
@@ -2268,12 +2388,19 @@ impl<'a> Analyzer<'a> {
         let mut binds: IndexSet<u32> = IndexSet::default();
         analyze::collect_pattern_bindings(pat, &mut binds);
         for b in binds {
-            live.swap_remove(&b);
+            self.kill_local(b, live);
         }
     }
 
+    /// `local` bound or rebound whole: nothing after reads what it held before.
+    fn kill_local(&self, local: u32, live: &mut IndexSet<u32>) {
+        live.swap_remove(&local);
+        self.field_slots.kill(local, live);
+    }
+
     /// Record place-level move candidates at a literal or `let`: a child
-    /// materializing an aggregate root left dead and undisturbed after it.
+    /// materializing an aggregate root, or fields of it, that no read after it
+    /// takes and nothing disturbs.
     fn collect_place_moves(&mut self, children: &[&'a TirExpr], live_out: &IndexSet<u32>) {
         let mut mats: IndexMap<u32, Vec<(Option<u32>, &'a TirExpr)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();
@@ -2288,7 +2415,17 @@ impl<'a> Analyzer<'a> {
             }
         }
         for (base, sites) in &mats {
-            if live_out.contains(base) || conflict.contains(base) {
+            if conflict.contains(base) {
+                continue;
+            }
+            // The aggregate is read again, but none of those reads takes a field
+            // read here: each is overwritten first.
+            let fields_only = live_out.contains(base);
+            if fields_only
+                && sites.iter().any(|(top, _)| {
+                    top.is_none_or(|top| self.field_slots.read_later(*base, top, live_out))
+                })
+            {
                 continue;
             }
             let has_whole = sites.iter().any(|(top, _)| top.is_none());
@@ -2306,6 +2443,7 @@ impl<'a> Analyzer<'a> {
                     top,
                     node,
                     live: live_out.clone(),
+                    fields_only,
                 });
             }
         }
@@ -2460,7 +2598,7 @@ impl<'a> Analyzer<'a> {
 
     /// Live set at the resume point of a break/continue to `label`. Unknown
     /// target → every local (the sound over-approximation).
-    fn exit_live(&self, label: &Option<String>) -> IndexSet<u32> {
+    fn exit_live(&mut self, label: &Option<String>) -> IndexSet<u32> {
         let found = match label {
             Some(l) => self
                 .exits
@@ -2469,17 +2607,24 @@ impl<'a> Analyzer<'a> {
                 .find(|e| e.label.as_ref() == Some(l)),
             None => self.exits.iter().rev().find(|e| e.label.is_none()),
         };
-        found.map_or_else(|| self.all_locals.clone(), |e| e.live.clone())
+        match found {
+            Some(e) => e.live.clone(),
+            None => self.every_local_live(),
+        }
     }
 
     /// Live set where a `continue` resumes: the loop head's, what runs next
     /// being the next iteration rather than whatever follows the loop.
-    fn continue_live(&self) -> IndexSet<u32> {
-        self.exits
-            .iter()
-            .rev()
-            .find_map(|e| e.continue_live.clone())
-            .unwrap_or_else(|| self.all_locals.clone())
+    fn continue_live(&mut self) -> IndexSet<u32> {
+        match self.exits.iter().rev().find_map(|e| e.continue_live.clone()) {
+            Some(live) => live,
+            None => self.every_local_live(),
+        }
+    }
+
+    fn every_local_live(&mut self) -> IndexSet<u32> {
+        self.field_slots.imprecise = true;
+        self.all_locals.clone()
     }
 
     /// A run of `let`s each taking a distinct field of one aggregate, as a
@@ -2503,7 +2648,7 @@ impl<'a> Analyzer<'a> {
                     else {
                         unreachable!("a field run holds only `let`s");
                     };
-                    live_out.swap_remove(local_index);
+                    self.kill_local(*local_index, &mut live_out);
                     values.push(value);
                 }
                 self.collect_place_moves(&values, &live_out);
@@ -2545,7 +2690,7 @@ impl<'a> Analyzer<'a> {
                         self.share_sources.insert(*local_index, path);
                     }
                 }
-                live.swap_remove(local_index);
+                self.kill_local(*local_index, live);
                 if record && place_moves {
                     self.collect_place_moves(&[value], live);
                 }
@@ -2787,7 +2932,7 @@ impl<'a> Analyzer<'a> {
                         self.mark_local_mutated(*index, true, live);
                         self.note_assign_site(expr, target, start, live);
                     }
-                    live.swap_remove(index);
+                    self.kill_local(*index, live);
                     self.walk_stored_value(*index, value, live, record);
                 } else {
                     if record {
@@ -2795,8 +2940,19 @@ impl<'a> Analyzer<'a> {
                         self.record_assign(target, live);
                         self.note_assign_site(expr, target, start, live);
                     }
+                    let overwritten = overwritten_field(target);
+                    if let Some((root, field)) = overwritten {
+                        self.field_slots.overwrite(root, field, live);
+                    }
                     self.walk_persisting(value, live, record);
+                    // The place is written, not read: only its root is.
+                    let unread = overwritten
+                        .map(|(root, field)| self.field_slots.field(root, field))
+                        .filter(|slot| !live.contains(slot));
                     self.walk_expr(target, live, record);
+                    if let Some(slot) = unread {
+                        live.swap_remove(&slot);
+                    }
                 }
             }
             TirExprKind::Match { expr: scrut, arms } => {
@@ -2949,6 +3105,7 @@ impl<'a> Analyzer<'a> {
                 let sources: Vec<u32> = capture_source_locals(captures).collect();
                 for index in sources {
                     live.insert(index);
+                    live.insert(self.field_slots.whole(index));
                     if record {
                         self.mark_escaped(index, None);
                         self.mark_local_mutated(index, false, live);
@@ -2973,8 +3130,8 @@ impl<'a> Analyzer<'a> {
             }
             // A projection hands on a piece of its root, so the root is read but
             // not taken. A deref is the same step, naming the referent.
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
+            TirExprKind::FieldAccess { .. } => self.walk_place_base(expr, live, record),
+            TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
@@ -3155,6 +3312,23 @@ fn clean_root(expr: &TirExpr) -> Option<u32> {
         TirExprKind::FieldAccess { expr: inner, .. } => clean_root(inner),
         _ => None,
     }
+}
+
+/// `(root, field)` where an assignment's place is a field of a local itself,
+/// which the assignment replaces whole.
+fn overwritten_field(place: &TirExpr) -> Option<(u32, u32)> {
+    let TirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &place.kind
+    else {
+        return None;
+    };
+    let TirExprKind::Local { index, .. } = inner.kind else {
+        return None;
+    };
+    Some((index, *field_index))
 }
 
 /// The start of the run of at least two `let`s ending before `end` that each
