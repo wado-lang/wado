@@ -1,0 +1,76 @@
+use { println, eprintln, args, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { assemble_grammar } from "../src/g4/parser.wado";
+use { generate, GenerateOptions } from "../src/codegen.wado";
+use { diagnostic_level } from "../src/gir.wado";
+
+global GRAMMARS: String = "package-gale/tests/grammars";
+
+fn job(base: String, names: &List<String>) -> Option<[String, List<String>]> {
+    let path = fs::join(GRAMMARS, `${base}.g4`);
+    if let Some(stem) = base.strip_suffix("Parser") {
+        let lexer = `${stem}Lexer.g4`;
+        if names.contains_str(&lexer) {
+            return Some([stem.to_string(), [fs::join(GRAMMARS, lexer), path]]);
+        }
+    } else if let Some(stem) = base.strip_suffix("Lexer") {
+        if names.contains_str(`${stem}Parser.g4`) {
+            return null;
+        }
+    }
+    return Some([base, [path]]);
+}
+
+/// What `gale gen` prints for `paths`: the parser on stdout, the diagnostics
+/// and any refusal on stderr.
+fn gen(paths: &List<String>) -> [String, String] with Preopens {
+    let mut inputs: List<[String, String]> = [];
+    for let p of paths {
+        inputs.push([*p, fs::read_to_string(p).unwrap()]);
+    }
+    let mut grammar = match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(Parse(pe)) => return ["", `gale: ${pe.0}: parse error: ${pe.1}\n`],
+        Err(Check(msg)) => return ["", `gale: ${msg}\n`],
+    };
+    let generated = generate(&mut grammar, &GenerateOptions {});
+    let mut err = "";
+    let mut refused = false;
+    for let d of &generated.diagnostics {
+        if let Some(level) = diagnostic_level(&d.kind) {
+            err.push_str(`${level:?} ${d.owner.label()}: ${d.message}\n`);
+            refused = refused || level matches { Error };
+        }
+    }
+    if refused {
+        return ["", err];
+    }
+    return [generated.source, err];
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
+    let argv = args();
+    if argv.len() != 1 {
+        eprintln("usage: golden_gen.wado <output-dir>");
+        exit(2);
+    }
+    let out = argv[0];
+    fs::create_dir_all(&out).unwrap();
+    let mut names: List<String> = [];
+    for let entry of fs::read_dir(GRAMMARS).unwrap() {
+        if fs::extension(&entry.name) matches { Some("g4") } {
+            names.push(entry.name);
+        }
+    }
+    names.sort();
+    for let file of &names {
+        let Some([name, grammars]) = job(fs::file_stem(file).unwrap().to_string(), &names) else {
+            continue;
+        };
+        let [source, err] = gen(&grammars);
+        fs::write(fs::join(&out, `${name}.out`), &source).unwrap();
+        fs::write(fs::join(&out, `${name}.err`), &err).unwrap();
+        println(`gen ${name}`);
+    }
+}
