@@ -46,17 +46,8 @@ enum Target {
     Extern(FunctionId),
 }
 
-<<<<<<< HEAD
 /// Every target a walk of the call graph reached, in the order it reached them.
 type Reached = IndexSet<Target>;
-||||||| 902f57dd1
-/// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
-type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
-=======
-/// Effect usage: function ID -> the CM functions it imports, by
-/// `CmFunctionInfo::cm_identifier`
-type EffectUsageMap = IndexMap<FunctionId, IndexSet<String>>;
->>>>>>> origin/main
 
 /// A pending `$Closure_N` `inspect` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
@@ -419,30 +410,9 @@ fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -
 /// from the set of reachable functions and their effect usage.
 fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &Reached) {
     // Collect used WASI functions from reachable functions
-<<<<<<< HEAD
-    let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for pos in stored_positions(reachable) {
-        for (interface_name, op_name) in &graph.analyses[pos].effect_calls {
-            used_wasi_functions.insert(operation_key(interface_name, op_name));
-        }
-    }
-||||||| 902f57dd1
-    let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for func_id in reachable {
-        if let Some(effects) = effect_usage.get(func_id) {
-            for (interface_name, op_name) in effects {
-                used_wasi_functions.insert(operation_key(interface_name, op_name));
-            }
-        }
-    }
-=======
-    let mut used_wasi_functions: IndexSet<String> = reachable
-        .iter()
-        .filter_map(|func_id| effect_usage.get(func_id))
-        .flatten()
-        .cloned()
+    let mut used_wasi_functions: IndexSet<String> = stored_positions(reachable)
+        .flat_map(|pos| graph.analyses[pos].effect_calls.iter().cloned())
         .collect();
->>>>>>> origin/main
 
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.
