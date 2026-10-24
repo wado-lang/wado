@@ -3244,12 +3244,6 @@ impl CmInterfaceRegistry {
             .or_else(|| self.get_enum_cm_name_by_source(interface_path, ERROR_CODE_WADO_NAME))
     }
 
-    /// Whether `interface_path` declares its own `ErrorCode`. Codegen picks the
-    /// interface-local error type over an alias to the shared CLI one on this.
-    pub fn declares_own_error_code(&self, interface_path: &str) -> bool {
-        self.own_error_code_cm_name(interface_path).is_some()
-    }
-
     /// Keying on the declaration's own module source keeps a user type from
     /// being confused with a same-named WASI or dependency declaration.
     ///
@@ -5189,7 +5183,6 @@ mod tests {
             registry.own_error_code_cm_name("wasi:demo/plain@0.1.0"),
             None
         );
-        assert!(!registry.declares_own_error_code("wasi:demo/plain@0.1.0"));
     }
 
     /// The bare-name fallback searches the bundled namespaces alone: a type an

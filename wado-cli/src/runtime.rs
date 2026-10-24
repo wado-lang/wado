@@ -25,6 +25,10 @@ use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
+use crate::process_host::{
+    GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
+    add_to_linker as add_process_to_linker,
+};
 use wado_host::engine::default_config;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
@@ -96,6 +100,7 @@ pub struct WasiState {
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
     tls: WasiTlsCtx,
+    process: ProcessCtx,
     /// `wado test` only: the store's handle on `core:eval`.
     eval: Option<EvalSession>,
     /// `wado test` only: the coverage regions this store reported.
@@ -137,8 +142,12 @@ impl WasiState {
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
-    pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
-        let preopens = Preopens::open(preopened_dirs)?;
+    pub fn new(
+        preopened_dirs: &[(String, String)],
+        args: &[String],
+        process: ProcessGrant,
+    ) -> Result<Self> {
+        let preopens = Preopens::open(preopened_dirs, process)?;
         Ok(Self::build(&preopens, args, true, Stdio::Inherit, None))
     }
 
@@ -163,11 +172,12 @@ impl WasiState {
         preopened_dirs: &[(String, String)],
         args: &[String],
         eval: EvalSession,
+        process: ProcessGrant,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let state = Self::build(
-            &Preopens::open(preopened_dirs)?,
+            &Preopens::open(preopened_dirs, process)?,
             args,
             true,
             Stdio::Captured {
@@ -202,28 +212,31 @@ impl WasiState {
         eval: Option<EvalSession>,
     ) -> Self {
         let mut builder = WasiCtx::builder();
-        match stdio {
+        let guest_stdio = match stdio {
             Stdio::Inherit => {
                 builder.inherit_stdio();
+                GuestStdio::Host
             }
             Stdio::Captured { stdout, stderr } => {
-                builder.stdout(stdout);
-                builder.stderr(stderr);
+                builder.stdout(stdout.clone());
+                builder.stderr(stderr.clone());
+                GuestStdio::Captured { stdout, stderr }
             }
-        }
+        };
         if inherit_env {
             builder.inherit_env();
         }
         builder.args(args);
         grant_host_network(&mut builder);
         let mut ctx = builder.build();
-        *ctx.filesystem() = preopens.0.clone();
+        *ctx.filesystem() = preopens.filesystem.clone();
         Self {
             ctx,
             table: ResourceTable::new(),
             http: WasiHttpCtx::new(),
             http_hooks: WadoHttpHooks::new(),
             tls: build_wasi_tls_ctx(),
+            process: ProcessCtx::new(preopens.spawning.clone(), guest_stdio),
             eval,
             coverage: CoverageHits::default(),
             fuel_start: None,
@@ -233,6 +246,14 @@ impl WasiState {
     /// The coverage regions this store reported.
     pub fn coverage_hits(&mut self) -> &mut CoverageHits {
         &mut self.coverage
+    }
+
+    /// The store's handle on `core:process`.
+    pub fn process_view(&mut self) -> ProcessView<'_> {
+        ProcessView {
+            ctx: &mut self.process,
+            table: &mut self.table,
+        }
     }
 
     /// The test's handle on `core:eval`.
@@ -254,7 +275,11 @@ impl WasiState {
 /// The underlying `cap_std::fs::Dir` handles are reference-counted inside
 /// wasmtime's `Dir` (`Arc<cap_std::fs::Dir>`), so cloning a `Preopens`
 /// only bumps refcounts.
-pub struct Preopens(WasiFilesystemCtx);
+pub struct Preopens {
+    filesystem: WasiFilesystemCtx,
+    /// Whether a guest granted these directories may spawn.
+    spawning: Spawning,
+}
 
 impl Preopens {
     /// Open the given `(host_path, guest_path)` pairs once.
@@ -262,13 +287,16 @@ impl Preopens {
     /// # Errors
     ///
     /// Returns an error if any host path cannot be opened.
-    pub fn open(preopened_dirs: &[(String, String)]) -> Result<Self> {
+    pub fn open(preopened_dirs: &[(String, String)], process: ProcessGrant) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         let mut ctx = builder.build();
-        Ok(Self(ctx.filesystem().clone()))
+        Ok(Self {
+            filesystem: ctx.filesystem().clone(),
+            spawning: Spawning::new(preopened_dirs, process)?,
+        })
     }
 }
 
@@ -536,8 +564,12 @@ pub fn create_store(
     engine: &Engine,
     preopened_dirs: &[(String, String)],
     args: &[String],
+    process: ProcessGrant,
 ) -> Result<Store<WasiState>> {
-    Ok(new_store(engine, WasiState::new(preopened_dirs, args)?))
+    Ok(new_store(
+        engine,
+        WasiState::new(preopened_dirs, args, process)?,
+    ))
 }
 
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
@@ -553,9 +585,10 @@ pub fn create_test_store(
     preopened_dirs: &[(String, String)],
     program: &str,
     eval: EvalSession,
+    process: ProcessGrant,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (state, stdout, stderr) =
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval)?;
+        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval, process)?;
     Ok((new_store(engine, state), stdout, stderr))
 }
 
@@ -593,6 +626,7 @@ fn host_linker(component: &Component) -> Result<Linker<WasiState>> {
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
+    add_process_to_linker(&mut linker, WasiState::process_view)?;
     Ok(linker)
 }
 

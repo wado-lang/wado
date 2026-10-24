@@ -1,0 +1,118 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/process/process.wit"])]
+#![stdlib("core:process/types.wado")]
+
+/// How a child ended.
+#[cm("core:process/types@0.1.0#exit-status")]
+pub variant ExitStatus {
+    /// It exited with this status.
+    #[cm("exited")]
+    Exited(u8),
+    /// A signal ended it.
+    #[cm("signaled")]
+    Signaled(u8),
+    /// The host ended it at its timeout.
+    #[cm("timed-out")]
+    TimedOut,
+}
+
+/// Whether this host spawns. Fixed when the host starts.
+#[cm("core:process/types@0.1.0#availability")]
+pub enum Availability {
+    #[cm("available")]
+    Available,
+    /// The host turned spawning off.
+    #[cm("denied")]
+    Denied,
+    /// The OS cannot confine a child.
+    #[cm("unsupported")]
+    Unsupported,
+}
+
+#[cm("core:process/types@0.1.0#error-code")]
+pub enum ErrorCode {
+    /// No such program.
+    #[cm("not-found")]
+    NotFound,
+    /// The sandbox refused to execute this program.
+    #[cm("not-permitted")]
+    NotPermitted,
+    #[cm("resource-exhausted")]
+    ResourceExhausted,
+    #[cm("io")]
+    Io,
+}
+
+#[cm("core:process/types@0.1.0#input")]
+pub affine variant Input {
+    #[cm("null")]
+    Null,
+    /// The guest's own stdin. The guest passes on only a stream it holds.
+    #[cm("inherit")]
+    Inherit,
+    #[cm("piped")]
+    Piped(Stream<u8>),
+}
+
+#[cm("core:process/types@0.1.0#output")]
+pub enum Output {
+    #[cm("null")]
+    Null,
+    /// The guest's own stdout or stderr.
+    #[cm("inherit")]
+    Inherit,
+    #[cm("piped")]
+    Piped,
+}
+
+#[cm("core:process/types@0.1.0#command")]
+pub affine struct Command {
+    /// A path when it holds a `/`; otherwise a name looked up on the
+    /// host's `PATH`, skipping empty and relative entries.
+    #[cm("program")]
+    pub program: String,
+    #[cm("args")]
+    pub args: List<String>,
+    /// Laid over the baseline variables: `PATH`, a private `HOME` and
+    /// `TMPDIR`, `LANG` and `LC_*`, and `TERM` where a stream is
+    /// inherited. The guest's own environment is not passed on.
+    #[cm("env")]
+    pub env: List<[String, String]>,
+    #[cm("stdin")]
+    pub stdin: Input,
+    #[cm("stdout")]
+    pub stdout: Output,
+    #[cm("stderr")]
+    pub stderr: Output,
+    /// Nanoseconds, as `wasi:clocks` counts a duration. At the timeout the
+    /// host sends SIGTERM to the child's process group, then SIGKILL after
+    /// a grace period the host sets.
+    #[cm("timeout")]
+    pub timeout: Option<u64>,
+}
+
+#[cm("core:process/types@0.1.0#spawned")]
+pub affine struct Spawned {
+    #[cm("child")]
+    pub child: Child,
+    /// `some` exactly where `command.stdout` was `piped`.
+    #[cm("stdout")]
+    pub stdout: Option<Stream<u8>>,
+    /// `some` exactly where `command.stderr` was `piped`.
+    #[cm("stderr")]
+    pub stderr: Option<Stream<u8>>,
+    #[cm("exit")]
+    pub exit: Future<Result<ExitStatus, ErrorCode>>,
+}
+
+/// A running child. Dropping it kills its process group, and the host
+/// kills every child when the guest exits.
+#[cm("core:process/types@0.1.0#child")]
+pub resource Child {
+    /// Kill the child's process group now.
+    #[cm("core:process/types@0.1.0#[method]child.kill")]
+    #[cm_params("self")]
+    fn kill(&self);
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}

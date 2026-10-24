@@ -100,6 +100,13 @@ test "tokenize macro invocation" {
     assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
+// C string literals came in Rust 1.77, after the upstream grammar.
+test "tokenize C string literals" {
+    let tokens = rlex_tok("c\"/dev/null\" cr#\"a\"b\"#");
+    assert rust::token_kind_name(tokens.kinds[0]) == "C_STRING_LITERAL";
+    assert rust::token_kind_name(tokens.kinds[1]) == "RAW_C_STRING_LITERAL";
+    assert rlex_prs("fn f() { open(c\"/dev/null\", cr\"x\"); }").ok();
+}
 
 test "parse empty crate" {
     let result = rlex_prs("");

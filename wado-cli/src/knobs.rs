@@ -6,6 +6,7 @@ use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
 
 use crate::args::{self, CliExit, OptSpec};
+use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
 
@@ -296,10 +297,16 @@ pub enum RuntimeKnobOpt {
     Collector,
     GcHeapInitial,
     ReportFuel,
+    DenyProcess,
 }
 
 impl RuntimeKnobOpt {
-    pub const ALL: &[Self] = &[Self::Collector, Self::GcHeapInitial, Self::ReportFuel];
+    pub const ALL: &[Self] = &[
+        Self::Collector,
+        Self::GcHeapInitial,
+        Self::ReportFuel,
+        Self::DenyProcess,
+    ];
 
     #[must_use]
     pub const fn spec(self) -> OptSpec {
@@ -322,6 +329,12 @@ impl RuntimeKnobOpt {
                 value: None,
                 desc: "Meter the guest in wasmtime fuel (about one unit per Wasm\ninstruction) and report what it spent: per program (run), per\ntest (test), per request (serve, one request at a time).\nPure computation spends the same fuel on every machine; a guest\nwaiting on I/O can loop more or less, as the host answers",
             },
+            Self::DenyProcess => OptSpec {
+                long: Some("deny-process"),
+                short: None,
+                value: None,
+                desc: "Turn off core:process: the guest may not spawn a host program,\neven one confined to its own grants",
+            },
         }
     }
 }
@@ -334,6 +347,8 @@ pub struct RuntimeKnobs {
     pub gc_heap_initial_size: u64,
     /// `--report-fuel`: meter the guest in fuel and report what it spent.
     pub report_fuel: bool,
+    /// `--deny-process`: whether a guest may spawn.
+    pub process: ProcessGrant,
 }
 
 impl Default for RuntimeKnobs {
@@ -342,6 +357,7 @@ impl Default for RuntimeKnobs {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
             report_fuel: false,
+            process: ProcessGrant::Offered,
         }
     }
 }
@@ -359,6 +375,7 @@ impl RuntimeKnobs {
                     parse_gc_heap_size(&args::require_string(parser)?).map_err(CliExit::error)?;
             }
             RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
+            RuntimeKnobOpt::DenyProcess => self.process = ProcessGrant::Denied,
         }
         Ok(())
     }

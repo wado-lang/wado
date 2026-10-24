@@ -212,8 +212,8 @@ enum WritePlace {
     /// `recv[i] = v`, which becomes `recv.index_assign(i, v)`.
     IndexAssign {
         receiver: TirExpr,
-        index: TirExpr,
-        dispatch: OperatorDispatch,
+        index: Box<TirExpr>,
+        dispatch: Box<OperatorDispatch>,
     },
     /// Any other place; a global's becomes a `GlobalVarSet`.
     Place(TirExpr),
@@ -238,7 +238,7 @@ impl WritePlace {
                     receiver,
                     dispatch.function_ref,
                     vec![],
-                    vec![CallArg::new(index, false), CallArg::new(value, false)],
+                    vec![CallArg::new(*index, false), CallArg::new(value, false)],
                     dispatch.return_type,
                     span,
                 );
@@ -5532,8 +5532,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let index = self.reify_expr(&index_expr.index, ctx, None);
             return WritePlace::IndexAssign {
                 receiver,
-                index,
-                dispatch,
+                index: Box::new(index),
+                dispatch: Box::new(dispatch),
             };
         }
         WritePlace::Place(self.reify_expr(target, ctx, None))
@@ -5678,8 +5678,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
             let place = WritePlace::IndexAssign {
                 receiver,
-                index,
-                dispatch,
+                index: Box::new(index),
+                dispatch: Box::new(dispatch),
             };
             return self.wrap_prelude(prelude, place.write(combined, span), span);
         }

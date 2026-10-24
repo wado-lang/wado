@@ -260,6 +260,42 @@ jobs:
 
       - run: mise run test-gale-o2
 
+  # The sandbox's escape tests, on the backend no other job runs: Seatbelt.
+  # See docs/wep-2026-10-21-core-process.md.
+  test-sandbox-macos:
+    name: Test (sandbox, macOS)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # rustup installs the toolchain rust-toolchain.toml names; no mise tool
+      # is needed. Only main saves, as cargo-cache.yml does for Linux.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: sandbox-macos
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked -p wado-host --lib sandbox::tests
+      # Seatbelt logs each operation it denies, and a child it kills leaves a
+      # crash report; the test sees only the exit status.
+      - name: Show what the sandbox denied
+        if: failure()
+        run: |
+          log show --last 30m --style compact --predicate 'eventMessage CONTAINS "deny("' |
+            grep -E 'Sandbox: (sh|cat|sandbox-exec|wado_host[^(]*)\(' | head -n 200 || true
+          find ~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports -type f \
+            \( -name 'sh*' -o -name 'sandbox-exec*' -o -name 'cat*' -o -name 'wado_host*' \) 2>/dev/null |
+            head -n 3 | while read -r report; do
+              echo "== $report"
+              head -c 8000 "$report"
+              echo
+            done
+
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
   # tests it. See `wado-run-webgpu/AGENTS.md`.
   test-webgpu:
@@ -302,7 +338,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu]
+    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu, test-sandbox-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
