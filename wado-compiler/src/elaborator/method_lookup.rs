@@ -1039,16 +1039,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_args: &[TypeId],
         span: Span,
     ) {
-        let Some(block) = block else {
-            return;
-        };
-        if let Some(unmet) = self.tysys.unmet_impl_bound(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            block,
-            None,
-            Some(receiver_args),
-        ) {
+        if let Some(block) = block
+            && let Some(unmet) = self.tysys.unmet_impl_bound(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                block,
+                None,
+                Some(receiver_args),
+            )
+        {
             self.report_unmet(unmet, span);
         }
     }

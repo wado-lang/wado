@@ -1387,8 +1387,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => false,
         };
 
-        // An `ERROR` target was diagnosed where it was resolved.
         if !is_valid_lvalue {
+            // An `ERROR` target was diagnosed where it was resolved.
             if target_type != TypeTable::ERROR {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: "cannot assign to an expression that is not a place".to_string(),
