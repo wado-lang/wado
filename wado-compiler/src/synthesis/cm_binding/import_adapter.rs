@@ -8,7 +8,6 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     EffectRef, FunctionKind, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLocal, TirParam, TirStmt, TypeId,
@@ -36,7 +35,6 @@ use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
-use crate::name::cm_wrap_async_func_name;
 use crate::tir;
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:
@@ -492,7 +490,7 @@ pub(super) fn synthesize_adapter(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
-    effect: Option<EffectRef>,
+    effects: Vec<EffectRef>,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
     let lower_ctx = LowerContext {
@@ -535,7 +533,7 @@ pub(super) fn synthesize_adapter(
 
     let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
     let mut raw_call = cm_raw_call(
-        &func_info.local_alias_name(),
+        func_info,
         std::mem::take(&mut builder.flat_args),
         raw_call_return_type,
     );
@@ -555,14 +553,14 @@ pub(super) fn synthesize_adapter(
     };
 
     let binding = make_binding_function(
-        cm_binding_func_name(&func_info.interface_name, &func_info.method_name),
+        func_info.binding_name(),
         builder.params,
         adapter_return_type,
         block(builder.body_stmts),
         builder.next_local,
         builder.locals,
     );
-    binding.borrow_mut().effects.extend(effect);
+    binding.borrow_mut().effects.extend(effects);
     AdapterArtifacts {
         adapter: binding,
         auxiliary: builder.auxiliary,
@@ -1249,7 +1247,7 @@ impl<'a> AdapterBuilder<'a> {
 
         // Per-import lift function: `AsyncCall<T>::wait` calls back
         // through this `FuncRef` to materialise the result.
-        let lift_fn_name = cm_lift_func_name(&func_info.interface_name, &func_info.method_name);
+        let lift_fn_name = func_info.lift_name();
         let lift_fn = synthesize_async_lift_function(
             lift_fn_name.clone(),
             func_info,
@@ -1291,7 +1289,7 @@ impl<'a> AdapterBuilder<'a> {
             None => (0, 0),
         };
         self.auxiliary.push(synthesize_async_wrap_function(
-            cm_wrap_async_func_name(&func_info.interface_name, &func_info.method_name),
+            func_info.wrap_async_name(),
             func_info,
             inner_type_id,
             subtask_type,

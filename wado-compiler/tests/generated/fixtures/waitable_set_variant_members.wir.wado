@@ -234,15 +234,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(53)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(55)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(56)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(56)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(57)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for" = fn(i64) -> i32;  // TypeId(57)
 
 type "functype//waitable_set_variant_members.wado/first_ready" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(58)
 
-type "functype//waitable_set_variant_members.wado/$cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(59)
+type "functype//waitable_set_variant_members.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for" = fn(i32);  // TypeId(59)
 
 type "functype//waitable_set_variant_members.wado/$cm_export__run" = fn();  // TypeId(60)
 
@@ -252,9 +252,9 @@ type "functype//waitable_set_variant_members.wado/$drop$core:prelude/list.wado/L
 
 type "functype//waitable_set_variant_members.wado/$initialize_modules$cold0" = fn();  // TypeId(63)
 
-type "functype//waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec0" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(64)
+type "functype//waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec0" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(64)
 
-type "functype//waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec1" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(65)
+type "functype//waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec1" = fn(i64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(65)
 
 type "functype//core:prelude/fpfmt.wado/u64_bit_len" = fn(u64) -> i32;  // TypeId(66)
 
@@ -426,7 +426,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(149)
 
 type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(150)
 
-type "functype//waitable_set_variant_members.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(151)
+type "functype//waitable_set_variant_members.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(151)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(152)
 
@@ -438,9 +438,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:clocks/MonotonicClock::wait_for from "wasi/wasi:clocks/MonotonicClock::wait_for";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for from "wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -479,8 +479,8 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
     let x: i64;
     let q: u64;
     let tens: i32;
-    "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(local.tee set(struct.new "core:prelude/types.wado//WaitableSet<waitable_set_variant_members.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude/types.wado//Box<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude//List<waitable_set_variant_members.wado/Timer>" { repr: ref.as_non_null($moved_2_18 = elements_16; elements_16 = ref.null none; $moved_2_18), used: used_17 }, ready: used_17 = builtin::array_len(local.tee elements_20(array.new_fixed<ref null "core:prelude/types.wado//Ready<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<waitable_set_variant_members.wado/Timer>>" { repr: ref.as_non_null($moved_2_22 = elements_20; elements_20 = ref.null none; $moved_2_22), used: used_17 } }), struct.new "waitable_set_variant_members.wado//Timer::Long" { discriminant: 1, payload_0: "waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec0"(60000000000_i64) });
-    "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(set, struct.new "waitable_set_variant_members.wado//Timer::Short" { discriminant: 0, payload_0: "waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec1"(0_i64) });
+    "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(local.tee set(struct.new "core:prelude/types.wado//WaitableSet<waitable_set_variant_members.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude/types.wado//Box<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude//List<waitable_set_variant_members.wado/Timer>" { repr: ref.as_non_null($moved_2_18 = elements_16; elements_16 = ref.null none; $moved_2_18), used: used_17 }, ready: used_17 = builtin::array_len(local.tee elements_20(array.new_fixed<ref null "core:prelude/types.wado//Ready<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<waitable_set_variant_members.wado/Timer>>" { repr: ref.as_non_null($moved_2_22 = elements_20; elements_20 = ref.null none; $moved_2_22), used: used_17 } }), struct.new "waitable_set_variant_members.wado//Timer::Long" { discriminant: 1, payload_0: "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec0"(60000000000_i64) });
+    "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(set, struct.new "waitable_set_variant_members.wado//Timer::Short" { discriminant: 0, payload_0: "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec1"(0_i64) });
     ready = "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::wait"(set);
     let $match_scrut_0: ref null "waitable_set_variant_members.wado//Timer";
     name = (if ref.test "waitable_set_variant_members.wado//Timer::Short"(local.tee $match_scrut_0((if ref.is_null(local.tee $load_0(ready.member)) -> ref null "waitable_set_variant_members.wado//Timer" {
@@ -648,11 +648,11 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
     return $local_5;
 }
 
-fn "waitable_set_variant_members.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "waitable_set_variant_members.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "waitable_set_variant_members.wado/$cm_lift__MonotonicClock_wait_for"($outptr) {
+fn "waitable_set_variant_members.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for"($outptr) {
     return nop;
 }
 
@@ -732,7 +732,7 @@ condition: first_ready() == \"short first, 1 left\"
     }
     i = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     a_end = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "waitable_set_variant_members.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i; i = 0; $moved_4);
+    $moved_4 = "waitable_set_variant_members.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i; i = 0; $moved_4);
     i = a_end;
     a_end = 0;
     b = array.new_data<u8>("set dropped");
@@ -817,10 +817,10 @@ fn "waitable_set_variant_members.wado/$initialize_modules$cold0"() {
     global:waitable_set_variant_members.wado::$modules_initialized = 1;
 }
 
-fn "waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec0"(how_long) with MonotonicClock {
+fn "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec0"(how_long) with MonotonicClock {
     let $subtask_handle: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    $subtask_handle = "wasi/wasi:clocks/MonotonicClock::wait_for"(60000000000_i64) >>u 4;
+    $subtask_handle = "wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for"(60000000000_i64) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
@@ -828,10 +828,10 @@ fn "waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec0
     return struct.new "core:prelude/types.wado//AsyncCall<()>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0 }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "waitable_set_variant_members.wado//$Closure_1" {  }, func: ref.func "closure/waitable_set_variant_members.wado/$closure_wrapper_0" } };
 }
 
-fn "waitable_set_variant_members.wado/$cm_binding__MonotonicClock_wait_for$spec1"(how_long) with MonotonicClock {
+fn "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec1"(how_long) with MonotonicClock {
     let $subtask_handle: i32;
     let $subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    $subtask_handle = "wasi/wasi:clocks/MonotonicClock::wait_for"(0_i64) >>u 4;
+    $subtask_handle = "wasi/$wasi:clocks/monotonic-clock@0.3.0#wait-for"(0_i64) >>u 4;
     $subtask = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
@@ -955,7 +955,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -2525,7 +2525,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 }
 
 fn "waitable_set_variant_members.wado/waitable_set_variant_members.wado/$Closure_1::$call$dae[self]"($outptr) {
-    "waitable_set_variant_members.wado/$cm_lift__MonotonicClock_wait_for"($outptr);
+    "waitable_set_variant_members.wado/$cm_lift__wasi:clocks/monotonic-clock@0.3.0#wait-for"($outptr);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {

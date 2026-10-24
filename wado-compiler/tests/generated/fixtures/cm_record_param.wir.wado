@@ -15,9 +15,9 @@ struct cm_record_param.wado//Options {  // TypeId(2)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(4)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(4)
 
-type "functype//wasi/wasi:demo/Device::configure" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#[method]device.configure" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
 type "functype//cm_record_param.wado/$cm_export__run" = fn();  // TypeId(6)
 
@@ -25,22 +25,22 @@ type "functype//wasi/resource-drop:cm_record_param.wado#Device" = fn(i32);  // T
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
 
-type "functype//cm_record_param.wado/$cm_binding__Gfx_get_device" = fn() -> i32;  // TypeId(9)
+type "functype//cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(9)
 
-type "functype//cm_record_param.wado/$cm_binding__Device_configure" = fn(i32, ref "cm_record_param.wado//Options") -> u32;  // TypeId(10)
+type "functype//cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.configure" = fn(i32, ref "cm_record_param.wado//Options") -> u32;  // TypeId(10)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/Device::configure from "wasi/wasi:demo/Device::configure";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.configure from "wasi/$wasi:demo/gfx@0.1.0#[method]device.configure";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_record_param.wado#Device from "wasi/resource-drop:cm_record_param.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cm_record_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return "wasi/wasi:demo/Gfx::get_device"();
+fn "cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-device"();
 }
 
-fn "cm_record_param.wado/$cm_binding__Device_configure"(self, options) with Device {
+fn "cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.configure"(self, options) with Device {
     let $options_f0_optval: ref null "core:prelude/string.wado//String";
     let $options_f0_disc: i32;
     let $options_f0_inner0: i32;
@@ -66,12 +66,12 @@ fn "cm_record_param.wado/$cm_binding__Device_configure"(self, options) with Devi
         $options_f0_inner1 = builtin::i32_wrap_i64($local_8 >> 32_i64);
     } else {
     }
-    return "wasi/wasi:demo/Device::configure"(self, $options_f0_disc, $options_f0_inner0, $options_f0_inner1);
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.configure"(self, $options_f0_disc, $options_f0_inner0, $options_f0_inner1);
 }
 
 fn "cm_record_param.wado/$cm_export__run"() {
     let device: i32;
-    drop("cm_record_param.wado/$cm_binding__Device_configure"(local.tee device("cm_record_param.wado/$cm_binding__Gfx_get_device"()), struct.new "cm_record_param.wado//Options" { label: ref.null none }));
+    drop("cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.configure"(local.tee device("cm_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()), struct.new "cm_record_param.wado//Options" { label: ref.null none }));
     if (device == 0) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = device;

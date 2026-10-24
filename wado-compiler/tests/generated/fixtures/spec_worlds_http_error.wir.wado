@@ -235,9 +235,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(40)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(42)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
 
-type "functype//wasi/wasi:http/Request::get_path_with_query" = fn(i32, i32);  // TypeId(43)
+type "functype//wasi/$wasi:http/types@0.3.0#[method]request.get-path-with-query" = fn(i32, i32);  // TypeId(43)
 
 type "functype//spec_worlds_http_error.wado/$cm_export__handle" = fn(i32);  // TypeId(44)
 
@@ -351,7 +351,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(98)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(99)
 
-type "functype//spec_worlds_http_error.wado/$cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(100)
+type "functype//spec_worlds_http_error.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(100)
 
 type "functype//spec_worlds_http_error.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(101)
 
@@ -363,8 +363,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:http/Request::get_path_with_query from "wasi/wasi:http/Request::get_path_with_query";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:http/types@0.3.0#[method]request.get-path-with-query from "wasi/$wasi:http/types@0.3.0#[method]request.get-path-with-query";
 import memory (1) from "mem/memory";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi/http/types.wado#Request from "wasi/resource-drop:wasi/http/types.wado#Request";
@@ -381,7 +381,7 @@ global global:core:prelude/traits.wado::$const_obj_11: ref "core:prelude/string.
 global global:core:prelude/primitive.wado::$const_obj_17: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/primitive.wado::$const_obj_19: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
-fn "spec_worlds_http_error.wado/$cm_binding__Request_get_path_with_query"(self) with Request {
+fn "spec_worlds_http_error.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query"(self) with Request {
     let $outptr: i32;
     let $option_result: ref null "core:prelude/string.wado//String";
     let $str_len: i32;
@@ -389,7 +389,7 @@ fn "spec_worlds_http_error.wado/$cm_binding__Request_get_path_with_query"(self) 
     let arr_12: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 12);
-    "wasi/wasi:http/Request::get_path_with_query"(self, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]request.get-path-with-query"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = ref.null none;
     if self != 0 {
@@ -458,7 +458,7 @@ fn "spec_worlds_http_error.wado/$cm_task_entry__handle"(request) {
     let self_270: i32;
     let i_276: i32;
     let $sroa_$task_ret_2_377: ref null "wasi:http/types.wado//ErrorCode";
-    path = "spec_worlds_http_error.wado/$cm_binding__Request_get_path_with_query"(request);
+    path = "spec_worlds_http_error.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query"(request);
     $v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/broken"), used: 7 };
     if @unlikely($inline_core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__0: block -> bool {
         if ref.is_null(path) {
@@ -1144,7 +1144,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

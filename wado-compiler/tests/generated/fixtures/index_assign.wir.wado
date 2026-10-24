@@ -54,9 +54,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
 type "functype//index_assign.wado/index_assign_basic" = fn();  // TypeId(20)
 
@@ -136,7 +136,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(57)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
 
-type "functype//index_assign.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(59)
+type "functype//index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(59)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(60)
 
@@ -146,8 +146,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -211,7 +211,7 @@ fn "index_assign.wado/index_assign_basic"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_178.repr, is_negative_77, x_81, self_64);
     self_64 = builtin::i32_wrap_i64(local.tee x_81("wasi/stream-new"()));
     is_negative_77 = builtin::i32_wrap_i64(x_81 >> 32_i64);
-    $moved_4 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = self_64; self_64 = 0; $moved_4);
+    $moved_4 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = self_64; self_64 = 0; $moved_4);
     self_64 = is_negative_77;
     is_negative_77 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_64, $local_1.repr, $local_1.used);
@@ -274,7 +274,7 @@ fn "index_assign.wado/index_assign_expression_value"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_279.repr, value_102, x_145, is_negative_141);
     is_negative_141 = builtin::i32_wrap_i64(local.tee x_145("wasi/stream-new"()));
     value_102 = builtin::i32_wrap_i64(x_145 >> 32_i64);
-    $moved_4 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = is_negative_141; is_negative_141 = 0; $moved_4);
+    $moved_4 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = is_negative_141; is_negative_141 = 0; $moved_4);
     is_negative_141 = value_102;
     value_102 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_141, $local_2.repr, $local_2.used);
@@ -323,7 +323,7 @@ fn "index_assign.wado/index_assign_in_conditional"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_203.repr, is_negative_102, x_106, self_89);
     self_89 = builtin::i32_wrap_i64(local.tee x_106("wasi/stream-new"()));
     is_negative_102 = builtin::i32_wrap_i64(x_106 >> 32_i64);
-    $moved_4 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = self_89; self_89 = 0; $moved_4);
+    $moved_4 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = self_89; self_89 = 0; $moved_4);
     self_89 = is_negative_102;
     is_negative_102 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_89, $local_2.repr, $local_2.used);
@@ -372,7 +372,7 @@ fn "index_assign.wado/index_assign_in_function"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_294.repr, is_negative_95, x_99, self_82);
     self_82 = builtin::i32_wrap_i64(local.tee x_99("wasi/stream-new"()));
     is_negative_95 = builtin::i32_wrap_i64(x_99 >> 32_i64);
-    $moved_4_252 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4_252 = self_82; self_82 = 0; $moved_4_252);
+    $moved_4_252 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_252 = self_82; self_82 = 0; $moved_4_252);
     self_82 = is_negative_95;
     is_negative_95 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_82, $local_2.repr, $local_2.used);
@@ -390,7 +390,7 @@ fn "index_assign.wado/index_assign_in_function"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_294.repr, $moved_4_252, 84_i64, 2);
     $moved_4_252 = builtin::i32_wrap_i64(local.tee x_99("wasi/stream-new"()));
     self_82 = builtin::i32_wrap_i64(x_99 >> 32_i64);
-    is_negative_95 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(is_negative_95 = $moved_4_252; $moved_4_252 = 0; is_negative_95);
+    is_negative_95 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_95 = $moved_4_252; $moved_4_252 = 0; is_negative_95);
     $moved_4_252 = self_82;
     self_82 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_252, $local_2.repr, $local_2.used);
@@ -478,7 +478,7 @@ fn "index_assign.wado/index_assign_in_loop"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_578.repr, i, x_135, start_115);
     start_115 = builtin::i32_wrap_i64(local.tee x_135("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x_135 >> 32_i64);
-    $moved_4_501 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4_501 = start_115; start_115 = 0; $moved_4_501);
+    $moved_4_501 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_501 = start_115; start_115 = 0; $moved_4_501);
     start_115 = i;
     i = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_115, $local_6_6.repr, $local_6_6.used);
@@ -532,7 +532,7 @@ fn "index_assign.wado/index_assign_in_loop"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_578.repr, start_115, x_135, $moved_4_501);
     $moved_4_501 = builtin::i32_wrap_i64(local.tee x_135("wasi/stream-new"()));
     start_115 = builtin::i32_wrap_i64(x_135 >> 32_i64);
-    i = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(i = $moved_4_501; $moved_4_501 = 0; i);
+    i = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $moved_4_501; $moved_4_501 = 0; i);
     $moved_4_501 = start_115;
     start_115 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_501, $local_6_6.repr, $local_6_6.used);
@@ -592,7 +592,7 @@ fn "index_assign.wado/index_assign_in_loop"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_578.repr, $moved_4_501, x_135, start_115);
     start_115 = builtin::i32_wrap_i64(local.tee x_135("wasi/stream-new"()));
     $moved_4_501 = builtin::i32_wrap_i64(x_135 >> 32_i64);
-    i = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(i = start_115; start_115 = 0; i);
+    i = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = start_115; start_115 = 0; i);
     start_115 = $moved_4_501;
     $moved_4_501 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_115, $local_6_6.repr, $local_6_6.used);
@@ -663,7 +663,7 @@ fn "index_assign.wado/index_assign_multiple"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_622.repr, new_used_221, x_242, start_222);
     start_222 = builtin::i32_wrap_i64(local.tee x_242("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64(x_242 >> 32_i64);
-    $moved_4_530 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4_530 = start_222; start_222 = 0; $moved_4_530);
+    $moved_4_530 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_530 = start_222; start_222 = 0; $moved_4_530);
     start_222 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_222, $local_4.repr, $local_4.used);
@@ -707,7 +707,7 @@ fn "index_assign.wado/index_assign_multiple"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_622.repr, start_222, x_242, $moved_4_530);
     $moved_4_530 = builtin::i32_wrap_i64(local.tee x_242("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64(x_242 >> 32_i64);
-    new_used_221 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_530; $moved_4_530 = 0; new_used_221);
+    new_used_221 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_530; $moved_4_530 = 0; new_used_221);
     $moved_4_530 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_530, $local_4.repr, $local_4.used);
@@ -739,7 +739,7 @@ fn "index_assign.wado/index_assign_multiple"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_622.repr, new_used_221, x_242, $moved_4_530);
     $moved_4_530 = builtin::i32_wrap_i64(local.tee x_242("wasi/stream-new"()));
     new_used_221 = builtin::i32_wrap_i64(x_242 >> 32_i64);
-    start_222 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(start_222 = $moved_4_530; $moved_4_530 = 0; start_222);
+    start_222 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_222 = $moved_4_530; $moved_4_530 = 0; start_222);
     $moved_4_530 = new_used_221;
     new_used_221 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_530, $local_4.repr, $local_4.used);
@@ -765,7 +765,7 @@ fn "index_assign.wado/index_assign_multiple"() with Stdout {
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<f64>($sroa_d_repr_592, 1), $sroa_$f_buf_622);
     $moved_4_530 = builtin::i32_wrap_i64(local.tee x_242("wasi/stream-new"()));
     start_222 = builtin::i32_wrap_i64(x_242 >> 32_i64);
-    new_used_221 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(new_used_221 = $moved_4_530; $moved_4_530 = 0; new_used_221);
+    new_used_221 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_221 = $moved_4_530; $moved_4_530 = 0; new_used_221);
     $moved_4_530 = start_222;
     start_222 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_530, $local_4.repr, $local_4.used);
@@ -814,7 +814,7 @@ fn "index_assign.wado/index_assign_nested"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_442.repr, is_negative_168, x_172, self_155);
     self_155 = builtin::i32_wrap_i64(local.tee x_172("wasi/stream-new"()));
     is_negative_168 = builtin::i32_wrap_i64(x_172 >> 32_i64);
-    $moved_4_396 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"($moved_4_396 = self_155; self_155 = 0; $moved_4_396);
+    $moved_4_396 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_396 = self_155; self_155 = 0; $moved_4_396);
     self_155 = is_negative_168;
     is_negative_168 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_155, $local_4.repr, $local_4.used);
@@ -853,7 +853,7 @@ fn "index_assign.wado/index_assign_nested"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_442.repr, $moved_4_396, x_172, self_155);
     self_155 = builtin::i32_wrap_i64(local.tee x_172("wasi/stream-new"()));
     $moved_4_396 = builtin::i32_wrap_i64(x_172 >> 32_i64);
-    is_negative_168 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(is_negative_168 = self_155; self_155 = 0; is_negative_168);
+    is_negative_168 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_168 = self_155; self_155 = 0; is_negative_168);
     self_155 = $moved_4_396;
     $moved_4_396 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(self_155, $local_4.repr, $local_4.used);
@@ -921,7 +921,7 @@ fn "index_assign.wado/index_assign_ref_array"() with Stdout {
     };
     start_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_239("wasi/stream-new"()));
     n_79 = builtin::i32_wrap_i64($cm_pair_7_239 >> 32_i64);
-    start_84 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(start_84 = start_117; start_117 = 0; start_84);
+    start_84 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_84 = start_117; start_117 = 0; start_84);
     start_117 = n_79;
     n_79 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_117, $local_2.repr, $local_2.used);
@@ -960,15 +960,15 @@ fn "index_assign.wado/index_assign_ref_array"() with Stdout {
     };
     start_84 = builtin::i32_wrap_i64(local.tee $cm_pair_7_239("wasi/stream-new"()));
     n_79 = builtin::i32_wrap_i64($cm_pair_7_239 >> 32_i64);
-    start_117 = "index_assign.wado/$cm_binding__Stdout_write_via_stream"(start_117 = start_84; start_84 = 0; start_117);
+    start_117 = "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_117 = start_84; start_84 = 0; start_117);
     start_84 = n_79;
     n_79 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_84, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_84 = start_117; start_117 = 0; start_84);
 }
 
-fn "index_assign.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "index_assign.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "index_assign.wado/$cm_export__run"() {
@@ -1358,7 +1358,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

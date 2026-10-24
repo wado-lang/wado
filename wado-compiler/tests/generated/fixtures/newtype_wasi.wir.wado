@@ -23,11 +23,11 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(10)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> i64;  // TypeId(10)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::get_resolution" = fn() -> i64;  // TypeId(11)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#get-resolution" = fn() -> i64;  // TypeId(11)
 
 type "functype//newtype_wasi.wado/newtype_wasi_chained" = fn();  // TypeId(12)
 
@@ -35,9 +35,9 @@ type "functype//newtype_wasi.wado/newtype_wasi_duration" = fn();  // TypeId(13)
 
 type "functype//newtype_wasi.wado/newtype_wasi_multiple" = fn();  // TypeId(14)
 
-type "functype//newtype_wasi.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(15)
+type "functype//newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> u64;  // TypeId(15)
 
-type "functype//newtype_wasi.wado/$cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(16)
+type "functype//newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#get-resolution" = fn() -> u64;  // TypeId(16)
 
 type "functype//newtype_wasi.wado/$cm_export__run" = fn();  // TypeId(17)
 
@@ -53,7 +53,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//newtype_wasi.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
@@ -77,9 +77,9 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicClock::now";
-import fn wasi/wasi:clocks/MonotonicClock::get_resolution from "wasi/wasi:clocks/MonotonicClock::get_resolution";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#now from "wasi/$wasi:clocks/monotonic-clock@0.3.0#now";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#get-resolution from "wasi/$wasi:clocks/monotonic-clock@0.3.0#get-resolution";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -105,10 +105,10 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let $cm_pair_7_16: i64;
     let $sroa_$pattern_temp_0_0_13_22: i32;
     let $sroa_$pattern_temp_0_1_14_23: i32;
-    if (local.tee t1("newtype_wasi.wado/$cm_binding__MonotonicClock_now"()) == t1) & (t1 == t1) {
+    if (local.tee t1("newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"()) == t1) & (t1 == t1) {
         $sroa_$pattern_temp_0_0_13_22 = builtin::i32_wrap_i64(local.tee $cm_pair_7_16("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_23 = builtin::i32_wrap_i64($cm_pair_7_16 >> 32_i64);
-        $moved_4_13 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_13 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $moved_4_13);
+        $moved_4_13 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_13 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $moved_4_13);
         $sroa_$pattern_temp_0_0_13_22 = $sroa_$pattern_temp_0_1_14_23;
         $sroa_$pattern_temp_0_1_14_23 = 0;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -118,17 +118,17 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     } else {
         $sroa_$pattern_temp_0_0_13_22 = builtin::i32_wrap_i64(local.tee $cm_pair_7_16("wasi/stream-new"()));
         $moved_4_13 = builtin::i32_wrap_i64($cm_pair_7_16 >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_23 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_23 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $sroa_$pattern_temp_0_1_14_23);
+        $sroa_$pattern_temp_0_1_14_23 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_23 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $sroa_$pattern_temp_0_1_14_23);
         $sroa_$pattern_temp_0_0_13_22 = $moved_4_13;
         $moved_4_13 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_2;
         "core:rt/write_string_to_stream$spec1$dae[add_newline]"($sroa_$pattern_temp_0_0_13_22, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_22 = $sroa_$pattern_temp_0_1_14_23; $sroa_$pattern_temp_0_1_14_23 = 0; $sroa_$pattern_temp_0_0_13_22);
     }
-    if ("newtype_wasi.wado/$cm_binding__MonotonicClock_now"() - t1) >=u 0_i64 {
+    if ("newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() - t1) >=u 0_i64 {
         $sroa_$pattern_temp_0_0_13_22 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_23 = builtin::i32_wrap_i64(t1 >> 32_i64);
-        $moved_4_13 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_13 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $moved_4_13);
+        $moved_4_13 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_13 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $moved_4_13);
         $sroa_$pattern_temp_0_0_13_22 = $sroa_$pattern_temp_0_1_14_23;
         $sroa_$pattern_temp_0_1_14_23 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_1;
@@ -137,7 +137,7 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     }
     $sroa_$pattern_temp_0_0_13_22 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
     $moved_4_13 = builtin::i32_wrap_i64(t1 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_23 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_23 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $sroa_$pattern_temp_0_1_14_23);
+    $sroa_$pattern_temp_0_1_14_23 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_23 = $sroa_$pattern_temp_0_0_13_22; $sroa_$pattern_temp_0_0_13_22 = 0; $sroa_$pattern_temp_0_1_14_23);
     $sroa_$pattern_temp_0_0_13_22 = $moved_4_13;
     $moved_4_13 = 0;
     $mv_arg_2 = global:newtype_wasi.wado::$const_obj_0;
@@ -151,10 +151,10 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     let $cm_pair_7_10: i64;
     let $sroa_$pattern_temp_0_0_13_16: i32;
     let $sroa_$pattern_temp_0_1_14_17: i32;
-    if local.tee res("newtype_wasi.wado/$cm_binding__MonotonicClock_get_resolution"()) >u 0_i64 {
+    if local.tee res("newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#get-resolution"()) >u 0_i64 {
         $sroa_$pattern_temp_0_0_13_16 = builtin::i32_wrap_i64(local.tee $cm_pair_7_10("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_17 = builtin::i32_wrap_i64($cm_pair_7_10 >> 32_i64);
-        $moved_4_7 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
+        $moved_4_7 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
         $sroa_$pattern_temp_0_0_13_16 = $sroa_$pattern_temp_0_1_14_17;
         $sroa_$pattern_temp_0_1_14_17 = 0;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -164,7 +164,7 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     } else {
         $sroa_$pattern_temp_0_0_13_16 = builtin::i32_wrap_i64(local.tee $cm_pair_7_10("wasi/stream-new"()));
         $moved_4_7 = builtin::i32_wrap_i64($cm_pair_7_10 >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_17 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_17 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $sroa_$pattern_temp_0_1_14_17);
+        $sroa_$pattern_temp_0_1_14_17 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_17 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $sroa_$pattern_temp_0_1_14_17);
         $sroa_$pattern_temp_0_0_13_16 = $moved_4_7;
         $moved_4_7 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_7;
@@ -174,7 +174,7 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     if (res * 2_i64) >=u res {
         $sroa_$pattern_temp_0_0_13_16 = builtin::i32_wrap_i64(local.tee $cm_pair_7_10("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_17 = builtin::i32_wrap_i64($cm_pair_7_10 >> 32_i64);
-        $moved_4_7 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
+        $moved_4_7 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
         $sroa_$pattern_temp_0_0_13_16 = $sroa_$pattern_temp_0_1_14_17;
         $sroa_$pattern_temp_0_1_14_17 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_6;
@@ -184,7 +184,7 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     if res >u 0_i64 {
         $sroa_$pattern_temp_0_0_13_16 = builtin::i32_wrap_i64(local.tee res("wasi/stream-new"()));
         $moved_4_7 = builtin::i32_wrap_i64(res >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_17 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_17 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $sroa_$pattern_temp_0_1_14_17);
+        $sroa_$pattern_temp_0_1_14_17 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_17 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $sroa_$pattern_temp_0_1_14_17);
         $sroa_$pattern_temp_0_0_13_16 = $moved_4_7;
         $moved_4_7 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_5;
@@ -193,7 +193,7 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     }
     $sroa_$pattern_temp_0_0_13_16 = builtin::i32_wrap_i64(local.tee res("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_17 = builtin::i32_wrap_i64(res >> 32_i64);
-    $moved_4_7 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
+    $moved_4_7 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_7 = $sroa_$pattern_temp_0_0_13_16; $sroa_$pattern_temp_0_0_13_16 = 0; $moved_4_7);
     $sroa_$pattern_temp_0_0_13_16 = $sroa_$pattern_temp_0_1_14_17;
     $sroa_$pattern_temp_0_1_14_17 = 0;
     $mv_arg_2 = global:newtype_wasi.wado::$const_obj_4;
@@ -207,12 +207,12 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let $moved_4_10: i32;
     let $sroa_$pattern_temp_0_0_13_19: i32;
     let $sroa_$pattern_temp_0_1_14_20: i32;
-    start = "newtype_wasi.wado/$cm_binding__MonotonicClock_now"();
-    res = "newtype_wasi.wado/$cm_binding__MonotonicClock_get_resolution"();
+    start = "newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"();
+    res = "newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#get-resolution"();
     if (start >u 0_i64) & (res >u 0_i64) {
         $sroa_$pattern_temp_0_0_13_19 = builtin::i32_wrap_i64(local.tee res("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_20 = builtin::i32_wrap_i64(res >> 32_i64);
-        $moved_4_10 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_10 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $moved_4_10);
+        $moved_4_10 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_10 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $moved_4_10);
         $sroa_$pattern_temp_0_0_13_19 = $sroa_$pattern_temp_0_1_14_20;
         $sroa_$pattern_temp_0_1_14_20 = 0;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -220,10 +220,10 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
         "core:rt/write_string_to_stream$spec7$dae[add_newline]"($sroa_$pattern_temp_0_0_13_19, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_19 = $moved_4_10; $moved_4_10 = 0; $sroa_$pattern_temp_0_0_13_19);
     }
-    if ("newtype_wasi.wado/$cm_binding__MonotonicClock_now"() - start) >=u 0_i64 {
+    if ("newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() - start) >=u 0_i64 {
         $sroa_$pattern_temp_0_0_13_19 = builtin::i32_wrap_i64(local.tee start("wasi/stream-new"()));
         $moved_4_10 = builtin::i32_wrap_i64(start >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_20 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_20 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $sroa_$pattern_temp_0_1_14_20);
+        $sroa_$pattern_temp_0_1_14_20 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_20 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $sroa_$pattern_temp_0_1_14_20);
         $sroa_$pattern_temp_0_0_13_19 = $moved_4_10;
         $moved_4_10 = 0;
         $mv_arg_2 = global:newtype_wasi.wado::$const_obj_10;
@@ -232,7 +232,7 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     }
     $sroa_$pattern_temp_0_0_13_19 = builtin::i32_wrap_i64(local.tee start("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_20 = builtin::i32_wrap_i64(start >> 32_i64);
-    $moved_4_10 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"($moved_4_10 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $moved_4_10);
+    $moved_4_10 = "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_10 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $moved_4_10);
     $sroa_$pattern_temp_0_0_13_19 = $sroa_$pattern_temp_0_1_14_20;
     $sroa_$pattern_temp_0_1_14_20 = 0;
     $mv_arg_2 = global:newtype_wasi.wado::$const_obj_9;
@@ -240,16 +240,16 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_19 = $moved_4_10; $moved_4_10 = 0; $sroa_$pattern_temp_0_0_13_19);
 }
 
-fn "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "newtype_wasi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "newtype_wasi.wado/$cm_binding__MonotonicClock_now"() with MonotonicClock {
-    return "wasi/wasi:clocks/MonotonicClock::now"();
+fn "newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() with MonotonicClock {
+    return "wasi/$wasi:clocks/monotonic-clock@0.3.0#now"();
 }
 
-fn "newtype_wasi.wado/$cm_binding__MonotonicClock_get_resolution"() with MonotonicClock {
-    return "wasi/wasi:clocks/MonotonicClock::get_resolution"();
+fn "newtype_wasi.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#get-resolution"() with MonotonicClock {
+    return "wasi/$wasi:clocks/monotonic-clock@0.3.0#get-resolution"();
 }
 
 fn "newtype_wasi.wado/$cm_export__run"() {

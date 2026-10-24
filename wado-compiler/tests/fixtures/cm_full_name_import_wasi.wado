@@ -1,0 +1,15 @@
+// A `wasi:*` module offers each interface by its full name too, and the name
+// reaches the declaration its basename does: `Out` is `Stdout`.
+use { println } from "core:cli";
+use { "wasi:cli/stdout" as Out } from "wasi:cli";
+
+fn greet() with Out {
+    println("hi");
+}
+
+export fn run() with Out {
+    greet();
+}
+
+__DATA__
+{"stdout": "hi\n"}

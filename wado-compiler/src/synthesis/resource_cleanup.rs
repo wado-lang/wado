@@ -36,7 +36,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{TypeKey, TypeMemo, TypeTable};
 
 /// An affine local a scope declared.
 #[derive(Clone)]
@@ -251,7 +251,7 @@ struct Resources<'a> {
     /// Each type's `Drop::drop`, by the type's declaration.
     drop_impls: &'a DropImpls,
     /// What [`Self::carried_by`] has answered, by type.
-    answers: &'a RefCell<IndexMap<TypeKey, bool>>,
+    answers: &'a TypeMemo<bool>,
 }
 
 impl<'a> Resources<'a> {
@@ -260,12 +260,8 @@ impl<'a> Resources<'a> {
     /// / tuple / variant that transitively contains one.
     fn carried_by(&self, type_id: TypeId) -> bool {
         let key = self.tt.borrow().type_key(type_id);
-        if let Some(&carried) = self.answers.borrow().get(&key) {
-            return carried;
-        }
-        let carried = holds_resource(self, type_id);
-        self.answers.borrow_mut().insert(key, carried);
-        carried
+        self.answers
+            .get_or_compute(key, || holds_resource(self, type_id))
     }
 
     /// The [`Layout`] of `type_id`.
@@ -505,7 +501,7 @@ pub fn elaborate_resource_drops(project: &mut Package) {
         }),
         &type_table.borrow(),
     );
-    let answers = RefCell::default();
+    let answers = TypeMemo::default();
     let resources = Resources {
         tt: &type_table,
         reg: &project.cm_interface_registry,
@@ -577,7 +573,7 @@ fn with_flat_resources<R>(
 ) -> R {
     let mut struct_fields = generics.struct_fields.clone();
     struct_fields.extend(tir::struct_fields(&flat.structs));
-    let answers = RefCell::default();
+    let answers = TypeMemo::default();
     f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
