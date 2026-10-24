@@ -354,7 +354,11 @@ pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
 
 /// Create a `CmRawCall` expression targeting the lowered import `func`.
 pub fn cm_raw_call(func: &CmFunctionInfo, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
-    cm_target_call(CmCallTarget::Import(func.cm_identifier()), args, return_type)
+    cm_target_call(
+        CmCallTarget::Import(func.cm_identifier()),
+        args,
+        return_type,
+    )
 }
 
 /// Create a `CmRawCall` expression targeting a Component Model canonical

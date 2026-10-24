@@ -925,38 +925,33 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_call(&mut self, func: &nir::FunctionRef) {
-        let original_callee_module = func.module_source.clone();
-        let func_name = func.name.clone();
-
-        if let Some(call_info) = func.method_info.as_ref() {
+        let callee_id = if let Some(call_info) = func.method_info.as_ref() {
             // Static method call (e.g. `Box::get`, `String^Display::fmt`):
-            // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
-            let callee_id = if func.is_monomorphized() {
+            // `func.name` is `"Struct::method"` or `"Struct^Trait::method"`.
+            if func.is_monomorphized() {
                 FunctionId::Free(FreeFunctionName::new(
                     func.module_source.clone(),
-                    func_name.clone(),
+                    func.name.clone(),
                 ))
             } else {
                 // `full_method_name`, not `method_name`: `function_id_for` keys
                 // on the type arguments too, so a call keyed without them names
                 // no definition and DCE drops a live method.
                 FunctionId::Method(MethodName::new(
-                    original_callee_module,
+                    func.module_source.clone(),
                     call_info.fq_struct_name(),
                     call_info.trait_name.clone(),
                     call_info.full_method_name(),
                 ))
-            };
-            self.analysis.callees.insert(callee_id);
+            }
         } else {
             // Free function call. `method_info` is the discriminator — a name
             // is not one: a synthesized helper embeds a type mangle, which
             // carries `::` for an associated-type projection
             // (`$value_copy$S::MapSerializer`).
-            let callee_module = original_callee_module.clone();
-            let callee_id = FunctionId::free(&callee_module, &func_name);
-            self.analysis.callees.insert(callee_id);
-        }
+            FunctionId::free(&func.module_source, &func.name)
+        };
+        self.analysis.callees.insert(callee_id);
     }
 
     fn record_method_call(&mut self, receiver_type: TypeId, func: &nir::FunctionRef) {
@@ -1209,7 +1204,7 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
-        // Only a WASI import is tracked here; a canonical built-in has no
+        // Only a CM import is tracked here; a canonical built-in has no
         // interface to attribute it to.
         let CmCallTarget::Import(function) = target else {
             return;

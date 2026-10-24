@@ -8,7 +8,7 @@
 use std::array;
 
 use crate::module_source::ModuleSource;
-use crate::name::MangledName;
+use crate::name::{MangledName, cm_import_alias};
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
@@ -921,13 +921,8 @@ impl FunctionTranslator<'_, '_> {
                 if !self.ctx.package.ambient_stdio().writes(stream) {
                     return Some(WirInstr::Unreachable);
                 }
-                let write = self
-                    .ctx
-                    .package
-                    .cm_interface_registry
-                    .get_function(&stream.write_operation(&self.ctx.package.cm_interface_registry))
-                    .expect("`wasi:cli` declares every ambient stream's write");
-                let key = MangledName::wasi_import(&write.local_alias_name());
+                let write = stream.write_operation(&self.ctx.package.cm_interface_registry);
+                let key = MangledName::wasi_import(&cm_import_alias(&write));
                 let func_id = self.ctx.func_map.get(&key).cloned().expect(
                     "DCE imports the stream an ambient builtin writes once it is reachable",
                 );
