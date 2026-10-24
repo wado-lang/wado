@@ -818,19 +818,19 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
     let p_10: i64;
     let start: i32;
     let end: i32;
-    let $av_82: i32;
+    let $av_84: i32;
     sign = select u64(n.neg, 1_i64 << builtin::i64_extend_i32_s(($mv$format$exponent_bits + $mv$format$precision) - 1), 0_i64);
     if local.tee $load_1(n.digits) == 0_i64 {
         return sign;
     }
-    $av_82 = n.int_digits;
-    $av_82 = builtin::i32_wrap_i64(select i64(p_10 < 370_i64, local.tee p_10(select i64(p_10 > -371_i64, local.tee p_10(n.exp + builtin::i64_extend_i32_s((select i32($av_82 > 19, $av_82 - 19, 0) - n.frac_digits) - n.frac_lead_zeros)), -371_i64)), 370_i64));
+    $av_84 = n.int_digits;
+    $av_84 = builtin::i32_wrap_i64(select i64(p_10 < 370_i64, local.tee p_10(select i64(p_10 > -371_i64, local.tee p_10(n.exp + builtin::i64_extend_i32_s((select i32($av_84 > 19, $av_84 - 19, 0) - n.frac_digits) - n.frac_lead_zeros)), -371_i64)), 370_i64));
     if n.inexact == 0 {
         return sign | $inline_round_decimal_5: block -> u64 {
-            if $av_82 > 350 {
+            if $av_84 > 350 {
                 break $inline_round_decimal_5: ((1_i64 << builtin::i64_extend_i32_s($mv$format$exponent_bits)) - 1_i64) << builtin::i64_extend_i32_s($mv$format$precision - 1);
             }
-            if $av_82 < -351 {
+            if $av_84 < -351 {
                 break $inline_round_decimal_5: 0_i64;
             }
             if @unlikely($load_1 == 0_i64) {
@@ -838,7 +838,7 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
                 "core:prelude/fpfmt.wado/parse_bits$contract_report0"($load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/fpfmt.wado:1130"), used: 28 });
                 unreachable;
             }
-            break $inline_round_decimal_5: "core:prelude/fpfmt.wado/parse_bits$unchecked"($load_1, $av_82, $mv$format$precision, $mv$format$exponent_bits);
+            break $inline_round_decimal_5: "core:prelude/fpfmt.wado/parse_bits$unchecked"($load_1, $av_84, $mv$format$precision, $mv$format$exponent_bits);
         };
     }
     start = n.mantissa_start;
@@ -856,7 +856,7 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
     }
     $mv$input$end = select i32(end < $mv$input$end, local.tee end(select i32(end > start, end, start)), $mv$input$end);
     digits = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$input$repr, start: $mv$input$start + start, end: $mv$input$start + $mv$input$end };
-    return sign | "core:prelude/fpfmt.wado/round_truncated_decimal"($load_1, $av_82, digits.repr, digits.start, digits.end, $mv$format$precision, $mv$format$exponent_bits);
+    return sign | "core:prelude/fpfmt.wado/round_truncated_decimal"($load_1, $av_84, digits.repr, digits.start, digits.end, $mv$format$precision, $mv$format$exponent_bits);
 }
 
 fn "core:prelude/fpfmt.wado/pow10"(n) {
@@ -4808,12 +4808,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"($mv$self$repr, $mv$self$start, $mv$self$end, pat) {
     let p: ref "core:prelude/string.wado//StrSlice";
     let pat_len: i32;
-    let $av_7: i32;
-    $av_7 = local.tee p("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(pat.repr, pat.used)).start;
-    if local.tee pat_len(p.end - $av_7) > ($mv$self$end - $mv$self$start) {
+    let $av_6: i32;
+    $av_6 = local.tee p("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(pat.repr, pat.used)).start;
+    if local.tee pat_len(p.end - $av_6) > ($mv$self$end - $mv$self$start) {
         return 0;
     }
-    return "core:prelude/string.wado/bytes_match_at"($mv$self$repr, $mv$self$start, p.repr, $av_7, pat_len);
+    return "core:prelude/string.wado/bytes_match_at"($mv$self$repr, $mv$self$start, p.repr, $av_6, pat_len);
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/Result<serde_json_duplicate_fields.wado/Point,core:serde/DeserializeError>^core:prelude/traits.wado/ReflectVariant::members"() {
