@@ -4222,18 +4222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if derived.is_empty()
                 && let Some(base) = self.newtype_base_target(&key, struct_name)
             {
-                return self.infer_through_newtype(
-                    &key,
-                    base,
-                    StaticCallee {
-                        type_name: struct_name,
-                        method_name,
-                        receiver_key,
-                    },
-                    raw_args,
-                    args,
-                    span,
-                );
+                return self.infer_through_newtype(&key, base, method_name, raw_args, args, span);
             }
             return (derived, vec![]);
         };
@@ -4287,7 +4276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         key: &ImplTargetKey,
         (base_key, base_name): (ImplTargetKey, String),
-        callee: StaticCallee<'_>,
+        method_name: &str,
         raw_args: &[Expr],
         args: &[TypeId],
         span: token::Span,
@@ -4298,7 +4287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_args = self.args_at_representation(newtype, args);
         let (inferred, method_args) = self.infer_static_method_type_args(
             &base_name,
-            callee.method_name,
+            method_name,
             raw_args,
             &base_args,
             None,

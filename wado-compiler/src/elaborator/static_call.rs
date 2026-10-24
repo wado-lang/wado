@@ -429,15 +429,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return (None, arg_types.to_vec());
         };
-        (Some(base_type), self.args_at_newtype_base(def, arg_types))
-    }
-
-    /// `arg_types` as the base of the newtype `def` reads them.
-    fn args_at_newtype_base(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
-        arg_types
+        let at_base = arg_types
             .iter()
             .map(|&arg| self.tysys.unwrap_newtype_in_type(arg, def))
-            .collect()
+            .collect();
+        (Some(base_type), at_base)
     }
 
     /// `arg_types` as the type at the end of the newtype `def`'s chain reads

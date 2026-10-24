@@ -739,30 +739,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
 
-        // Type check method arguments against expected parameter types (newtype-aware)
-        // If method was inherited from a newtype's base type, substitute base->newtype in params
-        let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = owner.newtype_base() {
-            // Get the newtype that the method is being called on
-            let newtype_id = self.tysys.get_base_type(receiver);
-            // Substitute base type with newtype in all parameter types
-            param_types
-                .iter()
-                .map(|&ty| {
-                    self.tysys
-                        .substitute_newtype_in_type(ty, base_type_id, newtype_id)
-                })
-                .collect()
-        } else {
-            param_types
-        };
-
-        // Substitute return type for inherited newtype methods
-        // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
+        // A method inherited from a newtype's base reads the base as the newtype:
+        // `Point::clone_point() -> Point` is `Location::clone_point() -> Location`.
+        let mut expected_param_types = param_types;
         if let Some(base_type_id) = owner.newtype_base() {
             let newtype_id = self.tysys.get_base_type(receiver);
-            return_type =
-                self.tysys
-                    .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
+            for ty in expected_param_types
+                .iter_mut()
+                .chain(std::iter::once(&mut return_type))
+            {
+                *ty = self
+                    .tysys
+                    .substitute_newtype_in_type(*ty, base_type_id, newtype_id);
+            }
         }
 
         let impl_args = settled_impl_args(&impl_type_bindings);
@@ -1915,8 +1904,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&inst),
                 None,
             );
-            // A `_` is answered as the bare spelling answers the slot it
-            // leaves out, by the one inference both spellings share.
             let newtype = match self.tysys.type_table.borrow().get(target_type_id) {
                 ResolvedType::Newtype { def, .. } if inherited => Some(*def),
                 _ => None,
@@ -1925,6 +1912,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(def) => self.args_at_representation(def, &args),
                 None => args.clone(),
             };
+            // A `_` is answered as the bare spelling answers the slot it
+            // leaves out, by the one inference both spellings share.
             let inferred = struct_name_for_lookup.clone().map(|name| {
                 self.infer_static_method_type_args(
                     &name,
