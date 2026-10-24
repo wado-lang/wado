@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use crate::ast::{
-    self, AssignExpr, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
+    self, AssignExpr, AssignTarget, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
     IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -1255,12 +1255,16 @@ impl MoveWalker<'_, '_> {
     fn visit_assign(&mut self, a: &AssignExpr) {
         self.visit_at(&a.value);
         let places = a.places();
-        let owners: Vec<Owners> = match (&a.value, a.destructuring_targets()) {
-            (Expr::TupleLiteral(value), Some(_)) if value.elements.len() == places.len() => value
-                .elements
-                .iter()
-                .map(|element| self.owners_of(element))
-                .collect(),
+        let owners: Vec<Owners> = match (&a.value, &a.target) {
+            (Expr::TupleLiteral(value), AssignTarget::Destructuring { .. })
+                if value.elements.len() == places.len() =>
+            {
+                value
+                    .elements
+                    .iter()
+                    .map(|element| self.owners_of(element))
+                    .collect()
+            }
             _ => vec![self.owners_of(&a.value); places.len()],
         };
         for (place, owners) in places.iter().zip(owners) {

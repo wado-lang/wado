@@ -2922,9 +2922,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::If(if_expr) => {
                 self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
             }
-            ast::Expr::Assign(assign) => match assign.destructuring_targets() {
-                Some(targets) => self.reify_destructuring_assign(assign, targets, ctx),
-                None => self.reify_write(&assign.target, &assign.value, span, ctx),
+            ast::Expr::Assign(assign) => match &assign.target {
+                ast::AssignTarget::Place(target) => {
+                    self.reify_write(target, &assign.value, span, ctx)
+                }
+                ast::AssignTarget::Destructuring { places, .. } => {
+                    self.reify_destructuring_assign(assign, places, ctx)
+                }
             },
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`

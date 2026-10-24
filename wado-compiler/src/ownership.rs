@@ -4,7 +4,7 @@
 //! that moves.
 
 use crate::ast::{
-    AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm, Stmt, UnaryOp,
+    AssignTarget, AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm, Stmt, UnaryOp,
 };
 use crate::hashmap::IndexMap;
 use crate::symbol::{Symbol, SymbolKind};
@@ -356,12 +356,12 @@ fn positions(expr: &Expr) -> Vec<(&Expr, Position)> {
         Expr::Unary(u) => vec![(&u.expr, borrow)],
         Expr::Binary(b) => vec![(&b.left, borrow), (&b.right, borrow)],
         Expr::CompoundAssign(a) => vec![(&a.target, borrow), (&a.value, borrow)],
-        Expr::Assign(a) if a.destructuring_targets().is_some() => {
-            std::iter::once((&a.value, consume))
-                .chain(a.places().iter().map(|place| (place, borrow)))
-                .collect()
-        }
-        Expr::Assign(a) => vec![(&a.target, borrow), (&a.value, consume)],
+        Expr::Assign(a) => match &a.target {
+            AssignTarget::Place(target) => vec![(target, borrow), (&a.value, consume)],
+            AssignTarget::Destructuring { places, .. } => std::iter::once((&a.value, consume))
+                .chain(places.iter().map(|place| (place, borrow)))
+                .collect(),
+        },
         Expr::ComparisonChain(c) => std::iter::once((&c.first, borrow))
             .chain(c.comparisons.iter().map(|cmp| (&cmp.right, borrow)))
             .collect(),

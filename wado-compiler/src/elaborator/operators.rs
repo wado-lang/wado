@@ -1064,10 +1064,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        if let Some(targets) = assign.destructuring_targets() {
-            return self.resolve_destructuring_assign(assign, targets, ctx);
+        match &assign.target {
+            ast::AssignTarget::Place(target) => {
+                self.assign_to_target(target, AssignValue::Ast(&assign.value), ctx)
+            }
+            ast::AssignTarget::Destructuring { places, .. } => {
+                self.resolve_destructuring_assign(assign, places, ctx)
+            }
         }
-        self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
     /// Resolve `[t0, t1, …] = value` as `let [$da_0, $da_1, …] = value;` and

@@ -6,7 +6,7 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
-    AssertStmt, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt,
+    AssertStmt, AssignTarget, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt,
     ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern,
     ReturnStmt, Stmt, UnaryOp, WhileStmt, for_each_pattern_name,
 };
@@ -263,7 +263,8 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
                     .any(|c| expr_references_var(&c.right, name))
         }
         Expr::Assign(a) => {
-            expr_references_var(&a.target, name) || expr_references_var(&a.value, name)
+            a.places().iter().any(|place| expr_references_var(place, name))
+                || expr_references_var(&a.value, name)
         }
         Expr::CompoundAssign(ca) => {
             expr_references_var(&ca.target, name) || expr_references_var(&ca.value, name)
@@ -1008,27 +1009,27 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         match expr {
             Expr::Ident(ident) => self.read(&ident.name, ident.span)?,
 
-            // A destructuring assignment computes the whole value first, then
-            // writes each place in turn.
-            Expr::Assign(assign) if assign.destructuring_targets().is_some() => {
-                self.bind_expr(&assign.value)?;
-                for place in assign.places() {
-                    match place {
-                        Expr::Ident(ident) => self.assign(&ident.name, ident.span)?,
-                        place => self.bind_expr(place)?,
-                    }
-                }
-            }
             // A place evaluates before the value it receives; a name only
             // takes the value once it is computed.
             Expr::Assign(assign) => match &assign.target {
-                Expr::Ident(ident) => {
+                AssignTarget::Place(Expr::Ident(ident)) => {
                     self.bind_expr(&assign.value)?;
                     self.assign(&ident.name, assign.span)?;
                 }
-                target => {
+                AssignTarget::Place(target) => {
                     self.bind_expr(target)?;
                     self.bind_expr(&assign.value)?;
+                }
+                // A destructuring assignment computes the whole value first,
+                // then writes each place in turn.
+                AssignTarget::Destructuring { places, .. } => {
+                    self.bind_expr(&assign.value)?;
+                    for place in places {
+                        match place {
+                            Expr::Ident(ident) => self.assign(&ident.name, ident.span)?,
+                            place => self.bind_expr(place)?,
+                        }
+                    }
                 }
             },
 

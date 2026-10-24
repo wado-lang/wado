@@ -407,7 +407,7 @@ mod tests {
         for stmt in &body.stmts {
             if let Stmt::Expr(es) = stmt {
                 let target = match &es.expr {
-                    Expr::Assign(a) => &a.target,
+                    Expr::Assign(a) => &a.places()[0],
                     Expr::CompoundAssign(a) => &a.target,
                     _ => continue,
                 };
