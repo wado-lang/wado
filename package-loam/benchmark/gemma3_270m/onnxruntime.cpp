@@ -1,8 +1,7 @@
 // Gemma 3 (270M) on onnxruntime's own C++ API, against Microsoft's release as
 // shipped (../fetch_onnxruntime.sh): the program generate.wado
 // times. Each step feeds the new tokens and the attention cache of the rest,
-// as the example's generate.mjs does. A numeric argument caps onnxruntime's
-// threads, which it otherwise picks itself.
+// as the example's generate.mjs does.
 //
 //   mise run gemma3-270m   # builds and runs it
 
@@ -117,14 +116,9 @@ static void print_throughput(const char* label, int work_per_iter, int n, double
     std::printf("%s: %s   (%.3f ms/iter, %d iter)\n", label, rbuf, per_ms, n);
 }
 
-int main(int argc, char** argv) {
+int main() {
     Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "gemma3-270m");
-    Ort::SessionOptions options;
-    if (argc > 1) {
-        options.SetIntraOpNumThreads(std::atoi(argv[1]));
-        options.SetInterOpNumThreads(1);
-    }
-    Ort::Session session(env, (std::string(MODEL) + "/build/model.onnx").c_str(), options);
+    Ort::Session session(env, (std::string(MODEL) + "/build/model.onnx").c_str(), Ort::SessionOptions());
     const Names names;
     const std::vector<int64_t> ids = prompt_ids();
 

@@ -27,11 +27,9 @@ for model in gpt2_124m gemma3_270m; do
     c++ -O2 -std=c++17 -I"$ort/include" $model/onnxruntime.cpp \
         -L"$ort/lib" -lonnxruntime -Wl,-rpath,"$ort/lib" -o build/onnxruntime_$model
 done
-for build in cpu vulkan; do
-    llama=$(./fetch_llama_cpp.sh $build)
-    c++ -O2 -std=c++17 -I"$llama/include" gemma3_270m/llama_cpp.cpp \
-        -L"$llama" -lllama -lggml -lggml-base -Wl,-rpath,"$llama" -o build/llama_cpp_$build
-done
+llama=$(./fetch_llama_cpp.sh)
+c++ -O2 -std=c++17 -I"$llama/include" gemma3_270m/llama_cpp.cpp \
+    -L"$llama" -lllama -lggml -lggml-base -Wl,-rpath,"$llama" -o build/llama_cpp
 """
 
 [tasks.gpt2-124m]
@@ -76,24 +74,14 @@ wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 echo "=== onnxruntime (CPU) ==="
 build/onnxruntime_gemma3_270m
 
-echo "=== onnxruntime (CPU, 1 thread) ==="
-build/onnxruntime_gemma3_270m 1
-
 # llama.cpp's own tools run a thread per physical core.
-gguf=$(gemma3_270m/fetch_gguf.sh)
 cores=$(getconf _NPROCESSORS_ONLN)
 if command -v lscpu > /dev/null; then
     cores=$(lscpu -p=core | grep -v '^#' | sort -u | wc -l)
 fi
 
-echo "=== llama.cpp (CPU) ==="
-build/llama_cpp_cpu "$gguf" "$(./fetch_llama_cpp.sh cpu)" 0 $cores
-
-echo "=== llama.cpp (CPU, 1 thread) ==="
-build/llama_cpp_cpu "$gguf" "$(./fetch_llama_cpp.sh cpu)" 0 1
-
 echo "=== llama.cpp (Vulkan) ==="
-build/llama_cpp_vulkan "$gguf" "$(./fetch_llama_cpp.sh vulkan)" -1 $cores
+build/llama_cpp "$(gemma3_270m/fetch_gguf.sh)" "$(./fetch_llama_cpp.sh)" -1 $cores
 
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado

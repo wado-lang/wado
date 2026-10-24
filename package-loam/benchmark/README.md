@@ -17,7 +17,7 @@ The tasks fetch the rest themselves, each pinned by version and SHA-256 and
 cached under `~/.cache/loam`:
 
 - `fetch_onnxruntime.sh`: Microsoft's onnxruntime release.
-- `fetch_llama_cpp.sh`: llama.cpp's release, as the CPU and the Vulkan build.
+- `fetch_llama_cpp.sh`: llama.cpp's Vulkan release.
 - `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp.
 
 ## Tasks
@@ -75,10 +75,7 @@ ggml-org only Q8_0, so it is unsloth's conversion.
 | Arm                              | Program                                        |
 | -------------------------------- | ---------------------------------------------- |
 | onnxruntime, its own thread pool | `gemma3_270m/onnxruntime.cpp`                  |
-| onnxruntime, 1 thread            | `gemma3_270m/onnxruntime.cpp 1`                |
-| llama.cpp CPU, a thread per core | `gemma3_270m/llama_cpp.cpp`, CPU build         |
-| llama.cpp CPU, 1 thread          | `gemma3_270m/llama_cpp.cpp`, CPU build         |
-| llama.cpp Vulkan                 | `gemma3_270m/llama_cpp.cpp`, Vulkan build      |
+| llama.cpp Vulkan                 | `gemma3_270m/llama_cpp.cpp`                    |
 | Loam `WebGpuBackend`             | `gemma3_270m_webgpu.wado`, `wado run-webgpu`   |
 | Loam `Cpu`                       | `gemma3_270m.wado`, `wado run --collector drc` |
 
@@ -89,8 +86,5 @@ Every arm generated "[Your Name] and I am a", the tokens the example's
 | -------------------------------- | --------------: | ----------: | ------- |
 | llama.cpp Vulkan                 | 269.10 tokens/s |   29.729 ms | 1.00x   |
 | **Loam** `WebGpuBackend`         | 164.13 tokens/s |   48.743 ms | 1.64x   |
-| llama.cpp CPU, a thread per core |  70.39 tokens/s |  113.647 ms | 3.82x   |
-| llama.cpp CPU, 1 thread          |  41.03 tokens/s |  194.967 ms | 6.56x   |
 | onnxruntime, its own thread pool |  35.85 tokens/s |  223.173 ms | 7.51x   |
-| onnxruntime, 1 thread            |  24.15 tokens/s |  331.234 ms | 11.14x  |
 | **Loam** `Cpu`                   |   4.89 tokens/s | 1636.169 ms | 55.04x  |
