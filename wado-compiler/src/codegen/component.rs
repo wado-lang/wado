@@ -1074,7 +1074,6 @@ fn emit_kiln_world_types(
         ],
     );
     emit_export(&mut instance_type, &mut next_idx, "error", error_local);
-    let _ = next_idx;
 
     // Register the instance type at the component level.
     let instance_type_idx = ctx.register_type("kiln-types-instance-type");

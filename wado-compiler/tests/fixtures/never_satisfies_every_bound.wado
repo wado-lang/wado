@@ -1,0 +1,138 @@
+// `!` and a newtype over it hold every trait, and no impl is written for
+// either. An associated type projected from `!` is `!`, a static method called
+// at `Self = !` traps, and an operator, subscript or loop on a `!` operand is
+// the operand alone.
+
+type Never = !;
+
+fn fail() -> Never {
+    panic("fail");
+}
+
+fn show<T: Display>(x: T) -> String {
+    return `${x}`;
+}
+
+trait Labeled with () {
+    fn label() -> String;
+}
+
+fn label_of<T: Labeled>() -> String {
+    return T::label();
+}
+
+test "a `!` operand meets the bound its use asks" {
+    if builtin::black_box(false) {
+        let _ = `${panic("display")}`;
+        let _ = show(fail());
+        let _ = show(panic("bound"));
+    }
+}
+
+#[expect_trap]
+test "a static method traps at `Self = !`" {
+    let _ = label_of::<!>();
+}
+
+#[expect_trap]
+test "a static method traps at a newtype over `!`" {
+    let _ = label_of::<Never>();
+}
+
+trait Source with () {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+fn item_of<S: Source>(s: S) -> S::Item {
+    return s.get();
+}
+
+test "an associated type projected from `!` is `!`" {
+    if builtin::black_box(false) {
+        let _: ! = item_of(fail());
+        let _: ! = item_of(panic("item"));
+    }
+}
+
+trait Shown with () {
+    fn shown() -> String;
+}
+
+trait Small with () {}
+
+trait Large with () {}
+
+impl Small for i32 {}
+
+impl<T: Small> Shown for T {
+    fn shown() -> String {
+        return "small";
+    }
+}
+
+impl<T: Large> Shown for T {
+    fn shown() -> String {
+        return "large";
+    }
+}
+
+fn shown_of<T: Shown>() -> String {
+    return T::shown();
+}
+
+test "no blanket impl answers at `!`, so two never overlap there" {
+    assert shown_of::<i32>() == "small";
+}
+
+#[expect_trap]
+test "a blanket's static method traps at `!`" {
+    let _ = shown_of::<!>();
+}
+
+fn operators(c: bool) -> i32 {
+    if c {
+        let _ = -fail();
+        let _ = ~panic("bitnot");
+        return -panic("neg");
+    }
+    return 1;
+}
+
+fn subscript(c: bool) -> i32 {
+    if c {
+        return panic("index")[0];
+    }
+    return 2;
+}
+
+fn loop_over(c: bool) -> i32 {
+    if c {
+        for let i of fail() {
+            let _: ! = i;
+        }
+    }
+    return 3;
+}
+
+test "an operator, subscript or loop on `!` type-checks" {
+    assert operators(builtin::black_box(false)) == 1;
+    assert subscript(builtin::black_box(false)) == 2;
+    assert loop_over(builtin::black_box(false)) == 3;
+}
+
+#[expect_trap]
+test "a loop over `!` evaluates its iterable" {
+    loop_over(builtin::black_box(true));
+}
+
+fn inspected<T: Inspect>(x: T) -> String {
+    return `${x:?}`;
+}
+
+test "`Inspect` on `!`" {
+    if builtin::black_box(false) {
+        let _ = `${panic("inspect"):?}`;
+        let _ = inspected(fail());
+    }
+}

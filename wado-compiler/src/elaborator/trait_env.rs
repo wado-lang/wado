@@ -2255,7 +2255,7 @@ fn check_bounds_name_traits(
         resolve: ResolveTrait<'a>,
         unknown: Vec<(ModuleSource, TypeError)>,
     }
-    impl AstVisitor for Bounds<'_> {
+    impl AstVisitor<'_> for Bounds<'_> {
         fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
             for bound in bounds {
                 let written = bound.resolved.is_none() && bound.fn_signature.is_none();

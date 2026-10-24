@@ -317,6 +317,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `TirExpr` to inspect. Single-expression closure bodies (e.g.
         // `|c: char| c.to_ascii_uppercase()`) take the body's type as
         // the return type directly — no missing-return check applies.
+        let body_diverges = self.tysys.type_table.borrow().is_never(body_type);
         let return_type = if let Some(dt) = declared_return {
             dt
         } else if let ast::Expr::Block(ref block) = closure.body {
@@ -324,10 +325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.settle_branch_holes(&mut return_types, None);
             match return_types.first().copied() {
                 Some(t) => {
-                    if !self.ast_block_always_exits(block)
-                        && body_type != t
-                        && body_type != TypeTable::NEVER
-                    {
+                    if !self.ast_block_always_exits(block) && body_type != t && !body_diverges {
                         let _ = self.emit(TypeError::MissingReturn {
                             return_type: self.tysys.type_table.borrow().type_name(t),
                             span: closure.span,
@@ -335,7 +333,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     t
                 }
-                None if body_type == TypeTable::UNIT || body_type == TypeTable::NEVER => body_type,
+                None if body_type == TypeTable::UNIT || body_diverges => body_type,
                 None => {
                     let _ = self.emit(TypeError::MissingReturn {
                         return_type: self.tysys.type_table.borrow().type_name(body_type),

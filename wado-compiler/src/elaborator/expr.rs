@@ -857,13 +857,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tail_type: TypeId,
         overlays_before: &IndexMap<AstId, usize>,
     ) -> TypeId {
-        let values: Vec<&ast::Expr> = {
-            let ctx = self.ctrl_flow_ctx();
-            break_values(ctx, &lb.block, &lb.label)
-        }
-        .into_iter()
-        .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
-        .collect();
+        let values: Vec<&ast::Expr> = break_values(&lb.block, &lb.label)
+            .into_iter()
+            .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
+            .collect();
         let mut tails = NumericLiteralTails::default();
         let tail_is_literal = tail_type != TypeTable::NEVER
             && self.collect_block_numeric_literal_tails(&lb.block, tail_type, &mut tails)
@@ -964,7 +961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// trailing value no path reaches is still the block's value, as a dead
     /// tail is an `if` arm's, so it answers to the block's type all the same.
     fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
-        if self.ast_labeled_block_falls_through(&lb.block, &lb.label)
+        if !self.ast_block_always_exits(&lb.block)
             || matches!(lb.block.stmts.last(), Some(ast::Stmt::Expr(_)))
         {
             self.ast_block_result_type(&lb.block)
@@ -2206,6 +2203,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         access: IndexAccess,
         key_class: &OnceCell<ArgClass>,
     ) -> TypeId {
+        // No receiver reaches the subscript, so the key is checked but never
+        // evaluated.
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            self.resolve_expr(&index.index, ctx, None);
+            return expr_type;
+        }
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -5952,7 +5955,7 @@ impl CaptureWritesCollector {
     }
 }
 
-impl AstVisitor for CaptureWritesCollector {
+impl AstVisitor<'_> for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {

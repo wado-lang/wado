@@ -668,7 +668,7 @@ struct LocalItems<'a> {
     module: &'a ModuleSource,
 }
 
-impl AstVisitor for LocalItems<'_> {
+impl AstVisitor<'_> for LocalItems<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if let Stmt::Item(item) = stmt {
             self.table.declare_local_item(self.module, item);

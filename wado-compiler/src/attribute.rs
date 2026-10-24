@@ -791,7 +791,7 @@ impl<F: FnMut(WrittenAttribute<'_>)> AttributeWalk<'_, F> {
     }
 }
 
-impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
+impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor<'_> for AttributeWalk<'_, F> {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Struct(decl) => {

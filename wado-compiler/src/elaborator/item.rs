@@ -782,6 +782,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         {
             scope.reject_provided_from(target, source, impl_block.span);
         }
+        if scope.tysys.type_table.borrow().is_never(target) {
+            let type_name = scope.tysys.type_table.borrow().type_name(target);
+            let _ = scope.emit(TypeError::ImplForNever {
+                type_name,
+                span: impl_block.span,
+            });
+        }
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
         }

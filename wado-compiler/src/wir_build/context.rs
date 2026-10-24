@@ -740,6 +740,15 @@ impl<'a> WirContext<'a> {
         wir
     }
 
+    /// The results a function returning `type_id` declares: none for a
+    /// stackless type.
+    pub fn result_wir_types(&self, type_table: &TypeTable, type_id: TypeId) -> Vec<WirType> {
+        match self.type_id_to_wir_type(type_table, type_id) {
+            WirType::Unit => vec![],
+            wir_type => vec![wir_type],
+        }
+    }
+
     /// [`Self::type_id_to_wir_type`] for use during type registration, where a
     /// field can name a type a later phase defines — or the struct itself, since
     /// Wasm GC rec groups permit the cycle. It takes the placeholder, which

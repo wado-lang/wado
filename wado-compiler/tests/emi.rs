@@ -650,7 +650,7 @@ fn params_of(params: &[Param]) -> Vec<Binding> {
         .collect()
 }
 
-impl AstVisitor for SiteCollector {
+impl AstVisitor<'_> for SiteCollector {
     fn visit_item(&mut self, item: &Item) {
         // A `test` body is a function body in every way that matters here; the
         // rest reach their bodies through `visit_function`.

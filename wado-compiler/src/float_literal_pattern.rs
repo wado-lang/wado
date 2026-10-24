@@ -79,7 +79,7 @@ impl Sites {
     }
 }
 
-impl AstVisitor for Sites {
+impl AstVisitor<'_> for Sites {
     fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         self.waiving(attrs_allow(attrs, lint::FLOAT_LITERAL_PATTERN), body);
     }

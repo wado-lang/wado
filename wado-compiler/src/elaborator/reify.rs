@@ -2360,8 +2360,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// builds. A `return` / `break` ends a path too, but a normal exit is not a
     /// cold one, so it is left alone.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+        let tt = self.tysys.type_table.borrow();
         let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
+            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
         if !stmts.iter().any(diverges) {
             return stmts;
         }
@@ -3683,6 +3684,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match self.ann_desugars(for_of.id) {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
+            Some(DesugarKind::ForOfNever) => {
+                let (iterable, _) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+                let iterable = self.reify_expr(iterable, ctx, None);
+                self.skip_for_of_body(for_of.id);
+                vec![TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)]
+            }
             Some(DesugarKind::ForOfIterator) | None => {
                 let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return vec![TirStmt::new(
@@ -3696,7 +3703,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 self.reify_iterator_for_of(for_of, ctx, info)
             }
-            _ => unreachable!("for_of carries one of the three ForOf* desugar tags"),
+            _ => unreachable!("for_of carries one of the ForOf* desugar tags"),
         }
     }
 
@@ -3860,12 +3867,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
-        let (actual_iterable, is_enumerate) = match &for_of.iterable {
-            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            other => (other, false),
-        };
+        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let tuple_type_id = iterable.type_id;
         // Look through a `&`/`&mut` wrapper: `for v of &tuple` binds each
@@ -4056,12 +4058,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
-        let (actual_iterable, is_enumerate) = match &for_of.iterable {
-            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            other => (other, false),
-        };
+        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -6051,6 +6048,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         let receiver = self.reify_expr(&index.expr, ctx, None);
+        if self.tysys.type_table.borrow().is_never(receiver.type_id) {
+            // The key never runs, yet resolve walked it, so its probes and
+            // slots are reified here, after the receiver that diverges.
+            let (type_id, span) = (receiver.type_id, receiver.span);
+            let key = self.reify_expr(&index.index, ctx, None);
+            let stmts = vec![
+                TirStmt::new(TirStmtKind::Expr(receiver), span),
+                TirStmt::new(TirStmtKind::Expr(key), span),
+            ];
+            return TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                type_id,
+                span,
+            );
+        }
 
         // Tuple constant-index path: detect via the receiver's
         // resolved type + the index being a constant integer
@@ -10525,7 +10537,7 @@ fn names_captured_by_defaults(
 #[derive(Default)]
 struct SpelledNames(IndexSet<String>);
 
-impl AstVisitor for SpelledNames {
+impl AstVisitor<'_> for SpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Ident(ident) = expr {
             self.0.insert(ident.name.clone());
@@ -10538,7 +10550,7 @@ impl AstVisitor for SpelledNames {
 #[derive(Default)]
 struct ClosureSpelledNames(SpelledNames);
 
-impl AstVisitor for ClosureSpelledNames {
+impl AstVisitor<'_> for ClosureSpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Closure(_) = expr {
             self.0.visit_expr(expr);

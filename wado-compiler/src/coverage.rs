@@ -818,7 +818,7 @@ impl Planner<'_> {
     }
 }
 
-impl AstVisitor for Planner<'_> {
+impl AstVisitor<'_> for Planner<'_> {
     fn visit_item(&mut self, item: &Item) {
         self.item(item);
     }
@@ -1000,7 +1000,7 @@ impl Leaves {
     }
 }
 
-impl AstVisitor for Leaves {
+impl AstVisitor<'_> for Leaves {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_) => self.0 = true,
@@ -1362,7 +1362,7 @@ mod tests {
     /// the prelude's.
     fn plan_kinds(body: &str) -> Vec<RegionKind> {
         struct Spelled(IndexSet<AstId>);
-        impl AstVisitor for Spelled {
+        impl AstVisitor<'_> for Spelled {
             fn visit_expr(&mut self, expr: &Expr) {
                 if let Expr::Ident(ident) = expr
                     && ident.name == "unreachable"

@@ -1,0 +1,23 @@
+// A closure body that ends in a call of a newtype over `!` never falls through,
+// as one ending in a call of type `!` does, so it needs no `return`.
+
+use { println, Stdout } from "core:cli";
+
+type Never = !;
+
+fn fail() -> Never {
+    panic("gone");
+}
+
+export fn run() with Stdout {
+    let give_up = || {
+        fail();
+    };
+    if false {
+        give_up();
+    }
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

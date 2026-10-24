@@ -5479,7 +5479,6 @@ impl Parser {
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
-        let pos_before = self.pos;
         let args = self.parse_comma_separated_recovering(
             &TokenKind::RParen,
             Self::parse_expr,
@@ -5489,7 +5488,6 @@ impl Parser {
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
             && self.previous().kind == TokenKind::Comma;
-        let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
 
@@ -7512,7 +7510,7 @@ impl EscapingJump {
     }
 }
 
-impl AstVisitor for EscapingJump {
+impl AstVisitor<'_> for EscapingJump {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if self.found.is_some() {
             return;
@@ -8640,7 +8638,7 @@ mod tests {
         found: Vec<(String, usize, usize)>,
     }
 
-    impl AstVisitor for IdentPositions<'_> {
+    impl AstVisitor<'_> for IdentPositions<'_> {
         fn visit_expr(&mut self, expr: &Expr) {
             if let Expr::Ident(ident) = expr {
                 let span = ident.span;

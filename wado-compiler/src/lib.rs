@@ -25,6 +25,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;

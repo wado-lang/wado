@@ -1060,7 +1060,7 @@ fn expr_scopes_bindings(expr: &ast::Expr) -> bool {
     )
 }
 
-impl AstVisitor for Resolver<'_> {
+impl AstVisitor<'_> for Resolver<'_> {
     fn visit_attributed(&mut self, attrs: &[ast::Attribute], body: impl FnOnce(&mut Self)) {
         for arg in attrs
             .iter()

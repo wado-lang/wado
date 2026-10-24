@@ -454,6 +454,9 @@ pub struct Program {
     /// The marker a type holds when no value of it is affine, which a
     /// [`ParamDef::copyable`] parameter asks of its argument.
     pub copyable: Option<TraitDeclId>,
+    /// The head `!` lowers under. No value of it exists, so it holds every
+    /// trait: no body it would owe can run.
+    pub never: Option<TypeDeclId>,
 }
 
 /// The ids whose target could match `ty`, in the order they were added: what
