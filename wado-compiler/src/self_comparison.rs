@@ -125,7 +125,7 @@ impl SelfComparisons<'_> {
     }
 }
 
-impl AstVisitor for SelfComparisons<'_> {
+impl AstVisitor<'_> for SelfComparisons<'_> {
     fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         if !attrs_allow(attrs, lint::SELF_COMPARISON) {
             body(self);
@@ -153,7 +153,7 @@ impl AstVisitor for SelfComparisons<'_> {
 /// The line of each `#line` in `expr`, in source order.
 fn line_literals(expr: &Expr) -> Vec<usize> {
     struct Lines(Vec<usize>);
-    impl AstVisitor for Lines {
+    impl AstVisitor<'_> for Lines {
         fn visit_expr(&mut self, expr: &Expr) {
             if let Expr::Literal(lit) = expr
                 && matches!(lit.value, Literal::LocationLine)

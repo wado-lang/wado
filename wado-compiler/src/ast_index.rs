@@ -154,7 +154,7 @@ impl IndexBuilder {
     }
 }
 
-impl AstVisitor for IndexBuilder {
+impl AstVisitor<'_> for IndexBuilder {
     fn visit_id(&mut self, id: AstId, span: Span) {
         // First write wins: the same id can be visited from a leaf walker
         // path (which emits the name span) and from a containing node

@@ -130,7 +130,7 @@ impl Finder<'_> {
     }
 }
 
-impl AstVisitor for Finder<'_> {
+impl AstVisitor<'_> for Finder<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         let assignment = match expr {
             Expr::Assign(assign) => Some((&assign.target, &assign.value)),

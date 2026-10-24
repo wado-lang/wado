@@ -100,7 +100,7 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
 /// list an item declares. A body's local items are checked where it is walked.
 struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
 
-impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+impl<H: CompilerHost> AstVisitor<'_> for ForwardDefaults<'_, '_, H> {
     fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
         self.0.report_forward_type_param_defaults(params);
         ast::walk_generic_params(self, params);

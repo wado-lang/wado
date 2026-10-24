@@ -261,7 +261,7 @@ impl FirstMatch for LocalRenderer<'_> {
     }
 }
 
-impl AstVisitor for LocalRenderer<'_> {
+impl AstVisitor<'_> for LocalRenderer<'_> {
     fn visit_function(&mut self, func: &ast::Function) {
         if self.result.is_some() {
             return;

@@ -10391,7 +10391,7 @@ fn names_captured_by_defaults(
 #[derive(Default)]
 struct SpelledNames(IndexSet<String>);
 
-impl AstVisitor for SpelledNames {
+impl AstVisitor<'_> for SpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Ident(ident) = expr {
             self.0.insert(ident.name.clone());
@@ -10404,7 +10404,7 @@ impl AstVisitor for SpelledNames {
 #[derive(Default)]
 struct ClosureSpelledNames(SpelledNames);
 
-impl AstVisitor for ClosureSpelledNames {
+impl AstVisitor<'_> for ClosureSpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Closure(_) = expr {
             self.0.visit_expr(expr);

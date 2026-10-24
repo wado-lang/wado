@@ -48,7 +48,7 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
             }
         }
     }
-    impl AstVisitor for Names {
+    impl AstVisitor<'_> for Names {
         fn visit_item(&mut self, item: &Item) {
             let at = item.name_span();
             match item {

@@ -5949,7 +5949,7 @@ impl CaptureWritesCollector {
     }
 }
 
-impl AstVisitor for CaptureWritesCollector {
+impl AstVisitor<'_> for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {

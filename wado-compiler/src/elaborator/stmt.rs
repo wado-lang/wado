@@ -3499,7 +3499,7 @@ struct LoopControlFlowFinder {
     found: Option<(&'static str, Span)>,
 }
 
-impl AstVisitor for LoopControlFlowFinder {
+impl AstVisitor<'_> for LoopControlFlowFinder {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if self.found.is_some() {
             return;

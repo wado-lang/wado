@@ -8,7 +8,7 @@
 //! is left only by an unlabeled `break` it binds: a labeled one lands past the
 //! block it names, never right after the loop.
 
-use crate::ast;
+use crate::ast::{self, AstVisitor};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart};
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -240,144 +240,44 @@ fn block_can_break_to_label(block: &ast::Block, label: &str) -> bool {
 /// Whether `probe` matches anywhere in `block`. The walk stops at a closure
 /// body and at a local item, which have control flow of their own.
 pub(crate) fn any_in_tree<'t, P: AstTreeProbe<'t>>(block: &'t ast::Block, probe: &mut P) -> bool {
-    block.stmts.iter().any(|s| any_in_stmt(s, probe))
+    let mut search = Search {
+        probe,
+        found: false,
+    };
+    search.visit_block(block);
+    search.found
 }
 
-fn any_in_stmt<'t, P: AstTreeProbe<'t>>(stmt: &'t ast::Stmt, probe: &mut P) -> bool {
-    match probe.check_stmt(stmt) {
-        Step::Match => return true,
-        Step::Skip => return false,
-        Step::Descend => {}
-    }
-    match stmt {
-        ast::Stmt::If(if_stmt) => {
-            condition_any(&if_stmt.condition, probe)
-                || any_in_tree(&if_stmt.then_block, probe)
-                || if_stmt
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| any_in_tree(b, probe))
-        }
-        ast::Stmt::While(w) => condition_any(&w.condition, probe) || any_in_tree(&w.body, probe),
-        ast::Stmt::For(f) => {
-            f.init.as_ref().is_some_and(|s| any_in_stmt(s, probe))
-                || f.condition
-                    .as_ref()
-                    .is_some_and(|c| condition_any(c, probe))
-                || f.update.as_ref().is_some_and(|e| any_in_expr(e, probe))
-                || any_in_tree(&f.body, probe)
-        }
-        ast::Stmt::ForOf(fo) => any_in_expr(&fo.iterable, probe) || any_in_tree(&fo.body, probe),
-        ast::Stmt::Loop(l) => any_in_tree(&l.body, probe),
-        ast::Stmt::LabeledBlock(lb) => any_in_tree(&lb.block, probe),
-        ast::Stmt::Match(m) => {
-            any_in_expr(&m.expr, probe)
-                || m.arms.iter().any(|arm| {
-                    arm.guard.as_ref().is_some_and(|g| any_in_expr(g, probe))
-                        || any_in_expr(&arm.body, probe)
-                })
-        }
-        ast::Stmt::Expr(e) => any_in_expr(&e.expr, probe),
-        ast::Stmt::Let(l) => {
-            l.value.as_ref().is_some_and(|v| any_in_expr(v, probe))
-                || l.else_block.as_ref().is_some_and(|b| any_in_tree(b, probe))
-        }
-        ast::Stmt::TaskReturn(tr) => any_in_expr(&tr.value, probe),
-        ast::Stmt::Return(r) => r.value.as_ref().is_some_and(|v| any_in_expr(v, probe)),
-        ast::Stmt::Break(b) => b.value.as_ref().is_some_and(|v| any_in_expr(v, probe)),
-        ast::Stmt::Assert(a) => {
-            any_in_expr(&a.condition, probe)
-                || a.message.as_ref().is_some_and(|m| any_in_expr(m, probe))
-        }
-        ast::Stmt::Continue(_) | ast::Stmt::Item(_) | ast::Stmt::Error(_) => false,
-    }
+struct Search<'p, P> {
+    probe: &'p mut P,
+    found: bool,
 }
 
-fn condition_any<'t, P: AstTreeProbe<'t>>(cond: &'t ast::Condition, probe: &mut P) -> bool {
-    match cond {
-        ast::Condition::Expr(e) => any_in_expr(e, probe),
-        ast::Condition::LetChain { elements, .. } => {
-            elements.iter().any(|el| any_in_expr(el.expr(), probe))
+impl<'t, P: AstTreeProbe<'t>> AstVisitor<'t> for Search<'_, P> {
+    fn visit_stmt(&mut self, stmt: &'t ast::Stmt) {
+        if self.found {
+            return;
+        }
+        match self.probe.check_stmt(stmt) {
+            Step::Match => self.found = true,
+            Step::Skip => {}
+            Step::Descend => ast::walk_stmt(self, stmt),
         }
     }
-}
 
-fn any_in_expr<'t, P: AstTreeProbe<'t>>(expr: &'t ast::Expr, probe: &mut P) -> bool {
-    match probe.check_expr(expr) {
-        Step::Match => return true,
-        Step::Skip => return false,
-        Step::Descend => {}
+    fn visit_expr(&mut self, expr: &'t ast::Expr) {
+        if self.found {
+            return;
+        }
+        match self.probe.check_expr(expr) {
+            Step::Match => self.found = true,
+            Step::Skip => {}
+            Step::Descend if matches!(expr, ast::Expr::Closure(_)) => {}
+            Step::Descend => ast::walk_expr(self, expr),
+        }
     }
-    match expr {
-        ast::Expr::Block(block) => any_in_tree(block, probe),
-        ast::Expr::LabeledBlock(lb) => any_in_tree(&lb.block, probe),
-        ast::Expr::If(if_expr) => {
-            condition_any(&if_expr.condition, probe)
-                || any_in_tree(&if_expr.then_block, probe)
-                || if_expr
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| any_in_tree(b, probe))
-        }
-        ast::Expr::Match(m) => {
-            any_in_expr(&m.expr, probe)
-                || m.arms.iter().any(|arm| {
-                    arm.guard.as_ref().is_some_and(|g| any_in_expr(g, probe))
-                        || any_in_expr(&arm.body, probe)
-                })
-        }
-        ast::Expr::Matches(m) => {
-            any_in_expr(&m.expr, probe) || m.guard.as_ref().is_some_and(|g| any_in_expr(g, probe))
-        }
-        ast::Expr::Binary(b) => any_in_expr(&b.left, probe) || any_in_expr(&b.right, probe),
-        ast::Expr::Unary(u) => any_in_expr(&u.expr, probe),
-        ast::Expr::Cast(c) => any_in_expr(&c.expr, probe),
-        ast::Expr::FieldAccess(f) => any_in_expr(&f.expr, probe),
-        ast::Expr::Assign(a) => any_in_expr(&a.target, probe) || any_in_expr(&a.value, probe),
-        ast::Expr::CompoundAssign(a) => {
-            any_in_expr(&a.target, probe) || any_in_expr(&a.value, probe)
-        }
-        ast::Expr::ComparisonChain(c) => {
-            any_in_expr(&c.first, probe)
-                || c.comparisons
-                    .iter()
-                    .any(|cmp| any_in_expr(&cmp.right, probe))
-        }
-        ast::Expr::Index(i) => any_in_expr(&i.expr, probe) || any_in_expr(&i.index, probe),
-        ast::Expr::Call(c) => {
-            any_in_expr(&c.callee, probe) || c.args.iter().any(|a| any_in_expr(a, probe))
-        }
-        ast::Expr::MethodCall(mc) => {
-            any_in_expr(&mc.receiver, probe) || mc.args.iter().any(|a| any_in_expr(a, probe))
-        }
-        ast::Expr::StaticMethodCall(sc) => sc.args.iter().any(|a| any_in_expr(a, probe)),
-        ast::Expr::StructLiteral(s) => {
-            s.fields.iter().any(|f| any_in_expr(&f.value, probe))
-                || s.spreads.iter().any(|sp| any_in_expr(&sp.expr, probe))
-        }
-        ast::Expr::TupleLiteral(t) => t.elements.iter().any(|e| any_in_expr(e, probe)),
-        ast::Expr::TupleComprehension(c) => {
-            any_in_expr(&c.iterable, probe) || any_in_expr(&c.body, probe)
-        }
-        ast::Expr::Spread(inner, _) => any_in_expr(inner, probe),
-        ast::Expr::Range(r) => any_in_expr(&r.start, probe) || any_in_expr(&r.end, probe),
-        ast::Expr::TryOp(t) => any_in_expr(&t.expr, probe),
-        ast::Expr::TemplateString(ts) => ts.interpolations().any(|expr| any_in_expr(expr, probe)),
-        ast::Expr::TaggedTemplate(t) => {
-            any_in_expr(&t.tag, probe)
-                || t.template
-                    .interpolations()
-                    .any(|expr| any_in_expr(expr, probe))
-        }
-        ast::Expr::WithHandler(wh) => {
-            wh.handlers.iter().any(|b| any_in_expr(&b.handler, probe))
-                || any_in_tree(&wh.body, probe)
-        }
-        ast::Expr::Closure(_)
-        | ast::Expr::Ident(_)
-        | ast::Expr::Literal(_)
-        | ast::Expr::Error(_) => false,
-    }
+
+    fn visit_item(&mut self, _item: &'t ast::Item) {}
 }
 
 /// [`block_always_exits`] over TIR.
