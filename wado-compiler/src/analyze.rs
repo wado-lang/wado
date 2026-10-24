@@ -6,9 +6,9 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, InterfaceDecl, Item,
-    Module, StrLit, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport, cm_import_of,
-    for_each_function, walk_generic_params, walk_item,
+    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes,
+    InterfaceDecl, Item, Module, StrLit, UseDecl, UseItem, UseNameSpelling, Visibility,
+    WorldExport, cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -1231,15 +1231,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// is, so the two consume alike. A name the module declares itself, or one
     /// two default interfaces share, stays behind its interface.
     fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
-        let mut owners: hashmap::IndexMap<&str, Vec<&InterfaceDecl>> = hashmap::IndexMap::default();
-        for (iface, _) in exported_interfaces(module).filter(|(_, cm)| cm.is_package_default()) {
+        let mut owners: hashmap::IndexMap<&str, Vec<(&InterfaceDecl, &CmImport)>> =
+            hashmap::IndexMap::default();
+        for (iface, cm) in exported_interfaces(module).filter(|(_, cm)| cm.is_package_default()) {
             for op in &iface.methods {
-                owners.entry(op.name.as_str()).or_default().push(iface);
+                owners
+                    .entry(op.name.as_str())
+                    .or_default()
+                    .push((iface, cm));
             }
         }
         for (op, ifaces) in owners {
             match ifaces.as_slice() {
-                [iface] if !self.symbols.is_defined_in_module(module_source, op) => {
+                [(iface, _)] if !self.symbols.is_defined_in_module(module_source, op) => {
                     self.symbols.register_reexport(
                         module_source,
                         op,
@@ -1250,9 +1254,17 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
                 [_] => {}
                 shared => {
+                    // An interface sharing its basename is declared under no
+                    // name a `use` can write, so its full name stands in.
                     let candidates = shared
                         .iter()
-                        .map(|iface| format!("{}::{op}", iface.name))
+                        .map(|(iface, cm)| {
+                            if iface.name == interface_basename(cm) {
+                                format!("{}::{op}", iface.name)
+                            } else {
+                                StrLit::new(cm.interface_path()).as_written()
+                            }
+                        })
                         .collect();
                     self.ambiguous_names
                         .insert((module_source.clone(), op.to_string()), candidates);

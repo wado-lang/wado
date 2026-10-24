@@ -486,6 +486,12 @@ pub fn cm_lift_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
 }
 
+/// The function packaging a handler's result of an async CM import as the
+/// `AsyncCall<T>` its call site reads.
+pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_wrap_async__{cm_identifier}")
+}
+
 /// The helper writing a future of the payload type mangled as `payload`.
 pub fn cm_future_write_func_name(payload: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_future_write_{payload}")
@@ -2634,10 +2640,6 @@ pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
 /// - `dispatch_field_name("read")` → `"op_read"`
 pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
-}
-
-pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_wrap_async__{interface_name}_{method_name}")
 }
 
 /// Convert a `test "name"` string into the snake-case segment of the internal

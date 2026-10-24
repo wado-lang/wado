@@ -4,9 +4,10 @@
 //! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
-use crate::ast::{RestClause, Visibility};
+use crate::ast::{CmImport, RestClause, Visibility};
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
+use crate::component_model::cm_function_key;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1654,7 +1655,6 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     handler_type,
                     h_local,
                     &h_name,
-                    interface_name,
                     &env.entry_source,
                     &env.type_table,
                 )
@@ -2102,24 +2102,23 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 }
 
 /// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
-/// site reads, through the interface's `$cm_wrap_async__<E>__<op>` adapter.
-/// The adapter takes no argument when `T` is unit, so the method call becomes a
-/// statement and the wrap is the block's trailing expression.
+/// site reads, through the `$cm_wrap_async__*` adapter of the CM function the
+/// operation binds. The adapter takes no argument when `T` is unit, so the
+/// method call becomes a statement and the wrap is the block's trailing
+/// expression.
 fn wrap_async_result(
     op: &TirEffectOp,
     method_call: TirExpr,
     method_ret: TypeId,
-    base_name: &str,
     entry_source: &ModuleSource,
     span: token::Span,
 ) -> TirExpr {
-    assert!(
-        op.cm_name.is_some(),
-        "handled async op `{}` without a CM import binding — no \
-         `$cm_wrap_async__` adapter exists to repackage the handler's result \
-         (the elaborator rejects handler impls for user-defined async effects)",
-        op.name
-    );
+    // The elaborator rejects a handler impl for a user-defined async effect.
+    let cm_import = op
+        .cm_name
+        .as_deref()
+        .and_then(CmImport::parse)
+        .expect("a handled async operation binds a CM import");
     let (wrap_args, prelude) = if method_ret == TypeTable::UNIT {
         (
             vec![],
@@ -2132,7 +2131,7 @@ fn wrap_async_result(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: cm_wrap_async_func_name(base_name, &op.name),
+                name: cm_wrap_async_func_name(&cm_function_key(&cm_import, &op.name)),
                 template: None,
                 monomorph_info: None,
                 method_info: None,
@@ -2182,14 +2181,13 @@ fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
 /// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
 /// into a field access on the functor struct. Typed at the call-site type, so an
-/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
+/// async operation wraps the result in its CM function's `$cm_wrap_async__*`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
     handler_type: TypeId,
     h_local_index: u32,
     h_name: &str,
-    base_name: &str,
     entry_source: &ModuleSource,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
@@ -2245,7 +2243,7 @@ fn build_handler_op_closure(
 
     let closure_ret = op.return_type;
     let body = if op.is_async {
-        wrap_async_result(op, method_call, method_ret, base_name, entry_source, span)
+        wrap_async_result(op, method_call, method_ret, entry_source, span)
     } else {
         method_call
     };

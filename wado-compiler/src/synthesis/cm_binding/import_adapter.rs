@@ -35,7 +35,6 @@ use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
-use crate::name::cm_wrap_async_func_name;
 use crate::tir;
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:
@@ -1290,7 +1289,7 @@ impl<'a> AdapterBuilder<'a> {
             None => (0, 0),
         };
         self.auxiliary.push(synthesize_async_wrap_function(
-            cm_wrap_async_func_name(&func_info.interface_name, &func_info.method_name),
+            func_info.wrap_async_name(),
             func_info,
             inner_type_id,
             subtask_type,
