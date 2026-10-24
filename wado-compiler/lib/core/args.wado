@@ -175,29 +175,25 @@ impl ArgvDeserializer {
         }
     }
 
+    /// The failure `message` names, as `kind` for `parse` and as `as_kind` for
+    /// the `Deserialize` code it returns through.
+    fn record(&mut self, kind: ArgsErrorKind, as_kind: DeserializeErrorKind, message: String) -> DeserializeError {
+        self.err = Option::Some(ArgsError { kind, message });
+        return DeserializeError { kind: as_kind, message, offset: -1 };
+    }
+
+    fn missing_value(&mut self) -> DeserializeError {
+        return self.record(
+            ArgsErrorKind::MissingValue,
+            DeserializeErrorKind::Eof,
+            `missing value for option --${self.cur_name}`,
+        );
+    }
+
     /// Pull the next token as the current option's value. Options are always
     /// `--`-prefixed (long options only), so a value never starts with `--`; a
     /// single `-` (a negative number like `-5`) is a valid value. A following
     /// `--`-token or end of input means the option is missing its value.
-    /// Records `kind` for the failure `error` reports, and returns `error`.
-    fn record(&mut self, kind: ArgsErrorKind, error: DeserializeError) -> DeserializeError {
-        self.err = Option::Some(ArgsError { kind, message: error.message });
-        return error;
-    }
-
-    /// Records `kind` for a failure no `DeserializeErrorKind` names.
-    fn reject(&mut self, kind: ArgsErrorKind, message: String) -> DeserializeError {
-        return self.record(kind, DeserializeError { kind: DeserializeErrorKind::Custom, message, offset: -1 });
-    }
-
-    fn missing_value(&mut self) -> DeserializeError {
-        return self.record(ArgsErrorKind::MissingValue, DeserializeError {
-            kind: DeserializeErrorKind::Eof,
-            message: `missing value for option --${self.cur_name}`,
-            offset: -1,
-        });
-    }
-
     fn pull_option_value(&mut self) -> Result<String, DeserializeError> {
         self.skip_consumed();
         if self.pos >= self.tokens.len() || self.tokens[self.pos].starts_with("--") {
@@ -286,7 +282,7 @@ impl ArgvDeserializer {
 
     /// Record an `InvalidValue` and return the matching `DeserializeError`.
     fn invalid_value<S: AsStrSlice>(&mut self, token: S) -> DeserializeError {
-        return self.record(ArgsErrorKind::InvalidValue, DeserializeError::invalid_value(`invalid value: '${token}'`));
+        return self.record(ArgsErrorKind::InvalidValue, DeserializeErrorKind::InvalidValue, `invalid value: '${token}'`);
     }
 
     /// The next value token, converted with `LenientFromStr`.
@@ -340,7 +336,11 @@ impl DeserializeStruct for ArgvStructAccess {
                 self.de.pos += 1;
                 let lo = unchecked ArgvDeserializer::split_long(&tok);
                 if lo.raw == "" {
-                    return Result::Err(self.de.reject(ArgsErrorKind::UnknownOption, `malformed option: ${tok}`));
+                    return Result::Err(self.de.record(
+                        ArgsErrorKind::UnknownOption,
+                        DeserializeErrorKind::Custom,
+                        `malformed option: ${tok}`,
+                    ));
                 }
                 if let Some(idx) = S::lookup(lo.folded.as_bytes()) {
                     self.de.cur_is_option = true;
@@ -348,7 +348,11 @@ impl DeserializeStruct for ArgvStructAccess {
                     self.de.cur_name = lo.folded;
                     return Result::Ok(Option::Some(idx));
                 }
-                return Result::Err(self.de.reject(ArgsErrorKind::UnknownOption, `unknown option --${lo.raw}`));
+                return Result::Err(self.de.record(
+                    ArgsErrorKind::UnknownOption,
+                    DeserializeErrorKind::Custom,
+                    `unknown option --${lo.raw}`,
+                ));
             }
             let rank = self.pos_rank;
             self.pos_rank += 1;
@@ -356,7 +360,11 @@ impl DeserializeStruct for ArgvStructAccess {
                 self.de.cur_is_option = false;
                 return Result::Ok(Option::Some(idx));
             }
-            return Result::Err(self.de.reject(ArgsErrorKind::TooManyPositionals, `unexpected argument: ${tok}`));
+            return Result::Err(self.de.record(
+                ArgsErrorKind::TooManyPositionals,
+                DeserializeErrorKind::Custom,
+                `unexpected argument: ${tok}`,
+            ));
         }
     }
 
@@ -574,11 +582,11 @@ impl Deserializer for ArgvDeserializer {
         // token the outer `next_field` saw is the tag.
         self.skip_consumed();
         if self.pos >= self.tokens.len() {
-            return Result::Err(self.record(ArgsErrorKind::MissingArgument, DeserializeError {
-                kind: DeserializeErrorKind::Eof,
-                message: `missing subcommand for ${type_name}`,
-                offset: -1,
-            }));
+            return Result::Err(self.record(
+                ArgsErrorKind::MissingArgument,
+                DeserializeErrorKind::Eof,
+                `missing subcommand for ${type_name}`,
+            ));
         }
         let tag = self.tokens[self.pos];
         self.pos += 1;
