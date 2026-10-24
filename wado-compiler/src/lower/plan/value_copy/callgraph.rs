@@ -17,12 +17,21 @@ use std::collections::VecDeque;
 
 /// Dense function ids (position in `project.functions`) plus call edges both
 /// ways: the reverse edges drive the worklist, the forward ones the components.
+/// A function taken by name as a value counts as called: the body minting the
+/// value reads its summary as a call does, so its change must reach that body.
 pub struct CallGraph {
     index: FuncIndex,
     /// `callers[callee]` lists every function that calls `callee`.
     callers: Vec<Vec<u32>>,
     /// `callees[caller]` lists every function it calls, deduplicated.
     callees: Vec<Vec<u32>>,
+}
+
+pub fn body_ids(project: &FlatPackage) -> impl Iterator<Item = u32> + '_ {
+    (0..)
+        .zip(&project.functions)
+        .filter(|(_, func)| func.borrow().body.is_some())
+        .map(|(id, _)| id)
 }
 
 impl CallGraph {
@@ -127,15 +136,22 @@ impl CallGraph {
     /// Drive a monotone worklist: seed every body function, and each time
     /// `recompute(id)` reports a change, re-enqueue that function's callers.
     /// `recompute` returns whether the function's summary grew.
-    pub fn solve(&self, project: &FlatPackage, mut recompute: impl FnMut(u32) -> bool) {
+    pub fn solve(&self, project: &FlatPackage, recompute: impl FnMut(u32) -> bool) {
+        self.solve_from(body_ids(project), recompute);
+    }
+
+    /// [`Self::solve`], recomputing first only `seeds` and then their callers.
+    pub fn solve_from(
+        &self,
+        seeds: impl IntoIterator<Item = u32>,
+        mut recompute: impl FnMut(u32) -> bool,
+    ) {
         let n = self.callers.len();
         let mut in_queue = vec![false; n];
         let mut queue: VecDeque<u32> = VecDeque::with_capacity(n);
-        for (i, func) in project.functions.iter().enumerate() {
-            if func.borrow().body.is_some() {
-                in_queue[i] = true;
-                queue.push_back(i as u32);
-            }
+        for seed in seeds {
+            in_queue[seed as usize] = true;
+            queue.push_back(seed);
         }
         while let Some(u) = queue.pop_front() {
             in_queue[u as usize] = false;
@@ -158,8 +174,17 @@ struct CalleeCollector<'a> {
 
 impl TirRefVisitor for CalleeCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Call { func, .. } = &expr.kind
-            && let Some(id) = self.index.id(&func.module_source, &func.name)
+        let named = match &expr.kind {
+            TirExprKind::Call { func, .. } => Some((&func.module_source, &func.name)),
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => Some((module_source, name)),
+            _ => None,
+        };
+        if let Some((module_source, name)) = named
+            && let Some(id) = self.index.id(module_source, name)
         {
             self.callees.push(id);
         }

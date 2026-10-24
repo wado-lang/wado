@@ -1,0 +1,14 @@
+// Each target is a place the assignment may write, and the error names the
+// target that is not.
+
+export fn run() {
+    let a = 1;
+    let mut b = 2;
+    [b, a] = [a, b];
+}
+
+__DATA__
+{
+    "compile_error": ":7:9: analysis error: cannot assign to immutable variable 'a'",
+    "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]
+}

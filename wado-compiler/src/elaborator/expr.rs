@@ -5959,7 +5959,9 @@ impl AstVisitor<'_> for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {
-                self.record_target(&a.target);
+                for place in a.places() {
+                    self.record_target(place);
+                }
                 // Still descend into the target (it may contain
                 // sub-expressions like `arr[bump()] = ...`) and the value.
                 ast::walk_expr(self, expr);

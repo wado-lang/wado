@@ -133,16 +133,24 @@ impl Finder<'_> {
 impl AstVisitor<'_> for Finder<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         let assignment = match expr {
-            Expr::Assign(assign) => Some((&assign.target, &assign.value)),
-            Expr::CompoundAssign(compound) => Some((&compound.target, &compound.value)),
+            Expr::Assign(assign) => Some((assign.places(), &assign.value)),
+            Expr::CompoundAssign(compound) => {
+                Some((std::slice::from_ref(&compound.target), &compound.value))
+            }
             _ => None,
         };
-        if let Some((Expr::Index(index), value)) = assignment
-            && let Some(span) = index.unchecked
-        {
-            self.report(ASSIGNED, span);
-            self.visit_expr(&index.expr);
-            self.visit_expr(&index.index);
+        if let Some((places, value)) = assignment {
+            for place in places {
+                if let Expr::Index(index) = place
+                    && let Some(span) = index.unchecked
+                {
+                    self.report(ASSIGNED, span);
+                    self.visit_expr(&index.expr);
+                    self.visit_expr(&index.index);
+                } else {
+                    self.visit_expr(place);
+                }
+            }
             self.visit_expr(value);
             return;
         }

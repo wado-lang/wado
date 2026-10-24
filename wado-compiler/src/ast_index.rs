@@ -196,8 +196,10 @@ impl AstVisitor<'_> for IndexBuilder {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Assign(e) => {
-                if let Expr::Ident(target) = &e.target {
-                    self.index.write_targets.insert(target.id);
+                for place in e.places() {
+                    if let Expr::Ident(target) = place {
+                        self.index.write_targets.insert(target.id);
+                    }
                 }
             }
             Expr::CompoundAssign(e) => {
@@ -405,7 +407,7 @@ mod tests {
         for stmt in &body.stmts {
             if let Stmt::Expr(es) = stmt {
                 let target = match &es.expr {
-                    Expr::Assign(a) => &a.target,
+                    Expr::Assign(a) => &a.places()[0],
                     Expr::CompoundAssign(a) => &a.target,
                     _ => continue,
                 };
