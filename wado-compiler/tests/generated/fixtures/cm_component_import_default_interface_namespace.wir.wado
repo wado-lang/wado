@@ -49,13 +49,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wado-lang:cm-catalog/CmCatalog::id_string" = fn(i32, i32, i32);  // TypeId(13)
+type "functype//wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string" = fn(i32, i32, i32);  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//cm_component_import_default_interface_namespace.wado/$cm_export__$test_0" = fn();  // TypeId(15)
 
-type "functype//cm_component_import_default_interface_namespace.wado/$cm_binding__CmCatalog_id_string$spec0" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(16)
+type "functype//cm_component_import_default_interface_namespace.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string$spec0" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
 type "functype//core:prelude/fpfmt.wado/u64_bit_len" = fn(u64) -> i32;  // TypeId(17)
 
@@ -163,8 +163,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wado-lang:cm-catalog/CmCatalog::id_string from "wasi/wado-lang:cm-catalog/CmCatalog::id_string";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string from "wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -184,7 +184,7 @@ fn "cm_component_import_default_interface_namespace.wado/$cm_export__$test_0"() 
     let b: ref Array<u8>;
     let i: i32;
     let f_38: ref "core:prelude/format.wado//Formatter";
-    $v0 = "cm_component_import_default_interface_namespace.wado/$cm_binding__CmCatalog_id_string$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+    $v0 = "cm_component_import_default_interface_namespace.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
         a = $v0.repr;
         a_end = $v0.used;
@@ -242,7 +242,7 @@ condition: catalog::id_string(\"hello\") == \"hello\"
     "wasi/task-return"(0);
 }
 
-fn "cm_component_import_default_interface_namespace.wado/$cm_binding__CmCatalog_id_string$spec0"(v) with CmCatalog {
+fn "cm_component_import_default_interface_namespace.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string$spec0"(v) with CmCatalog {
     let $v_packed: i64;
     let $str_len: i32;
     let bytes_8: ref Array<u8>;
@@ -262,7 +262,7 @@ fn "cm_component_import_default_interface_namespace.wado/$cm_binding__CmCatalog_
     };
     $v_packed = builtin::i64_extend_i32_u(ptr_9) | 21474836480_i64;
     ptr_9 = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wado-lang:cm-catalog/CmCatalog::id_string"(builtin::i32_wrap_i64($v_packed), builtin::i32_wrap_i64($v_packed >> 32_i64), ptr_9);
+    "wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-string"(builtin::i32_wrap_i64($v_packed), builtin::i32_wrap_i64($v_packed >> 32_i64), ptr_9);
     i_16 = builtin::load_i32(ptr_9);
     bytes_8 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32(ptr_9 + 4)));
     i_25 = 0;
@@ -508,7 +508,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

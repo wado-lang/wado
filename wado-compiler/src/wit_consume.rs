@@ -12,12 +12,15 @@ use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
     NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
-    VariantCase, VariantDecl, Visibility, cm_import_of,
+    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_import_of, cm_interface_name_of,
 };
-use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
+use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
-use crate::name::wado_identifier;
+use crate::module_source::ModuleSource;
+use crate::name::{
+    cm_dependency_interface, interface_basename, unnamed_interface_name, wado_identifier,
+};
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -29,11 +32,8 @@ use wit_parser::{
 pub struct ComponentBindings {
     /// The AST module declaring the component's exported interfaces and types.
     pub module: Module,
-    /// FQ names of every exported interface (drives import-plan classification).
-    pub interface_fqs: Vec<String>,
-    /// Bare names of every exported world-level function (Phase 9); composition
-    /// wires these by name.
-    pub world_func_names: Vec<String>,
+    /// Every interface the component exports.
+    pub interfaces: Vec<ExportedInterface>,
     /// FQ names of the interfaces the component itself imports — its host-leaf
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
@@ -42,6 +42,16 @@ pub struct ComponentBindings {
     /// keyed by the reference's own site. Merged into the CM registry by the
     /// loader; the syntax nodes carry no interface of their own.
     pub source_interfaces: SourceInterfaceBatch,
+}
+
+/// An interface an imported component exports.
+#[derive(Debug, Clone)]
+pub struct ExportedInterface {
+    /// Its name in the component.
+    pub export: String,
+    /// The interface the program imports it as, which composition wires to
+    /// `export` ([`cm_dependency_interface`]).
+    pub import: String,
 }
 
 /// The host-leaf import FQs a component-binding module carries in its
@@ -86,22 +96,36 @@ pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceD
 /// # Errors
 /// A message naming each shape the component exports that has no import
 /// mapping yet: a resource, a world-level type, or `error-context`.
-pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
-    let mut b = Builder::new();
-    let mut interface_fqs = Vec::new();
-    let mut world_func_names = Vec::new();
+pub fn build_bindings(
+    resolve: &Resolve,
+    world: WorldId,
+    component: &ModuleSource,
+) -> Result<ComponentBindings, String> {
+    let namespace = component
+        .wasm_canonical_namespace()
+        .expect("a component is a wasm asset");
+    let exports = resolve.worlds[world]
+        .exports
+        .values()
+        .filter_map(|item| match item {
+            WorldItem::Interface { id, .. } => Some(interface_fq(resolve, *id)),
+            WorldItem::Function(_) | WorldItem::Type { .. } => None,
+        })
+        .map(|fq| {
+            let cm = CmImport::parse(&fq).expect("interface FQ is well-formed");
+            let import = cm_dependency_interface(&cm, &namespace).interface_path();
+            (fq, import)
+        })
+        .collect();
+    let mut b = Builder::new(exports);
 
     for (_, item) in &resolve.worlds[world].exports {
         match item {
             WorldItem::Interface { id, .. } => {
                 let fq = interface_fq(resolve, *id);
                 b.emit_interface(resolve, *id, &fq);
-                interface_fqs.push(fq);
             }
-            WorldItem::Function(f) => {
-                b.emit_world_function(resolve, f);
-                world_func_names.push(f.name.clone());
-            }
+            WorldItem::Function(f) => b.emit_world_function(resolve, f),
             WorldItem::Type { .. } => {
                 return Err(
                     "importing a component that exports a world-level type is not yet supported"
@@ -136,6 +160,8 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
             }
         }
     }
+
+    b.unname_shared_basenames();
 
     if !b.errors.is_empty() {
         // One unsupported shape reaches the collector once per signature
@@ -176,10 +202,14 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         // Synthesized from WIT, never highlighted: no source text to key on.
         Vec::new(),
     );
+    let interfaces = b
+        .exports
+        .into_iter()
+        .map(|(export, import)| ExportedInterface { export, import })
+        .collect();
     Ok(ComponentBindings {
         module,
-        interface_fqs,
-        world_func_names,
+        interfaces,
         host_leaf_imports,
         source_interfaces,
     })
@@ -193,10 +223,13 @@ struct Builder {
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
     uses_tree_map: bool,
+    /// Each interface the component exports -> the one the program imports it
+    /// as ([`cm_dependency_interface`]).
+    exports: hashmap::IndexMap<String, String>,
 }
 
 impl Builder {
-    fn new() -> Self {
+    fn new(exports: hashmap::IndexMap<String, String>) -> Self {
         Self {
             space: AstIdSpace::next(),
             count: 0,
@@ -204,6 +237,7 @@ impl Builder {
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
             uses_tree_map: false,
+            exports,
         }
     }
 
@@ -221,6 +255,7 @@ impl Builder {
             items: vec![UseItem::Simple {
                 id: self.id(),
                 name: "TreeMap".to_string(),
+                spelling: UseNameSpelling::Ident,
                 name_span: syn(),
                 alias: None,
                 local_span: syn(),
@@ -231,15 +266,56 @@ impl Builder {
         })
     }
 
+    /// Declare under its interface name each interface whose basename is not its
+    /// own: one another interface shares, or one a world function or a type
+    /// takes, as each outranks a basename. Such an interface is reached by its
+    /// full name alone.
+    fn unname_shared_basenames(&mut self) {
+        let mut interfaces: hashmap::IndexMap<String, usize> = hashmap::IndexMap::default();
+        let mut taken: hashmap::IndexSet<String> = hashmap::IndexSet::default();
+        for item in &self.items {
+            match item {
+                Item::Interface(decl) => *interfaces.entry(decl.name.clone()).or_default() += 1,
+                Item::Function(func) => {
+                    taken.insert(func.name.clone());
+                }
+                other => {
+                    if let Some(head) = other.type_decl() {
+                        taken.insert(head.name.to_string());
+                    }
+                }
+            }
+        }
+        for item in &mut self.items {
+            if let Item::Interface(decl) = item
+                && (interfaces[&decl.name] > 1 || taken.contains(&decl.name))
+            {
+                let name = cm_interface_name_of(&decl.attrs)
+                    .expect("a synthesized interface carries `#[cm]`");
+                decl.name = unnamed_interface_name(&name);
+            }
+        }
+    }
+
     fn id(&mut self) -> AstId {
         let id = AstId::new(self.space, self.count);
         self.count += 1;
         id
     }
 
-    /// `#[cm("ns:pkg/iface@ver[#frag]")]` as an interface-import boundary.
+    /// The interface the program imports the component's interface `fq` as:
+    /// one it imports itself keeps its name.
+    fn import_fq(&self, fq: &str) -> String {
+        self.exports
+            .get(fq)
+            .cloned()
+            .unwrap_or_else(|| fq.to_string())
+    }
+
+    /// `#[cm("ns:pkg/iface@ver[#frag]")]` as an interface-import boundary, for
+    /// the interface `fq` the program imports.
     fn cm_import_attr(&self, fq: &str, frag: Option<&str>) -> Attribute {
-        let mut cm = CmImport::parse(fq).expect("interface FQ is well-formed");
+        let mut cm = CmImport::parse(&self.import_fq(fq)).expect("interface FQ is well-formed");
         cm.function = frag.map(str::to_string);
         Attribute {
             name: CM.to_string(),
@@ -277,11 +353,8 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
-        let iface_name = iface
-            .name
-            .as_deref()
-            .unwrap_or_default()
-            .to_upper_camel_case();
+        let iface_name =
+            interface_basename(&CmImport::parse(fq).expect("interface FQ is well-formed"));
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
@@ -340,7 +413,15 @@ impl Builder {
             });
         }
 
-        let attrs = vec![self.cm_import_attr(fq, None)];
+        let mut attrs = vec![self.cm_import_attr(fq, None)];
+        if self.exports.contains_key(fq) {
+            attrs.push(Attribute {
+                name: CM_EXPORT.to_string(),
+                args: vec![AttrArg::Str(StrLit::new(fq))],
+                cm_boundary: None,
+                span: syn(),
+            });
+        }
         let id = self.id();
         self.items.push(Item::Interface(InterfaceDecl {
             id,
@@ -655,7 +736,7 @@ impl Builder {
         };
         let td = &resolve.types[id];
         if let Some(name) = td.name.as_deref() {
-            let src = type_source_fq(resolve, id, current_fq);
+            let src = self.import_fq(&type_source_fq(resolve, id, current_fq));
             self.named(&name.to_upper_camel_case(), Some(src))
         } else {
             self.errors.push(
@@ -802,6 +883,7 @@ mod tests {
     use super::*;
     use crate::ast::{Item, cm_import_of};
     use crate::component_model::CmInterfaceRegistry;
+    use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
 
     fn decode_fixture() -> (Resolve, WorldId) {
         let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
@@ -824,14 +906,29 @@ mod tests {
         format!("{}:{}/cm-catalog@{version}", name.namespace, name.name)
     }
 
+    fn component() -> ModuleSource {
+        ModuleSourceInterner::new().wasm("cm-catalog.wasm", WasmAssetKind::Wasm)
+    }
+
     #[test]
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
-        let b = build_bindings(&resolve, world).expect("build bindings");
+        let component = component();
+        let b = build_bindings(&resolve, world, &component).expect("build bindings");
         let catalog_fq = catalog_fq(&resolve);
+        // The program imports the interface under a name of this component's.
+        let catalog_import = cm_dependency_interface(
+            &CmImport::parse(&catalog_fq).unwrap(),
+            &component.wasm_canonical_namespace().unwrap(),
+        )
+        .interface_path();
         let registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(b.source_interfaces.clone());
-        assert_eq!(b.interface_fqs, vec![catalog_fq.clone()]);
+        let [exported] = b.interfaces.as_slice() else {
+            panic!("cm-catalog exports one interface");
+        };
+        assert_eq!(exported.export, catalog_fq);
+        assert_eq!(exported.import, catalog_import);
         // cm-catalog performs no I/O, so the ambient panic path imports nothing
         // (`log_stderr` rides an existing stderr import or drops its message —
         // see `AmbientStdio`). Its one host-leaf import is
@@ -854,11 +951,15 @@ mod tests {
         }
         let iface = iface.expect("interface present");
         assert_eq!(iface.name, "CmCatalog");
+        assert_eq!(
+            cm_interface_name_of(&iface.attrs).unwrap().interface_path(),
+            catalog_fq
+        );
 
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = cm_import_of(&id_u32.attrs).unwrap();
-        assert_eq!(cm.interface_path(), catalog_fq);
+        assert_eq!(cm.interface_path(), catalog_import);
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -871,7 +972,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some(catalog_fq.as_str())
+                    Some(catalog_import.as_str())
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),
@@ -893,7 +994,7 @@ mod tests {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some(catalog_fq.as_str())
+                    Some(catalog_import.as_str())
                 );
             }
             other => panic!("expected Named Meters, got {other:?}"),
@@ -912,7 +1013,7 @@ mod tests {
             )
             .unwrap();
         let world = resolve.select_world(&[package], Some("w")).unwrap();
-        let b = build_bindings(&resolve, world).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component()).expect("build bindings");
         let mut names = Vec::new();
         for item in &b.module.items {
             let functions = match item {

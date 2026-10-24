@@ -1120,12 +1120,11 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                     .map(|p| ctx.type_id_to_wir_type_pending(type_table, *p))
                     .filter(|t| !matches!(t, WirType::Unit))
                     .collect();
-                let result_wirs: Vec<WirType> =
-                    if *return_type == TypeTable::UNIT || *return_type == TypeTable::NEVER {
-                        vec![]
-                    } else {
-                        vec![ctx.type_id_to_wir_type_pending(type_table, *return_type)]
-                    };
+                let result_wirs: Vec<WirType> = if type_table.is_stackless(*return_type) {
+                    vec![]
+                } else {
+                    vec![ctx.type_id_to_wir_type_pending(type_table, *return_type)]
+                };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
                     let arity = params.len();

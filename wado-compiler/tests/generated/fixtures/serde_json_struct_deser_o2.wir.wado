@@ -127,9 +127,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(25)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
 type "functype//serde_json_struct_deser_o2.wado/run" = fn();  // TypeId(29)
 
@@ -341,7 +341,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(132)
 
 type "functype//core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_struct_deser_o2.wado/Point>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(133)
 
-type "functype//serde_json_struct_deser_o2.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(134)
+type "functype//serde_json_struct_deser_o2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(134)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(135)
 
@@ -351,8 +351,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -403,7 +403,7 @@ fn "serde_json_struct_deser_o2.wado/run"() with Stdout {
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, $mv$r$0, x_27, is_negative_23);
         is_negative_23 = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
         $mv$r$0 = builtin::i32_wrap_i64(x_27 >> 32_i64);
-        $moved_4 = "serde_json_struct_deser_o2.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = is_negative_23; is_negative_23 = 0; $moved_4);
+        $moved_4 = "serde_json_struct_deser_o2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = is_negative_23; is_negative_23 = 0; $moved_4);
         is_negative_23 = $mv$r$0;
         $mv$r$0 = 0;
         "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_2.repr, $local_2.used);
@@ -415,8 +415,8 @@ fn "serde_json_struct_deser_o2.wado/run"() with Stdout {
     }
 }
 
-fn "serde_json_struct_deser_o2.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "serde_json_struct_deser_o2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "serde_json_struct_deser_o2.wado/$cm_export__run"() {
@@ -802,7 +802,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -2977,12 +2977,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"($mv$self$repr, $mv$self$start, $mv$self$end, pat) {
     let p: ref "core:prelude/string.wado//StrSlice";
     let pat_len: i32;
-    let $av_7: i32;
-    $av_7 = local.tee p("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(pat.repr, pat.used)).start;
-    if local.tee pat_len(p.end - $av_7) > ($mv$self$end - $mv$self$start) {
+    let $av_6: i32;
+    $av_6 = local.tee p("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(pat.repr, pat.used)).start;
+    if local.tee pat_len(p.end - $av_6) > ($mv$self$end - $mv$self$start) {
         return 0;
     }
-    return "core:prelude/string.wado/bytes_match_at"($mv$self$repr, $mv$self$start, p.repr, $av_7, pat_len);
+    return "core:prelude/string.wado/bytes_match_at"($mv$self$repr, $mv$self$start, p.repr, $av_6, pat_len);
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str<&core:prelude/string.wado/String>$sroa[return]"($mv$s$repr, $mv$s$used) {

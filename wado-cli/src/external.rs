@@ -58,6 +58,15 @@ pub fn find(name: &str) -> Option<PathBuf> {
         .find_map(|dir| resolve_in(&dir, name))
 }
 
+/// The first executable `name` on `PATH`, by the rule subcommands follow.
+#[must_use]
+pub fn find_program(name: &str) -> Option<PathBuf> {
+    search_dirs().into_iter().find_map(|dir| {
+        let path = dir.join(name);
+        is_executable(&path).then_some(path)
+    })
+}
+
 /// The `wado-<name>` one directory offers, taking the extensions in the order
 /// the operating system would.
 fn resolve_in(dir: &Path, name: &str) -> Option<PathBuf> {

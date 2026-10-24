@@ -14,19 +14,19 @@ pub trait NirRefVisitor {
     }
 }
 
-/// Every expression id reachable from the body root, in walk order.
+/// Every expression id [`Body::for_each_reachable_node`] reaches, in walk order.
 ///
 /// Reachability is what separates the nodes a pass may act on from the ones an
 /// earlier in-place rewrite left behind: the arena keeps every displaced node,
 /// and one nothing refers to never runs.
-///
-/// A body with no block structure is a bare expression — a global initializer —
-/// and everything it holds is reachable by construction.
 pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
-    if body.blocks.is_empty() {
-        return body.exprs.iter().map(|(e, _)| e).collect();
-    }
-    exprs_under(body, NodeRef::Block(body.root()))
+    let mut out = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(e) = node {
+            out.push(e);
+        }
+    });
+    out
 }
 
 /// Every expression id reachable from `node`, in walk order — the region a

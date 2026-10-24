@@ -7,14 +7,15 @@
 use crate::ast::{RestClause, Visibility};
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
+use crate::component_model::cm_payload_function_key;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclName, DeclPath, DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver,
-    cm_wrap_async_func_name, dispatch_field_name, dispatch_global_name, dispatch_struct_name,
-    dispatch_wrapper_name, effect_default_impl_name, effect_namespace, mangle_generic_name,
+    DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver, cm_wrap_async_func_name,
+    dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
+    effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
 use crate::package::Package;
 use crate::synthesis::common::{
@@ -108,7 +109,7 @@ struct EffectMeta {
 /// covering both `effect` and `resource` declarations. Resources participate
 /// in the dispatch protocol identically to effects — same operation list,
 /// same wrapper synthesis, same call-site rewriting against
-/// `$cm_binding__<R>_<op>` adapters — so they share a single index. The
+/// `$cm_binding__*` adapters — so they share a single index. The
 /// `is_resource` flag distinguishes the kinds where it matters (currently
 /// only the wrapper's declared `effects` list).
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
@@ -247,7 +248,7 @@ pub struct DispatchPlan {
     /// boundary. A handler that leaves one out keeps the wrapper's routing
     /// rather than falling to a local default, which would shadow the real
     /// implementation on the other side.
-    pub open_boundary_ops: IndexSet<String>,
+    pub open_boundary_ops: IndexSet<DefId>,
 }
 
 /// The label dispatch infrastructure is named after: `Stream` declared in
@@ -318,6 +319,7 @@ fn substitute_operations(
                 })
                 .collect();
             TirEffectOp {
+                def: op.def,
                 name: op.name.clone(),
                 params: new_params,
                 return_type: type_table.substitute_type_params(op.return_type, &subst),
@@ -500,18 +502,20 @@ fn synthesize_dispatch_wrappers(
     // registered as one: a non-lib build registers no guest imports, so its
     // wrappers keep trapping rather than emit an unresolvable import call.
     let is_open = open_effects.contains(effect);
+    let declared_at = project.tir_modules[entry_source]
+        .type_table
+        .borrow()
+        .defs()
+        .ast_id(effect.def());
+    let registry = &project.cm_interface_registry;
     let open_and_registered: Vec<bool> = plan
         .operations
         .iter()
         .map(|op| {
             is_open
-                && project
-                    .cm_interface_registry
-                    .get_function(&DeclPath::method_of(
-                        &DeclName::new(effect.name()),
-                        &op.name,
-                    ))
-                    .is_some()
+                && registry
+                    .operation_key(declared_at, op.cm_name.as_deref(), &op.name)
+                    .is_some_and(|key| registry.get_function(&key).is_some())
         })
         .collect();
     plan.open_boundary_ops = plan
@@ -519,7 +523,7 @@ fn synthesize_dispatch_wrappers(
         .iter()
         .zip(&open_and_registered)
         .filter(|(_, is_open_import)| **is_open_import)
-        .map(|(op, _)| op.name.clone())
+        .map(|(op, _)| op.def)
         .collect();
     let entry_module = project
         .tir_modules
@@ -830,7 +834,7 @@ fn build_dispatch_wrapper_function(
                 func: Box::new(FunctionRef {
                     module_source: ModuleSource::effect(effect),
                     name: op_name.clone(),
-                    template: None,
+                    template: Some(TemplateId::Operation { def: op.def }),
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -1651,7 +1655,6 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     handler_type,
                     h_local,
                     &h_name,
-                    interface_name,
                     &env.entry_source,
                     &env.type_table,
                 )
@@ -1659,7 +1662,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
             } else if impl_info.rest.is_none()
                 && op.has_default
-                && !plan.open_boundary_ops.contains(&op.name)
+                && !plan.open_boundary_ops.contains(&op.def)
             {
                 // No rest clause, and the interface said what the operation
                 // does unhandled. `..trap` above wins over that — a mock means
@@ -1762,7 +1765,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut stmts: Vec<TirStmt> = Vec::with_capacity(prelude.len() + body.stmts.len() + 2);
     stmts.extend(prelude);
 
-    if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+    if result_type == TypeTable::UNIT || env.type_table.borrow().is_never(result_type) {
         // Statement form (or a diverging body): the body produces no value to
         // preserve, so the restore simply runs after it.
         stmts.extend(body.stmts);
@@ -2099,24 +2102,23 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 }
 
 /// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
-/// site reads, through the interface's `$cm_wrap_async__<E>__<op>` adapter.
-/// The adapter takes no argument when `T` is unit, so the method call becomes a
-/// statement and the wrap is the block's trailing expression.
+/// site reads, through the `$cm_wrap_async__*` adapter of the CM function the
+/// operation binds. The adapter takes no argument when `T` is unit, so the
+/// method call becomes a statement and the wrap is the block's trailing
+/// expression.
 fn wrap_async_result(
     op: &TirEffectOp,
     method_call: TirExpr,
     method_ret: TypeId,
-    base_name: &str,
     entry_source: &ModuleSource,
     span: token::Span,
 ) -> TirExpr {
-    assert!(
-        op.cm_name.is_some(),
-        "handled async op `{}` without a CM import binding — no \
-         `$cm_wrap_async__` adapter exists to repackage the handler's result \
-         (the elaborator rejects handler impls for user-defined async effects)",
-        op.name
-    );
+    // The elaborator rejects a handler impl for a user-defined async effect.
+    let cm_function = op
+        .cm_name
+        .as_deref()
+        .and_then(|cm_name| cm_payload_function_key(cm_name, &op.name))
+        .expect("a handled async operation binds a CM import");
     let (wrap_args, prelude) = if method_ret == TypeTable::UNIT {
         (
             vec![],
@@ -2129,7 +2131,7 @@ fn wrap_async_result(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: cm_wrap_async_func_name(base_name, &op.name),
+                name: cm_wrap_async_func_name(&cm_function),
                 template: None,
                 monomorph_info: None,
                 method_info: None,
@@ -2179,14 +2181,13 @@ fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
 /// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
 /// into a field access on the functor struct. Typed at the call-site type, so an
-/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
+/// async operation wraps the result in its CM function's `$cm_wrap_async__*`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
     handler_type: TypeId,
     h_local_index: u32,
     h_name: &str,
-    base_name: &str,
     entry_source: &ModuleSource,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
@@ -2242,7 +2243,7 @@ fn build_handler_op_closure(
 
     let closure_ret = op.return_type;
     let body = if op.is_async {
-        wrap_async_result(op, method_call, method_ret, base_name, entry_source, span)
+        wrap_async_result(op, method_call, method_ret, entry_source, span)
     } else {
         method_call
     };
@@ -2447,8 +2448,8 @@ fn build_forward_closure(
 
 /// Rewrite every effect-operation call site to route through a dispatch wrapper.
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
-/// elaborator emits: a `Call` in `ModuleSource::Effect` for
-/// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
+/// elaborator emits: a `Call` naming its operation (`TemplateId::Operation`)
+/// for `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
 /// op. Calls inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
@@ -2488,12 +2489,11 @@ fn rewrite_calls_in_functions(
 /// Outlives its pass: an instance minted later routes through the same wrappers.
 pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeKey>, String)>>;
 
-/// `(interface, op) → wrapper_name` for user-effect calls (e.g.
-/// `Counter::next()`).
-type EffectOpWrappers = IndexMap<(DefId, String), String>;
+/// `op → wrapper_name` for user-effect calls (e.g. `Counter::next()`).
+type EffectOpWrappers = IndexMap<DefId, String>;
 
-/// One lookup map per call shape: an effect op keys on its interface and name,
-/// a resource method on `(resource, cm_name)` plus its type args.
+/// One lookup map per call shape: an effect op keys on its declaration, a
+/// resource method on `(resource, cm_name)` plus its type args.
 fn build_wrapper_indexes(
     project: &Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2520,11 +2520,11 @@ fn build_wrapper_indexes(
                 // user-side calls (no canonical attribute → no
                 // elaborator-side `cm_name` tag), so skip them.
             } else {
-                // Effect op: route via the `ModuleSource::Effect` call shape
-                // regardless of whether the op carries a CM attribute (the
+                // Effect op: route by its declaration regardless of whether
+                // the op carries a CM attribute (the
                 // WASI effect adapter generation in cm_binding still kicks in
                 // for the wrapper fallback).
-                user_to_wrapper.insert((effect.def(), op.name.clone()), wrapper_name.clone());
+                user_to_wrapper.insert(op.def, wrapper_name.clone());
             }
         }
     }
@@ -2709,8 +2709,8 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                             ctx.entry_source,
                         )
                     })
-            } else if let Some(effect) = func.module_source.effect_interface()
-                && let Some(wrapper) = ctx.user_to_wrapper.get(&(effect.def(), func.name.clone()))
+            } else if let Some(op) = func.template.as_ref().and_then(TemplateId::operation)
+                && let Some(wrapper) = ctx.user_to_wrapper.get(&op)
             {
                 Some(wrapper_call(
                     wrapper.clone(),

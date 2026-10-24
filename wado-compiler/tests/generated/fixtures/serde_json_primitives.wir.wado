@@ -173,7 +173,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(37)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(38)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(39)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(39)
 
 type "functype//serde_json_primitives.wado/$test_0_i32_zero_roundtrip" = fn();  // TypeId(40)
 
@@ -763,7 +763,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -2868,19 +2868,19 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
     let p_10: i64;
     let start: i32;
     let end: i32;
-    let $av_82: i32;
+    let $av_84: i32;
     sign = select u64(n.neg, 1_i64 << builtin::i64_extend_i32_s(($mv$format$exponent_bits + $mv$format$precision) - 1), 0_i64);
     if local.tee $load_1(n.digits) == 0_i64 {
         return sign;
     }
-    $av_82 = n.int_digits;
-    $av_82 = builtin::i32_wrap_i64(select i64(p_10 < 370_i64, local.tee p_10(select i64(p_10 > -371_i64, local.tee p_10(n.exp + builtin::i64_extend_i32_s((select i32($av_82 > 19, $av_82 - 19, 0) - n.frac_digits) - n.frac_lead_zeros)), -371_i64)), 370_i64));
+    $av_84 = n.int_digits;
+    $av_84 = builtin::i32_wrap_i64(select i64(p_10 < 370_i64, local.tee p_10(select i64(p_10 > -371_i64, local.tee p_10(n.exp + builtin::i64_extend_i32_s((select i32($av_84 > 19, $av_84 - 19, 0) - n.frac_digits) - n.frac_lead_zeros)), -371_i64)), 370_i64));
     if n.inexact == 0 {
         return sign | $inline_round_decimal_5: block -> u64 {
-            if $av_82 > 350 {
+            if $av_84 > 350 {
                 break $inline_round_decimal_5: ((1_i64 << builtin::i64_extend_i32_s($mv$format$exponent_bits)) - 1_i64) << builtin::i64_extend_i32_s($mv$format$precision - 1);
             }
-            if $av_82 < -351 {
+            if $av_84 < -351 {
                 break $inline_round_decimal_5: 0_i64;
             }
             if @unlikely($load_1 == 0_i64) {
@@ -2888,7 +2888,7 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
                 "core:prelude/fpfmt.wado/parse_bits$contract_report0"($load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/fpfmt.wado:1130"), used: 28 });
                 unreachable;
             }
-            break $inline_round_decimal_5: "core:prelude/fpfmt.wado/parse_bits$unchecked"($load_1, $av_82, $mv$format$precision, $mv$format$exponent_bits);
+            break $inline_round_decimal_5: "core:prelude/fpfmt.wado/parse_bits$unchecked"($load_1, $av_84, $mv$format$precision, $mv$format$exponent_bits);
         };
     }
     start = n.mantissa_start;
@@ -2906,7 +2906,7 @@ fn "core:json/scanned_to_bits"(n, $mv$input$repr, $mv$input$start, $mv$input$end
     }
     $mv$input$end = select i32(end < $mv$input$end, local.tee end(select i32(end > start, end, start)), $mv$input$end);
     digits = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$input$repr, start: $mv$input$start + start, end: $mv$input$start + $mv$input$end };
-    return sign | "core:prelude/fpfmt.wado/round_truncated_decimal"($load_1, $av_82, digits.repr, digits.start, digits.end, $mv$format$precision, $mv$format$exponent_bits);
+    return sign | "core:prelude/fpfmt.wado/round_truncated_decimal"($load_1, $av_84, digits.repr, digits.start, digits.end, $mv$format$precision, $mv$format$exponent_bits);
 }
 
 fn "core:json/integer_range_error"(type_name, start) {
@@ -4667,7 +4667,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

@@ -207,6 +207,7 @@
 - [Affine Types — Swift's Noncopyable Discipline for Resources](./wep-2026-10-17-affine-types.md)
 - [`core:process` — Running Host Programs Without Extending Authority](./wep-2026-10-21-core-process.md)
 - [Destructuring Assignment and a Swap Without Value Copies](./wep-2026-10-21-destructuring-assignment.md)
+- [A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
 
 ## Standard Library
@@ -228,6 +229,7 @@
 - [core:log](./stdlib-core-log.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)
+- [core:process](./stdlib-core-process.md)
 - [core:router](./stdlib-core-router.md)
 - [core:secure_random](./stdlib-core-secure_random.md)
 - [core:serde](./stdlib-core-serde.md)

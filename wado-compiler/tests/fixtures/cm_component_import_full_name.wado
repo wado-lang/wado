@@ -1,0 +1,8 @@
+// An interface is imported by its full interface name, a string that takes
+// `as`. The version may be left out where the module offers one.
+use { "wado:test/math@0.1.0" as Versioned, "wado:test/math" as M } from "./sub/wasm_import_cm_math.wat" with { type: "wat" };
+
+test "a component interface is imported by its full name" {
+    assert Versioned::add(2, 40) == 42;
+    assert M::add(1, 2) == 3;
+}

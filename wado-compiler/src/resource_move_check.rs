@@ -11,6 +11,7 @@ use crate::ast::{
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
+use crate::divergence::{self, ExprTypes};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
@@ -676,6 +677,14 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
         inner.disturbances.clone_from(&self.disturbances);
         inner.suppress = self.suppress;
         inner
+    }
+}
+
+impl ExprTypes for MoveWalker<'_, '_> {
+    fn is_never(&self, expr: &Expr) -> bool {
+        self.sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| self.sem().types.is_never(ty))
     }
 }
 
@@ -1731,7 +1740,15 @@ impl MoveWalker<'_, '_> {
         walk(&mut dead);
     }
 
+    /// Walks `stmt`, answering whether control never reaches past it.
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
+        let walked = self.walk_stmt(stmt);
+        walked || divergence::stmt_head_always_exits(self, stmt)
+    }
+
+    /// Answers the divergence of the paths `stmt` chooses between; what it
+    /// evaluates first is [`divergence::stmt_head_always_exits`]'s to answer.
+    fn walk_stmt(&mut self, stmt: &Stmt) -> bool {
         match stmt {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
@@ -1747,17 +1764,15 @@ impl MoveWalker<'_, '_> {
                     self.visit_block(eb);
                     self.flow = matched;
                 }
-                if let Some(value) = &l.value {
-                    self.bind_to(&l.pattern, value);
-                    self.is_never(value)
-                } else {
-                    self.bind_pattern(&l.pattern);
-                    false
+                match &l.value {
+                    Some(value) => self.bind_to(&l.pattern, value),
+                    None => self.bind_pattern(&l.pattern),
                 }
+                false
             }
             Stmt::Expr(e) => {
                 self.visit_at(&e.expr);
-                self.is_never(&e.expr)
+                false
             }
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
@@ -1861,13 +1876,6 @@ impl MoveWalker<'_, '_> {
             ended
         });
         self.continue_from(end, jumps.breaks)
-    }
-
-    /// Whether `expr` is of type `!`: evaluating it never falls through.
-    fn is_never(&self, expr: &Expr) -> bool {
-        self.sem()
-            .expression_type(expr.id())
-            .is_some_and(|ty| self.sem().types.is_never(ty))
     }
 
     /// The iteration's end is reached by a body that does not diverge and by
@@ -2016,7 +2024,7 @@ impl MoveWalker<'_, '_> {
             Expr::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
             other => {
                 self.visit_at(other);
-                self.is_never(other)
+                divergence::expr_always_exits(self, other)
             }
         }
     }

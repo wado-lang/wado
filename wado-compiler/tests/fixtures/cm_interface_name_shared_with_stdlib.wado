@@ -1,8 +1,6 @@
-#![TODO]
-// A program's own `Client::send` is refused because `wasi:http` declares a
-// `Client::send` too, which the program never imports: a call finds its
-// Component Model binding by `Interface::operation` alone, not by the
-// declaration it names.
+// A program's own `Client::send` binds its own Component Model function, though
+// `wasi:http` declares a `Client::send` too: a call finds its binding by the
+// declaration it names, not by `Interface::operation`.
 
 #[cm("example:demo/client")]
 interface Client {

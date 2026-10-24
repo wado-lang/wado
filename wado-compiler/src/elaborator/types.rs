@@ -1159,6 +1159,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` for `!` or a newtype over it, which holds every trait already
+    /// (spec-types.md § Trait Bounds on `!`).
+    ImplForNever {
+        type_name: String,
+        span: Span,
+    },
+
     /// An `impl` method takes a different number of parameters than the trait
     /// declares. Left unreported it reaches codegen as a call built to the
     /// trait's arity against a body of another.
@@ -2605,6 +2612,13 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "cannot implement `{trait_name}`: it is sealed, and a variant whose cases each hold one derives it with `impl {trait_name} for V;`"
+                ),
+                *span,
+            ),
+            TypeError::ImplForNever { type_name, span } => (
+                Code::OrphanRule,
+                format!(
+                    "cannot write an `impl` for `{type_name}`: it has no values, so it holds every trait already"
                 ),
                 *span,
             ),

@@ -6,9 +6,10 @@ use std::fmt::Write;
 
 use crate::ast::Visibility;
 use crate::ast::{
-    Block, EffectHandlerBinding, Expr, ExprStmt, GenericType, IdentExpr, Item, LetStmt, Module,
-    NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, WithHandlerExpr,
+    Block, CmImport, EffectHandlerBinding, Expr, ExprStmt, GenericType, IdentExpr, Item, LetStmt,
+    Module, NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr,
+    StructLiteralField, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseNameSpelling,
+    WithHandlerExpr,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
@@ -26,6 +27,24 @@ pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 /// A bundled CM package, as [`CmNamespace::split_package`] answers it.
 type CmPackage<'a> = (CmNamespace, &'a str);
 
+/// A WASI interface a generator world imports.
+struct ProvidedInterface<'a> {
+    package: CmPackage<'a>,
+    /// The name a `use` spells, as `InsecureSeed`.
+    name: &'a str,
+    full_name: CmImport,
+}
+
+impl ProvidedInterface<'_> {
+    /// Whether `name`, as a `use` of `package` spells it, names this interface.
+    fn is_named_by(&self, package: CmPackage<'_>, name: &str, spelling: &UseNameSpelling) -> bool {
+        match spelling {
+            UseNameSpelling::Ident => self.package == package && self.name == name,
+            UseNameSpelling::InterfaceName(wanted) => self.full_name.is_named_by(wanted),
+        }
+    }
+}
+
 /// Reject the WASI interfaces the author's own `use` names, blaming that span.
 /// Returns the count of rejected sites; zero means the generator passed.
 pub fn check_loaded<H: CompilerHost>(
@@ -39,13 +58,11 @@ pub fn check_loaded<H: CompilerHost>(
         return 0;
     };
     let provided = provided_wasi_interfaces(world);
-    let provided_text =
-        provided
-            .iter()
-            .fold(String::new(), |mut out, ((namespace, package), name)| {
-                let _ = write!(out, "`{name}` from `{namespace}:{package}`, ");
-                out
-            });
+    let provided_text = provided.iter().fold(String::new(), |mut out, provided| {
+        let ((namespace, package), name) = (provided.package, provided.name);
+        let _ = write!(out, "`{name}` from `{namespace}:{package}`, ");
+        out
+    });
 
     let mut count = 0;
     for (source, module) in modules {
@@ -106,13 +123,17 @@ pub fn check_cm_imports<H: CompilerHost>(
 /// The WASI interfaces `world` imports, each as its package and the name a
 /// `use` spells: `wasi:random/insecure-seed@0.3.0` gives
 /// `((Wasi, "random"), "InsecureSeed")`.
-fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<(CmPackage<'_>, &str)> {
+fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<ProvidedInterface<'_>> {
     world
         .imports
         .iter()
         .filter_map(|import| {
-            let package = CmNamespace::split_package(import.cm_interface_fq.as_deref()?)?;
-            Some((package, import.interface_name.as_str()))
+            let full_name = import.cm_interface_fq.as_deref()?;
+            Some(ProvidedInterface {
+                package: CmNamespace::split_package(full_name)?,
+                name: import.interface_name.as_str(),
+                full_name: CmImport::parse(full_name)?,
+            })
         })
         .collect()
 }
@@ -444,7 +465,7 @@ fn should_check(source: &ModuleSource) -> bool {
 
 fn check_module<H: CompilerHost>(
     module: &Module,
-    provided_wasi: &[(CmPackage<'_>, &str)],
+    provided_wasi: &[ProvidedInterface<'_>],
     provided_text: &str,
     entry_module: &ModuleSource,
     this: &ModuleSource,
@@ -487,7 +508,7 @@ fn check_module<H: CompilerHost>(
 /// none, and the import-plan check answers for what it reaches.
 fn forbidden_sites<'a>(
     decl: &'a UseDecl,
-    provided_wasi: &[(CmPackage<'_>, &str)],
+    provided_wasi: &[ProvidedInterface<'_>],
 ) -> Vec<(&'a Span, String)> {
     if let Some(reason) = forbid_reason(&decl.source, provided_wasi) {
         return vec![(&decl.source_span, reason.to_string())];
@@ -499,17 +520,24 @@ fn forbidden_sites<'a>(
         .iter()
         .filter_map(|item| match item {
             UseItem::Simple {
-                name, name_span, ..
-            }
-            | UseItem::InterfaceFunctions {
-                interface_name: name,
+                name,
+                spelling,
                 name_span,
                 ..
-            } => Some((name, name_span)),
+            } => Some((name, spelling, name_span)),
+            UseItem::InterfaceFunctions {
+                interface_name,
+                name_span,
+                ..
+            } => Some((interface_name, &UseNameSpelling::Ident, name_span)),
             UseItem::Wildcard | UseItem::Namespace { .. } => None,
         })
-        .filter(|(name, _)| !provided_wasi.contains(&(package, name.as_str())))
-        .map(|(name, span)| {
+        .filter(|(name, spelling, _)| {
+            !provided_wasi
+                .iter()
+                .any(|provided| provided.is_named_by(package, name, spelling))
+        })
+        .map(|(name, _, span)| {
             (
                 span,
                 format!("the generator world does not import `{name}`"),
@@ -520,11 +548,11 @@ fn forbidden_sites<'a>(
 
 /// Return `Some(reason)` when `source` is not permitted inside a Kiln
 /// generator package, whose world imports the WASI interfaces `provided_wasi`.
-fn forbid_reason(source: &str, provided_wasi: &[(CmPackage<'_>, &str)]) -> Option<&'static str> {
+fn forbid_reason(source: &str, provided_wasi: &[ProvidedInterface<'_>]) -> Option<&'static str> {
     if let Some(package) = CmNamespace::split_package(source)
         && !provided_wasi
             .iter()
-            .any(|(provided, _)| *provided == package)
+            .any(|provided| provided.package == package)
     {
         return Some("the generator world imports none of its interfaces");
     }
@@ -540,30 +568,59 @@ fn forbid_reason(source: &str, provided_wasi: &[(CmPackage<'_>, &str)]) -> Optio
 mod tests {
     use super::*;
 
-    const PROVIDED: &[(CmPackage<'_>, &str)] = &[
-        ((CmNamespace::Wasi, "random"), "Insecure"),
-        ((CmNamespace::Wasi, "random"), "InsecureSeed"),
-    ];
+    fn provided() -> Vec<ProvidedInterface<'static>> {
+        [
+            ("Insecure", "wasi:random/insecure@0.3.0"),
+            ("InsecureSeed", "wasi:random/insecure-seed@0.3.0"),
+        ]
+        .into_iter()
+        .map(|(name, full_name)| ProvidedInterface {
+            package: (CmNamespace::Wasi, "random"),
+            name,
+            full_name: CmImport::parse(full_name).unwrap(),
+        })
+        .collect()
+    }
+
+    #[test]
+    fn provided_interface_is_named_by_either_spelling() {
+        let seed = &provided()[1];
+        let random = (CmNamespace::Wasi, "random");
+        assert!(seed.is_named_by(random, "InsecureSeed", &UseNameSpelling::Ident));
+        assert!(!seed.is_named_by(random, "Insecure", &UseNameSpelling::Ident));
+        let named_by_full_name = |name: &str| {
+            let spelling = UseNameSpelling::InterfaceName(CmImport::parse(name).unwrap());
+            seed.is_named_by(random, name, &spelling)
+        };
+        assert!(named_by_full_name("wasi:random/insecure-seed"));
+        assert!(named_by_full_name("wasi:random/insecure-seed@0.3.0"));
+        assert!(!named_by_full_name("wasi:random/insecure-seed@0.2.0"));
+        assert!(!named_by_full_name("wasi:random/random"));
+    }
 
     #[test]
     fn forbid_reason_flags_unprovided_wasi_and_http() {
-        assert!(forbid_reason("wasi:clocks", PROVIDED).is_some());
-        assert!(forbid_reason("wasi:cli/stdout", PROVIDED).is_some());
-        assert!(forbid_reason("wasi:randomness", PROVIDED).is_some());
-        assert!(forbid_reason("https://example.com/foo.wado", PROVIDED).is_some());
-        assert!(forbid_reason("http://example.com/foo.wado", PROVIDED).is_some());
+        let provided = provided();
+        let provided = provided.as_slice();
+        assert!(forbid_reason("wasi:clocks", provided).is_some());
+        assert!(forbid_reason("wasi:cli/stdout", provided).is_some());
+        assert!(forbid_reason("wasi:randomness", provided).is_some());
+        assert!(forbid_reason("https://example.com/foo.wado", provided).is_some());
+        assert!(forbid_reason("http://example.com/foo.wado", provided).is_some());
     }
 
     #[test]
     fn forbid_reason_allows_core_provided_wasi_and_relative() {
-        assert!(forbid_reason("core:kiln", PROVIDED).is_none());
-        assert!(forbid_reason("core:kiln/kiln_host.wado", PROVIDED).is_none());
-        assert!(forbid_reason("core:prelude", PROVIDED).is_none());
-        assert!(forbid_reason("core:json", PROVIDED).is_none());
-        assert!(forbid_reason("core:cbor", PROVIDED).is_none());
-        assert!(forbid_reason("wasi:random", PROVIDED).is_none());
-        assert!(forbid_reason("wasi:random/insecure_seed.wado", PROVIDED).is_none());
-        assert!(forbid_reason("./options.wado", PROVIDED).is_none());
-        assert!(forbid_reason("../shared.wado", PROVIDED).is_none());
+        let provided = provided();
+        let provided = provided.as_slice();
+        assert!(forbid_reason("core:kiln", provided).is_none());
+        assert!(forbid_reason("core:kiln/kiln_host.wado", provided).is_none());
+        assert!(forbid_reason("core:prelude", provided).is_none());
+        assert!(forbid_reason("core:json", provided).is_none());
+        assert!(forbid_reason("core:cbor", provided).is_none());
+        assert!(forbid_reason("wasi:random", provided).is_none());
+        assert!(forbid_reason("wasi:random/insecure_seed.wado", provided).is_none());
+        assert!(forbid_reason("./options.wado", provided).is_none());
+        assert!(forbid_reason("../shared.wado", provided).is_none());
     }
 }

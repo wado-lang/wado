@@ -103,15 +103,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/wasi:random/InsecureSeed::get_insecure_seed" = fn(i32);  // TypeId(25)
+type "functype//wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed" = fn(i32);  // TypeId(25)
 
 type "functype//spec_attributes_user.wado/error_handler" = fn();  // TypeId(26)
 
 type "functype//spec_attributes_user.wado/$test_3" = fn();  // TypeId(27)
 
-type "functype//spec_attributes_user.wado/$cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(28)
+type "functype//spec_attributes_user.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(28)
 
 type "functype//spec_attributes_user.wado/$cm_export__$test_0" = fn();  // TypeId(29)
 
@@ -403,8 +403,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:random/InsecureSeed::get_insecure_seed from "wasi/wasi:random/InsecureSeed::get_insecure_seed";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed from "wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -512,11 +512,11 @@ condition: `${foo:?}` == \"Foo { name: \\\"ann\\\", .. }\"
     }
 }
 
-fn "spec_attributes_user.wado/$cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
+fn "spec_attributes_user.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed"() with InsecureSeed {
     let $outptr: i32;
     let $lifted_result_1: i64;
     let $lifted_result_2: i64;
-    "wasi/wasi:random/InsecureSeed::get_insecure_seed"(local.tee $outptr("mem/realloc"(0, 0, 8, 16)));
+    "wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed"(local.tee $outptr("mem/realloc"(0, 0, 8, 16)));
     $lifted_result_1 = builtin::load_i64($outptr);
     $lifted_result_2 = builtin::load_i64($outptr + 8);
     drop("mem/realloc"($outptr, 16, 8, 0));
@@ -533,7 +533,7 @@ fn "spec_attributes_user.wado/$cm_export__$test_trap_1_the_handler_traps"() {
 }
 
 fn "spec_attributes_user.wado/$cm_export__$test_2"() {
-    drop("spec_attributes_user.wado/$cm_binding__InsecureSeed_get_insecure_seed"());
+    drop("spec_attributes_user.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed"());
     "wasi/task-return"(0);
 }
 
@@ -1295,7 +1295,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

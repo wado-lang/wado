@@ -59,6 +59,7 @@ use crate::ast::{
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
+use crate::divergence;
 use crate::elaborator::item::OperationOwner;
 pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
@@ -99,7 +100,7 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
 /// list an item declares. A body's local items are checked where it is walked.
 struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
 
-impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+impl<H: CompilerHost> AstVisitor<'_> for ForwardDefaults<'_, '_, H> {
     fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
         self.0.report_forward_type_param_defaults(params);
         ast::walk_generic_params(self, params);
@@ -786,7 +787,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     pub(super) fn ast_block_always_exits(&self, block: &Block) -> bool {
-        control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+        divergence::block_always_exits(&self.ctrl_flow_ctx(), block)
     }
 
     /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
@@ -796,16 +797,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(body) = body else {
             return;
         };
-        if let Some((jump, span)) = control_flow::find_unbound_loop_jump(self.ctrl_flow_ctx(), body)
-        {
+        if let Some((jump, span)) = control_flow::find_unbound_loop_jump(body) {
             let _ = self.emit(types::TypeError::LoopJumpOutsideLoop { jump, span });
         }
-    }
-
-    /// Whether a labeled block's body can reach its own end, so its trailing
-    /// statement is a branch of the block.
-    pub(super) fn ast_labeled_block_falls_through(&self, block: &Block, label: &str) -> bool {
-        control_flow::labeled_block_falls_through(self.ctrl_flow_ctx(), block, label)
     }
 
     /// Result type of an AST block, read from `expression_types` rather
@@ -845,7 +839,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         };
         if in_handler_method {
-            if !control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+            if !self.ast_block_always_exits(body) {
                 let _ = self.emit(types::TypeError::MissingResume {
                     function: func.name.clone(),
                     span: func.span,
@@ -854,9 +848,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         if func.is_async {
-            if !control_flow::block_delivers(self.ctrl_flow_ctx(), body)
-                && !control_flow::block_always_exits(self.ctrl_flow_ctx(), body)
-            {
+            if !control_flow::block_delivers(body) && !self.ast_block_always_exits(body) {
                 let _ = self.emit(types::TypeError::MissingTaskReturn {
                     function: func.name.clone(),
                     span: func.span,
@@ -867,7 +859,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
             return;
         }
-        if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+        if self.ast_block_always_exits(body) {
             return;
         }
         let _ = self.emit(types::TypeError::MissingReturn {
@@ -1613,8 +1605,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             for use_item in &use_decl.items {
                 match use_item {
-                    ast::UseItem::Simple { id, name, .. } => {
-                        self.record_use_reference(&source, *id, name);
+                    ast::UseItem::Simple {
+                        id, name, spelling, ..
+                    } => {
+                        if let Some(member) = self.symbols.use_item_member(&source, name, spelling)
+                        {
+                            self.record_use_reference(&source, *id, &member);
+                        }
                     }
                     ast::UseItem::InterfaceFunctions {
                         id,

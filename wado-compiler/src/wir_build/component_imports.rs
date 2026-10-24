@@ -98,7 +98,7 @@ pub fn resolve_import_plan(
             // itself still needs the response/error-code types).
             let has_used_function = interface_info.functions.iter().any(|func| {
                 registry.is_function_supported(func)
-                    && project.used_wasi_functions.contains(&func.used_key())
+                    && project.used_wasi_functions.contains(&func.cm_identifier())
             });
             if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
                 push(
@@ -117,7 +117,7 @@ pub fn resolve_import_plan(
             .iter()
             .filter(|func| {
                 registry.is_function_supported(func)
-                    && project.used_wasi_functions.contains(&func.used_key())
+                    && project.used_wasi_functions.contains(&func.cm_identifier())
             })
             .collect();
         if used.is_empty() {
@@ -183,7 +183,7 @@ pub fn resolve_import_plan(
         let needed = interface_info
             .functions
             .iter()
-            .any(|f| project.used_wasi_functions.contains(&f.used_key()));
+            .any(|f| project.used_wasi_functions.contains(&f.cm_identifier()));
         if !needed {
             continue;
         }
@@ -204,8 +204,12 @@ pub fn resolve_import_plan(
 
     // Phase 4: world-level function imports (Phase 9). Composed away by
     // `wasm-compose`, so they drop out of `imported_cm_interface_fqs`.
-    for (name, _) in registry.world_import_functions() {
-        push(&mut entries, name.to_string(), ImportKind::WorldFunction);
+    for func in registry.world_import_functions() {
+        push(
+            &mut entries,
+            func.cm_identifier(),
+            ImportKind::WorldFunction,
+        );
     }
 
     entries
@@ -268,7 +272,7 @@ fn needs_canonical_cli_error_code(
     // Import side: a used interface's signature references the cli error-code.
     let import_side = project.cm_interface_registry.interfaces().any(|interface| {
         interface.functions.iter().any(|func| {
-            project.used_wasi_functions.contains(&func.used_key())
+            project.used_wasi_functions.contains(&func.cm_identifier())
                 && (func.return_type.as_ref().is_some_and(|ty| {
                     references_cli_error_code(ty, &project.cm_interface_registry)
                 }) || func.params.iter().any(|(_, _, ty)| {

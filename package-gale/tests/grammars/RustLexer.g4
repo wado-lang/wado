@@ -185,6 +185,12 @@ BYTE_STRING_LITERAL: 'b"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
 
 RAW_BYTE_STRING_LITERAL: 'br' RAW_STRING_CONTENT;
 
+// LOCAL: C string literals (Rust 1.77), which the upstream grammar predates.
+// The escapes are a byte string's plus `\u{…}`.
+C_STRING_LITERAL: 'c"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE | UNICODE_ESCAPE | ESC_NEWLINE)* '"';
+
+RAW_C_STRING_LITERAL: 'cr' RAW_STRING_CONTENT;
+
 fragment ASCII_ESCAPE: '\\x' OCT_DIGIT HEX_DIGIT | COMMON_ESCAPE;
 
 fragment BYTE_ESCAPE: '\\x' HEX_DIGIT HEX_DIGIT | COMMON_ESCAPE;

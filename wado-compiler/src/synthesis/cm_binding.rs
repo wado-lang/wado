@@ -18,6 +18,7 @@ pub(crate) mod types;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -32,8 +33,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclPath, DeclaredHead, cm_export_func_name, cm_name_key, cm_post_return_func_name,
-    is_test_function, to_cm_name,
+    cm_export_func_name, cm_name_key, cm_post_return_func_name, is_test_function, to_cm_name,
 };
 use crate::package::{Package, test_selected};
 use crate::synthesis::SynthesisError;
@@ -58,50 +58,12 @@ use task_return::{
     assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
     split_task_entry,
 };
-use type_fixup::{collect_effect_calls_in_block, rewrite_calls_in_block};
+use type_fixup::{CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block};
 use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
-
-/// Every effect and resource the TIR modules declare: the candidates
-/// [`lookup_effect_owner`] picks a binding's owner from.
-fn effect_owners(modules: &IndexMap<ModuleSource, TirModule>) -> Vec<&DeclaredHead> {
-    modules
-        .values()
-        .flat_map(|module| {
-            let effects = module.effects.iter().map(|effect| &effect.head);
-            effects.chain(module.resources.iter().map(|resource| &resource.head))
-        })
-        .collect()
-}
-
-/// The effect/resource named `name` whose binding targets CM `package`. The CM
-/// registry is parsed apart from the program and holds no declaration, so the
-/// name is all it gives: a declaration in a [`ModuleSource::Binding`] under
-/// `"{package}/"` wins, and any other of the name is the fallback.
-fn lookup_effect_owner(
-    owners: &[&DeclaredHead],
-    name: &str,
-    package: &str,
-) -> Option<DeclaredHead> {
-    let mut fallback: Option<&DeclaredHead> = None;
-    for &head in owners {
-        if head.name() != name {
-            continue;
-        }
-        if let ModuleSource::Binding { interface, .. } = head.module()
-            && interface
-                .strip_prefix(package)
-                .is_some_and(|rest| rest.starts_with('/'))
-        {
-            return Some(head.clone());
-        }
-        fallback.get_or_insert(head);
-    }
-    fallback.cloned()
-}
 
 use payload_validation::reject_unresolvable_record_payloads;
 pub use payload_validation::{PayloadsValidated, reject_unresolvable_payloads_monomorphized};
@@ -476,18 +438,20 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 /// sites to target them. Answers the closure types those calls pass.
 fn generate_import_adapters(project: &mut Package) -> Callbacks {
     let entry_source = project.entry_module_source.clone();
+    let registry = Arc::clone(&project.cm_interface_registry);
+    let entry_type_table = entry_type_table(project);
+    let call_sites = CmCallSites::new(
+        &registry,
+        &project.tir_modules,
+        entry_type_table.borrow().defs(),
+    );
 
-    let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
+    let mut seen_effects: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                collect_effect_calls_in_block(
-                    body,
-                    &mut seen_effects,
-                    &project.cm_interface_registry,
-                    &module.type_table,
-                );
+                collect_effect_calls_in_block(body, &mut seen_effects, &call_sites);
             }
         }
     }
@@ -496,33 +460,33 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
         return callbacks;
     }
 
-    let entry_type_table = entry_type_table(project);
-    let owners = effect_owners(&project.tir_modules);
-    let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
+    let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
-    for qualified_name in &seen_effects {
-        let registry = &project.cm_interface_registry;
+    for key in &seen_effects {
         let func_info = registry
-            .get_function(qualified_name)
+            .get_function(key)
             .expect("the collector records only a registered CM function");
-        // An operation on `E`, effect or resource alike, requires `with E`; a
-        // world function belongs to no interface and requires nothing.
-        let effect = (!registry.is_world_import_function(qualified_name)).then(|| {
-            EffectRef::Concrete(
-                lookup_effect_owner(&owners, &func_info.interface_name, &func_info.package)
-                    .expect("an interface function's effect is declared"),
-            )
-        });
+        // An operation on `E`, effect or resource alike, requires `with E`, for
+        // each `E` binding the function; a world function belongs to no
+        // interface and requires nothing.
+        let effects: Vec<EffectRef> = call_sites
+            .owners(key)
+            .map(|owner| EffectRef::Concrete(owner.clone()))
+            .collect();
+        assert!(
+            effects.is_empty() == func_info.is_world_function(),
+            "an interface function's effect is declared"
+        );
         let produced = synthesize_adapter(
             func_info,
-            registry,
+            &registry,
             &entry_type_table,
             &project.interner,
-            effect,
+            effects,
             &entry_source,
         );
         auxiliary_functions.extend(produced.auxiliary);
-        adapters.insert(qualified_name.clone(), produced.adapter);
+        adapters.insert(key.clone(), produced.adapter);
     }
 
     let entry_module = project
@@ -547,7 +511,7 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
                     body,
                     &adapters,
                     &entry_source,
-                    &project.cm_interface_registry,
+                    &call_sites,
                     &entry_type_table,
                     &mut applied_returns,
                     &mut callbacks,

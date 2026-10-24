@@ -88,7 +88,7 @@ throughout the else block: `let Some(x) = x else { … }` reads the shadowed `x`
 in both the scrutinee and the else block.
 
 Divergence is checked with the existing AST control-flow analysis
-(`control_flow::block_always_exits`), extended to treat a `break`/`continue`
+(`divergence::block_always_exits`), extended to treat a `break`/`continue`
 statement as exiting (it already counted them as `Never` in
 `block_result_type`).
 

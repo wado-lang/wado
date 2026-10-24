@@ -2,7 +2,6 @@
 //! asked of them.
 
 use std::cell::RefCell;
-use std::fmt::Write;
 use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
@@ -18,10 +17,10 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTraitName, FqTypeName, INTERNAL_PREFIX, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
+    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type, ref_type_name, type_pack_name,
+    mangle_tuple_type, ref_type_name, template_shape_name, type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -1417,12 +1416,7 @@ impl TypeTable {
                         None => h.update([0u8]),
                     }
                 }
-                let bytes: [u8; 32] = h.finalize().into();
-                let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
-                for b in &bytes[..8] {
-                    let _ = write!(mangle, "{b:02x}");
-                }
-                mangle
+                template_shape_name(&h.finalize().into())
             }
         }
     }
@@ -3734,6 +3728,7 @@ impl TypeTable {
                 })?
                 .at(self, trait_args)
         })
+        .or_else(|| self.is_never(concrete_id).then_some(Self::NEVER))
     }
 
     /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.

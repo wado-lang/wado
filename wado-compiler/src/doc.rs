@@ -11,7 +11,7 @@ use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::lexer::is_ident_continue;
 use crate::loader::resolve_wasm_asset_path;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -1025,7 +1025,8 @@ fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<Do
     let DecodedWasm::Component(resolve, world) = decoded else {
         return None;
     };
-    let bindings = build_bindings(&resolve, world).ok()?;
+    let component = interner.wasm(&path, WasmAssetKind::Wat);
+    let bindings = build_bindings(&resolve, world, &component).ok()?;
     Some(extract_doc_filtered(
         &bindings.module,
         &TriviaMap::default(),

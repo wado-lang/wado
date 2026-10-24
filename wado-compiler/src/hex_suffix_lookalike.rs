@@ -43,7 +43,7 @@ pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Di
 /// The lookalike literals of one module outside the code that waives the lint.
 struct Lookalikes(Vec<(String, Span)>);
 
-impl AstVisitor for Lookalikes {
+impl AstVisitor<'_> for Lookalikes {
     fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         if !attrs_allow(attrs, lint::HEX_SUFFIX_LOOKALIKE) {
             body(self);

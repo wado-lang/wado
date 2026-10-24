@@ -63,7 +63,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//tagged_template_sql.wado/run" = fn();  // TypeId(18)
 
@@ -101,7 +101,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
-type "functype//tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
 
@@ -113,7 +113,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -154,7 +154,7 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     multivalue_bind [$mv$q_2$text, $mv$q_2$params] = "tagged_template_sql.wado/tagged_template_sql.wado/sql<tagged_template_sql.wado/$tmpl$9735897fc7613ff0,[i32,core:prelude/string.wado/String]>$spec0"(id, $sroa_user_name_110);
     $sroa_$pattern_temp_0_0_13_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7_125("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_132 = builtin::i32_wrap_i64($cm_pair_7_125 >> 32_i64);
-    $moved_4_122 = "tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream"($moved_4_122 = $sroa_$pattern_temp_0_0_13_131; $sroa_$pattern_temp_0_0_13_131 = 0; $moved_4_122);
+    $moved_4_122 = "tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_122 = $sroa_$pattern_temp_0_0_13_131; $sroa_$pattern_temp_0_0_13_131 = 0; $moved_4_122);
     $sroa_$pattern_temp_0_0_13_131 = $sroa_$pattern_temp_0_1_14_132;
     $sroa_$pattern_temp_0_1_14_132 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_131, $mv$q_2$text.repr, $mv$q_2$text.used);
@@ -164,7 +164,7 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<tagged_template_sql.wado/Param>$dae[start,marker]$spec0"($mv$q_2$params.repr, $mv$q_2$params.used, $local_5, 256);
     $sroa_$pattern_temp_0_0_13_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7_125("wasi/stream-new"()));
     $moved_4_122 = builtin::i32_wrap_i64($cm_pair_7_125 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_132 = "tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_132 = $sroa_$pattern_temp_0_0_13_131; $sroa_$pattern_temp_0_0_13_131 = 0; $sroa_$pattern_temp_0_1_14_132);
+    $sroa_$pattern_temp_0_1_14_132 = "tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_132 = $sroa_$pattern_temp_0_0_13_131; $sroa_$pattern_temp_0_0_13_131 = 0; $sroa_$pattern_temp_0_1_14_132);
     $sroa_$pattern_temp_0_0_13_131 = $moved_4_122;
     $moved_4_122 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_131, $mv$q_2$text.repr, $mv$q_2$text.used);
@@ -285,14 +285,14 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     }
     $sroa_$pattern_temp_0_1_14_132 = builtin::i32_wrap_i64(local.tee $cm_pair_7_125("wasi/stream-new"()));
     id = builtin::i32_wrap_i64($cm_pair_7_125 >> 32_i64);
-    $moved_4_122 = "tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream"($moved_4_122 = $sroa_$pattern_temp_0_1_14_132; $sroa_$pattern_temp_0_1_14_132 = 0; $moved_4_122);
+    $moved_4_122 = "tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_122 = $sroa_$pattern_temp_0_1_14_132; $sroa_$pattern_temp_0_1_14_132 = 0; $moved_4_122);
     $sroa_$pattern_temp_0_1_14_132 = id;
     id = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_132, $mv$q_2$text.repr, $mv$q_2$text.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_132 = $moved_4_122; $moved_4_122 = 0; $sroa_$pattern_temp_0_1_14_132);
     $sroa_$pattern_temp_0_1_14_132 = builtin::i32_wrap_i64(local.tee $cm_pair_7_125("wasi/stream-new"()));
     $moved_4_122 = builtin::i32_wrap_i64($cm_pair_7_125 >> 32_i64);
-    id = "tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream"(id = $sroa_$pattern_temp_0_1_14_132; $sroa_$pattern_temp_0_1_14_132 = 0; id);
+    id = "tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(id = $sroa_$pattern_temp_0_1_14_132; $sroa_$pattern_temp_0_1_14_132 = 0; id);
     $sroa_$pattern_temp_0_1_14_132 = $moved_4_122;
     $moved_4_122 = 0;
     $mv$q_2$text = global:tagged_template_sql.wado::$const_obj_3;
@@ -300,8 +300,8 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_132 = id; id = 0; $sroa_$pattern_temp_0_1_14_132);
 }
 
-fn "tagged_template_sql.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "tagged_template_sql.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "tagged_template_sql.wado/$cm_export__run"() {

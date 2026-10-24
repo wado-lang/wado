@@ -103,13 +103,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(26)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(29)
+type "functype//wasi/$wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> i64;  // TypeId(29)
 
 type "functype//effect_handler_with_do.wado/run" = fn();  // TypeId(30)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(31)
+type "functype//effect_handler_with_do.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now" = fn() -> u64;  // TypeId(31)
 
 type "functype//effect_handler_with_do.wado/$cm_export__run" = fn();  // TypeId(32)
 
@@ -137,7 +137,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(43)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(45)
+type "functype//effect_handler_with_do.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(45)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(46)
 
@@ -147,8 +147,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicClock::now";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#now from "wasi/$wasi:clocks/monotonic-clock@0.3.0#now";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -183,7 +183,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
             global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = $local_0;
             break $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: $local_2_9;
         } else {
-            break $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: "effect_handler_with_do.wado/$cm_binding__MonotonicClock_now"();
+            break $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: "effect_handler_with_do.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"();
         }
         unreachable;
     };
@@ -280,7 +280,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     }
     start_151 = builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"()));
     start_22 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
-    new_used_21 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(new_used_21 = start_151; start_151 = 0; new_used_21);
+    new_used_21 = "effect_handler_with_do.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_21 = start_151; start_151 = 0; new_used_21);
     start_151 = start_22;
     start_22 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_151, $local_2_2.repr, $local_2_2.used);
@@ -288,12 +288,12 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = $save_wasi:clocks/monotonic_clock.wado/MonotonicClock;
 }
 
-fn "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_with_do.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "effect_handler_with_do.wado/$cm_binding__MonotonicClock_now"() with MonotonicClock {
-    return "wasi/wasi:clocks/MonotonicClock::now"();
+fn "effect_handler_with_do.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() with MonotonicClock {
+    return "wasi/$wasi:clocks/monotonic-clock@0.3.0#now"();
 }
 
 fn "effect_handler_with_do.wado/$cm_export__run"() {

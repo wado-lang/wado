@@ -380,10 +380,10 @@ fn call_sites(body: &Body, own_return: TypeId) -> Vec<CallSite> {
     // block a `break` exits, so it is dropped rather than guessed at: guessing
     // wrong skips a rebox that was needed.
     let mut label_types: IndexMap<&str, Option<TypeId>> = IndexMap::default();
-    for expr in body.exprs.values() {
+    for e in reachable_exprs(body) {
         if let ExprKind::LabeledBlock {
             label, result_type, ..
-        } = &expr.kind
+        } = &body.exprs[e].kind
         {
             label_types
                 .entry(label.as_str())
@@ -1324,7 +1324,7 @@ impl Returns<'_> {
         let Some(expr) = op.as_expr() else {
             return null_return_case(body, op, cand).is_some();
         };
-        if body.exprs[expr].type_id == TypeTable::NEVER {
+        if self.type_table.is_never(body.exprs[expr].type_id) {
             return true;
         }
         if let Some(b) = body.unbroken_block(expr) {
@@ -1901,7 +1901,7 @@ impl ReturnRewrite<'_> {
         let Some(expr) = op.as_expr() else {
             return null_tuple(body, op, cand, span);
         };
-        if body.exprs[expr].type_id == TypeTable::NEVER {
+        if self.type_table.is_never(body.exprs[expr].type_id) {
             return None;
         }
         if let Some(b) = body.unbroken_block(expr) {

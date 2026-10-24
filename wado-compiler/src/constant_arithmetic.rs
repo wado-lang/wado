@@ -354,7 +354,7 @@ impl ConstantArithmetic<'_> {
     }
 }
 
-impl AstVisitor for ConstantArithmetic<'_> {
+impl AstVisitor<'_> for ConstantArithmetic<'_> {
     fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         let saved = (self.overflow, self.trap);
         self.overflow &= !attrs_allow(attrs, lint::ARITHMETIC_OVERFLOW);

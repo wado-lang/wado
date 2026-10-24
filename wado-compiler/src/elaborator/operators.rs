@@ -999,6 +999,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 panic!("only `-` and `~` dispatch through a trait")
             }
         };
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            return Some(expr_type);
+        }
         let trait_name = self
             .tysys
             .type_table

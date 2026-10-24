@@ -471,7 +471,7 @@ set -xe -o pipefail
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
-  core:icu core:eval"
+  core:icu core:eval core:process"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 scripts/dev-bin.sh wado doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -639,6 +639,8 @@ cargo run -p wado-from-idl -- \
 find wado-compiler/lib/wasi -type f -name '*.wado' -exec scripts/dev-bin.sh wado format -w {} +
 # The Kiln generator world imports two of `wasi:random`'s interfaces.
 cp vendor/wasmtime/crates/wasi/src/p3/wit/deps/random.wit wado-compiler/lib/core/kiln/deps/random.wit
+# `core:process` takes a `wasi:filesystem` descriptor, which uses `wasi:clocks`.
+cp vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit vendor/wasmtime/crates/wasi/src/p3/wit/deps/clocks.wit wado-compiler/lib/core/process/deps/
 """
 
 [tasks.webidl-deps]
@@ -662,13 +664,13 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:process; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
 # `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
-for package in kiln eval coverage; do
+for package in kiln eval coverage process; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \

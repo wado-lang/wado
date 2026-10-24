@@ -1573,7 +1573,7 @@ struct StartsAsyncCall<'a> {
     found: bool,
 }
 
-impl AstVisitor for StartsAsyncCall<'_> {
+impl AstVisitor<'_> for StartsAsyncCall<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         if matches!(expr, Expr::Closure(_)) {
             return;
@@ -1601,7 +1601,7 @@ enum Body<'a> {
 }
 
 impl Body<'_> {
-    fn walk<V: AstVisitor>(self, v: &mut V) {
+    fn walk<V: for<'ast> AstVisitor<'ast>>(self, v: &mut V) {
         match self {
             Body::Block(block) => ast::walk_block(v, block),
             Body::Expr(expr) => v.visit_expr(expr),
@@ -1654,7 +1654,7 @@ fn starts_async_call(
 #[derive(Default)]
 struct TypePatternSites(Vec<AstId>);
 
-impl AstVisitor for TypePatternSites {
+impl AstVisitor<'_> for TypePatternSites {
     fn visit_expr(&mut self, expr: &Expr) {
         if !matches!(expr, Expr::Closure(_)) {
             ast::walk_expr(self, expr);
@@ -2262,7 +2262,13 @@ impl EffectIndex<'_> {
         by_decl: &IndexMap<AstId, V>,
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
-        let entry = match func_ref.template.as_ref().and_then(TemplateId::def) {
+        let template = func_ref.template.as_ref();
+        if template.and_then(TemplateId::operation).is_some() {
+            // An operation declares no effects: what a call of one demands is
+            // its owner's, which `operation_requirements` reads.
+            return V::default();
+        }
+        let entry = match template.and_then(TemplateId::def) {
             Some(def) => by_decl.get(&self.resolutions.defs().ast_id(def)),
             None => by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone())),
         };
@@ -2552,13 +2558,6 @@ fn type_arg_at<'a>(args: &'a [FqTypeName], path: &[usize]) -> Option<&'a FqTypeN
 }
 
 impl SemEffectWalker<'_> {
-    /// The effects a direct `E::op()` call requires. A bare interface-operation
-    /// call resolves to a `ModuleSource::Local(E)` free-call `func_ref` that
-    /// carries no declared effects, so without this it would slip through the
-    /// checker unflagged. For a host/WASI effect the requirement is the effect
-    /// itself; for a CM-component-imported interface it is the reconstructed
-    /// host-leaf effect set — empty for a purely-computational component, so its
-    /// operations need no `with`. Returns empty for a non-effect-op callee.
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
         binding_granted_effects(self.annotations, self.index, binding)
     }
@@ -2619,7 +2618,7 @@ impl SemEffectWalker<'_> {
     }
 }
 
-impl AstVisitor for SemEffectWalker<'_> {
+impl AstVisitor<'_> for SemEffectWalker<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         // A clause may perform no effect at all, which the purity check
         // reports; a missing effect there would be the same fault twice.
@@ -3017,7 +3016,7 @@ fn expr_types_of(expr: &Expr, sem: &Semantics) -> Vec<TypeId> {
 /// initializer.
 fn closure_bindings(expr: &Expr) -> Vec<Span> {
     struct Closures(Vec<Span>);
-    impl AstVisitor for Closures {
+    impl AstVisitor<'_> for Closures {
         fn visit_stmt(&mut self, stmt: &Stmt) {
             if let Stmt::Let(binding) = stmt
                 && let Some(Expr::Closure(_)) = &binding.value
@@ -3387,7 +3386,7 @@ impl<'a> PurityWalker<'a> {
     }
 }
 
-impl AstVisitor for PurityWalker<'_> {
+impl AstVisitor<'_> for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {

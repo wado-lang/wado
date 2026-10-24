@@ -611,6 +611,53 @@ test {
 }
 ```
 
+### Trait Bounds on `!`
+
+`!` and a newtype over it implement every trait without an `impl`. An `impl`
+for either, an inherent one included, is an error. No value of the type exists,
+so no method called on one can run:
+
+- An associated type projected from `!` is `!`.
+- A method taking `self` is never called, since the receiver never exists.
+- A static method called with `Self = !` evaluates its arguments, then traps.
+- An operator, field access, subscript or `for` loop on a `!` operand
+  evaluates the operand, which diverges.
+
+<!-- {"fixture":"never_satisfies_every_bound.wado"} -->
+
+```wado
+type Never = !;
+
+fn fail() -> Never {
+    panic("fail");
+}
+
+fn show<T: Display>(x: T) -> String {
+    return `${x}`;
+}
+
+trait Labeled with () {
+    fn label() -> String;
+}
+
+fn label_of<T: Labeled>() -> String {
+    return T::label();
+}
+
+test "a `!` operand meets the bound its use asks" {
+    if builtin::black_box(false) {
+        let _ = `${panic("display")}`;
+        let _ = show(fail());
+        let _ = show(panic("bound"));
+    }
+}
+
+#[expect_trap]
+test "a static method traps at `Self = !`" {
+    let _ = label_of::<!>();
+}
+```
+
 ## Newtype
 
 `type T = U` creates a newtype: a distinct type with the same values as its base type.
