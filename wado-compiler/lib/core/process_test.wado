@@ -94,6 +94,15 @@ test "a piped child reads what the guest writes" {
     assert child.wait().unwrap() == ExitStatus::Exited(0);
 }
 
+test "output and status close a piped stdin nobody can write" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let cat = Command::new("cat").stdin_piped();
+    assert cat.output().unwrap().stdout == b"";
+    assert cat.status().unwrap() == ExitStatus::Exited(0);
+}
+
 test "the child sees only the guest's grants" {
     if availability() != Availability::Available {
         return;
