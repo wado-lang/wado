@@ -1,17 +1,25 @@
-//! A call dispatched on `!`. `!` holds every trait and no impl is written for
-//! it (spec-types.md § Trait Bounds on `!`), so such a call type-checks, yet no
-//! body answers it: it evaluates its arguments and traps.
+//! A call dispatched on `!` or a newtype over it. Either holds every trait and
+//! no impl is written for it (spec-types.md § Trait Bounds on `!`), so such a
+//! call type-checks, yet no body answers it: it evaluates its arguments and
+//! traps.
 
-use crate::name::{FqTypeName, NEVER_TYPE_NAME};
+use std::collections::HashSet;
+
+use crate::name::FqTypeName;
 use crate::synthesis::common::builtin_call;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
 
 pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule) {
-    let mut trapper = NeverDispatch {
-        never: FqTypeName::builtin(NEVER_TYPE_NAME),
+    let never_heads = {
+        let tt = module.type_table.borrow();
+        tt.all_types()
+            .filter(|&(id, _)| tt.is_never(id))
+            .map(|(id, _)| tt.fq_base_type_name(id))
+            .collect()
     };
+    let mut trapper = NeverDispatch { never_heads };
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
@@ -24,7 +32,7 @@ pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule) {
 }
 
 struct NeverDispatch {
-    never: FqTypeName,
+    never_heads: HashSet<FqTypeName>,
 }
 
 impl TirMutVisitor for NeverDispatch {
@@ -36,7 +44,7 @@ impl TirMutVisitor for NeverDispatch {
         let on_never = func
             .method_info
             .as_ref()
-            .is_some_and(|info| info.fq_base_struct_name() == self.never);
+            .is_some_and(|info| self.never_heads.contains(&info.fq_base_struct_name()));
         if !on_never {
             return;
         }

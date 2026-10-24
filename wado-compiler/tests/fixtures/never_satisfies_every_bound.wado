@@ -90,6 +90,16 @@ test "a blanket's static method traps at `!`" {
     let _ = shown_of::<!>();
 }
 
+#[expect_trap]
+test "a blanket's static method traps at a newtype over `!`" {
+    let _ = shown_of::<Never>();
+}
+
+#[expect_trap]
+test "a blanket's static method traps called on a newtype over `!`" {
+    let _ = Never::shown();
+}
+
 fn operators(c: bool) -> i32 {
     if c {
         let _ = -fail();
