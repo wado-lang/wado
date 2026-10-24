@@ -3,8 +3,7 @@
 //! call type-checks, yet no body answers it: it evaluates its arguments and
 //! traps.
 
-use std::collections::HashSet;
-
+use crate::hashmap::IndexSet;
 use crate::name::FqTypeName;
 use crate::synthesis::common::builtin_call;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
@@ -32,7 +31,7 @@ pub(super) fn trap_never_dispatch_in_module(module: &mut TirModule) {
 }
 
 struct NeverDispatch {
-    never_heads: HashSet<FqTypeName>,
+    never_heads: IndexSet<FqTypeName>,
 }
 
 impl TirMutVisitor for NeverDispatch {
