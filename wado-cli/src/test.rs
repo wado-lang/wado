@@ -22,7 +22,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_coverage_include};
 use crate::discover;
-use crate::eval_host::{EvalHost, EvalSession};
+use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::process_host::ProcessGrant;
@@ -1676,12 +1676,18 @@ fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) 
 async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> TestResult {
     let start = Instant::now();
     let module = job.module.as_ref();
+    let clock = Arc::new(TestClock::new(start));
 
     let (mut store, stdout_pipe, stderr_pipe) = match runtime::create_test_store(
         &module.engine,
         &job.grants,
         &module.path,
-        EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
+        EvalSession::new(
+            Arc::clone(&job.eval_host),
+            &module.path,
+            cpu_permit,
+            Arc::clone(&clock),
+        ),
         module.process,
     ) {
         Ok(v) => v,
@@ -1690,7 +1696,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
 
     // Profiling samples on every epoch tick, so it takes the deadline the
     // timeout was counted in; `parse_args` says so on the flag.
-    if let Some((slot, interval)) = module.profiler.clone() {
+    let timeout = if let Some((slot, interval)) = module.profiler.clone() {
         store.epoch_deadline_callback(move |store_ctx| {
             if let Some(profiler) = lock(&slot).as_mut() {
                 profiler.sample(&store_ctx, interval);
@@ -1698,23 +1704,23 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             Ok(UpdateDeadline::Continue(1))
         });
         store.set_epoch_deadline(1);
+        None
     } else {
-        // Time inside `eval` does not count, so reaching the deadline grants
-        // what is left of the test's own time. It counts from the current
-        // epoch, which an `eval` may have carried far past the deadline.
+        // Reaching the deadline grants what is left of the test's own time.
+        // It counts from the current epoch, which an `eval` may have carried
+        // far past the deadline.
         let timeout = Duration::from_millis(job.timeout_ms);
-        store.epoch_deadline_callback(move |mut store_ctx| {
-            let own = start
-                .elapsed()
-                .saturating_sub(store_ctx.data_mut().eval_session().paused());
-            let left = timeout.saturating_sub(own);
+        let own = Arc::clone(&clock);
+        store.epoch_deadline_callback(move |_| {
+            let left = timeout.saturating_sub(own.own());
             if left.is_zero() {
                 return Err(Trap::Interrupt.into());
             }
             Ok(UpdateDeadline::Continue(epoch_ticks(left)))
         });
         store.set_epoch_deadline(epoch_ticks(timeout));
-    }
+        Some(timeout)
+    };
 
     let instance = match module
         .linker
@@ -1731,7 +1737,12 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
 
     let (outcome, error) = match test_func {
-        Ok(func) => match func.call_async(&mut store, ()).await {
+        // An epoch interrupts only running wasm, so a guest blocked on a host
+        // future is ended by the clock instead.
+        Ok(func) => match tokio::select! {
+            called = func.call_async(&mut store, ()) => called,
+            () = past(&clock, timeout) => Err(Trap::Interrupt.into()),
+        } {
             Ok((Ok(()),)) => {
                 if let Some(mark) = job.todo {
                     (
@@ -1789,6 +1800,20 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         fuel: runtime::fuel_spent(&store),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
+    }
+}
+
+/// Resolves once `clock` passes `timeout`; never without one.
+async fn past(clock: &TestClock, timeout: Option<Duration>) {
+    let Some(timeout) = timeout else {
+        return std::future::pending().await;
+    };
+    loop {
+        let left = timeout.saturating_sub(clock.own());
+        if left.is_zero() {
+            return;
+        }
+        tokio::time::sleep(left).await;
     }
 }
 

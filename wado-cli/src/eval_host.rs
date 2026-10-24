@@ -752,38 +752,36 @@ fn trap_kind(trap: Trap) -> TrapKind {
 }
 
 /// One test's handle on the run's [`EvalHost`]: which file is calling, the CPU
-/// permit it runs on, and how long it has spent inside `eval`.
+/// permit it runs on, and the clock its time inside `eval` stops.
 pub struct EvalSession {
     host: Arc<EvalHost>,
     caller: PathBuf,
     /// Empty only inside `eval`.
     cpu: Option<OwnedSemaphorePermit>,
-    paused: Duration,
+    clock: Arc<TestClock>,
 }
 
 impl EvalSession {
     /// A session for a test in the file at `caller`, running on `cpu`.
     #[must_use]
-    pub fn new(host: Arc<EvalHost>, caller: &str, cpu: OwnedSemaphorePermit) -> Self {
+    pub fn new(
+        host: Arc<EvalHost>,
+        caller: &str,
+        cpu: OwnedSemaphorePermit,
+        clock: Arc<TestClock>,
+    ) -> Self {
         Self {
             host,
             caller: PathBuf::from(caller),
             cpu: Some(cpu),
-            paused: Duration::ZERO,
+            clock,
         }
-    }
-
-    /// The time spent inside `eval` so far, which does not count against the
-    /// test's deadline.
-    #[must_use]
-    pub fn paused(&self) -> Duration {
-        self.paused
     }
 }
 
 impl eval_host::Host for EvalSession {
     async fn run(&mut self, source: String, fuel: u64) -> Outcome {
-        let start = Instant::now();
+        lock(&self.clock.eval).entered = Some(Instant::now());
         drop(
             self.cpu
                 .take()
@@ -791,8 +789,41 @@ impl eval_host::Host for EvalSession {
         );
         let outcome = self.host.outcome(&self.caller, source, fuel).await;
         self.cpu = Some(self.host.cpu_permit().await);
-        self.paused += start.elapsed();
+        let mut eval = lock(&self.clock.eval);
+        let entered = eval.entered.take().expect("a test leaves only the eval it entered");
+        eval.paused += entered.elapsed();
         outcome
+    }
+}
+
+/// A test's own time, which its deadline counts: the time since it started,
+/// less the time inside `eval`.
+pub struct TestClock {
+    start: Instant,
+    eval: Mutex<EvalTime>,
+}
+
+#[derive(Default)]
+struct EvalTime {
+    paused: Duration,
+    /// When the `eval` the test is inside began, where it is inside one.
+    entered: Option<Instant>,
+}
+
+impl TestClock {
+    #[must_use]
+    pub fn new(start: Instant) -> Self {
+        Self {
+            start,
+            eval: Mutex::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn own(&self) -> Duration {
+        let eval = lock(&self.eval);
+        let inside = eval.entered.map_or(Duration::ZERO, |entered| entered.elapsed());
+        self.start.elapsed().saturating_sub(eval.paused + inside)
     }
 }
 
