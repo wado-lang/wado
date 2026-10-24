@@ -189,12 +189,36 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum BoundKey {
     Local(u32),
-    /// `root_local . field_index` — a field read of a by-value local.
-    Field(u32, u32),
+    /// `root_local . path` — a field read of a by-value local, through the
+    /// fields `path` names.
+    Field(u32, FieldPath),
     /// A folded bound: `arr.len()` over a literal list is a constant by the time
     /// the guard and the check meet, and two such constants denote the same
     /// program object exactly when they are equal.
     Const(i64),
+}
+
+/// The fields a [`BoundKey::Field`] reads from its root, outermost first. The
+/// whole path is the identity: `node.outputs.used` and `node.inputs.used` end
+/// in one field and are two lengths.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct FieldPath(u64);
+
+impl FieldPath {
+    const ROOT: FieldPath = FieldPath(0);
+    /// The bits one field takes, holding its index plus one so that a path
+    /// never packs to another's.
+    const SLOT_BITS: u32 = 16;
+
+    /// This path followed by `field`, or `None` past the four fields the
+    /// packing holds.
+    fn then(self, field: u32) -> Option<FieldPath> {
+        let slot = u64::from(field) + 1;
+        if self.0 >> (u64::BITS - Self::SLOT_BITS) != 0 || slot >> Self::SLOT_BITS != 0 {
+            return None;
+        }
+        Some(FieldPath(self.0 << Self::SLOT_BITS | slot))
+    }
 }
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
@@ -480,17 +504,26 @@ pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
     operand_local(engine.body, Operand::Value(v))
 }
 
-/// The root a [`BoundKey::Field`] keys on. Path-sensitive on purpose: since the
-/// key is `(root, field_index)`, the walk must not collapse a variant-payload
-/// projection (whose field 0 is not the scrutinee's field 0), so it does not use
-/// `arena_query::storage_root`.
-fn field_bound_root(body: &nir_arena::Body, expr: ExprId) -> Option<u32> {
+/// The root and field path a [`BoundKey::Field`] keys on. Path-sensitive on
+/// purpose, so it does not use `arena_query::storage_root`: a variant-payload
+/// projection's field 0 is not the scrutinee's field 0, and each element an
+/// `Index` reads is an object of its own.
+fn field_path(body: &nir_arena::Body, expr: ExprId) -> Option<(u32, FieldPath)> {
     match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => field_bound_root(body, inner.as_expr()?),
+        ExprKind::Local { index, .. } => Some((*index, FieldPath::ROOT)),
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        }
+        | ExprKind::Cast { expr: inner, .. } => field_path(body, inner.as_expr()?),
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (root, path) = field_path(body, inner.as_expr()?)?;
+            Some((root, path.then(*field_index)?))
+        }
         _ => None,
     }
 }
@@ -515,9 +548,9 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
-            ExprKind::FieldAccess { field_index, .. } => {
-                let root = field_bound_root(engine.body, e)?;
-                Some(BoundKey::Field(root, *field_index))
+            ExprKind::FieldAccess { .. } => {
+                let (root, path) = field_path(engine.body, e)?;
+                Some(BoundKey::Field(root, path))
             }
             _ => None,
         },
@@ -529,7 +562,7 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
                 ..
             } => Some(BoundKey::Field(
                 opaque_local(engine, *receiver)?,
-                *field_index,
+                FieldPath::ROOT.then(*field_index)?,
             )),
             _ => None,
         },
