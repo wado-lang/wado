@@ -821,14 +821,10 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
     }
 }
 
-/// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
-/// **all** per-function facts the DCE driver needs (callees, effect calls,
-/// pending inspect edges, used globals, used types) in one traversal of a
-/// function body. Replaces three hand-rolled walkers (`analyze_block`,
-/// `collect_global_reads_block`, `collect_types_from_block`) that all
-/// rediscovered the same NIR shape independently — new `StmtKind` /
-/// `ExprKind` variants now only need to be considered in the visitor
-/// trait, not in three places.
+/// Single-walk DCE fact collector: collects **all** per-function facts the DCE
+/// driver needs (callees, effect calls, pending inspect edges, used globals,
+/// used types) in one [`Body::for_each_reachable_node`] traversal of a function
+/// body.
 struct DceWalker<'a> {
     type_table: &'a TypeTable,
     current_module: &'a ModuleSource,
@@ -912,7 +908,7 @@ impl<'a> DceWalker<'a> {
             }
         }
         if let Some(body) = func.body.as_ref() {
-            self.walk_node(body, NodeRef::Block(body.root()));
+            self.walk_body(body);
         }
     }
 
@@ -1314,9 +1310,13 @@ impl DceWalker<'_> {
         }
     }
 
-    /// Record the per-node facts, then recurse into every id-bearing child
-    /// (including patterns, matching the former `NirRefVisitor` full walk).
-    fn walk_node(&mut self, body: &Body, node: NodeRef) {
+    /// The extraction sources are walked too: they produce a promoted operand's
+    /// code, and a type or callee only they name must survive.
+    fn walk_body(&mut self, body: &Body) {
+        body.for_each_reachable_node(|node| self.record_node(body, node));
+    }
+
+    fn record_node(&mut self, body: &Body, node: NodeRef) {
         match node {
             NodeRef::Stmt(s) => {
                 // The `Let` binding's declared type is not visible from its
@@ -1398,11 +1398,6 @@ impl DceWalker<'_> {
                 _ => {}
             },
             NodeRef::Block(_) => {}
-        }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.walk_node(body, c);
         }
     }
 }
@@ -1654,8 +1649,7 @@ fn populate_type_reachability(
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker =
                 DceWalker::new(&type_table, &global.module_source, descriptors, functors);
-            let init_body = global.init.slot_expr().body();
-            walker.walk_node(init_body, NodeRef::Block(init_body.root()));
+            walker.walk_body(global.init.slot_expr().body());
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }
@@ -1907,21 +1901,13 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 /// Every statement id reachable from the body root. The arena keeps the nodes an
 /// in-place rewrite displaced, and one nothing refers to never runs.
 fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
-    struct Collect(Vec<StmtId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Stmt(s) = node {
-                self.0.push(s);
-            }
-            self.walk_node(body, node);
+    let mut out = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(s) = node {
+            out.push(s);
         }
-    }
-    if body.blocks.is_empty() {
-        return Vec::new();
-    }
-    let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
-    collect.0
+    });
+    out
 }
 
 /// Locals some reachable node mentions, skeleton and value pool alike. A
@@ -2321,21 +2307,13 @@ fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
 /// them, which is where inlining leaves a guard — or a read it counted as
 /// non-observing outlives the store it was counted against.
 fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
-    struct Collect(Vec<BlockId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Block(b) = node {
-                self.0.push(b);
-            }
-            self.walk_node(body, node);
+    let mut out = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
         }
-    }
-    if body.blocks.is_empty() {
-        return Vec::new();
-    }
-    let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
-    collect.0
+    });
+    out
 }
 
 fn drop_unobserved_stmts(
