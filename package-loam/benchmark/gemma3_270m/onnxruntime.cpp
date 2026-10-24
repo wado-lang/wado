@@ -1,7 +1,7 @@
 // Gemma 3 (270M) on onnxruntime's own C++ API, against Microsoft's release as
-// shipped (../fetch_onnxruntime.sh): the program generate.wado
-// times. Each step feeds the new tokens and the attention cache of the rest,
-// as the example's generate.mjs does.
+// shipped (../fetch_onnxruntime.sh): the program generate.wado times. Each step
+// feeds the new tokens and the attention cache of the rest, as the example's
+// generate.mjs does.
 //
 //   mise run gemma3-270m   # builds and runs it
 
