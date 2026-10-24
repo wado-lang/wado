@@ -3502,14 +3502,14 @@ ${stage}        var sums = array<f32, ${NARROW * lane_cols}>();
             for (var k = split * ${steps}u; k < inner; k += ${splits * steps}u) {
 ${sum}            }
         }
-        for (var i = 0u; i < ${NARROW * lane_cols}u; i++) {
+        for (var i = 0u; i < block * ${lane_cols}u; i++) {
             partial[i * ${NARROW_LANES}u + lid] = sums[i];
         }
         workgroupBarrier();
         // Each column's parts add in halves, so the first split holds the sum.
         for (var h = ${splits / 2}u; h > 0u; h >>= 1u) {
             if split < h {
-                for (var i = 0u; i < ${NARROW * lane_cols}u; i++) {
+                for (var i = 0u; i < block * ${lane_cols}u; i++) {
                     partial[i * ${NARROW_LANES}u + lid] += partial[i * ${NARROW_LANES}u + lid + h * ${stride}];
                 }
             }
