@@ -1164,6 +1164,9 @@ impl TypeTable {
                 ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
                     (name.clone(), index)
                 }
+                ResolvedType::PackElement { pack, walk } => {
+                    (pack_element_name(self.pack_name(*pack), *walk), index)
+                }
                 other => unreachable!("collected a parameter that is not one: {other:?}"),
             })
             .collect()
@@ -1183,6 +1186,13 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 found.insert(*index, id);
+            }
+            // Its walk's unroll answers it, at the walk's slot.
+            ResolvedType::PackElement { pack, walk } => {
+                let ResolvedType::TypePack { index, .. } = self.get(*pack) else {
+                    unreachable!("a pack element names a type pack");
+                };
+                found.insert(Self::pack_walk_slot(*index, *walk), id);
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
@@ -5429,6 +5439,14 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypePack { .. } => true,
             _ => self.any_constituent(id, &mut |t| self.mentions_type_pack(t)),
+        }
+    }
+
+    /// Whether `id` mentions one step's element of a pack walk.
+    pub fn mentions_pack_element(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::PackElement { .. } => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_pack_element(t)),
         }
     }
 

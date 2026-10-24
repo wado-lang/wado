@@ -420,6 +420,22 @@ fn locals_defined_in_block(block: &TirBlock) -> Vec<u32> {
     collector.locals
 }
 
+/// Settle the slots still typed by a walk's element. Unrolling declares each
+/// element's slots at that element's type, so such a slot takes the type its
+/// `let` declares, and one nothing declares is a template no element took (an
+/// unroll's binding, or a body over an empty pack) and becomes `()`.
+fn settle_walk_template_locals(body: &TirBlock, locals: &mut [TirLocal], type_table: &TypeTable) {
+    for (index, local) in locals.iter_mut().enumerate() {
+        if type_table.mentions_pack_element(local.type_id) {
+            local.type_id = local_type_in_block(body, index as u32).unwrap_or(TypeTable::UNIT);
+            assert!(
+                !type_table.mentions_pack_element(local.type_id),
+                "unrolling declares every element's slots at a concrete type"
+            );
+        }
+    }
+}
+
 /// Finds the declared type of a specific local index by scanning the `let`
 /// statement or pattern binding that introduces it. A local is defined exactly
 /// once, so the first match is the answer. Stops at `Closure` boundaries for
@@ -1285,6 +1301,7 @@ impl Monomorphizer {
                 address_taken: &mut address_taken_locals,
             }
             .visit_block(&mut new_body);
+            settle_walk_template_locals(&new_body, &mut locals, type_table);
             new_body
         });
 
