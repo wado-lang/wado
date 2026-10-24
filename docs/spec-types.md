@@ -613,13 +613,15 @@ test {
 
 ### Trait Bounds on `!`
 
-`!` satisfies every trait bound, and so does a newtype over `!`. No value of
-the type exists, so no method called on one can run:
+`!` and a newtype over it implement every trait, and no `impl` is written for
+either, an inherent one included. No value of the type exists, so no method
+called on one can run:
 
 - An associated type projected from `!` is `!`.
 - A method taking `self` is never called, since the receiver never exists.
 - A static method called with `Self = !` evaluates its arguments, then traps.
-- An impl written for `!`, or for a newtype over it, answers before this rule.
+- An operator, subscript or `for` loop on a `!` operand evaluates the operand,
+  which diverges.
 
 <!-- {"fixture":"never_satisfies_every_bound.wado"} -->
 
@@ -651,7 +653,7 @@ test "a `!` operand meets the bound its use asks" {
 }
 
 #[expect_trap]
-test "a static method no impl answers traps at `Self = !`" {
+test "a static method traps at `Self = !`" {
     let _ = label_of::<!>();
 }
 ```

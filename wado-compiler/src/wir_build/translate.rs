@@ -249,11 +249,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 user_params.push(wir_type);
             }
         }
-        let result_wirs: Vec<WirType> =
-            match ctx.type_id_to_wir_type(type_table, functor.canonical_return) {
-                WirType::Unit => vec![],
-                wir_type => vec![wir_type],
-            };
+        let result_wirs = ctx.result_wir_types(type_table, functor.canonical_return);
 
         // Decide vtable schema for this functor by looking the canonical
         // return type up in the inspectable gate computed at WirContext
@@ -1064,6 +1060,10 @@ impl FunctionTranslator<'_, '_> {
     /// Shorthand for `self.ctx.type_id_to_wir_type(self.type_table, type_id)`.
     pub(super) fn wir_type(&self, type_id: TypeId) -> WirType {
         self.ctx.type_id_to_wir_type(self.type_table, type_id)
+    }
+
+    pub(super) fn result_wir_types(&self, type_id: TypeId) -> Vec<WirType> {
+        self.ctx.result_wir_types(self.type_table, type_id)
     }
 
     /// The WIR type index of a `TypeId` that must lower to a concrete reference
@@ -2172,7 +2172,7 @@ impl FunctionTranslator<'_, '_> {
                 // so LocalSet would be invalid. `translate_operand` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if self.operand_type_id(*value) == TypeTable::NEVER {
+                if self.type_table.is_never(self.operand_type_id(*value)) {
                     Some(value_instr)
                 } else if self.is_stackless_type(self.operand_type_id(*value)) {
                     // Unit-type (and `&()`-type) locals have no Wasm
@@ -2378,7 +2378,8 @@ impl FunctionTranslator<'_, '_> {
     /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
-        if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
+        if self.type_table.is_never(self.body.exprs[expr_id].type_id) && !instr.ends_with_terminator()
+        {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr
@@ -3245,12 +3246,11 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| self.core_wir_type(self.operand_type_id(*a)))
                         .collect();
-                    let mut results =
-                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
-                            vec![]
-                        } else {
-                            vec![self.core_wir_type(expr.type_id)]
-                        };
+                    let mut results = if self.type_table.is_stackless(expr.type_id) {
+                        vec![]
+                    } else {
+                        vec![self.core_wir_type(expr.type_id)]
+                    };
                     if discards_result {
                         assert!(results.is_empty(), "a UNIT call declares no result");
                         results.push(WirType::I32);

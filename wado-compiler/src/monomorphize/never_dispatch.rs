@@ -1,10 +1,10 @@
-//! A call dispatched on `!` that no impl answers. `!` holds every trait
-//! (spec-types.md § The Never Type), so such a call type-checks, yet no body
-//! exists for it: it evaluates its arguments and traps.
+//! A call dispatched on `!`. `!` holds every trait and no impl is written for
+//! it (spec-types.md § Trait Bounds on `!`), so such a call type-checks, yet no
+//! body answers it: it evaluates its arguments and traps.
 
 use crate::name::{FqTypeName, NEVER_TYPE_NAME};
 use crate::synthesis::common::builtin_call;
-use crate::tir::{TemplateId, TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
 
@@ -37,8 +37,7 @@ impl TirMutVisitor for NeverDispatch {
             .method_info
             .as_ref()
             .is_some_and(|info| info.fq_base_struct_name() == self.never);
-        let written = func.template.as_ref().and_then(TemplateId::def).is_some();
-        if !on_never || written {
+        if !on_never {
             return;
         }
         let mut stmts: Vec<TirStmt> = std::mem::take(args)

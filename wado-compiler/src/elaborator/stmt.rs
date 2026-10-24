@@ -2563,6 +2563,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the iterable to determine its type
         let iterable_type_id = self.resolve_expr(actual_iterable, ctx, None);
 
+        if self.tysys.type_table.borrow().is_never(iterable_type_id) {
+            self.record_desugar(for_of.id, DesugarKind::ForOfNever);
+            let mut scope = ctx.enter_scope();
+            self.resolve_let_pattern(
+                &for_of.binding,
+                TypeTable::NEVER,
+                for_of.is_mut,
+                for_of.span,
+                BindingSite::ForOf,
+                &mut scope,
+            );
+            self.resolve_block(&for_of.body, &mut scope, None);
+            return;
+        }
+
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref
         // (`&T_k`), mirroring `for v of &list`.

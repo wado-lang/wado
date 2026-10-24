@@ -965,6 +965,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(item)
             .to_string();
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            return Some(expr_type);
+        }
         if let Some(call) = self.dispatch_operator_through_bounds(
             expr_type,
             item,

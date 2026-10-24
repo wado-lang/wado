@@ -800,6 +800,7 @@ impl Semantics {
             DesugarKind::ForOfTuple => "for_of_tuple",
             DesugarKind::ForOfVariadic => "for_of_variadic",
             DesugarKind::ForOfIterator => "for_of_iterator",
+            DesugarKind::ForOfNever => "for_of_never",
             DesugarKind::CStyleFor => "c_style_for",
             DesugarKind::While => "while",
             DesugarKind::WhileLetChain => "while_let_chain",

@@ -2203,6 +2203,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         access: IndexAccess,
         key_class: &OnceCell<ArgClass>,
     ) -> TypeId {
+        // No receiver reaches the subscript, so the key is checked but never
+        // evaluated.
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            self.resolve_expr(&index.index, ctx, None);
+            return expr_type;
+        }
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 

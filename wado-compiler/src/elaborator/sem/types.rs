@@ -1154,6 +1154,9 @@ pub(crate) enum DesugarKind {
     /// `for let v of expr { body }` → `IntoIterator` / `next()` loop.
     /// Not recorded when the iterable fails the `IntoIterator` check.
     ForOfIterator,
+    /// `for let v of expr { body }` over a `!` iterable → `expr;`. No value
+    /// reaches the loop, so it never starts.
+    ForOfNever,
     /// `for (init; cond; update) { body }` → labeled-block + loop with
     /// init, conditional break, body, update (the C-style for desugar).
     CStyleFor,

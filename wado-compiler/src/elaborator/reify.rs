@@ -3593,6 +3593,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match self.ann_desugars(for_of.id) {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
+            Some(DesugarKind::ForOfNever) => {
+                let iterable = self.reify_expr(&for_of.iterable, ctx, None);
+                vec![TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)]
+            }
             Some(DesugarKind::ForOfIterator) | None => {
                 let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return vec![TirStmt::new(
@@ -3606,7 +3610,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 self.reify_iterator_for_of(for_of, ctx, info)
             }
-            _ => unreachable!("for_of carries one of the three ForOf* desugar tags"),
+            _ => unreachable!("for_of carries one of the ForOf* desugar tags"),
         }
     }
 
@@ -5917,6 +5921,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         let receiver = self.reify_expr(&index.expr, ctx, None);
+        if self.tysys.type_table.borrow().is_never(receiver.type_id) {
+            return receiver;
+        }
 
         // Tuple constant-index path: detect via the receiver's
         // resolved type + the index being a constant integer

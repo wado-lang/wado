@@ -1,0 +1,29 @@
+// `!` and a newtype over it hold every trait already, so an impl for either is
+// rejected, an inherent one included.
+
+type Never = !;
+
+trait Named with () {
+    fn name() -> String;
+}
+
+impl Named for ! {
+    fn name() -> String {
+        return "never";
+    }
+}
+
+impl Named for Never {
+    fn name() -> String {
+        return "never";
+    }
+}
+
+impl Never {
+    fn get(&self) -> i32 {
+        return 0;
+    }
+}
+
+__DATA__
+{"compile_error_codes": ["ORPHAN_RULE", "ORPHAN_RULE", "ORPHAN_RULE"]}
