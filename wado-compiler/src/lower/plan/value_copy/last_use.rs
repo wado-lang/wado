@@ -113,6 +113,7 @@ pub fn analyze_ownership(
         field_slots: FieldSlots {
             first: u32::try_from(all_locals.len()).unwrap(),
             ids: IndexMap::default(),
+            by_root: IndexMap::default(),
             imprecise: false,
         },
         all_locals,
@@ -1233,79 +1234,60 @@ struct Exit {
 /// moves where the field is overwritten before any read takes it.
 struct FieldSlots {
     first: u32,
-    ids: IndexMap<(u32, FieldReach), u32>,
+    /// `(local, field)`, `None` for a read that takes every field.
+    ids: IndexMap<(u32, Option<u32>), u32>,
+    by_root: IndexMap<u32, Vec<u32>>,
     /// Whether a `break` or `continue` with no target on the exit stack resumed
     /// with every local live, which names no slot.
     imprecise: bool,
 }
 
-/// What one read of a local takes of its fields.
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum FieldReach {
-    Field(u32),
-    /// Every field but those overwritten between the read and the point the
-    /// live set describes, in ascending order.
-    AllBut(Vec<u32>),
-}
-
 impl FieldSlots {
-    fn id(&mut self, root: u32, reach: FieldReach) -> u32 {
-        let next = self.first + u32::try_from(self.ids.len()).unwrap();
-        *self.ids.entry((root, reach)).or_insert(next)
-    }
-
-    fn whole(&mut self, root: u32) -> u32 {
-        self.id(root, FieldReach::AllBut(Vec::new()))
-    }
-
-    fn field(&mut self, root: u32, field: u32) -> u32 {
-        self.id(root, FieldReach::Field(field))
+    fn id(&mut self, root: u32, field: Option<u32>) -> u32 {
+        if let Some(id) = self.ids.get(&(root, field)) {
+            return *id;
+        }
+        let id = self.first + u32::try_from(self.ids.len()).unwrap();
+        self.ids.insert((root, field), id);
+        self.by_root.entry(root).or_default().push(id);
+        id
     }
 
     /// Whether a read `live` holds may take field `top` of `root`.
     fn read_later(&self, root: u32, top: u32, live: &IndexSet<u32>) -> bool {
-        self.ids.iter().any(|((r, reach), id)| {
-            *r == root
-                && live.contains(id)
-                && match reach {
-                    FieldReach::Field(f) => *f == top,
-                    FieldReach::AllBut(skipped) => !skipped.contains(&top),
-                }
-        })
+        [Some(top), None]
+            .iter()
+            .any(|field| self.ids.get(&(root, *field)).is_some_and(|id| live.contains(id)))
     }
 
-    /// `root.field = v`: no read after it takes the field it replaces.
-    fn overwrite(&mut self, root: u32, field: u32, live: &mut IndexSet<u32>) {
-        let own = self.field(root, field);
+    /// `root.field = v`, `root` a struct of `field_count` fields where that is
+    /// known: no read after it takes the field it replaces. A later read of every
+    /// field becomes one of each other field.
+    fn overwrite(
+        &mut self,
+        root: u32,
+        field: u32,
+        field_count: Option<u32>,
+        live: &mut IndexSet<u32>,
+    ) {
+        let own = self.id(root, Some(field));
         live.swap_remove(&own);
-        let widened: Vec<(u32, Vec<u32>)> = self
-            .ids
-            .iter()
-            .filter_map(|((r, reach), id)| match reach {
-                FieldReach::AllBut(skipped)
-                    if *r == root && live.contains(id) && !skipped.contains(&field) =>
-                {
-                    let mut skipped = skipped.clone();
-                    skipped.push(field);
-                    skipped.sort_unstable();
-                    Some((*id, skipped))
-                }
-                _ => None,
-            })
-            .collect();
-        for (id, skipped) in widened {
-            live.swap_remove(&id);
-            let narrower = self.id(root, FieldReach::AllBut(skipped));
-            live.insert(narrower);
+        let Some(count) = field_count else {
+            return;
+        };
+        let whole = self.id(root, None);
+        if live.swap_remove(&whole) {
+            for other in (0..count).filter(|&f| f != field) {
+                let id = self.id(root, Some(other));
+                live.insert(id);
+            }
         }
     }
 
     /// `root` rebound whole: no read after it takes a field it held before.
     fn kill(&self, root: u32, live: &mut IndexSet<u32>) {
-        for ((r, _), id) in &self.ids {
-            if *r == root {
-                live.swap_remove(id);
-            }
+        for id in self.by_root.get(&root).into_iter().flatten() {
+            live.swap_remove(id);
         }
     }
 }
@@ -1495,10 +1477,7 @@ impl<'a> Analyzer<'a> {
     /// `index` is read here: the one `field` of it, or every field for `None`.
     fn mark_read(&mut self, index: u32, field: Option<u32>, live: &mut IndexSet<u32>) {
         live.insert(index);
-        live.insert(match field {
-            Some(field) => self.field_slots.field(index, field),
-            None => self.field_slots.whole(index),
-        });
+        live.insert(self.field_slots.id(index, field));
     }
 
     /// A place an expression is read *out of*. Move-side this is the read the
@@ -2951,13 +2930,14 @@ impl<'a> Analyzer<'a> {
                         self.note_assign_site(expr, target, start, live);
                     }
                     let overwritten = overwritten_field(target);
-                    if let Some((root, field)) = overwritten {
-                        self.field_slots.overwrite(root, field, live);
+                    if let Some((root, field, owner)) = overwritten {
+                        let count = self.reach.field_count(field_owner(owner, self.type_table));
+                        self.field_slots.overwrite(root, field, count, live);
                     }
                     self.walk_persisting(value, live, record);
                     // The place is written, not read: only its root is.
                     let unread = overwritten
-                        .map(|(root, field)| self.field_slots.field(root, field))
+                        .map(|(root, field, _)| self.field_slots.id(root, Some(field)))
                         .filter(|slot| !live.contains(slot));
                     self.walk_expr(target, live, record);
                     if let Some(slot) = unread {
@@ -3323,9 +3303,9 @@ fn clean_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
-/// `(root, field)` where an assignment's place is a field of a local itself,
-/// which the assignment replaces whole.
-fn overwritten_field(place: &TirExpr) -> Option<(u32, u32)> {
+/// `(root, field, root's type)` where an assignment's place is a field of a
+/// local itself, which the assignment replaces whole.
+fn overwritten_field(place: &TirExpr) -> Option<(u32, u32, TypeId)> {
     let TirExprKind::FieldAccess {
         expr: inner,
         field_index,
@@ -3337,7 +3317,7 @@ fn overwritten_field(place: &TirExpr) -> Option<(u32, u32)> {
     let TirExprKind::Local { index, .. } = inner.kind else {
         return None;
     };
-    Some((index, *field_index))
+    Some((index, *field_index, inner.type_id))
 }
 
 /// The start of the run of at least two `let`s ending before `end` that each
