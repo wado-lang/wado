@@ -187,6 +187,8 @@ Reads the members of a JSON object as a struct's fields.
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+##### `fn tag<S: AsStrSlice>(&mut self, key: S, on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError>`
+
 ## Structs
 
 ### `pub struct JsonSeqSerializer`

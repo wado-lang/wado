@@ -49,22 +49,21 @@
         (i32.lt_s
           (memory.grow
             (call $pages
-              (local.tee 1
-                (if (result i64) ;; label = @1
-                  (i64.gt_u
-                    (local.get 0)
-                    (local.get 1))
-                  (then
-                    (i64.shl
-                      (i64.const 1)
-                      (i64.sub
-                        (i64.const 64)
-                        (i64.clz
-                          (i64.sub
-                            (local.get 0)
-                            (i64.const 1))))))
-                  (else
-                    (local.get 1))))))
+              (if (result i64) ;; label = @1
+                (i64.gt_u
+                  (local.get 0)
+                  (local.get 1))
+                (then
+                  (i64.shl
+                    (i64.const 1)
+                    (i64.sub
+                      (i64.const 64)
+                      (i64.clz
+                        (i64.sub
+                          (local.get 0)
+                          (i64.const 1))))))
+                (else
+                  (local.get 1)))))
           (i32.const 0))
         (then
           (@metadata.code.branch_hint "\00")

@@ -83,6 +83,9 @@ use {
     TextKeyDeserializer,
     TextKeySerializer,
     deeper,
+    read_tag,
+    report_duplicate_field,
+    DuplicateFieldPolicy,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
@@ -2343,9 +2346,9 @@ impl DeserializeStruct for JsonStructAccess {
         }
         de.first_entry = false;
 
-        // Fast path: scan JSON string key without allocating.
-        // For unescaped keys (the common case), we pass the byte range
-        // directly to S::lookup, avoiding String allocation entirely.
+        // `entry_key`'s read, kept inline: `next_field` has an instance per
+        // struct, and the inliner declines a callee that size at that many
+        // sites, which costs json-twitter's decode 1%.
         if b != b'"' {
             builtin::cold_path();
             return Result::Err(de.key_quote_error(b));
@@ -2394,6 +2397,60 @@ impl DeserializeStruct for JsonStructAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         return self.close_container(b'}');
+    }
+
+    fn tag<S: AsStrSlice>(&mut self, key: S, on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
+        let de = *self as &mut JsonDeserializer;
+        let wanted = key.as_str_slice();
+        let start = de.pos;
+        let first_entry = de.first_entry;
+        let mut found: Option<String> = null;
+        while de.entry_head(b'}')? {
+            let b = de.peek_after_whitespace();
+            if de.entry_key(b)? != wanted.as_bytes() {
+                de.skip_value(de.depth)?;
+                continue;
+            }
+            if found matches { Some(_) } {
+                report_duplicate_field(on_duplicate, &wanted.to_string())?;
+            }
+            found = Option::Some(read_tag(de, wanted)?);
+        }
+        let Some(value) = found else {
+            return Result::Err(DeserializeError::missing_field(key));
+        };
+        de.pos = start;
+        de.first_entry = first_entry;
+        return Result::Ok(value);
+    }
+}
+
+impl JsonDeserializer {
+    /// Reads an entry's key from its opening quote `b`, and the `:` after it.
+    fn entry_key(&mut self, b: i32) -> Result<ByteSlice, DeserializeError> {
+        if b != b'"' {
+            builtin::cold_path();
+            return Result::Err(self.key_quote_error(b));
+        }
+        self.pos += 1;
+        let key_start = self.pos;
+        let scan = self.scan_string_run(key_start);
+        // Fast path: a key without escapes is read from the input in place.
+        if scan.stop == b'"' {
+            if !scan.valid {
+                builtin::cold_path();
+                return Result::Err(self.invalid_utf8_string(key_start));
+            }
+            self.pos = scan.end + 1;
+            self.expect_char(b':')?;
+            return Result::Ok(self.input.slice(key_start, scan.end));
+        }
+        // Slow path: a key with escapes, or a malformed one, is parsed in full.
+        builtin::cold_path();
+        self.pos = key_start - 1;
+        let key = self.read_json_string()?;
+        self.expect_char(b':')?;
+        return Result::Ok(key.as_bytes());
     }
 }
 

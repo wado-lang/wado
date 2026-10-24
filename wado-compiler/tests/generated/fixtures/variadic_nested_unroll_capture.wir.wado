@@ -6,20 +6,26 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(2)
+struct core:prelude/string.wado//StrSlice {  // TypeId(2)
+    mut repr: ref Array<u8>,
+    mut start: i32,
+    mut end: i32,
+}
+
+struct core:prelude/string.wado//StrCharIter {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(4)
 
-struct core:prelude/string.wado//String {  // TypeId(4)
+struct core:prelude/string.wado//String {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(5)
+struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -31,109 +37,137 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(6)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(7)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(7)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(8)
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(8)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keeps_the_outer_binding_s_own_element" = fn();  // TypeId(16)
+type "functype//variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keeps_the_outer_binding_s_own_element" = fn();  // TypeId(17)
 
-type "functype//variadic_nested_unroll_capture.wado/$cm_export__$test_1_a_nested_comprehension_keeps_the_outer_binding_s_own_element" = fn();  // TypeId(17)
+type "functype//variadic_nested_unroll_capture.wado/$cm_export__$test_1_a_nested_comprehension_keeps_the_outer_binding_s_own_element" = fn();  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
+type "functype//core:prelude/fpfmt.wado/u64_bit_len" = fn(u64) -> i32;  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(22)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(23)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(23)
+type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(25)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(26)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(26)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(27)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(27)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(28)
+type "functype//core:rt/unreachable" = fn();  // TypeId(29)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(30)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(30)
+type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/char::from_u32$contract_report0" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$cold0$dae[self]" = fn(u32);  // TypeId(33)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(34)
+type "functype//core:prelude/primitive.wado/char::from_u32$contract_report0" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(36)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$cold0$dae[self]" = fn(u32);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked" = fn(ref "core:prelude/string.wado//String", i32, u8);  // TypeId(40)
 
-type "functype//variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed_comprehension" = fn(ref "tuple//[i32, core:prelude/string.wado/String]") -> ref "core:prelude/string.wado//String";  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(41)
 
-type "functype//variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed" = fn(ref "tuple//[i32, core:prelude/string.wado/String]") -> ref "core:prelude/string.wado//String";  // TypeId(41)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(42)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(42)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(44)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(45)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]" = fn(ref "core:prelude/format.wado//Formatter", bool, i32) -> i32;  // TypeId(45)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(46)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(46)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(47)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(48)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(48)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::chars" = fn(ref Array<u8>, i32) -> [ref Array<u8>, i32, i32];  // TypeId(49)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref Array<u8>) -> ref "core:prelude/string.wado//String";  // TypeId(49)
+type "functype//variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed_comprehension" = fn(ref "tuple//[i32, core:prelude/string.wado/String]") -> ref "core:prelude/string.wado//String";  // TypeId(50)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
+type "functype//variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed" = fn(ref "tuple//[i32, core:prelude/string.wado/String]") -> ref "core:prelude/string.wado//String";  // TypeId(51)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
+type "functype//core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]" = fn(i32, i32) -> i32;  // TypeId(53)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(53)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(54)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(55)
+
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(56)
+
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]" = fn(ref "core:prelude/format.wado//Formatter", bool, i32) -> i32;  // TypeId(57)
+
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref Array<u8>, i32);  // TypeId(58)
+
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(59)
+
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(60)
+
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$dae[is_negative]" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32, i32) -> i32;  // TypeId(61)
+
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(62)
+
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref Array<u8>) -> ref "core:prelude/string.wado//String";  // TypeId(63)
+
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(64)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(65)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(66)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(67)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(68)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(69)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -149,8 +183,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
 global global:variadic_nested_unroll_capture.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(45);
-global global:core:prelude/format.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
-global global:core:prelude/format.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
+global global:core:prelude/format.wado::$const_obj_11: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+global global:core:prelude/format.wado::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keeps_the_outer_binding_s_own_element"() {
     let $v0: ref "core:prelude/string.wado//String";
@@ -161,7 +196,7 @@ fn "variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keep
     let i: i32;
     let f_38: ref "core:prelude/format.wado//Formatter";
     $v0 = "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed"(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } });
-    if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         a = $v0.repr;
         a_end = $v0.used;
         b = array.new_data<u8>("1-1,1-a,a-1,a-a");
@@ -180,7 +215,7 @@ fn "variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keep
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
-    }) == 0) {
+    } == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(162), used: 0 }), 121);
         b = $local_2.repr;
@@ -209,8 +244,8 @@ condition: [1, \"a\"].crossed() == \"1-1,1-a,a-1,a-a\"
         i = i + 52;
         b = array.new_data<u8>("[1, \"a\"].crossed(): ");
         builtin::array_copy<u8>(a, i, b, 0, 20);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2), $v0.repr, $v0.used);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $v0(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_2);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2), $v0);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_2);
         "core:rt/panic"($local_2.repr, $local_2.used);
         unreachable;
     }
@@ -226,7 +261,7 @@ fn "variadic_nested_unroll_capture.wado/$cm_export__$test_1_a_nested_comprehensi
     let i: i32;
     let f_38: ref "core:prelude/format.wado//Formatter";
     $v0 = "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed_comprehension"(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } });
-    if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         a = $v0.repr;
         a_end = $v0.used;
         b = array.new_data<u8>("1-1,1-a,a-1,a-a");
@@ -245,7 +280,7 @@ fn "variadic_nested_unroll_capture.wado/$cm_export__$test_1_a_nested_comprehensi
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
-    }) == 0) {
+    } == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(190), used: 0 }), 128);
         b = $local_2.repr;
@@ -274,12 +309,16 @@ condition: [1, \"a\"].crossed_comprehension() == \"1-1,1-a,a-1,a-a\"
         i = i + 66;
         b = array.new_data<u8>("[1, \"a\"].crossed_comprehension(): ");
         builtin::array_copy<u8>(a, i, b, 0, 34);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2), $v0.repr, $v0.used);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $v0(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_2);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2), $v0);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_2);
         "core:rt/panic"($local_2.repr, $local_2.used);
         unreachable;
     }
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/u64_bit_len"(x) {
+    return 64 - builtin::i32_wrap_i64(builtin::i64_clz(x));
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -365,6 +404,39 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
+fn "core:prelude/primitive.wado/count_digits_u64_base"(val_i64, bits_per_digit) {
+    if val_i64 == 0_i64 {
+        return 1;
+    }
+    return "core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]"("core:prelude/fpfmt.wado/u64_bit_len"(val_i64), bits_per_digit);
+}
+
+fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, digit_count, bits_per_digit, mask, upper) {
+    let mask64: i64;
+    let $licm_arith_13: u64;
+    mask64 = builtin::i64_extend_i32_s(mask);
+    digit_count = offset + digit_count;
+    if val_i64 == 0_i64 {
+        builtin::array_set_u8(arr, offset, 48);
+    } else {
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
+        b34: block {
+            l35: loop {
+                break_if b34 val_i64 == 0_i64;
+                digit_count = digit_count - 1;
+                bits_per_digit = builtin::i32_wrap_i64(val_i64 & mask64);
+                builtin::array_set_u8(arr, digit_count, (if bits_per_digit < 10 -> i32 {
+                    48 + bits_per_digit;
+                } else {
+                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
+                }) & 255);
+                val_i64 = val_i64 >>u $licm_arith_13;
+                continue l35;
+            };
+        };
+    }
+}
+
 fn "core:prelude/types.wado/copy_result"(packed) {
     return (if local.tee packed(packed & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
@@ -396,12 +468,12 @@ fn "core:prelude/types.wado/cm_await_copy"(handle) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b35: block {
-        l36: loop {
-            break_if b35 i >= len;
+    b40: block {
+        l41: loop {
+            break_if b40 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l36;
+            continue l41;
         };
     };
 }
@@ -471,7 +543,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l41: loop {
+        l46: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             result_7 = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -479,356 +551,88 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return result_7;
             }
-            continue l41;
+            continue l46;
         };
     };
 }
 
-fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, $mv$text$repr, $mv$text$used) {
-    let $load_16: ref Array<u8>;
-    let $load_21: ref Array<u8>;
-    let $load_26: ref Array<u8>;
-    let $load_31: ref Array<u8>;
-    let $iter_0: ref "core:prelude/string.wado//StrCharIter";
-    let $local_8_8: ref "core:prelude/string.wado//String";
+fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, text) {
+    let count: i32;
+    let truncated: bool;
+    let $local_8: ref "core:prelude/string.wado//String";
+    let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_11: i32;
-    let self_12: ref "core:prelude/string.wado//String";
-    let new_used_61: i32;
-    let start_62: i32;
-    let new_used_96: i32;
-    let start_97: i32;
-    let self_116: i32;
-    let new_used_125: i32;
-    let start_126: i32;
-    let self_145: i32;
-    let new_used_154: i32;
-    let start_155: i32;
-    let self_174: i32;
-    let new_used_183: i32;
-    let start_184: i32;
-    let self_203: i32;
-    let new_used_212: i32;
-    let start_213: i32;
-    let self_232: i32;
-    let new_used_241: i32;
-    let start_242: i32;
-    let self_261: i32;
-    let new_used_270: i32;
-    let start_271: i32;
-    let self_290: i32;
-    let new_used_299: i32;
-    let start_300: i32;
-    let self_319: i32;
-    let new_used_328: i32;
-    let start_329: i32;
-    let self_348: i32;
-    let new_used_357: i32;
-    let start_358: i32;
-    let self_377: i32;
-    let new_used_389: i32;
-    let start_390: i32;
-    let n_399: i32;
-    let new_used_403: i32;
-    let start_404: i32;
-    let new_used_411: i32;
-    let start_412: i32;
-    let self_431: i32;
-    let val_i64_496: i64;
-    let digit_count_499: i32;
-    let self_503: i32;
-    let q: i32;
-    let arr: ref Array<u8>;
-    let pos: i32;
-    let temp: i64;
-    let digit: i32;
-    let new_used_619: i32;
-    let start_620: i32;
-    let $hfs_used_998: i32;
+    let self_14: ref "core:prelude/string.wado//StrCharIter";
+    let $fuse_at_56: i32;
+    let $fuse_at_57: i32;
+    let $fuse_at_58: i32;
+    let $fuse_at_59: i32;
+    let $fuse_at_60: i32;
     self_11 = $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
         if local.tee self_11(f.precision) == -2 {
             break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
         }
         break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_11;
     };
-    if @unlikely(local.tee new_used_61(local.tee self_12(f.buf).used + 1) > builtin::array_len(self_12.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_61);
-    }
-    start_62 = self_12.used;
-    self_12.used = new_used_61;
-    new_used_61 = self_12.used;
-    if @unlikely(start_62 >=u new_used_61) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_62, new_used_61, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-        unreachable;
-    }
-    builtin::array_set_u8(self_12.repr, start_62, 34);
-    start_62 = 0;
-    new_used_61 = 0;
-    $iter_0 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv$text$repr, used: $mv$text$used, byte_index: 0 };
-    self_12 = f.buf;
-    $mv$text$used = self_11 >= 0;
-    $hfs_used_998 = self_12.used;
-    b46: block {
-        l47: loop {
-            let $mv$$match_10$0: i32;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 34);
+    count = 0;
+    truncated = 0;
+    let $mv_repr_1: ref Array<u8>;
+    let $mv_used_2: i32;
+    let $mv_byte_index_3: i32;
+    multivalue_bind [$mv_repr_1, $mv_used_2, $mv_byte_index_3] = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::chars"(text.repr, text.used);
+    self_14 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 };
+    text = f.buf;
+    $mv_byte_index_3 = self_11 >= 0;
+    b49: block {
+        l50: loop {
             let $mv$$match_10$1: char;
-            multivalue_bind [$mv$$match_10$0, $mv$$match_10$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"($iter_0);
-            if $mv$$match_10$0 == 1 {
-                if select i32($mv$text$used, start_62 >= self_11, 0) {
-                    new_used_61 = 1;
-                    break b46;
+            multivalue_bind [$mv_used_2, $mv$$match_10$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_14);
+            if $mv_used_2 == 1 {
+                if select i32($mv_byte_index_3, count >= self_11, 0) {
+                    truncated = 1;
+                    break b49;
                 }
                 if $mv$$match_10$1 == 34 {
-                    if @unlikely(local.tee new_used_96($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_96);
-                    } else {
-                    }
-                    start_97 = local.tee $hfs_used_998(self_12.used);
-                    self_116 = local.tee $hfs_used_998(new_used_96);
-                    if @unlikely(((0 <= start_97) & (start_97 < self_116)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_97, self_116, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(local.tee $mv$text$repr(self_12.repr), start_97, 92);
-                    if @unlikely(local.tee new_used_125($hfs_used_998 + 1) > builtin::array_len($mv$text$repr)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_125);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_126 = $hfs_used_998;
-                    self_145 = local.tee $hfs_used_998(new_used_125);
-                    if @unlikely(((0 <= start_126) & (start_126 < self_145)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_126, self_145, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_126, 34);
+                    $fuse_at_56 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_56, 92);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_56 + 1, 34);
                 } else if $mv$$match_10$1 == 92 {
-                    if @unlikely(local.tee new_used_154($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_154);
-                    } else {
-                    }
-                    start_155 = local.tee $hfs_used_998(self_12.used);
-                    self_174 = local.tee $hfs_used_998(new_used_154);
-                    if @unlikely(((0 <= start_155) & (start_155 < self_174)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_155, self_174, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(local.tee $load_16(self_12.repr), start_155, 92);
-                    if @unlikely(local.tee new_used_183($hfs_used_998 + 1) > builtin::array_len($load_16)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_183);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_184 = $hfs_used_998;
-                    self_203 = local.tee $hfs_used_998(new_used_183);
-                    if @unlikely(((0 <= start_184) & (start_184 < self_203)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_184, self_203, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_184, 92);
+                    $fuse_at_57 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_57, 92);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_57 + 1, 92);
                 } else if $mv$$match_10$1 == 10 {
-                    if @unlikely(local.tee new_used_212($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_212);
-                    } else {
-                    }
-                    start_213 = local.tee $hfs_used_998(self_12.used);
-                    self_232 = local.tee $hfs_used_998(new_used_212);
-                    if @unlikely(((0 <= start_213) & (start_213 < self_232)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_213, self_232, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(local.tee $load_21(self_12.repr), start_213, 92);
-                    if @unlikely(local.tee new_used_241($hfs_used_998 + 1) > builtin::array_len($load_21)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_241);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_242 = $hfs_used_998;
-                    self_261 = local.tee $hfs_used_998(new_used_241);
-                    if @unlikely(((0 <= start_242) & (start_242 < self_261)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_242, self_261, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_242, 110);
+                    $fuse_at_58 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_58, 92);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_58 + 1, 110);
                 } else if $mv$$match_10$1 == 13 {
-                    if @unlikely(local.tee new_used_270($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_270);
-                    } else {
-                    }
-                    start_271 = local.tee $hfs_used_998(self_12.used);
-                    self_290 = local.tee $hfs_used_998(new_used_270);
-                    if @unlikely(((0 <= start_271) & (start_271 < self_290)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_271, self_290, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(local.tee $load_26(self_12.repr), start_271, 92);
-                    if @unlikely(local.tee new_used_299($hfs_used_998 + 1) > builtin::array_len($load_26)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_299);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_300 = $hfs_used_998;
-                    self_319 = local.tee $hfs_used_998(new_used_299);
-                    if @unlikely(((0 <= start_300) & (start_300 < self_319)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_300, self_319, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_300, 114);
+                    $fuse_at_59 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_59, 92);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_59 + 1, 114);
                 } else if $mv$$match_10$1 == 9 {
-                    if @unlikely(local.tee new_used_328($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_328);
-                    } else {
-                    }
-                    start_329 = local.tee $hfs_used_998(self_12.used);
-                    self_348 = local.tee $hfs_used_998(new_used_328);
-                    if @unlikely(((0 <= start_329) & (start_329 < self_348)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_329, self_348, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(local.tee $load_31(self_12.repr), start_329, 92);
-                    if @unlikely(local.tee new_used_357($hfs_used_998 + 1) > builtin::array_len($load_31)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_357);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_358 = $hfs_used_998;
-                    self_377 = local.tee $hfs_used_998(new_used_357);
-                    if @unlikely(((0 <= start_358) & (start_358 < self_377)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_358, self_377, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_358, 116);
+                    $fuse_at_60 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_60, 92);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(text, $fuse_at_60 + 1, 116);
                 } else if ($mv$$match_10$1 < 32) | ($mv$$match_10$1 == 127) {
-                    if @unlikely(local.tee new_used_389($hfs_used_998 + 3) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_389);
-                    } else {
-                    }
-                    start_390 = local.tee $hfs_used_998(self_12.used);
-                    $hfs_used_998 = new_used_389;
-                    builtin::array_copy<u8>(self_12.repr, start_390, global:core:prelude/format.wado::$const_obj_12, 0, 3);
-                    $local_8_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                    val_i64_496 = builtin::i64_extend_i32_u($mv$$match_10$1);
-                    digit_count_499 = $inline_u64__fmt_base_sroa_self_value__spec0_spec0_sroa_f_buf__0__$inline_count_digits_u64_base_0: block -> i32 {
-                        if val_i64_496 == 0_i64 {
-                            break $inline_u64__fmt_base_sroa_self_value__spec0_spec0_sroa_f_buf__0__$inline_count_digits_u64_base_0: 1;
-                        }
-                        break $inline_u64__fmt_base_sroa_self_value__spec0_spec0_sroa_f_buf__0__$inline_count_digits_u64_base_0: select i32((self_503 - (q * 4)) != 0, (local.tee q(local.tee self_503(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_496))) / 4) + 1) + ((self_503 ^ 4) >> 31), q);
-                    };
-                    if @unlikely(local.tee new_used_619(0 + digit_count_499) > builtin::array_len($local_8_8.repr)) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, new_used_619);
-                    }
-                    start_620 = $local_8_8.used;
-                    $local_8_8.used = new_used_619;
-                    arr = $local_8_8.repr;
-                    pos = start_620 + digit_count_499;
-                    if val_i64_496 == 0_i64 {
-                        builtin::array_set_u8(arr, start_620, 48);
-                    } else {
-                        temp = val_i64_496;
-                        b80: block {
-                            l81: loop {
-                                break_if b80 temp == 0_i64;
-                                pos = pos - 1;
-                                digit = builtin::i32_wrap_i64(temp & 15_i64);
-                                builtin::array_set_u8(arr, pos, select i32(digit < 10, 48 + digit, (97 + digit) - 10) & 255);
-                                temp = temp >>u 4_i64;
-                                continue l81;
-                            };
-                        };
-                    }
-                    $inline_core_prelude_string_wado_String_core_prelude_string_wado_AsStrSlice__internal_append_to_17__$inline_core_prelude_string_wado_String__internal_push_string_0: block {
-                        break_if $inline_core_prelude_string_wado_String_core_prelude_string_wado_AsStrSlice__internal_append_to_17__$inline_core_prelude_string_wado_String__internal_push_string_0 local.tee n_399($local_8_8.used) == 0;
-                        if @unlikely(local.tee new_used_403($hfs_used_998 + n_399) > builtin::array_len(self_12.repr)) {
-                            cold_path;
-                            self_12.used = $hfs_used_998;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_403);
-                            $hfs_used_998 = self_12.used;
-                        }
-                        start_404 = $hfs_used_998;
-                        $hfs_used_998 = new_used_403;
-                        builtin::array_copy<u8>(self_12.repr, start_404, $local_8_8.repr, 0, n_399);
-                    };
-                    if @unlikely(local.tee new_used_411($hfs_used_998 + 1) > builtin::array_len(self_12.repr)) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, new_used_411);
-                        $hfs_used_998 = self_12.used;
-                    }
-                    start_412 = $hfs_used_998;
-                    self_431 = local.tee $hfs_used_998(new_used_411);
-                    if @unlikely(((0 <= start_412) & (start_412 < self_431)) == 0) {
-                        cold_path;
-                        self_12.used = $hfs_used_998;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_412, self_431, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-                        unreachable;
-                    }
-                    builtin::array_set_u8(self_12.repr, start_412, 125);
+                    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/format.wado::$const_obj_12, text);
+                    $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }));
+                    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"($mv$$match_10$1, $local_9);
+                    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($local_8, text);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(text, 125);
                 } else {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_12, $mv$$match_10$1);
-                    $hfs_used_998 = self_12.used;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, $mv$$match_10$1);
                 }
-                start_62 = start_62 + 1;
+                count = count + 1;
             } else {
-                break b46;
+                break b49;
             }
-            self_12.used = $hfs_used_998;
-            continue l47;
+            continue l50;
         };
     };
-    if @unlikely(local.tee self_431(local.tee $local_8_8(f.buf).used + 1) > builtin::array_len($local_8_8.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, self_431);
-    }
-    start_412 = $local_8_8.used;
-    $local_8_8.used = self_431;
-    self_431 = $local_8_8.used;
-    if @unlikely(start_412 >=u self_431) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_412, self_431, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
-        unreachable;
-    }
-    builtin::array_set_u8($local_8_8.repr, start_412, 34);
-    if new_used_61 {
-        if @unlikely(local.tee new_used_61(local.tee $local_8_8(f.buf).used + 3) > builtin::array_len($local_8_8.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, new_used_61);
-        }
-        start_412 = $local_8_8.used;
-        $local_8_8.used = new_used_61;
-        builtin::array_copy<u8>($local_8_8.repr, start_412, global:core:prelude/format.wado::$const_obj_11, 0, 3);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 34);
+    if truncated {
+        $local_8 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/format.wado::$const_obj_11, $local_8);
     }
 }
 
@@ -863,7 +667,7 @@ condition: char::is_scalar_value(value)
     builtin::array_copy<u8>($sroa_s_repr_39, $fuse_at_4, $load_0, 0, 7);
     $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
     "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(value, $local_3);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $site(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_2);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_2);
     "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
@@ -909,7 +713,7 @@ condition: 0 <= index < self.len()
     builtin::array_copy<u8>($load_0, index, $sroa_s_repr_55, 0, 12);
     $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_8);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee $site(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_7);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_7);
     "core:rt/panic"($local_7.repr, $local_7.used);
     unreachable;
 }
@@ -973,6 +777,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
         "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$cold0$dae[self]"($sroa_slot_35);
         unreachable;
     }; $sroa_slot_35;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, index, value) {
+    let self_17: i32;
+    self_17 = self.used;
+    if @unlikely(index >=u self_17) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, self_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+        unreachable;
+    }
+    builtin::array_set_u8(self.repr, index, value);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -1052,25 +867,72 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, byte) {
+    let new_used: i32;
+    let start_6: i32;
+    if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+    }
+    start_6 = self.used;
+    self.used = new_used;
+    new_used = self.used;
+    if @unlikely(start_6 >=u new_used) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_6, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+        unreachable;
+    }
+    builtin::array_set_u8(self.repr, start_6, byte);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$repr, $mv$self$start, $mv$self$end) {
+    return $mv$self$repr, $mv$self$end, $mv$self$start;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"($mv$self$repr, $mv$self$used) {
+    return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: 0, end: $mv$self$used };
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {
+    let n_4: i32;
+    let new_used: i32;
+    let start_9: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_0: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_0 local.tee n_4(self.used) == 0;
+        if @unlikely(local.tee new_used(out.used + n_4) > builtin::array_len(out.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
+        }
+        start_9 = out.used;
+        out.used = new_used;
+        builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, n_4);
+    };
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::chars"($mv$self$repr, $mv$self$used) {
+    let $mv_arg_1: ref "core:prelude/string.wado//StrSlice";
+    return "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"($mv$self$repr, $mv$self$used)).repr, $mv_arg_1.start, $mv_arg_1.end);
+}
+
 fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^variadic_nested_unroll_capture.wado/Crossed::crossed_comprehension"(self) {
     let $load_0: i32;
+    let $load_16: ref "Array<core:prelude/string.wado/String>";
     let out_1: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $local_13: ref "core:prelude/string.wado//String";
     let $local_18_18: ref "core:prelude/string.wado//String";
-    let elements: ref "Array<core:prelude/string.wado/String>";
     let is_negative_42: bool;
     let digit_count_44: i32;
     let x_46: i64;
-    let self_47: ref "core:prelude/string.wado//String";
-    let self_87: ref "core:prelude/string.wado//String";
     let $sroa_$f_buf_530: ref "core:prelude/string.wado//String";
     let $sroa_$f_buf_539: ref "core:prelude/string.wado//String";
-    out_1 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
+    let $sroa_$f_buf_557: ref "core:prelude/string.wado//String";
+    out_1 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $load_0 = self.0;
     $sroa_$f_buf_530 = local.tee $local_18_18(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_42 = $load_0 < 0;
     digit_count_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_46(x_46 = builtin::i64_extend_i32_s($load_0); select i64(x_46 < 0_i64, 0_i64 - x_46, x_46)));
     is_negative_42 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_530, is_negative_42, digit_count_44);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_47($sroa_$f_buf_530).repr, is_negative_42, x_46, digit_count_44);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_530.repr, is_negative_42, x_46, digit_count_44);
     if @unlikely(local.tee digit_count_44($local_18_18.used + 1) > builtin::array_len($local_18_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_18_18, digit_count_44);
@@ -1084,19 +946,19 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     is_negative_42 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_530, is_negative_42, digit_count_44);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_530.repr, is_negative_42, x_46, digit_count_44);
     $sroa_$f_buf_530 = self.1;
-    $sroa_$f_buf_539 = local.tee self_47(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$f_buf_539 = local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     digit_count_44 = $load_0 < 0;
     $load_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_46(x_46 = builtin::i64_extend_i32_s($load_0); select i64(x_46 < 0_i64, 0_i64 - x_46, x_46)));
     digit_count_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_539, digit_count_44, $load_0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_87($sroa_$f_buf_539).repr, digit_count_44, x_46, $load_0);
-    if @unlikely(local.tee $load_0(self_47.used + 1) > builtin::array_len(self_47.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_539.repr, digit_count_44, x_46, $load_0);
+    if @unlikely(local.tee $load_0($local_13.used + 1) > builtin::array_len($local_13.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_47, $load_0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, $load_0);
     }
-    digit_count_44 = self_47.used;
-    self_47.used = $load_0;
-    builtin::array_copy<u8>(self_47.repr, digit_count_44, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
-    $sroa_$f_buf_539 = self_47;
+    digit_count_44 = $local_13.used;
+    $local_13.used = $load_0;
+    builtin::array_copy<u8>($local_13.repr, digit_count_44, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
+    $sroa_$f_buf_539 = $local_13;
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_539, $sroa_$f_buf_530.repr, $sroa_$f_buf_530.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
@@ -1105,19 +967,19 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee elements(out_1.repr), 0, $local_18_18);
+    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_16(out_1.repr), 0, $local_18_18);
     out_1.used = 0 + 1;
-    if @unlikely(local.tee digit_count_44(out_1.used) >= builtin::array_len(elements)) {
+    if @unlikely(local.tee digit_count_44(out_1.used) >= builtin::array_len($load_16)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, digit_count_44, self_47);
+    builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, digit_count_44, $local_13);
     out_1.used = digit_count_44 + 1;
-    self_47 = self.1;
+    $local_13 = self.1;
     digit_count_44 = self.0;
     $sroa_$f_buf_530 = local.tee $local_18_18(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__1: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_530, self_47.repr, self_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_530, $local_13.repr, $local_13.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__1;
     };
     if @unlikely(local.tee $load_0($local_18_18.used + 1) > builtin::array_len($local_18_18.repr)) {
@@ -1133,9 +995,9 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     is_negative_42 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_530, is_negative_42, digit_count_44);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_530.repr, is_negative_42, x_46, digit_count_44);
     $sroa_$f_buf_530 = self.1;
-    self_87 = local.tee $sroa_$f_buf_539(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$f_buf_557 = local.tee $sroa_$f_buf_539(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_87, self_47.repr, self_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_557, $local_13.repr, $local_13.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2;
     };
     if @unlikely(local.tee digit_count_44($sroa_$f_buf_539.used + 1) > builtin::array_len($sroa_$f_buf_539.repr)) {
@@ -1145,18 +1007,18 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     is_negative_42 = $sroa_$f_buf_539.used;
     $sroa_$f_buf_539.used = digit_count_44;
     builtin::array_copy<u8>($sroa_$f_buf_539.repr, is_negative_42, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
-    self_87 = $sroa_$f_buf_539;
+    $sroa_$f_buf_557 = $sroa_$f_buf_539;
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__3: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_87, $sroa_$f_buf_530.repr, $sroa_$f_buf_530.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_557, $sroa_$f_buf_530.repr, $sroa_$f_buf_530.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__3;
     };
     if @unlikely(local.tee is_negative_42(out_1.used) >= builtin::array_len(out_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee elements(out_1.repr), is_negative_42, $local_18_18);
+    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_16(out_1.repr), is_negative_42, $local_18_18);
     out_1.used = is_negative_42 + 1;
-    if @unlikely(local.tee is_negative_42(out_1.used) >= builtin::array_len(elements)) {
+    if @unlikely(local.tee is_negative_42(out_1.used) >= builtin::array_len($load_16)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
     }
@@ -1172,16 +1034,16 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     let is_negative_36: bool;
     let digit_count_38: i32;
     let x_40: i64;
-    let self_41: ref "core:prelude/string.wado//String";
-    let self_88: ref "core:prelude/string.wado//String";
     let $sroa_$f_buf_517: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_526: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_544: ref "core:prelude/string.wado//String";
     out_1 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $load_0 = self.0;
     $sroa_$f_buf_517 = local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_36 = $load_0 < 0;
     digit_count_38 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_40(x_40 = builtin::i64_extend_i32_s($load_0); select i64(x_40 < 0_i64, 0_i64 - x_40, x_40)));
     is_negative_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_517, is_negative_36, digit_count_38);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_41($sroa_$f_buf_517).repr, is_negative_36, x_40, digit_count_38);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_517.repr, is_negative_36, x_40, digit_count_38);
     if @unlikely(local.tee digit_count_38($local_13.used + 1) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, digit_count_38);
@@ -1201,11 +1063,11 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, 0, $local_13);
     out_1.used = 0 + 1;
     $local_13 = self.1;
-    self_41 = local.tee $sroa_$f_buf_517(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$f_buf_526 = local.tee $sroa_$f_buf_517(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     digit_count_38 = $load_0 < 0;
     $load_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_40(x_40 = builtin::i64_extend_i32_s($load_0); select i64(x_40 < 0_i64, 0_i64 - x_40, x_40)));
-    digit_count_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self_41, digit_count_38, $load_0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_88(self_41).repr, digit_count_38, x_40, $load_0);
+    digit_count_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_526, digit_count_38, $load_0);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_526.repr, digit_count_38, x_40, $load_0);
     if @unlikely(local.tee $load_0($sroa_$f_buf_517.used + 1) > builtin::array_len($sroa_$f_buf_517.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_517, $load_0);
@@ -1213,9 +1075,9 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     digit_count_38 = $sroa_$f_buf_517.used;
     $sroa_$f_buf_517.used = $load_0;
     builtin::array_copy<u8>($sroa_$f_buf_517.repr, digit_count_38, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
-    self_41 = $sroa_$f_buf_517;
+    $sroa_$f_buf_526 = $sroa_$f_buf_517;
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_41, $local_13.repr, $local_13.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_526, $local_13.repr, $local_13.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     };
     if @unlikely(local.tee digit_count_38(out_1.used) >= builtin::array_len(out_1.repr)) {
@@ -1226,9 +1088,9 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     out_1.used = digit_count_38 + 1;
     $sroa_$f_buf_517 = self.1;
     digit_count_38 = self.0;
-    self_41 = local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$f_buf_526 = local.tee $local_13(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__1: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_41, $sroa_$f_buf_517.repr, $sroa_$f_buf_517.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_526, $sroa_$f_buf_517.repr, $sroa_$f_buf_517.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__1;
     };
     if @unlikely(local.tee $load_0($local_13.used + 1) > builtin::array_len($local_13.repr)) {
@@ -1238,11 +1100,11 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     is_negative_36 = $local_13.used;
     $local_13.used = $load_0;
     builtin::array_copy<u8>($local_13.repr, is_negative_36, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
-    self_41 = $local_13;
+    $sroa_$f_buf_526 = $local_13;
     is_negative_36 = digit_count_38 < 0;
     digit_count_38 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_40(x_40 = builtin::i64_extend_i32_s(digit_count_38); select i64(x_40 < 0_i64, 0_i64 - x_40, x_40)));
-    is_negative_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self_41, is_negative_36, digit_count_38);
-    "core:prelude/primitive.wado/write_decimal_digits"(self_41.repr, is_negative_36, x_40, digit_count_38);
+    is_negative_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_526, is_negative_36, digit_count_38);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_526.repr, is_negative_36, x_40, digit_count_38);
     if @unlikely(local.tee digit_count_38(out_1.used) >= builtin::array_len(out_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
@@ -1250,28 +1112,28 @@ fn "variadic_nested_unroll_capture.wado/[i32,core:prelude/string.wado/String]^va
     builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, digit_count_38, $local_13);
     out_1.used = digit_count_38 + 1;
     $local_13 = self.1;
-    self_88 = local.tee self_41(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$f_buf_544 = local.tee $sroa_$f_buf_526(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_88, $sroa_$f_buf_517.repr, $sroa_$f_buf_517.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_544, $sroa_$f_buf_517.repr, $sroa_$f_buf_517.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2;
     };
-    if @unlikely(local.tee digit_count_38(self_41.used + 1) > builtin::array_len(self_41.repr)) {
+    if @unlikely(local.tee digit_count_38($sroa_$f_buf_526.used + 1) > builtin::array_len($sroa_$f_buf_526.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_41, digit_count_38);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_526, digit_count_38);
     }
-    is_negative_36 = self_41.used;
-    self_41.used = digit_count_38;
-    builtin::array_copy<u8>(self_41.repr, is_negative_36, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
-    self_88 = self_41;
+    is_negative_36 = $sroa_$f_buf_526.used;
+    $sroa_$f_buf_526.used = digit_count_38;
+    builtin::array_copy<u8>($sroa_$f_buf_526.repr, is_negative_36, global:variadic_nested_unroll_capture.wado::$const_obj_3, 0, 1);
+    $sroa_$f_buf_544 = $sroa_$f_buf_526;
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__3: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self_88, $local_13.repr, $local_13.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_544, $local_13.repr, $local_13.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__3;
     };
     if @unlikely(local.tee is_negative_36(out_1.used) >= builtin::array_len(out_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out_1);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, is_negative_36, self_41);
+    builtin::array_set<ref "core:prelude/string.wado//String">(out_1.repr, is_negative_36, $sroa_$f_buf_526);
     out_1.used = is_negative_36 + 1;
     return "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]"(out_1, array.new_fixed<u8>(44));
 }
@@ -1282,6 +1144,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let a: i32;
     builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]"(self, rhs) {
+    let q: i32;
+    return select i32((self - (q * rhs)) != 0, (local.tee q(self / rhs) + 1) + ((self ^ rhs) >> 31), q);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
@@ -1299,6 +1166,14 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, 0, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
+    let $arg_spill_1: u64;
+    $arg_spill_1 = builtin::i64_extend_i32_u(self);
+    let $mv_arg_5: ref "core:prelude/string.wado//String";
+    $mv_arg_5 = global:core:prelude/primitive.wado::$const_obj_13;
+    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0"($arg_spill_1, f, 16, 0, $mv_arg_5.repr, $mv_arg_5.used);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(self, is_negative, digit_count) {
@@ -1396,9 +1271,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         $load_2 = 0;
         start_26 = self_20.used;
-        b137: block {
-            l138: loop {
-                break_if b137 $load_2 >= sign_len;
+        b112: block {
+            l113: loop {
+                break_if b112 $load_2 >= sign_len;
                 if @unlikely(local.tee new_used_25(start_26 + 1) > builtin::array_len(self_20.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, new_used_25);
@@ -1415,7 +1290,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_set_u8(self_20.repr, start_449, 48);
                 $load_2 = $load_2 + 1;
                 self_20.used = start_26;
-                continue l138;
+                continue l113;
             };
         };
         if @unlikely(local.tee start_26(local.tee self_20(self.buf).used + digit_count) > builtin::array_len(self_20.repr)) {
@@ -1470,12 +1345,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         start_449 = self.fill;
         start_26 = 0;
-        b151: block {
-            l152: loop {
-                break_if b151 start_26 >= sign_len;
+        b126: block {
+            l127: loop {
+                break_if b126 start_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
                 start_26 = start_26 + 1;
-                continue l152;
+                continue l127;
             };
         };
         return $load_0;
@@ -1485,12 +1360,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         start_449 = self.fill;
         start_26 = 0;
-        b154: block {
-            l155: loop {
-                break_if b154 start_26 >= $load_2;
+        b129: block {
+            l130: loop {
+                break_if b129 start_26 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
                 start_26 = start_26 + 1;
-                continue l155;
+                continue l130;
             };
         };
         if is_negative {
@@ -1536,12 +1411,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         start_449 = self.fill;
         $load_2 = 0;
-        b164: block {
-            l165: loop {
-                break_if b164 $load_2 >= $load_0;
+        b139: block {
+            l140: loop {
+                break_if b139 $load_2 >= $load_0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_449);
                 $load_2 = $load_2 + 1;
-                continue l165;
+                continue l140;
             };
         };
         return start_26;
@@ -1549,12 +1424,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         start_26 = self.fill;
         start_449 = 0;
-        b166: block {
-            l167: loop {
-                break_if b166 start_449 >= sign_len;
+        b141: block {
+            l142: loop {
+                break_if b141 start_449 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, start_26);
                 start_449 = start_449 + 1;
-                continue l167;
+                continue l142;
             };
         };
         if is_negative {
@@ -1601,6 +1476,32 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0"(self, f, base, upper, $mv$alt_prefix$repr, $mv$alt_prefix$used) {
+    let bits_per_digit: i32;
+    let digit_count: i32;
+    bits_per_digit = (if base == 2 -> i32 {
+        1;
+    } else {
+        select i32(base == 8, 3, 4);
+    });
+    base = base - 1;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
+    $mv$alt_prefix$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$dae[is_negative]"(f, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count);
+    "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, $mv$alt_prefix$used, self, digit_count, bits_per_digit, base, upper);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
+    let new_used: i32;
+    let start_9: i32;
+    if @unlikely(local.tee new_used(out.used + 3) > builtin::array_len(out.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
+    }
+    start_9 = out.used;
+    out.used = new_used;
+    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 3);
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(self, out) {
     let new_used: i32;
     let start_9: i32;
@@ -1611,6 +1512,239 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
     start_9 = out.used;
     out.used = new_used;
     builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$dae[is_negative]"(self, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
+    let $load_2: i32;
+    let sign_len: i32;
+    let prefix_len: i32;
+    let self_49: ref "core:prelude/string.wado//String";
+    let new_used_54: i32;
+    let start_55: i32;
+    $mv$alt_prefix$used = self.sign_plus;
+    sign_len = select i32($mv$alt_prefix$used, 1, 0);
+    prefix_len = select i32(self.alternate, 2, 0);
+    sign_len = (sign_len + prefix_len) + digit_count;
+    if (local.tee $load_2(self.width) <= 0) | (sign_len >= $load_2) {
+        if $mv$alt_prefix$used {
+            if @unlikely(local.tee new_used_54(local.tee self_49(self.buf).used + 1) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, new_used_54);
+            }
+            start_55 = self_49.used;
+            self_49.used = new_used_54;
+            new_used_54 = self_49.used;
+            if @unlikely(start_55 >=u new_used_54) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_55, new_used_54, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+                unreachable;
+            }
+            builtin::array_set_u8(self_49.repr, start_55, 43);
+        }
+        if prefix_len > 0 {
+            if @unlikely(local.tee start_55(local.tee self_49(self.buf).used + 2) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, start_55);
+            }
+            new_used_54 = self_49.used;
+            self_49.used = start_55;
+            builtin::array_copy<u8>(self_49.repr, new_used_54, $mv$alt_prefix$repr, 0, 2);
+        }
+        if @unlikely(local.tee new_used_54(local.tee self_49(self.buf).used + digit_count) > builtin::array_len(self_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, new_used_54);
+        }
+        start_55 = self_49.used;
+        self_49.used = new_used_54;
+        return start_55;
+    }
+    sign_len = $load_2 - sign_len;
+    if self.zero_pad {
+        if $mv$alt_prefix$used {
+            if @unlikely(local.tee $load_2(local.tee self_49(self.buf).used + 1) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, $load_2);
+            }
+            start_55 = self_49.used;
+            self_49.used = $load_2;
+            $load_2 = self_49.used;
+            if @unlikely(start_55 >=u $load_2) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_55, $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+                unreachable;
+            }
+            builtin::array_set_u8(self_49.repr, start_55, 43);
+        }
+        if prefix_len > 0 {
+            if @unlikely(local.tee start_55(local.tee self_49(self.buf).used + 2) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, start_55);
+            }
+            $load_2 = self_49.used;
+            self_49.used = start_55;
+            builtin::array_copy<u8>(self_49.repr, $load_2, $mv$alt_prefix$repr, 0, 2);
+        }
+        self_49 = self.buf;
+        $load_2 = 0;
+        b167: block {
+            l168: loop {
+                break_if b167 $load_2 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self_49, 48);
+                $load_2 = $load_2 + 1;
+                continue l168;
+            };
+        };
+        if @unlikely(local.tee $load_2(local.tee self_49(self.buf).used + digit_count) > builtin::array_len(self_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, $load_2);
+        }
+        start_55 = self_49.used;
+        self_49.used = $load_2;
+        return start_55;
+    }
+    if local.tee start_55(self.align) == 0 {
+        if $mv$alt_prefix$used {
+            if @unlikely(local.tee $mv$alt_prefix$used(local.tee self_49(self.buf).used + 1) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, $mv$alt_prefix$used);
+            }
+            $load_2 = self_49.used;
+            self_49.used = $mv$alt_prefix$used;
+            $mv$alt_prefix$used = self_49.used;
+            if @unlikely($load_2 >=u $mv$alt_prefix$used) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($load_2, $mv$alt_prefix$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+                unreachable;
+            }
+            builtin::array_set_u8(self_49.repr, $load_2, 43);
+        }
+        if prefix_len > 0 {
+            if @unlikely(local.tee $load_2(local.tee self_49(self.buf).used + 2) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, $load_2);
+            }
+            $mv$alt_prefix$used = self_49.used;
+            self_49.used = $load_2;
+            builtin::array_copy<u8>(self_49.repr, $mv$alt_prefix$used, $mv$alt_prefix$repr, 0, 2);
+        }
+        if @unlikely(local.tee $mv$alt_prefix$used(local.tee self_49(self.buf).used + digit_count) > builtin::array_len(self_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, $mv$alt_prefix$used);
+        }
+        $load_2 = self_49.used;
+        self_49.used = $mv$alt_prefix$used;
+        self_49 = self.buf;
+        $mv$alt_prefix$used = self.fill;
+        new_used_54 = 0;
+        b177: block {
+            l178: loop {
+                break_if b177 new_used_54 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_49, $mv$alt_prefix$used);
+                new_used_54 = new_used_54 + 1;
+                continue l178;
+            };
+        };
+        return $load_2;
+    } else if start_55 == 1 {
+        start_55 = sign_len / 2;
+        $load_2 = sign_len - start_55;
+        self_49 = self.buf;
+        new_used_54 = self.fill;
+        $mv$alt_prefix$used = 0;
+        b180: block {
+            l181: loop {
+                break_if b180 $mv$alt_prefix$used >= start_55;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_49, new_used_54);
+                $mv$alt_prefix$used = $mv$alt_prefix$used + 1;
+                continue l181;
+            };
+        };
+        if self.sign_plus {
+            if @unlikely(local.tee start_55(local.tee self_49(self.buf).used + 1) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, start_55);
+            }
+            new_used_54 = self_49.used;
+            self_49.used = start_55;
+            start_55 = self_49.used;
+            if @unlikely(new_used_54 >=u start_55) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(new_used_54, start_55, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+                unreachable;
+            }
+            builtin::array_set_u8(self_49.repr, new_used_54, 43);
+        }
+        if prefix_len > 0 {
+            if @unlikely(local.tee new_used_54(local.tee self_49(self.buf).used + 2) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, new_used_54);
+            }
+            start_55 = self_49.used;
+            self_49.used = new_used_54;
+            builtin::array_copy<u8>(self_49.repr, start_55, $mv$alt_prefix$repr, 0, 2);
+        }
+        if @unlikely(local.tee start_55(local.tee self_49(self.buf).used + digit_count) > builtin::array_len(self_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, start_55);
+        }
+        new_used_54 = self_49.used;
+        self_49.used = start_55;
+        self_49 = self.buf;
+        start_55 = self.fill;
+        $mv$alt_prefix$used = 0;
+        b188: block {
+            l189: loop {
+                break_if b188 $mv$alt_prefix$used >= $load_2;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_49, start_55);
+                $mv$alt_prefix$used = $mv$alt_prefix$used + 1;
+                continue l189;
+            };
+        };
+        return new_used_54;
+    } else {
+        self_49 = self.buf;
+        new_used_54 = self.fill;
+        start_55 = 0;
+        b190: block {
+            l191: loop {
+                break_if b190 start_55 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_49, new_used_54);
+                start_55 = start_55 + 1;
+                continue l191;
+            };
+        };
+        if self.sign_plus {
+            if @unlikely(local.tee start_55(local.tee self_49(self.buf).used + 1) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, start_55);
+            }
+            new_used_54 = self_49.used;
+            self_49.used = start_55;
+            start_55 = self_49.used;
+            if @unlikely(new_used_54 >=u start_55) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(new_used_54, start_55, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:541"), used: 28 });
+                unreachable;
+            }
+            builtin::array_set_u8(self_49.repr, new_used_54, 43);
+        }
+        if prefix_len > 0 {
+            if @unlikely(local.tee prefix_len(local.tee self_49(self.buf).used + 2) > builtin::array_len(self_49.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, prefix_len);
+            }
+            new_used_54 = self_49.used;
+            self_49.used = prefix_len;
+            builtin::array_copy<u8>(self_49.repr, new_used_54, $mv$alt_prefix$repr, 0, 2);
+        }
+        if @unlikely(local.tee digit_count(local.tee self_49(self.buf).used + digit_count) > builtin::array_len(self_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_49, digit_count);
+        }
+        new_used_54 = self_49.used;
+        self_49.used = digit_count;
+        return new_used_54;
+    }
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
@@ -1627,6 +1761,59 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         builtin::array_copy<u8>(self.repr, start_65, $mv$content$repr, 0, $mv$content$used);
     };
     return;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]"(self, separator) {
+    let $load_0: i32;
+    let buf_2: ref "core:prelude/string.wado//String";
+    let i_4: i32;
+    let item: ref "core:prelude/string.wado//String";
+    let new_used_22: i32;
+    let start_23: i32;
+    let $licm_repr_30: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_31: ref Array<u8>;
+    let n_183: i32;
+    let new_used_187: i32;
+    let start_188: i32;
+    buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(self.used) * 8), used: 0 };
+    i_4 = 0;
+    $licm_repr_30 = self.repr;
+    $licm_repr_31 = separator;
+    b199: block {
+        l200: loop {
+            break_if b199 i_4 >= $load_0;
+            if i_4 > 0 {
+                if @unlikely(local.tee new_used_22(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_22);
+                }
+                start_23 = buf_2.used;
+                buf_2.used = new_used_22;
+                builtin::array_copy<u8>(buf_2.repr, start_23, $licm_repr_31, 0, 1);
+            }
+            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_30, i_4);
+            $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
+                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+                    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                        break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_183(item.used) == 0;
+                        if @unlikely(local.tee new_used_187(buf_2.used + n_183) > builtin::array_len(buf_2.repr)) {
+                            cold_path;
+                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_187);
+                        }
+                        start_188 = buf_2.used;
+                        buf_2.used = new_used_187;
+                        builtin::array_copy<u8>(buf_2.repr, start_188, item.repr, 0, n_183);
+                    };
+                    break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
+                };
+                break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
+            };
+            $licm_repr_31 = separator;
+            i_4 = i_4 + 1;
+            continue l200;
+        };
+    };
+    return buf_2;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
@@ -1654,59 +1841,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]"(self, separator) {
-    let $load_0: i32;
-    let buf_2: ref "core:prelude/string.wado//String";
-    let i_4: i32;
-    let item: ref "core:prelude/string.wado//String";
-    let new_used_22: i32;
-    let start_23: i32;
-    let $licm_repr_30: ref "Array<core:prelude/string.wado/String>";
-    let $licm_repr_31: ref Array<u8>;
-    let n_174: i32;
-    let new_used_178: i32;
-    let start_179: i32;
-    buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(self.used) * 8), used: 0 };
-    i_4 = 0;
-    $licm_repr_30 = self.repr;
-    $licm_repr_31 = separator;
-    b182: block {
-        l183: loop {
-            break_if b182 i_4 >= $load_0;
-            if i_4 > 0 {
-                if @unlikely(local.tee new_used_22(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_22);
-                }
-                start_23 = buf_2.used;
-                buf_2.used = new_used_22;
-                builtin::array_copy<u8>(buf_2.repr, start_23, $licm_repr_31, 0, 1);
-            }
-            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_30, i_4);
-            $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
-                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
-                    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                        break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_174(item.used) == 0;
-                        if @unlikely(local.tee new_used_178(buf_2.used + n_174) > builtin::array_len(buf_2.repr)) {
-                            cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_178);
-                        }
-                        start_179 = buf_2.used;
-                        buf_2.used = new_used_178;
-                        builtin::array_copy<u8>(buf_2.repr, start_179, item.repr, 0, n_174);
-                    };
-                    break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
-                };
-                break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
-            };
-            $licm_repr_31 = separator;
-            i_4 = i_4 + 1;
-            continue l183;
-        };
-    };
-    return buf_2;
 }
 
 export fn "variadic_nested_unroll_capture.wado/$cm_export__$test_0_a_nested_for_of_keeps_the_outer_binding_s_own_element" as "$test_0_a_nested_for_of_keeps_the_outer_binding_s_own_element"

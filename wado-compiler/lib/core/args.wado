@@ -620,10 +620,17 @@ impl From<DeserializeError> for ArgsError {
             DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
             _ => ArgsErrorKind::InvalidValue,
         };
-        return ArgsError {
-            kind,
-            message: e.message,
-        };
+        return ArgsError { kind, message: e.message }.at(&e.path);
+    }
+}
+
+impl ArgsError {
+    /// This error, led by the `path` of the value whose read failed.
+    fn at(&self, path: &String) -> ArgsError {
+        if path.is_empty() {
+            return *self;
+        }
+        return ArgsError { kind: self.kind, message: `${path}: ${self.message}` };
     }
 }
 
@@ -648,14 +655,20 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         err: null,
         unknown_case: null,
     };
-    let r = T::deserialize(&mut de);
-    if let Some(e) = de.err {
-        return Result::Err(e);
-    }
-    if let Err(e) = r && e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
-        return Result::Err(bad);
-    }
-    return Result::Ok(r?);
+    let e = match T::deserialize(&mut de) {
+        Ok(v) => {
+            return Result::Ok(v);
+        },
+        Err(e) => e,
+    };
+    let recorded = if let Some(err) = de.err {
+        err;
+    } else if e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
+        bad;
+    } else {
+        return Result::Err(ArgsError::from(e));
+    };
+    return Result::Err(recorded.at(&e.path));
 }
 
 /// Parse the process arguments (`core:cli::args()`) into `T`.

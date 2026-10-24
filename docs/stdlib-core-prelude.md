@@ -208,6 +208,13 @@ Returns the live case's tag.
 
 Returns the per-case members.
 
+#### `fn wire_tag() -> Option<String>`
+
+`#[compiler_item("reflect_variant_wire_tag")]`
+
+Returns the key `#[wire(tag)]` writes each case under, or `None` where
+the variant declares none.
+
 ### `pub trait ReflectEnum: Reflect with ()`
 
 Compile-time enum introspection. The compiler synthesizes an impl for
