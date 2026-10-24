@@ -2847,6 +2847,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let inner_expected = Some(recorded_type)
                     .filter(|&t| t != TypeTable::UNKNOWN && unary_passes_expected_type(unary));
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
+                if self.tysys.type_table.borrow().is_never(inner.type_id) {
+                    return inner;
+                }
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
                     // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
@@ -3028,6 +3031,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // info from `tysys.data.struct_fields` keyed by the
                 // receiver's resolved struct name.
                 let inner = self.reify_expr(&field_access.expr, ctx, None);
+                if self.tysys.type_table.borrow().is_never(inner.type_id) {
+                    return inner;
+                }
                 let (field_index, field_name, field_type) =
                     self.lookup_struct_field_index(inner.type_id, &field_access.field);
                 TirExpr::new(

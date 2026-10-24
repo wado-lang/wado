@@ -1869,6 +1869,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         field_access: &ast::FieldAccessExpr,
         expr_type: TypeId,
     ) -> TypeId {
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            return expr_type;
+        }
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr_type, &field_access.field, field_access.field_id);

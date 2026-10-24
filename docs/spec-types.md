@@ -620,8 +620,8 @@ so no method called on one can run:
 - An associated type projected from `!` is `!`.
 - A method taking `self` is never called, since the receiver never exists.
 - A static method called with `Self = !` evaluates its arguments, then traps.
-- An operator, subscript or `for` loop on a `!` operand evaluates the operand,
-  which diverges.
+- An operator, field access, subscript or `for` loop on a `!` operand
+  evaluates the operand, which diverges.
 
 <!-- {"fixture":"never_satisfies_every_bound.wado"} -->
 

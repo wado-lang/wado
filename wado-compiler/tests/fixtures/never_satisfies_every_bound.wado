@@ -1,7 +1,7 @@
 // `!` and a newtype over it hold every trait, and no impl is written for
 // either. An associated type projected from `!` is `!`, a static method called
-// at `Self = !` traps, and an operator, subscript or loop on a `!` operand is
-// the operand alone.
+// at `Self = !` traps, and an operator, field access, subscript or loop on a
+// `!` operand is the operand alone.
 
 type Never = !;
 
@@ -115,10 +115,20 @@ fn loop_over(c: bool) -> i32 {
     return 3;
 }
 
-test "an operator, subscript or loop on `!` type-checks" {
+// A `!` local is read as it stands, where a `!` call already ends the path.
+fn on_a_local(x: !) -> i32 {
+    let _ = ~x;
+    let _: i32 = x.0;
+    return -x;
+}
+
+test "an operator, field, subscript or loop on `!` type-checks" {
     assert operators(builtin::black_box(false)) == 1;
     assert subscript(builtin::black_box(false)) == 2;
     assert loop_over(builtin::black_box(false)) == 3;
+    if builtin::black_box(false) {
+        let _ = on_a_local(panic("local"));
+    }
 }
 
 #[expect_trap]
