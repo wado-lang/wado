@@ -322,17 +322,13 @@ affine variant Pipe {
 
 impl Waitable for Pipe;
 
-/// Read `child`'s stdout and stderr together until both end, so a child
+/// Read `child`'s stdout and stderr, both piped, together until both end, so a child
 /// filling one pipe never blocks against a parent reading the other.
 fn capture(child: &mut Child, limit: i32) -> Captured {
     let mut captured = Captured { stdout: [], stderr: [], too_large: false };
     let mut set = WaitableSet::<Pipe>::new();
-    if let Some(out) = child.stdout.take() {
-        set.insert(Pipe::Out(out.start_read(CAPTURE_CHUNK)));
-    }
-    if let Some(err) = child.stderr.take() {
-        set.insert(Pipe::Err(err.start_read(CAPTURE_CHUNK)));
-    }
+    set.insert(Pipe::Out(child.stdout.take().unwrap().start_read(CAPTURE_CHUNK)));
+    set.insert(Pipe::Err(child.stderr.take().unwrap().start_read(CAPTURE_CHUNK)));
     while !set.is_empty() {
         match set.wait().member {
             Out(copy) => {

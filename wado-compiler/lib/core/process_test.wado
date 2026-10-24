@@ -1,4 +1,13 @@
-use { availability, cmd, Availability, Command, ExitStatus } from "core:process";
+use {
+    availability,
+    cmd,
+    Availability,
+    Command,
+    ErrorCode,
+    ExitStatus,
+    ProcessError,
+    ProcessErrorKind,
+} from "core:process";
 
 test "cmd splits literal text and keeps each hole one argument" {
     let msg = "fix the bug";
@@ -54,6 +63,51 @@ test "a missing program is NotFound" {
     }
     let err = Command::new("wado-no-such-program").status().unwrap_err();
     assert err.kind matches { NotFound };
+    assert `${err}` == "wado-no-such-program: no such program";
+    assert Command::new("wado-no-such-program").output().unwrap_err().kind matches { NotFound };
+}
+
+test "a failure names the program, the status and stderr" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "printf oops >&2; exit 3";
+    let err = cmd`sh -c ${script}`.read().unwrap_err();
+    assert `${err}` == "sh: ExitStatus::Exited(3): oops";
+}
+
+test "every error kind reads as a reason" {
+    let reason = |kind: ProcessErrorKind| `${ProcessError { program: "p", kind }}`;
+    assert reason(ProcessErrorKind::NotPermitted) == "p: the sandbox refused to execute it";
+    assert reason(ProcessErrorKind::Io(ErrorCode::Io)) == "p: ErrorCode::Io";
+    assert reason(ProcessErrorKind::OutputTooLarge) == "p: its stdout passed the capture limit";
+}
+
+test "cmd takes integers of every width as one argument each" {
+    let c = cmd`seq ${1 as i64} ${2 as u32} ${3 as u64}`;
+    assert c.args == ["1", "2", "3"];
+}
+
+test "arg appends one argument" {
+    let c = Command::new("echo").arg("a b").arg("c");
+    assert c.args == ["a b", "c"];
+}
+
+test "a piped stderr reaches the guest" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "printf err >&2";
+    let mut child = Command::new("sh").args(["-c", script]).stderr_piped().spawn().unwrap();
+    assert child.stderr.take().unwrap().read_to_end_bytes() == b"err";
+    assert child.wait().unwrap() == ExitStatus::Exited(0);
+}
+
+test "an inherited stream is the guest's own" {
+    if availability() != Availability::Available {
+        return;
+    }
+    assert Command::new("true").inherit_stdio().status().unwrap() == ExitStatus::Exited(0);
 }
 
 test "a timeout ends the child" {
