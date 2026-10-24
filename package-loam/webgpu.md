@@ -262,8 +262,9 @@ workgroup folds a block of rows and computes the block's elements into
 workgroup memory, which its lanes then read as the left matrix. Every
 workgroup repeats the fold, which costs the rows' reads again per workgroup
 and saves a dispatch and the normalized tensor's write and read. A product of
-more rows, or of rows too long for workgroup memory, writes the prologue with
-the row kernel it would otherwise have had.
+more rows, of rows too long for workgroup memory, or a pair of products by
+weights that are not transposed, writes the prologue with the row kernel it would otherwise
+have had.
 
 #### What a layer costs
 

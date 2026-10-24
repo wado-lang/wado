@@ -504,6 +504,16 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
     let mut groups = HashMap::<String, Group>::new();
     let mut decisions = HashMap::<String, Decision>::new();
     let mut pairs: List<[String, String]> = [];
+    let rhs = rhs_weights(graph, checked, &lowered, fuse);
+    // Each node's left operand where it is a matrix product, and where that
+    // product is by a weight held for products: what a prologue of it computes.
+    let mut lhs_of: List<Option<String>> = [];
+    let mut by_rhs: List<Option<String>> = [];
+    for let node of &graph.nodes {
+        let lhs = product_lhs(node, checked, &spreads, &aliased);
+        by_rhs.push(if lhs matches { Some(_) } && rhs.contains_key(node.inputs[1]) { lhs } else { null });
+        lhs_of.push(lhs);
+    }
     for let mut at = graph.nodes.len() - 1; at >= 0; at -= 1 {
         let node = &graph.nodes[at];
         if !lowered[at] matches { Kernel } {
@@ -512,7 +522,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         let tensor = node.outputs[0];
         let out = space_of(checked, &spreads, &tensor);
         let join = join_of(node, checked, graph.opset);
-        let lhs = product_lhs(node, checked, &spreads, &aliased);
+        let lhs = lhs_of[at];
         let decision = if fuse {
             decided(graph, checked, &lowered, node, &out, &join, &lhs, &readers, &returned, &heads, &groups);
         } else {
@@ -533,14 +543,6 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             },
         }
         decisions[tensor] = decision;
-    }
-    let rhs = rhs_weights(graph, checked, &lowered, fuse);
-    // The left operand each product by a weight held for products reads, by
-    // position: what a prologue of that product computes.
-    let mut by_rhs: List<Option<String>> = [];
-    for let node of &graph.nodes {
-        let lhs = product_lhs(node, checked, &spreads, &aliased);
-        by_rhs.push(if lhs matches { Some(_) } && rhs.contains_key(node.inputs[1]) { lhs } else { null });
     }
     let mut rows = HashMap::<String, Shape>::new();
     for let [head, group] of groups.entries() {
@@ -648,8 +650,9 @@ fn rhs_weights(graph: &Graph, checked: &Checked, lowered: &List<Lowering>, fuse:
     uses.note(graph, checked, lowered, fuse);
     let mut out = HashMap::<String, bool>::new();
     for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
-        ) == 2 {
+        if let Some(transposed) = uses.right.get(vi.name)
+            && !uses.elsewhere.contains(vi.name)
+            && checked.shapes[vi.name].rank() == 2 {
             out[vi.name] = transposed;
         }
     }

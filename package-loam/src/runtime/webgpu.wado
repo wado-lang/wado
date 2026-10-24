@@ -19,6 +19,7 @@ use {
     Paired,
     Prologue,
     Read,
+    RowOp,
     Tensor,
     UnaryOp,
     Window,
@@ -3253,31 +3254,8 @@ fn row_shader(op: &Expr, bindings: &List<i32>, rank: i32, row_axes: i32, reduced
         let Fold([kind, a]) = step else {
             continue;
         };
-        let [init, combine] = match kind {
-            Sum => ["0.0", "acc + v"],
-            Max => ["bitcast<f32>(0xff800000u)", "max(acc, v)"],
-        };
-        let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + s]");
-        phases.push_str(`    {
-        var acc = ${init};
-        for (var e = lid; e < len; e += ${LANES}u) {
-${element(a)}            let v = s${a};
-            acc = ${combine};
-        }
-        partial[lid] = acc;
-        workgroupBarrier();
-        for (var s = ${LANES / 2}u; s > 0u; s = s >> 1u) {
-            if lid < s {
-                partial[lid] = ${tree};
-            }
-            workgroupBarrier();
-        }
-        if lid == 0u {
-            folds[${fold}] = partial[0];
-        }
-        workgroupBarrier();
-    }
-`);
+        let value = `${element(a)}        let v = s${a};\n`;
+        phases.push_str(`    {\n${fold_wgsl(kind, value, "e", "len", LANES, `folds[${fold}]`, "        ")}    }\n`);
         fold += 1;
     }
     let last = op.steps.len() - 1;
@@ -3295,7 +3273,7 @@ ${element(last)}        out[row * len + e] = s${last};
     };
     return `${buffers_wgsl(buffers, null)}
 var<workgroup> partial: array<f32, ${LANES}>;
-var<workgroup> folds: array<f32, ${i32::max(op.fold_count(), 1)}>;
+var<workgroup> folds: array<f32, ${fold_slots(op)}>;
 
 @compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
@@ -3701,21 +3679,63 @@ struct Staged {
 /// each row's folds.
 fn staged_wgsl(s: &Staged) -> String {
     return `var<workgroup> staged: array<f32, ${s.rows * s.inner}>;
-var<workgroup> staged_folds: array<f32, ${s.rows * i32::max(s.op.fold_count(), 1)}>;
+var<workgroup> staged_folds: array<f32, ${s.rows * fold_slots(&s.op)}>;
 `;
 }
 
 /// The workgroup memory a [`Staged`] prologue takes, in bytes.
 fn staged_bytes(s: &Staged) -> i32 {
-    return 4 * s.rows * (s.inner + i32::max(s.op.fold_count(), 1));
+    return 4 * s.rows * (s.inner + fold_slots(&s.op));
+}
+
+/// The folds a shader keeps for each row of `op`: one at least, as a WGSL
+/// array is never empty.
+fn fold_slots(op: &Expr) -> i32 {
+    return i32::max(op.fold_count(), 1);
+}
+
+/// Lines folding `kind` over `index` from `lid` up to `bound`, `lanes` at a
+/// time, `value` being the lines that bind the value at `index` to `v`. Each
+/// lane folds its part, the parts add in halves through `partial`, and lane 0
+/// stores the whole to `target`.
+fn fold_wgsl(
+    kind: RowOp,
+    value: String,
+    index: String,
+    bound: String,
+    lanes: i32,
+    target: String,
+    indent: String,
+) -> String {
+    let [init, combine] = match kind {
+        Sum => ["0.0", "acc + v"],
+        Max => ["bitcast<f32>(0xff800000u)", "max(acc, v)"],
+    };
+    let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + h]");
+    return `${indent}var acc = ${init};
+${indent}for (var ${index} = lid; ${index} < ${bound}; ${index} += ${lanes}u) {
+${value}${indent}    acc = ${combine};
+${indent}}
+${indent}partial[lid] = acc;
+${indent}workgroupBarrier();
+${indent}for (var h = ${lanes / 2}u; h > 0u; h >>= 1u) {
+${indent}    if lid < h {
+${indent}        partial[lid] = ${tree};
+${indent}    }
+${indent}    workgroupBarrier();
+${indent}}
+${indent}if lid == 0u {
+${indent}    ${target} = partial[0];
+${indent}}
+${indent}workgroupBarrier();
+`;
 }
 
 /// Lines computing the block of rows from `r0` of a [`Staged`] prologue into
-/// `staged`: each fold along each row, its lanes' parts added in halves, then
-/// each element.
+/// `staged`: each fold along each row, then each element.
 fn stage_wgsl(s: &Staged, bindings: &List<i32>, batch: i32) -> String {
     let rank = batch + 2;
-    let folds = i32::max(s.op.fold_count(), 1);
+    let folds = fold_slots(&s.op);
     let first_operand = bindings.len() - s.operands;
     let first_param = epilogue_params(batch) + (first_operand - 2) * (rank + 1);
     // The steps up to `last` at row `r0 + b` and inner index `k`, the row's
@@ -3742,31 +3762,10 @@ ${indent}let c${batch + 1} = k;
         let Fold([kind, a]) = step else {
             continue;
         };
-        let [init, combine] = match kind {
-            Sum => ["0.0", "acc + v"],
-            Max => ["bitcast<f32>(0xff800000u)", "max(acc, v)"],
-        };
-        let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + h]");
-        out.push_str(`        for (var b = 0u; b < block; b++) {
-            var acc = ${init};
-            for (var k = lid; k < inner; k += ${NARROW_LANES}u) {
-${element(a, "                ")}                let v = s${a};
-                acc = ${combine};
-            }
-            partial[lid] = acc;
-            workgroupBarrier();
-            for (var h = ${NARROW_LANES / 2}u; h > 0u; h >>= 1u) {
-                if lid < h {
-                    partial[lid] = ${tree};
-                }
-                workgroupBarrier();
-            }
-            if lid == 0u {
-                staged_folds[b * ${folds}u + ${fold}u] = partial[0];
-            }
-            workgroupBarrier();
-        }
-`);
+        let value = `${element(a, "                ")}                let v = s${a};\n`;
+        let target = `staged_folds[b * ${folds}u + ${fold}u]`;
+        let phase = fold_wgsl(kind, value, "k", "inner", NARROW_LANES, target, "            ");
+        out.push_str(`        for (var b = 0u; b < block; b++) {\n${phase}        }\n`);
         fold += 1;
     }
     let last = s.op.steps.len() - 1;
