@@ -2200,35 +2200,22 @@ impl EffectIndex<'_> {
             for (written, arg) in target_args.iter().zip(args) {
                 filled |= rows_written_as(written, arg, effect, &mut out);
             }
+            let mut brought = Brought::default();
             for bound in bounds {
                 // The empty path is a blanket impl's receiver, the type
                 // itself, which `blanket_for` answers.
-                let Some(arg) = bound
+                if let Some(arg) = bound
                     .path
                     .as_deref()
                     .filter(|path| !path.is_empty())
                     .and_then(|path| type_arg_at(args, path))
-                else {
-                    continue;
-                };
-                for trait_key in bound
-                    .traits
-                    .iter()
-                    .filter(|t| self.open_traits.contains(*t))
                 {
-                    let Some(inner) = self.impl_effects.get(&(arg.head_only(), *trait_key)) else {
-                        continue;
-                    };
-                    filled = true;
-                    out.extend(self.close_over_args(
-                        &inner.declared,
-                        &inner.bounds,
-                        &inner.target_args,
-                        arg.args(),
-                    ));
+                    self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
                 }
             }
-            if !filled {
+            out.extend(brought.effects);
+            // One bound left open keeps the parameter, whatever the others fill.
+            if brought.open || !(filled || brought.determined) {
                 out.insert(effect.clone());
             }
         }
