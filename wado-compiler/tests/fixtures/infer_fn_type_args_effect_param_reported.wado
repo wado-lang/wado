@@ -1,0 +1,47 @@
+// A type parameter no argument answers is reported, whatever effect
+// parameter the callee declares. `with _` adds one, and the report compared
+// the declared list, effect included, with the arguments, which leave it out:
+// the lengths differed, nothing was reported, and the unanswered slot reached
+// codegen as a type of unknown elements.
+//
+// `joined_of` reads its parameters only through `S::Held`, which no argument
+// type can be unfolded through, so a turbofish must name them.
+
+use { println, Stdout } from "core:cli";
+
+struct Box<Axes> {
+    n: i32,
+}
+
+trait Store with _ {
+    type Held<Axes>;
+    fn made<Axes>(&self) -> Self::Held<Axes>;
+    fn joined<M, N>(&self, b: &Self::Held<[M, N]>) -> Self::Held<[N]> {
+        return joined_of(self, b);
+    }
+}
+
+fn joined_of<S: Store, M, N>(s: &S, b: &S::Held<[M, N]>) -> S::Held<[N]> with _ {
+    return s.made::<[N]>();
+}
+
+struct Plain {}
+
+impl Store for Plain {
+    type Held<Axes> = Box<Axes>;
+    fn made<Axes>(&self) -> Box<Axes> {
+        return Box { n: 1 };
+    }
+}
+
+struct P {}
+struct Q {}
+
+export fn run() with Stdout {
+    println(`${Plain {}.joined(&Box::<[P, Q]> { n: 3 }).n}`);
+}
+
+__DATA__
+{
+    "compile_error": ":20:16: analysis error: cannot infer type parameter `M`, `N` of function `joined_of`; add a turbofish (`joined_of::<...>()`) or a type annotation"
+}

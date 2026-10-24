@@ -3309,26 +3309,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
-    /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
-    /// `fn`-bound ones (constrained structurally), defaulted ones (already
-    /// filled), and ones bound to an outer-scope `TypeParam` (the caller
-    /// forwarding its own generics) are all excluded. A slot it reports is the
-    /// error type from then on, as
-    /// [`Self::report_uninferred_static_method_type_args`] leaves one.
+    /// an unsubstituted `TypeParam` reach codegen and trap. `type_args` is the
+    /// dense space [`RealTypeParams`] lists, so an effect parameter and a
+    /// `fn`-bound one hold no slot. Defaulted parameters (already filled) and
+    /// ones bound to an outer-scope `TypeParam` (the caller forwarding its own
+    /// generics) are excluded. A slot it reports is the error type from then
+    /// on, as [`Self::report_uninferred_static_method_type_args`] leaves one.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
         span: token::Span,
     ) {
-        let params = self.lookup_function_type_params(callee);
+        let declared = self.lookup_function_type_params(callee);
+        let params = RealTypeParams::borrowed(&declared);
         let scope_params = self.scope_type_param_ids();
 
         // When inference produced no type args at all, every inferable
         // parameter is unresolved. Otherwise check each against its inferred
-        // slot (parallel to the full declared parameter list).
-        let is_inferable =
-            |p: &ast::GenericParam| !p.is_effect && p.default.is_none() && !p.has_fn_bound();
+        // slot.
+        let is_inferable = |p: &ast::GenericParam| p.default.is_none() && !p.has_fn_bound();
         let unresolved: Vec<usize> = if type_args.is_empty() {
             (0..params.len())
                 .filter(|&i| is_inferable(&params[i]))
@@ -3340,8 +3340,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         } else {
-            // Length mismatch (packs/effects interleaved): be conservative
-            // and do not risk a false diagnostic.
+            // Length mismatch (packs interleaved): be conservative and do not
+            // risk a false diagnostic.
             return;
         };
 
