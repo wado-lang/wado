@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792880097221,
+  "lastUpdate": 1792884352611,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70325,6 +70325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b0344c1144dbe522f83e6b701507f131bd9a8280"
         },
         "date": 1792880096085,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d56bec29ae34ced1e02ee98f7a17088d5ab052b",
+          "message": "Merge pull request #2444 from wado-lang/ccr-8dca5f71-587irx\n\nperf: move a field out of a live local when the field is overwritten first",
+          "timestamp": "2026-10-25T08:06:44+09:00",
+          "tree_id": "301019b5a8f8f0c5174817107bbd83264ab1628a",
+          "url": "https://github.com/wado-lang/wado/commit/5d56bec29ae34ced1e02ee98f7a17088d5ab052b"
+        },
+        "date": 1792884352182,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
