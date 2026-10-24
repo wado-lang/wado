@@ -113,7 +113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.type_lookup(),
             receiver,
             &trait_,
-        ) || self.report_unmet_trait_impl_bound(receiver, item, None, span)
+        ) || self.report_unmet_trait_impl_bound(receiver, &[item], None, span)
         {
             return;
         }

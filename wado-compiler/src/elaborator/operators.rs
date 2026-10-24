@@ -745,7 +745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self.operator_not_implemented(op, left, right, span);
                 }
                 if let Some(item) = operator_compiler_item(&op)
-                    && self.report_unmet_trait_impl_bound(left, item, Some(right), span)
+                    && self.report_unmet_trait_impl_bound(left, &[item], Some(right), span)
                 {
                     return TypeTable::ERROR;
                 }
@@ -1011,7 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // No impl answered, and the WIR lowering has no opcode for this
         // operand, so reject here: `scalar_kind` would panic instead.
         if expr_type != TypeTable::ERROR && self.tysys.unary_operand_requires_trait(op, expr_type) {
-            if self.report_unmet_trait_impl_bound(expr_type, item, None, span) {
+            if self.report_unmet_trait_impl_bound(expr_type, &[item], None, span) {
                 return Some(TypeTable::ERROR);
             }
             let operand = self.tysys.type_table.borrow().type_name(expr_type);
@@ -1298,7 +1298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .is_none()
                         && self.report_unmet_trait_impl_bound(
                             base_type_id,
-                            CompilerItem::IndexAssign,
+                            &[CompilerItem::IndexAssign],
                             Some(index_type),
                             target_ast.span(),
                         )
@@ -1618,7 +1618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> TypeId {
         let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
-        if self.report_unmet_trait_impl_bound(left, item, Some(right), span) {
+        if self.report_unmet_trait_impl_bound(left, &[item], Some(right), span) {
             return TypeTable::ERROR;
         }
         let trait_name = self

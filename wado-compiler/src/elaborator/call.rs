@@ -3397,9 +3397,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // What `Self::infer_through_newtype` solved: the base's.
             None => {
                 let key = self.static_receiver_key(prefix, receiver_key);
-                self.newtype_base_target(&key, prefix).and_then(|(base_key, _)| {
-                    self.static_call_sig(prefix, suffix, Some(&base_key), SigChoice::Unique, &[])
-                })
+                self.newtype_base_target(&key, prefix)
+                    .and_then(|(base_key, _)| {
+                        self.static_call_sig(
+                            prefix,
+                            suffix,
+                            Some(&base_key),
+                            SigChoice::Unique,
+                            &[],
+                        )
+                    })
             }
         };
         let Some(sig) = sig else {

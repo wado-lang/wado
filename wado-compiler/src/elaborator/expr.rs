@@ -2440,21 +2440,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            let subscript_traits: Vec<DefId> = [
-                CompilerItem::IndexValue,
-                CompilerItem::IndexRef,
-                CompilerItem::IndexRefMut,
-            ]
-            .into_iter()
-            .filter_map(|item| self.tysys.compiler_trait_def(item))
-            .collect();
-            if self.report_unmet_impl_bound(base_type_id, index.span, |s, def| {
-                s.tysys
-                    .signatures
-                    .impl_trait(def)
-                    .is_some_and(|t| subscript_traits.contains(&t))
-                    && s.impl_takes_key(def, index_type)
-            }) {
+            if self.report_unmet_trait_impl_bound(
+                base_type_id,
+                &[
+                    CompilerItem::IndexValue,
+                    CompilerItem::IndexRef,
+                    CompilerItem::IndexRefMut,
+                ],
+                Some(index_type),
+                index.span,
+            ) {
                 return TypeTable::ERROR;
             }
         }

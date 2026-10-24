@@ -1008,13 +1008,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         // `&mut X` coerces to `&X`, so a block for either answers it.
-        let ref_kinds: &[RefKind] = match RefKind::from_resolved(
-            self.tysys.type_table.borrow().get(receiver),
-        ) {
-            Some(RefKind::Shared) => &[RefKind::Shared],
-            Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
-            None => &[],
-        };
+        let ref_kinds: &[RefKind] =
+            match RefKind::from_resolved(self.tysys.type_table.borrow().get(receiver)) {
+                Some(RefKind::Shared) => &[RefKind::Shared],
+                Some(RefKind::Mut) => &[RefKind::Mut, RefKind::Shared],
+                None => &[],
+            };
         let mut link = self.tysys.type_table.borrow().peel_refs(receiver);
         loop {
             if let Some(head) = self.tysys.struct_name_for_type(link) {
@@ -1030,14 +1029,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_env
                         .all_impl_keys(&ImplTargetKey::Ref(kind))
                         .into_iter()
-                        .filter(|&def| {
-                            self.tysys.type_table.borrow().impl_target_decl(def) == decl
-                        })
+                        .filter(|&def| self.tysys.type_table.borrow().impl_target_decl(def) == decl)
                 });
                 let unmet = trait_env
                     .all_impl_keys(&target)
                     .into_iter()
-                    .chain(on_ref.collect::<Vec<_>>())
+                    .chain(on_ref)
                     .find_map(|def| {
                         if !offers(self, def) || !self.tysys.impl_reaches(def, Some(&args)) {
                             return None;
@@ -1112,20 +1109,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::report_unmet_impl_bound`] over `ty`'s impls of the prelude
-    /// trait `item`, those taking `trait_arg` where one is given: an
+    /// traits `items`, those taking `trait_arg` where one is given: an
     /// operator's right operand, a subscript's key.
     pub(super) fn report_unmet_trait_impl_bound(
         &mut self,
         ty: TypeId,
-        item: CompilerItem,
+        items: &[CompilerItem],
         trait_arg: Option<TypeId>,
         span: Span,
     ) -> bool {
-        let Some(trait_) = self.tysys.compiler_trait_def(item) else {
-            return false;
-        };
+        let traits: Vec<DefId> = items
+            .iter()
+            .filter_map(|&item| self.tysys.compiler_trait_def(item))
+            .collect();
         self.report_unmet_impl_bound(ty, span, |s, def| {
-            s.tysys.signatures.impl_trait(def) == Some(trait_)
+            s.tysys
+                .signatures
+                .impl_trait(def)
+                .is_some_and(|t| traits.contains(&t))
                 && trait_arg.is_none_or(|arg| {
                     // An unwritten argument is the trait's default, `Self`.
                     let defaulted = s.tysys.signatures.impl_sig(def).trait_type_args.is_empty();
