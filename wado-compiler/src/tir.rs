@@ -2162,6 +2162,9 @@ pub enum TemplateId {
     /// A body synthesis minted, which declares nothing: the name it gave it in
     /// its module.
     Synthesized { module: ModuleSource, name: String },
+    /// An interface's operation. A call of one instantiates no body: dispatch
+    /// routes it to a handler.
+    Operation { def: DefId },
 }
 
 impl TemplateId {
@@ -2178,16 +2181,24 @@ impl TemplateId {
     pub fn block(&self) -> Option<DefId> {
         match self {
             Self::Declared { block, .. } | Self::Unchecked { block, .. } => *block,
-            Self::Synthesized { .. } => None,
+            Self::Synthesized { .. } | Self::Operation { .. } => None,
         }
     }
 
-    /// The written declaration answering, its `unchecked` twin's included;
-    /// `None` for a synthesized body.
+    /// The written declaration whose body answers, its `unchecked` twin's
+    /// included; `None` for a synthesized body and for an operation.
     pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared { def, .. } | Self::Unchecked { def, .. } => Some(*def),
-            Self::Synthesized { .. } => None,
+            Self::Synthesized { .. } | Self::Operation { .. } => None,
+        }
+    }
+
+    /// The operation a call of an interface reaches.
+    pub fn operation(&self) -> Option<DefId> {
+        match self {
+            Self::Operation { def } => Some(*def),
+            Self::Declared { .. } | Self::Unchecked { .. } | Self::Synthesized { .. } => None,
         }
     }
 
@@ -2198,6 +2209,7 @@ impl TemplateId {
                 defs.module(block.unwrap_or(*def)).clone()
             }
             Self::Synthesized { module, .. } => module.clone(),
+            Self::Operation { .. } => panic!("an operation emits no body: {self:?}"),
         }
     }
 
@@ -2208,7 +2220,7 @@ impl TemplateId {
                 def: *def,
                 block: *block,
             },
-            Self::Unchecked { .. } | Self::Synthesized { .. } => {
+            Self::Unchecked { .. } | Self::Synthesized { .. } | Self::Operation { .. } => {
                 panic!("only a declaration has an unchecked twin: {self:?}")
             }
         }
@@ -2221,7 +2233,7 @@ impl TemplateId {
                 def: *def,
                 block: *block,
             }),
-            Self::Declared { .. } | Self::Synthesized { .. } => None,
+            Self::Declared { .. } | Self::Synthesized { .. } | Self::Operation { .. } => None,
         }
     }
 
@@ -3692,6 +3704,7 @@ pub struct TirEffect {
 
 #[derive(Debug, Clone)]
 pub struct TirEffectOp {
+    pub def: DefId,
     pub name: String,
     pub params: Vec<TirParam>,
     pub return_type: TypeId,

@@ -2341,6 +2341,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
 
             ops.push(TirEffectOp {
+                def: method_def,
                 name: method.name.clone(),
                 params,
                 return_type,

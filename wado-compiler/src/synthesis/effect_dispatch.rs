@@ -318,6 +318,7 @@ fn substitute_operations(
                 })
                 .collect();
             TirEffectOp {
+                def: op.def,
                 name: op.name.clone(),
                 params: new_params,
                 return_type: type_table.substitute_type_params(op.return_type, &subst),
@@ -832,7 +833,7 @@ fn build_dispatch_wrapper_function(
                 func: Box::new(FunctionRef {
                     module_source: ModuleSource::effect(effect),
                     name: op_name.clone(),
-                    template: None,
+                    template: Some(TemplateId::Operation { def: op.def }),
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -2490,12 +2491,11 @@ fn rewrite_calls_in_functions(
 /// Outlives its pass: an instance minted later routes through the same wrappers.
 pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeKey>, String)>>;
 
-/// `(interface, op) → wrapper_name` for user-effect calls (e.g.
-/// `Counter::next()`).
-type EffectOpWrappers = IndexMap<(DefId, String), String>;
+/// `op → wrapper_name` for user-effect calls (e.g. `Counter::next()`).
+type EffectOpWrappers = IndexMap<DefId, String>;
 
-/// One lookup map per call shape: an effect op keys on its interface and name,
-/// a resource method on `(resource, cm_name)` plus its type args.
+/// One lookup map per call shape: an effect op keys on its declaration, a
+/// resource method on `(resource, cm_name)` plus its type args.
 fn build_wrapper_indexes(
     project: &Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2526,7 +2526,7 @@ fn build_wrapper_indexes(
                 // regardless of whether the op carries a CM attribute (the
                 // WASI effect adapter generation in cm_binding still kicks in
                 // for the wrapper fallback).
-                user_to_wrapper.insert((effect.def(), op.name.clone()), wrapper_name.clone());
+                user_to_wrapper.insert(op.def, wrapper_name.clone());
             }
         }
     }
@@ -2711,8 +2711,8 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                             ctx.entry_source,
                         )
                     })
-            } else if let Some(effect) = func.module_source.effect_interface()
-                && let Some(wrapper) = ctx.user_to_wrapper.get(&(effect.def(), func.name.clone()))
+            } else if let Some(op) = func.template.as_ref().and_then(TemplateId::operation)
+                && let Some(wrapper) = ctx.user_to_wrapper.get(&op)
             {
                 Some(wrapper_call(
                     wrapper.clone(),

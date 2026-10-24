@@ -475,7 +475,7 @@ enum CmCallKind {
 pub(super) struct CmCallSites<'a> {
     pub(super) registry: &'a CmInterfaceRegistry,
     /// The key each operation of an interface or resource binds.
-    operation_keys: IndexMap<(DeclaredHead, String), String>,
+    operation_keys: IndexMap<DefId, String>,
     /// The interfaces and resources whose operations bind each key.
     owners: IndexMap<String, IndexSet<DeclaredHead>>,
     /// The key each bodyless world-import function binds.
@@ -502,7 +502,7 @@ impl<'a> CmCallSites<'a> {
                     continue;
                 };
                 owners.entry(key.clone()).or_default().insert(head.clone());
-                operation_keys.insert((head.clone(), op.name.clone()), key);
+                operation_keys.insert(op.def, key);
             }
         }
         let world_imports = defs
@@ -528,18 +528,15 @@ impl<'a> CmCallSites<'a> {
         let TirExprKind::Call { func, .. } = &expr.kind else {
             return None;
         };
-        if let Some(key) = func
-            .template
-            .as_ref()
+        let template = func.template.as_ref();
+        if let Some(key) = template
             .and_then(TemplateId::def)
             .and_then(|def| self.world_imports.get(&def))
         {
             return Some((key.clone(), CmCallKind::Function));
         }
-        if let Some(head) = func.module_source.effect_interface() {
-            let key = self
-                .operation_keys
-                .get(&(head.clone(), func.name.clone()))?;
+        if let Some(op) = template.and_then(TemplateId::operation) {
+            let key = self.operation_keys.get(&op)?;
             return Some((key.clone(), CmCallKind::Function));
         }
         let info = func.method_info.as_ref()?;

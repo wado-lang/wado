@@ -2250,7 +2250,13 @@ impl EffectIndex<'_> {
         by_decl: &IndexMap<AstId, V>,
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
-        let entry = match func_ref.template.as_ref().and_then(TemplateId::def) {
+        let template = func_ref.template.as_ref();
+        if template.and_then(TemplateId::operation).is_some() {
+            // An operation declares no effects: what a call of one demands is
+            // its owner's, which `operation_requirements` reads.
+            return V::default();
+        }
+        let entry = match template.and_then(TemplateId::def) {
             Some(def) => by_decl.get(&self.resolutions.defs().ast_id(def)),
             None => by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone())),
         };

@@ -4,7 +4,9 @@
 use crate::defs::{DefId, DefTable};
 use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FqTraitName};
-use crate::tir::DeclarationLookup;
+use crate::tir::{DeclarationLookup, TemplateId};
+
+use super::sig::Signatures;
 
 /// Identity of a free function callee. `Declared` carries the module and name
 /// its one constructor reads off the table, so TIR emission needs none at hand;
@@ -16,9 +18,14 @@ pub(super) enum CalleeRef {
         module: ModuleSource,
         name: String,
     },
-    /// A callee no declaration names in this currency: an effect operation,
-    /// whose module is the namespace that signature resolution, the effect
-    /// check, dispatch and WIR all key on rather than one any module declares.
+    /// An interface's operation `def`. Its module is the interface's namespace,
+    /// which no module declares.
+    Operation {
+        def: DefId,
+        module: ModuleSource,
+        name: String,
+    },
+    /// A callee no declaration names: a probe for a name not yet resolved.
     Rendered { module: ModuleSource, name: String },
 }
 
@@ -39,32 +46,46 @@ impl CalleeRef {
         }
     }
 
-    /// An operation of the interface `interface` declares, rendered in the
-    /// interface's own namespace.
-    pub fn effect_operation(defs: &DefTable, interface: DefId, name: impl Into<String>) -> Self {
-        Self::rendered(
-            ModuleSource::effect(&DeclaredHead::new(defs, interface)),
-            name,
-        )
+    /// The operation `op` of the interface `interface`, in the interface's own
+    /// namespace.
+    pub fn effect_operation(defs: &DefTable, interface: DefId, op: DefId) -> Self {
+        Self::Operation {
+            def: op,
+            module: ModuleSource::effect(&DeclaredHead::new(defs, interface)),
+            name: defs.name(op).to_string(),
+        }
     }
 
-    /// The declaration this names, or `None` for a [`Self::Rendered`] callee.
+    /// The free function this names, or `None` for any other callee.
     pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared { def, .. } => Some(*def),
+            Self::Operation { .. } | Self::Rendered { .. } => None,
+        }
+    }
+
+    /// What a call of this instantiates.
+    pub fn template(&self, signatures: &Signatures) -> Option<TemplateId> {
+        match self {
+            Self::Declared { def, .. } => Some(signatures.declared_template(*def)),
+            Self::Operation { def, .. } => Some(TemplateId::Operation { def: *def }),
             Self::Rendered { .. } => None,
         }
     }
 
     pub fn module(&self) -> &ModuleSource {
         match self {
-            Self::Declared { module, .. } | Self::Rendered { module, .. } => module,
+            Self::Declared { module, .. }
+            | Self::Operation { module, .. }
+            | Self::Rendered { module, .. } => module,
         }
     }
 
     pub fn name(&self) -> &str {
         match self {
-            Self::Declared { name, .. } | Self::Rendered { name, .. } => name,
+            Self::Declared { name, .. }
+            | Self::Operation { name, .. }
+            | Self::Rendered { name, .. } => name,
         }
     }
 
