@@ -32,24 +32,15 @@ fn probe() {
     let (name, arg) = act.split_once(':').unwrap_or((&act, ""));
     let ret = match name {
         "ok" => 0,
-        "tcp" => {
-            // SAFETY: plain system calls on a socket this probe owns.
-            let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-            if fd < 0 {
-                -1
-            } else {
-                unsafe { libc::close(fd) }
-            }
-        }
-        "udp" => {
-            // SAFETY: as above.
-            let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
-            if fd < 0 {
-                -1
-            } else {
-                unsafe { libc::close(fd) }
-            }
-        }
+        // Binding, not creating, the socket: Seatbelt leaves `socket` alone.
+        "tcp" => match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(_) => 0,
+            Err(err) => exit_with(&err),
+        },
+        "udp" => match std::net::UdpSocket::bind("127.0.0.1:0") {
+            Ok(_) => 0,
+            Err(err) => exit_with(&err),
+        },
         "unix" => match std::os::unix::net::UnixStream::connect(arg) {
             Ok(_) => 0,
             Err(err) => exit_with(&err),
