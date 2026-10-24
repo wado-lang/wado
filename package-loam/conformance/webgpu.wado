@@ -256,16 +256,18 @@ fn bound_paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, Gpu
     let c = halved(tensor::<[Long, Col]>([8, 64], 50));
     // silu(operand(0)) * operand(1)
     let gated = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
-    let then = Epilogue { operands: [], op: gated };
     let mut cpu = Cpu {};
-    let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), then);
+    let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue { operands: [], op: gated });
     let bc = gpu.keep_rhs_paired(&b, &c);
     let uploaded = gpu.upload(&a);
     let mut dispatched = gpu.dispatches();
-    let plain = gpu.matmul_rhs_paired(&uploaded, &bc, then);
+    let plain = gpu.matmul_rhs_paired(&uploaded, &bc, Epilogue { operands: [], op: gated });
     assert gpu.dispatches() == dispatched + 1;
     dispatched = gpu.dispatches();
-    let staged = gpu.matmul_rhs_paired_from(Prologue { operands: [gpu.read(&uploaded)], op: operand(0) }, &bc, then);
+    let staged = gpu.matmul_rhs_paired_from(Prologue { operands: [gpu.read(&uploaded)], op: operand(0) }, &bc, Epilogue {
+        operands: [],
+        op: gated,
+    });
     assert gpu.dispatches() == dispatched + 1;
     println(`bound paired ${deviation(&gpu.download(&plain).data, &on_cpu.data)}`);
     println(`bound paired prologue ${deviation(&gpu.download(&staged).data, &on_cpu.data)}`);
