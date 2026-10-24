@@ -407,8 +407,18 @@ pub fn is_type_bridge(name: &str) -> bool {
         .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
-/// Prefix of a template shape's mangled name; the rest is the shape's hash.
-pub const TEMPLATE_SHAPE_PREFIX: &str = "$tmpl$";
+/// A minted name's digest part: the first 8 bytes of `digest`, in hex.
+fn short_digest(digest: &[u8]) -> String {
+    digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// The mangled name of the template shape whose hash is `digest`.
+pub fn template_shape_name(digest: &[u8; 32]) -> String {
+    format!("$tmpl${}", short_digest(digest))
+}
 
 /// Field name of the discriminant slot on a variant's base struct (the tag
 /// every case subtype inherits). Single source of truth for the WIR variant
@@ -475,12 +485,10 @@ pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
 /// The tag of the dependency whose canonical namespace is `component`: a
 /// digest, so it depends on no order the dependencies are met in.
 fn cm_dependency_tag(component: &str) -> String {
-    let digest = Sha256::digest(component.as_bytes());
-    let hex: String = digest[..8]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    format!("dependency{hex}")
+    format!(
+        "dependency{}",
+        short_digest(&Sha256::digest(component.as_bytes()))
+    )
 }
 
 /// The label the program imports the world function `function` of the

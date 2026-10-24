@@ -453,7 +453,9 @@ or side-car `.wit` is involved.
   interface at one version; where it offers two, the version is required.
 - An exported interface becomes a Wado `interface`, also offered under its
   basename: the last label of its interface name, without the version, in
-  `PascalCase` (`Trip`).
+  `PascalCase` (`Trip`). It is the component's own: where two components export
+  one interface name, each module declares its own interface, and a call
+  through either reaches the component it was imported from.
 - An interface's named types become Wado items of the corresponding kind: a
   record a `struct`, a variant a `variant`, an enum an `enum`, flags a `flags`,
   and a type alias a newtype. Each belongs to its interface, as a type an

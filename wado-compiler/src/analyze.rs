@@ -1230,18 +1230,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// is, so the two consume alike. A name the module declares itself, or one
     /// two default interfaces share, stays behind its interface.
     fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
-        let mut owners: hashmap::IndexMap<&str, Vec<(&InterfaceDecl, CmImport)>> =
+        let defaults: Vec<(&InterfaceDecl, CmImport)> = exported_interfaces(module)
+            .map(|(iface, _)| {
+                let name =
+                    cm_interface_name_of(&iface.attrs).expect("an exported interface is named");
+                (iface, name)
+            })
+            .filter(|(_, name)| name.is_package_default())
+            .collect();
+        let mut owners: hashmap::IndexMap<&str, Vec<&(&InterfaceDecl, CmImport)>> =
             hashmap::IndexMap::default();
-        let named = exported_interfaces(module).map(|(iface, _)| {
-            let name = cm_interface_name_of(&iface.attrs).expect("an exported interface is named");
-            (iface, name)
-        });
-        for (iface, name) in named.filter(|(_, name)| name.is_package_default()) {
-            for op in &iface.methods {
-                owners
-                    .entry(op.name.as_str())
-                    .or_default()
-                    .push((iface, name.clone()));
+        for default in &defaults {
+            for op in &default.0.methods {
+                owners.entry(op.name.as_str()).or_default().push(default);
             }
         }
         for (op, ifaces) in owners {
