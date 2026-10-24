@@ -413,6 +413,7 @@ test "an enum option naming no case reports InvalidValue" {
 struct DryRun {
     dry_run: String = "",
     dark_shade: Shade = Shade::Light,
+    dark_layer: List<Shade> = [],
 }
 impl Deserialize for DryRun;
 
@@ -421,6 +422,13 @@ test "an error names the option as written" {
     assert e.message == "dry_run: missing value for option --dry-run";
     let bad = parse::<DryRun>(["--dark-shade", "indigo"]).unwrap_err();
     assert bad.message == "dark_shade: invalid value for option --dark-shade: 'indigo'";
+}
+
+test "an error names the occurrence of a repeated option as written" {
+    let e = parse::<DryRun>(["--dark-layer", "light", "--dark_layer"]).unwrap_err();
+    assert e.message == "dark_layer: missing value for option --dark_layer";
+    let bad = parse::<DryRun>(["--dark-layer", "light", "--dark_layer", "indigo"]).unwrap_err();
+    assert bad.message == "dark_layer[1]: invalid value for option --dark_layer: 'indigo'";
 }
 
 flags Feature {

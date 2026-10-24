@@ -234,15 +234,16 @@ impl ArgvDeserializer {
     /// Gather every value of the current repeatable `--option` (`cur_name`):
     /// its first occurrence's value plus all further `--cur_name` occurrences,
     /// which are marked consumed so the main loop skips them. Handles
-    /// interspersed occurrences (`--inc a --jobs 4 --inc b`).
-    fn gather_option_values(&mut self) -> Result<List<String>, DeserializeError> {
-        let mut vals: List<String> = [];
+    /// interspersed occurrences (`--inc a --jobs 4 --inc b`). Each value comes
+    /// with its occurrence's name as written.
+    fn gather_option_values(&mut self) -> Result<List<[String, String]>, DeserializeError> {
+        let mut vals: List<[String, String]> = [];
         // First occurrence (the one `next_field` positioned at).
         if let Some(inl) = self.cur_inline {
-            vals.push(inl);
+            vals.push([self.cur_written, inl]);
         } else {
             let first = self.pull_option_value()?;
-            vals.push(first);
+            vals.push([self.cur_written, first]);
         }
         // Forward-scan for further `--cur_name` occurrences.
         let n = self.tokens.len();
@@ -269,14 +270,15 @@ impl ArgvDeserializer {
             }
             self.consumed[j] = true;
             if let Some(inl) = lo.inline {
-                vals.push(inl);
+                vals.push([lo.raw, inl]);
                 j += 1;
             } else {
                 let k = j + 1;
                 if k >= n || self.tokens[k].starts_with("--") {
+                    self.cur_written = lo.raw;
                     return Result::Err(self.missing_value());
                 }
-                vals.push(self.tokens[k]);
+                vals.push([lo.raw, self.tokens[k]]);
                 self.consumed[k] = true;
                 j = k + 1;
             }
@@ -311,8 +313,9 @@ pub struct ArgvSeqAccess {
     /// True for a repeatable `--option` list (values pre-gathered in `vals`);
     /// false for a variadic positional (consumes the bare-token run on demand).
     is_option_list: bool,
-    /// Pre-gathered values for a repeatable option.
-    vals: List<String>,
+    /// Pre-gathered values for a repeatable option, each with its occurrence's
+    /// name as written.
+    vals: List<[String, String]>,
     /// Cursor into `vals`.
     cursor: i32,
 }
@@ -395,7 +398,9 @@ impl DeserializeSeq for ArgvSeqAccess {
             if self.cursor >= self.vals.len() {
                 return Result::Ok(null);
             }
-            self.de.forced = Option::Some(self.vals[self.cursor]);
+            let [written, value] = self.vals[self.cursor];
+            self.de.cur_written = written;
+            self.de.forced = Option::Some(value);
             self.cursor += 1;
             let v = T::deserialize(self.de)?;
             return Result::Ok(Option::Some(v));
