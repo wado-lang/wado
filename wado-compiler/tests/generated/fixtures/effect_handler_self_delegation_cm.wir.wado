@@ -80,25 +80,25 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(25)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-bytes" = fn(i64, i32);  // TypeId(25)
 
-type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-u64" = fn() -> i64;  // TypeId(26)
 
 type "functype//effect_handler_self_delegation_cm.wado/run" = fn();  // TypeId(27)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(28)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(28)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(29)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64" = fn() -> u64;  // TypeId(29)
 
 type "functype//effect_handler_self_delegation_cm.wado/$cm_export__run" = fn();  // TypeId(30)
 
 type "functype//effect_handler_self_delegation_cm.wado/run$cold0$dae[$contract_arg_0]" = fn(i32);  // TypeId(31)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(32)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(32)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
 
@@ -150,7 +150,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(56)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(58)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(58)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(59)
 
@@ -160,10 +160,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:random/Random::get_random_bytes from "wasi/wasi:random/Random::get_random_bytes";
-import fn wasi/wasi:random/Random::get_random_u64 from "wasi/wasi:random/Random::get_random_u64";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/random@0.3.0#get-random-bytes from "wasi/$wasi:random/random@0.3.0#get-random-bytes";
+import fn wasi/$wasi:random/random@0.3.0#get-random-u64 from "wasi/$wasi:random/random@0.3.0#get-random-u64";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -202,7 +202,7 @@ fn "effect_handler_self_delegation_cm.wado/run"() with Stdout, Random {
             global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $local_1;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: v_23;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$spec0"(3_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(3_i64);
         }
         unreachable;
     }).repr;
@@ -231,7 +231,7 @@ fn "effect_handler_self_delegation_cm.wado/run"() with Stdout, Random {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_99.repr, is_negative_33, x_37, $load_5);
     $load_5 = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
     is_negative_33 = builtin::i32_wrap_i64(x_37 >> 32_i64);
-    digit_count_35 = "effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream"(digit_count_35 = $load_5; $load_5 = 0; digit_count_35);
+    digit_count_35 = "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_35 = $load_5; $load_5 = 0; digit_count_35);
     $load_5 = is_negative_33;
     is_negative_33 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($load_5, $local_3_3.repr, $local_3_3.used);
@@ -240,11 +240,11 @@ fn "effect_handler_self_delegation_cm.wado/run"() with Stdout, Random {
     global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random_9;
 }
 
-fn "effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
+fn "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -253,7 +253,7 @@ fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes"
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(max_len, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(max_len, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -278,8 +278,8 @@ fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes"
     return $result;
 }
 
-fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_u64"() with Random {
-    return "wasi/wasi:random/Random::get_random_u64"();
+fn "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"() with Random {
+    return "wasi/$wasi:random/random@0.3.0#get-random-u64"();
 }
 
 fn "effect_handler_self_delegation_cm.wado/$cm_export__run"() {
@@ -292,7 +292,7 @@ fn "effect_handler_self_delegation_cm.wado/run$cold0$dae[$contract_arg_0]"($v1) 
     unreachable;
 }
 
-fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$spec0"(max_len) with Random {
+fn "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -301,7 +301,7 @@ fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(3_i64, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(3_i64, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
@@ -429,7 +429,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -675,7 +675,7 @@ fn "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wad
             global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $local_1;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: v;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes"(max_len);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len);
         }
         unreachable;
     };
@@ -695,7 +695,7 @@ fn "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wad
             global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $local_0;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: $local_2;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: "effect_handler_self_delegation_cm.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"();
         }
         unreachable;
     };

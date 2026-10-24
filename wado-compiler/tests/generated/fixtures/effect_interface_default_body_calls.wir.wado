@@ -53,7 +53,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//effect_interface_default_body_calls.wado/run" = fn();  // TypeId(18)
 
@@ -93,7 +93,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
-type "functype//effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(37)
+type "functype//effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(37)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(38)
 
@@ -103,7 +103,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -166,7 +166,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, is_negative_66, x_70, $local_3_22);
     $local_3_22 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
     is_negative_66 = builtin::i32_wrap_i64(x_70 >> 32_i64);
-    $moved_4_352 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"($moved_4_352 = $local_3_22; $local_3_22 = 0; $moved_4_352);
+    $moved_4_352 = "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_352 = $local_3_22; $local_3_22 = 0; $moved_4_352);
     $local_3_22 = is_negative_66;
     is_negative_66 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_22, $local_3_3.repr, $local_3_3.used);
@@ -226,7 +226,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $moved_4_352, x_70, $local_3_22);
     $local_3_22 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
     $moved_4_352 = builtin::i32_wrap_i64(x_70 >> 32_i64);
-    is_negative_66 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"(is_negative_66 = $local_3_22; $local_3_22 = 0; is_negative_66);
+    is_negative_66 = "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_66 = $local_3_22; $local_3_22 = 0; is_negative_66);
     $local_3_22 = $moved_4_352;
     $moved_4_352 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_22, $local_3_3.repr, $local_3_3.used);
@@ -258,7 +258,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, is_negative_66, x_70, $local_3_22);
     $local_3_22 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
     is_negative_66 = builtin::i32_wrap_i64(x_70 >> 32_i64);
-    $moved_4_352 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"($moved_4_352 = $local_3_22; $local_3_22 = 0; $moved_4_352);
+    $moved_4_352 = "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_352 = $local_3_22; $local_3_22 = 0; $moved_4_352);
     $local_3_22 = is_negative_66;
     is_negative_66 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_22, $local_3_3.repr, $local_3_3.used);
@@ -318,7 +318,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $moved_4_352, x_70, $local_3_22);
     $local_3_22 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
     $moved_4_352 = builtin::i32_wrap_i64(x_70 >> 32_i64);
-    is_negative_66 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"(is_negative_66 = $local_3_22; $local_3_22 = 0; is_negative_66);
+    is_negative_66 = "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_66 = $local_3_22; $local_3_22 = 0; is_negative_66);
     $local_3_22 = $moved_4_352;
     $moved_4_352 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3_22, $local_3_3.repr, $local_3_3.used);
@@ -337,7 +337,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
             is_negative_66 = is_negative_66 + 1;
             $sroa_$pattern_temp_0_0_13_421 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_422 = builtin::i32_wrap_i64(x_70 >> 32_i64);
-            $sroa_$pattern_temp_0_0_13_421 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"($moved_4_412 = $sroa_$pattern_temp_0_0_13_421; $sroa_$pattern_temp_0_0_13_421 = 0; $moved_4_412);
+            $sroa_$pattern_temp_0_0_13_421 = "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_412 = $sroa_$pattern_temp_0_0_13_421; $sroa_$pattern_temp_0_0_13_421 = 0; $moved_4_412);
             $moved_5_413 = $sroa_$pattern_temp_0_1_14_422;
             $sroa_$pattern_temp_0_1_14_422 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"($moved_5_413, $local_3_3.repr, $av_528);
@@ -349,8 +349,8 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     };
 }
 
-fn "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_interface_default_body_calls.wado/$cm_export__run"() {

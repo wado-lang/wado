@@ -2262,7 +2262,13 @@ impl EffectIndex<'_> {
         by_decl: &IndexMap<AstId, V>,
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
-        let entry = match func_ref.template.as_ref().and_then(TemplateId::def) {
+        let template = func_ref.template.as_ref();
+        if template.and_then(TemplateId::operation).is_some() {
+            // An operation declares no effects: what a call of one demands is
+            // its owner's, which `operation_requirements` reads.
+            return V::default();
+        }
+        let entry = match template.and_then(TemplateId::def) {
             Some(def) => by_decl.get(&self.resolutions.defs().ast_id(def)),
             None => by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone())),
         };
@@ -2552,13 +2558,6 @@ fn type_arg_at<'a>(args: &'a [FqTypeName], path: &[usize]) -> Option<&'a FqTypeN
 }
 
 impl SemEffectWalker<'_> {
-    /// The effects a direct `E::op()` call requires. A bare interface-operation
-    /// call resolves to a `ModuleSource::Local(E)` free-call `func_ref` that
-    /// carries no declared effects, so without this it would slip through the
-    /// checker unflagged. For a host/WASI effect the requirement is the effect
-    /// itself; for a CM-component-imported interface it is the reconstructed
-    /// host-leaf effect set — empty for a purely-computational component, so its
-    /// operations need no `with`. Returns empty for a non-effect-op callee.
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
         binding_granted_effects(self.annotations, self.index, binding)
     }

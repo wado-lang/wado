@@ -1,6 +1,6 @@
 // Two Wado names binding one CM operation. The instance type describes the
-// imported interface, so it exports the CM name once; the core module imports
-// one alias per used Wado name.
+// imported interface, so it exports the CM name once, and the core module
+// imports the function once: what names it is the function, not a Wado name.
 use { println, Stdout } from "core:cli";
 use { Random } from "wasi:random";
 
@@ -21,6 +21,6 @@ __DATA__
   "skip_os": true,
   "wat_lines": [
     { "contains": ["(export", "\"get-random-u64\""], "count": 1 },
-    { "contains": ["(alias export $wasi:random/random"], "count": 2 }
+    { "contains": ["(alias export $wasi:random/random"], "count": 1 }
   ]
 }

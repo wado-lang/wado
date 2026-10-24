@@ -49,9 +49,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
 type "functype//newtype_generic_container_return.wado/run" = fn();  // TypeId(16)
 
@@ -101,7 +101,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//newtype_generic_container_return.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//newtype_generic_container_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
@@ -111,8 +111,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -162,7 +162,7 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_5.repr, start_31, global:newtype_generic_container_return.wado::$const_obj_0, 0, 1);
     start_31 = builtin::i32_wrap_i64(local.tee $cm_pair_7_208("wasi/stream-new"()));
     new_used_30 = builtin::i32_wrap_i64($cm_pair_7_208 >> 32_i64);
-    $moved_4_205 = "newtype_generic_container_return.wado/$cm_binding__Stdout_write_via_stream"($moved_4_205 = start_31; start_31 = 0; $moved_4_205);
+    $moved_4_205 = "newtype_generic_container_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_205 = start_31; start_31 = 0; $moved_4_205);
     start_31 = new_used_30;
     new_used_30 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_31, $local_5.repr, $local_5.used);
@@ -188,7 +188,7 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, start_31, $cm_pair_7_208, $moved_4_205);
     $moved_4_205 = builtin::i32_wrap_i64(local.tee $cm_pair_7_208("wasi/stream-new"()));
     start_31 = builtin::i32_wrap_i64($cm_pair_7_208 >> 32_i64);
-    new_used_30 = "newtype_generic_container_return.wado/$cm_binding__Stdout_write_via_stream"(new_used_30 = $moved_4_205; $moved_4_205 = 0; new_used_30);
+    new_used_30 = "newtype_generic_container_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_30 = $moved_4_205; $moved_4_205 = 0; new_used_30);
     $moved_4_205 = start_31;
     start_31 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_205, $local_5.repr, $local_5.used);
@@ -234,15 +234,15 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_5.repr, new_used_30, global:newtype_generic_container_return.wado::$const_obj_0, 0, 1);
     new_used_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7_208("wasi/stream-new"()));
     $moved_4_205 = builtin::i32_wrap_i64($cm_pair_7_208 >> 32_i64);
-    start_31 = "newtype_generic_container_return.wado/$cm_binding__Stdout_write_via_stream"(start_31 = new_used_30; new_used_30 = 0; start_31);
+    start_31 = "newtype_generic_container_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_31 = new_used_30; new_used_30 = 0; start_31);
     new_used_30 = $moved_4_205;
     $moved_4_205 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_30, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_30 = start_31; start_31 = 0; new_used_30);
 }
 
-fn "newtype_generic_container_return.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "newtype_generic_container_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "newtype_generic_container_return.wado/$cm_export__run"() {
@@ -358,7 +358,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

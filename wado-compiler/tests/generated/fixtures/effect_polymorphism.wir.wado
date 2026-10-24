@@ -32,9 +32,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(13)
 
 type "functype//effect_polymorphism.wado/effect_poly_basic" = fn();  // TypeId(14)
 
@@ -70,9 +70,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(31)
+type "functype//effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
@@ -108,8 +108,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -147,7 +147,7 @@ fn "effect_polymorphism.wado/effect_poly_basic"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_109: i32;
     $sroa_$pattern_temp_0_0_13_108 = builtin::i32_wrap_i64(local.tee $cm_pair_7_102("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_109 = builtin::i32_wrap_i64($cm_pair_7_102 >> 32_i64);
-    $moved_4_99 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_99 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $moved_4_99);
+    $moved_4_99 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_99 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $moved_4_99);
     $sroa_$pattern_temp_0_0_13_108 = $sroa_$pattern_temp_0_1_14_109;
     $sroa_$pattern_temp_0_1_14_109 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -156,7 +156,7 @@ fn "effect_polymorphism.wado/effect_poly_basic"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_108 = $moved_4_99; $moved_4_99 = 0; $sroa_$pattern_temp_0_0_13_108);
     $sroa_$pattern_temp_0_0_13_108 = builtin::i32_wrap_i64(local.tee $cm_pair_7_102("wasi/stream-new"()));
     $moved_4_99 = builtin::i32_wrap_i64($cm_pair_7_102 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_109 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_109 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $sroa_$pattern_temp_0_1_14_109);
+    $sroa_$pattern_temp_0_1_14_109 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_109 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $sroa_$pattern_temp_0_1_14_109);
     $sroa_$pattern_temp_0_0_13_108 = $moved_4_99;
     $moved_4_99 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_5;
@@ -164,7 +164,7 @@ fn "effect_polymorphism.wado/effect_poly_basic"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_108 = $sroa_$pattern_temp_0_1_14_109; $sroa_$pattern_temp_0_1_14_109 = 0; $sroa_$pattern_temp_0_0_13_108);
     $sroa_$pattern_temp_0_0_13_108 = builtin::i32_wrap_i64(local.tee $cm_pair_7_102("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_109 = builtin::i32_wrap_i64($cm_pair_7_102 >> 32_i64);
-    $moved_4_99 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_99 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $moved_4_99);
+    $moved_4_99 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_99 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $moved_4_99);
     $sroa_$pattern_temp_0_0_13_108 = $sroa_$pattern_temp_0_1_14_109;
     $sroa_$pattern_temp_0_1_14_109 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_4;
@@ -184,7 +184,7 @@ fn "effect_polymorphism.wado/effect_poly_basic"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $moved_4_99, $cm_pair_7_102, $sroa_$pattern_temp_0_0_13_108);
     $sroa_$pattern_temp_0_0_13_108 = builtin::i32_wrap_i64(local.tee $cm_pair_7_102("wasi/stream-new"()));
     $moved_4_99 = builtin::i32_wrap_i64($cm_pair_7_102 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_109 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_109 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $sroa_$pattern_temp_0_1_14_109);
+    $sroa_$pattern_temp_0_1_14_109 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_109 = $sroa_$pattern_temp_0_0_13_108; $sroa_$pattern_temp_0_0_13_108 = 0; $sroa_$pattern_temp_0_1_14_109);
     $sroa_$pattern_temp_0_0_13_108 = $moved_4_99;
     $moved_4_99 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_108, $mv_arg_2.repr, $mv_arg_2.used);
@@ -198,7 +198,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     let $sroa_$pattern_temp_0_1_14_118: i32;
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_118 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
+    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
     $sroa_$pattern_temp_0_0_13_117 = $sroa_$pattern_temp_0_1_14_118;
     $sroa_$pattern_temp_0_1_14_118 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -207,7 +207,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_117 = $moved_4_108; $moved_4_108 = 0; $sroa_$pattern_temp_0_0_13_117);
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $moved_4_108 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_118 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"($sroa_$pattern_temp_0_1_14_118 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $sroa_$pattern_temp_0_1_14_118);
+    $sroa_$pattern_temp_0_1_14_118 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_118 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $sroa_$pattern_temp_0_1_14_118);
     $sroa_$pattern_temp_0_0_13_117 = $moved_4_108;
     $moved_4_108 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_20;
@@ -215,7 +215,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_117 = $sroa_$pattern_temp_0_1_14_118; $sroa_$pattern_temp_0_1_14_118 = 0; $sroa_$pattern_temp_0_0_13_117);
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_118 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
+    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
     $sroa_$pattern_temp_0_0_13_117 = $sroa_$pattern_temp_0_1_14_118;
     $sroa_$pattern_temp_0_1_14_118 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_19;
@@ -223,7 +223,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_117 = $moved_4_108; $moved_4_108 = 0; $sroa_$pattern_temp_0_0_13_117);
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $moved_4_108 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_118 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_118 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $sroa_$pattern_temp_0_1_14_118);
+    $sroa_$pattern_temp_0_1_14_118 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_118 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $sroa_$pattern_temp_0_1_14_118);
     $sroa_$pattern_temp_0_0_13_117 = $moved_4_108;
     $moved_4_108 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_18;
@@ -243,7 +243,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_118, $cm_pair_7_111, $sroa_$pattern_temp_0_0_13_117);
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_118 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
+    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
     $sroa_$pattern_temp_0_0_13_117 = $sroa_$pattern_temp_0_1_14_118;
     $sroa_$pattern_temp_0_1_14_118 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_117, $mv_arg_2.repr, $mv_arg_2.used);
@@ -263,7 +263,7 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_118, $cm_pair_7_111, $sroa_$pattern_temp_0_0_13_117);
     $sroa_$pattern_temp_0_0_13_117 = builtin::i32_wrap_i64(local.tee $cm_pair_7_111("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_118 = builtin::i32_wrap_i64($cm_pair_7_111 >> 32_i64);
-    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
+    $moved_4_108 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_108 = $sroa_$pattern_temp_0_0_13_117; $sroa_$pattern_temp_0_0_13_117 = 0; $moved_4_108);
     $sroa_$pattern_temp_0_0_13_117 = $sroa_$pattern_temp_0_1_14_118;
     $sroa_$pattern_temp_0_1_14_118 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_117, $mv_arg_2.repr, $mv_arg_2.used);
@@ -278,7 +278,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     let $sroa_$pattern_temp_0_1_14_73: i32;
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -287,7 +287,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_33;
@@ -295,7 +295,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73; $sroa_$pattern_temp_0_1_14_73 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_32;
@@ -321,14 +321,14 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_73, $cm_pair_7_66, $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_72, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_30;
@@ -336,7 +336,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73; $sroa_$pattern_temp_0_1_14_73 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_29;
@@ -344,7 +344,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_22;
@@ -352,7 +352,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73; $sroa_$pattern_temp_0_1_14_73 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_27;
@@ -360,7 +360,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_26;
@@ -368,7 +368,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73; $sroa_$pattern_temp_0_1_14_73 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_25;
@@ -376,7 +376,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_24;
@@ -384,7 +384,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73; $sroa_$pattern_temp_0_1_14_73 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_73 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
+    $moved_4_63 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($moved_4_63 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $moved_4_63);
     $sroa_$pattern_temp_0_0_13_72 = $sroa_$pattern_temp_0_1_14_73;
     $sroa_$pattern_temp_0_1_14_73 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_23;
@@ -392,7 +392,7 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_72 = $moved_4_63; $moved_4_63 = 0; $sroa_$pattern_temp_0_0_13_72);
     $sroa_$pattern_temp_0_0_13_72 = builtin::i32_wrap_i64(local.tee $cm_pair_7_66("wasi/stream-new"()));
     $moved_4_63 = builtin::i32_wrap_i64($cm_pair_7_66 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
+    $sroa_$pattern_temp_0_1_14_73 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_73 = $sroa_$pattern_temp_0_0_13_72; $sroa_$pattern_temp_0_0_13_72 = 0; $sroa_$pattern_temp_0_1_14_73);
     $sroa_$pattern_temp_0_0_13_72 = $moved_4_63;
     $moved_4_63 = 0;
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_22;
@@ -401,12 +401,12 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     "effect_polymorphism.wado/effect_poly_multi_param"();
 }
 
-fn "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stderr::write_via_stream"($cm_handle_2);
+fn "effect_polymorphism.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_polymorphism.wado/$cm_export__run"() {
@@ -726,7 +726,7 @@ fn "effect_polymorphism.wado/effect_polymorphism.wado/$Closure_0::$call$dae[self
     let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -755,7 +755,7 @@ fn "effect_polymorphism.wado/effect_polymorphism.wado/$Closure_4::$call$dae[self
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_15, x_28, new_used);
     new_used = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
     start_15 = builtin::i32_wrap_i64(x_28 >> 32_i64);
-    $moved_4 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used; new_used = 0; $moved_4);
+    $moved_4 = "effect_polymorphism.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used; new_used = 0; $moved_4);
     new_used = start_15;
     start_15 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used, $local_2.repr, $local_2.used);

@@ -91,19 +91,19 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(23)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/example:demo/Demo::target" = fn() -> f64;  // TypeId(25)
+type "functype//wasi/$example:demo/global#target" = fn() -> f64;  // TypeId(25)
 
-type "functype//wasi/example:demo/Target::listen" = fn(f64, i32);  // TypeId(26)
+type "functype//wasi/$example:demo/target#listen" = fn(f64, i32);  // TypeId(26)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
 type "functype//cm_callback_diverging_arg.wado/run" = fn();  // TypeId(29)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_binding__Demo_target" = fn() -> u64;  // TypeId(30)
+type "functype//cm_callback_diverging_arg.wado/$cm_binding__example:demo/global#target" = fn() -> u64;  // TypeId(30)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_binding__Target_listen" = fn(u64, i32);  // TypeId(31)
+type "functype//cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen" = fn(u64, i32);  // TypeId(31)
 
 type "functype//cm_callback_diverging_arg.wado/$cm_callback__call-i32" = fn(u32, i32);  // TypeId(32)
 
@@ -173,7 +173,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(64)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(65)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(66)
+type "functype//cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(66)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(67)
 
@@ -185,10 +185,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/example:demo/Demo::target from "wasi/example:demo/Demo::target";
-import fn wasi/example:demo/Target::listen from "wasi/example:demo/Target::listen";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$example:demo/global#target from "wasi/$example:demo/global#target";
+import fn wasi/$example:demo/target#listen from "wasi/$example:demo/target#listen";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -238,7 +238,7 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
                     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = $local_0;
                     break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: $local_2_12;
                 } else {
-                    break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: "cm_callback_diverging_arg.wado/$cm_binding__Demo_target"();
+                    break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: "cm_callback_diverging_arg.wado/$cm_binding__example:demo/global#target"();
                 }
                 unreachable;
             };
@@ -251,7 +251,7 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_3"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_3"($local_3.op_listen)).env, $local_2_12, ref.as_non_null(listener));
                 break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = $local_2_8;
             } else {
-                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: "cm_callback_diverging_arg.wado/$cm_binding__Target_listen"($local_2_12, $inline_cm_callback_key_0: block -> u32 {
+                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: "cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen"($local_2_12, $inline_cm_callback_key_0: block -> u32 {
                     callback = ref.as_non_null(listener);
                     i = 0;
                     b4: block {
@@ -286,7 +286,7 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = $save_cm_callback_diverging_arg.wado/Demo;
     i = builtin::i32_wrap_i64(local.tee $local_2_12("wasi/stream-new"()));
     $v1_17 = builtin::i32_wrap_i64($local_2_12 >> 32_i64);
-    $moved_4 = "cm_callback_diverging_arg.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = i; i = 0; $moved_4);
+    $moved_4 = "cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i; i = 0; $moved_4);
     i = $v1_17;
     $v1_17 = 0;
     $mv_arg_2 = global:cm_callback_diverging_arg.wado::$const_obj_0;
@@ -294,16 +294,16 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = $moved_4; $moved_4 = 0; i);
 }
 
-fn "cm_callback_diverging_arg.wado/$cm_binding__Demo_target"() with Demo {
-    return builtin::i64_reinterpret_f64("wasi/example:demo/Demo::target"());
+fn "cm_callback_diverging_arg.wado/$cm_binding__example:demo/global#target"() with Demo {
+    return builtin::i64_reinterpret_f64("wasi/$example:demo/global#target"());
 }
 
-fn "cm_callback_diverging_arg.wado/$cm_binding__Target_listen"(self, listener) with Target {
-    "wasi/example:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
+fn "cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen"(self, listener) with Target {
+    "wasi/$example:demo/target#listen"(builtin::f64_reinterpret_i64(self), listener);
 }
 
-fn "cm_callback_diverging_arg.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "cm_callback_diverging_arg.wado/$cm_callback__call-i32"(key, a0) {
@@ -463,7 +463,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

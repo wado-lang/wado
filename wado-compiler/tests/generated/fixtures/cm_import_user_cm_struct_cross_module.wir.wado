@@ -8,26 +8,26 @@ struct ./sub/cm_import_user_cm_struct_dep.wado//Opts {  // TypeId(0)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
-type "functype//wasi/wasi:demo/Gfx::get_count" = fn(i32) -> i32;  // TypeId(2)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-count" = fn(i32) -> i32;  // TypeId(2)
 
 type "functype//cm_import_user_cm_struct_cross_module.wado/$cm_export__run" = fn();  // TypeId(3)
 
-type "functype//cm_import_user_cm_struct_cross_module.wado/$cm_binding__Gfx_get_count$spec0" = fn(ref "./sub/cm_import_user_cm_struct_dep.wado//Opts") -> i32;  // TypeId(4)
+type "functype//cm_import_user_cm_struct_cross_module.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count$spec0" = fn(ref "./sub/cm_import_user_cm_struct_dep.wado//Opts") -> i32;  // TypeId(4)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Gfx::get_count from "wasi/wasi:demo/Gfx::get_count";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-count from "wasi/$wasi:demo/gfx@0.1.0#get-count";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_import_user_cm_struct_cross_module.wado/$cm_export__run"() {
-    drop("cm_import_user_cm_struct_cross_module.wado/$cm_binding__Gfx_get_count$spec0"(struct.new "./sub/cm_import_user_cm_struct_dep.wado//Opts" { v: 1 }));
+    drop("cm_import_user_cm_struct_cross_module.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count$spec0"(struct.new "./sub/cm_import_user_cm_struct_dep.wado//Opts" { v: 1 }));
     "wasi/task-return"(0);
 }
 
-fn "cm_import_user_cm_struct_cross_module.wado/$cm_binding__Gfx_get_count$spec0"(x) with Gfx {
-    return "wasi/wasi:demo/Gfx::get_count"(1);
+fn "cm_import_user_cm_struct_cross_module.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-count$spec0"(x) with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-count"(1);
 }
 
 export fn "cm_import_user_cm_struct_cross_module.wado/$cm_export__run" as "run"
