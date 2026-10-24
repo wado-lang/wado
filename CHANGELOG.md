@@ -1,5 +1,58 @@
 # Changelog
 
+## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-10-24
+
+- perf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice by @gfx in https://github.com/wado-lang/wado/pull/2381
+- docs(benchmark): publish the 2026-10-18 results by @gfx in https://github.com/wado-lang/wado/pull/2383
+- refactor(gale): scan .g4 sources and action bodies as UTF-8 bytes by @gfx in https://github.com/wado-lang/wado/pull/2382
+- perf(optimizer): one bounds check for a run of sequential accesses, one compare per check by @gfx in https://github.com/wado-lang/wado/pull/2385
+- fix(contract): keep jumps inside detached expressions and check contracts under wado run by @gfx in https://github.com/wado-lang/wado/pull/2386
+- fix: a deferred local whose reference a call may keep compiles to valid Wasm by @gfx in https://github.com/wado-lang/wado/pull/2387
+- docs(loam): a model-agnostic design that reaches Gemma 4, Qwen 3.5 and gpt-oss by @gfx in https://github.com/wado-lang/wado/pull/2388
+- docs(loam): a roadmap to gpt-oss-20b on an 8 GB GPU, and a home for post-WEP design by @gfx in https://github.com/wado-lang/wado/pull/2389
+- feat(kiln): generators hash with HashMap::new() and log to the host by @gfx in https://github.com/wado-lang/wado/pull/2390
+- docs(loam): plan decisions answered from a few logits by @gfx in https://github.com/wado-lang/wado/pull/2391
+- refactor(loam): keep Loam's benchmarks in package-loam/benchmark by @gfx in https://github.com/wado-lang/wado/pull/2393
+- feat(eval): evaluated programs build maps and draw insecure randomness by @gfx in https://github.com/wado-lang/wado/pull/2392
+- refactor(compiler): one diagnostic spelling of a type, every name format in name.rs by @gfx in https://github.com/wado-lang/wado/pull/2394
+- feat(affine)!: every Component Model handle has exactly one owner, checked at compile time by @gfx in https://github.com/wado-lang/wado/pull/2395
+- chore: npm update deps by @gfx in https://github.com/wado-lang/wado/pull/2396
+- perf(affine): keep a resource no reference reaches as its bare handle by @gfx in https://github.com/wado-lang/wado/pull/2397
+- fix(test): end the run by naming every failed test by @gfx in https://github.com/wado-lang/wado/pull/2399
+- feat(gale): decide what static lookahead cannot through the ATN simulator, at static speed by @gfx in https://github.com/wado-lang/wado/pull/2398
+- fix(affine): decide ownership once, so each affine value drops exactly once by @gfx in https://github.com/wado-lang/wado/pull/2404
+- fix(compiler): a tuple literal coerces to a newtype over a tuple by @gfx in https://github.com/wado-lang/wado/pull/2403
+- feat(gale): `atn: "verify"` checks the tournament against the simulator by @gfx in https://github.com/wado-lang/wado/pull/2405
+- feat(template): check a hole's format-specifier trait at the template by @gfx in https://github.com/wado-lang/wado/pull/2406
+- fix(serve): a service reaches the host network, as run and test do by @gfx in https://github.com/wado-lang/wado/pull/2407
+- feat(gale): atn verify checks repeats and left-recursion loops against the simulator by @gfx in https://github.com/wado-lang/wado/pull/2408
+- fix(affine): end a path where it diverges, and make local structs affine by @gfx in https://github.com/wado-lang/wado/pull/2409
+- fix(rt): stop the stdlib coverage gate from flaking on stream reads by @gfx in https://github.com/wado-lang/wado/pull/2410
+- feat(template): pass a hole of a type parameter to a tag by @gfx in https://github.com/wado-lang/wado/pull/2411
+- fix(affine): reject an affine binding of an unmarked associated type by @gfx in https://github.com/wado-lang/wado/pull/2412
+- perf(optimize): compile gale_gen 25% faster by parallelizing heap effects by @gfx in https://github.com/wado-lang/wado/pull/2413
+- docs: propose destructuring assignment with a copy-free swap by @gfx in https://github.com/wado-lang/wado/pull/2414
+- chore(deps): wasmtime 50.0.0 and latest Cargo dependencies by @gfx in https://github.com/wado-lang/wado/pull/2416
+- perf(lower): lower gale_gen 45% faster by settling merged points-to nodes incrementally by @gfx in https://github.com/wado-lang/wado/pull/2417
+- docs(benchmark): remeasure on wasmtime 50.0.0 by @gfx in https://github.com/wado-lang/wado/pull/2418
+- perf(template): bring format`…` to the direct lowering's cost by @gfx in https://github.com/wado-lang/wado/pull/2419
+- perf(prelude): sort_by moves elements instead of copying them by @gfx in https://github.com/wado-lang/wado/pull/2420
+- refactor(template)!: a hole's spelling is no part of a template's shape by @gfx in https://github.com/wado-lang/wado/pull/2422
+- fix: a panic ends the run, and T::method checks its arguments by @gfx in https://github.com/wado-lang/wado/pull/2423
+- fix: T::method checks every argument against its settled parameter by @gfx in https://github.com/wado-lang/wado/pull/2424
+- feat(loam): a build reads a checkpoint's header and none of its weights by @gfx in https://github.com/wado-lang/wado/pull/2425
+- fix(affine): drop what a by-value pattern leaves as its arm is entered by @gfx in https://github.com/wado-lang/wado/pull/2427
+- feat(loam): build and load a sharded Hugging Face checkpoint by @gfx in https://github.com/wado-lang/wado/pull/2428
+- feat(stream): wait on several stream copies at once by @gfx in https://github.com/wado-lang/wado/pull/2429
+- refactor(template)!: a tag is instantiated once per hole shape, not per text by @gfx in https://github.com/wado-lang/wado/pull/2430
+- fix(affine): mark a type parameter by its binder, so shadowing and renaming cannot copy a move-only value by @gfx in https://github.com/wado-lang/wado/pull/2431
+- feat(serde): internally tagged variants, and decode errors that name their path by @gfx in https://github.com/wado-lang/wado/pull/2432
+- chore(mise): lock every dev tool at its latest release by @gfx in https://github.com/wado-lang/wado/pull/2434
+- refactor(prelude)!: a member enters a WaitableSet by insert by @gfx in https://github.com/wado-lang/wado/pull/2433
+- feat(loam): benchmark Gemma 3 against llama.cpp and native onnxruntime by @gfx in https://github.com/wado-lang/wado/pull/2437
+- feat: assign a tuple of places from a tuple value by @gfx in https://github.com/wado-lang/wado/pull/2436
+- perf(lower): halve the value-copy analysis, 10% off compiling Gale by @gfx in https://github.com/wado-lang/wado/pull/2439
+
 ## [v0.0.37](https://github.com/wado-lang/wado/compare/v0.0.36...v0.0.37) - 2026-10-18
 
 - perf(json): fewer allocations per container and quoted number by @gfx in https://github.com/wado-lang/wado/pull/2302
