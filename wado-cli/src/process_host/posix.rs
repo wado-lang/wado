@@ -175,8 +175,9 @@ fn start(
             }
         },
     });
-    let inherits =
-        stdin == Stdio::Inherit || matches!(stdout, Route::Inherit) || matches!(stderr, Route::Inherit);
+    let inherits = stdin == Stdio::Inherit
+        || matches!(stdout, Route::Inherit)
+        || matches!(stderr, Route::Inherit);
     let launched = (|| {
         let scratch = Scratch::new()?;
         let cwd = match cwd {
@@ -257,10 +258,7 @@ fn child_env(
     let mut vars: Vec<(OsString, OsString)> = std::env::vars_os()
         .filter(|(key, _)| {
             let key = key.to_string_lossy();
-            key == "PATH"
-                || key == "LANG"
-                || key.starts_with("LC_")
-                || (inherits && key == "TERM")
+            key == "PATH" || key == "LANG" || key.starts_with("LC_") || (inherits && key == "TERM")
         })
         .collect();
     vars.push(("HOME".into(), scratch.home().into()));

@@ -146,9 +146,9 @@ impl ProcessCtx {
     fn grants(&self) -> wasmtime::Result<&[Grant]> {
         match &*self.spawning.0 {
             Answer::Available(grants) => Ok(grants),
-            Answer::Denied(reason) | Answer::Unsupported(reason) => {
-                Err(wasmtime::format_err!("core:process is unavailable: {reason}"))
-            }
+            Answer::Denied(reason) | Answer::Unsupported(reason) => Err(wasmtime::format_err!(
+                "core:process is unavailable: {reason}"
+            )),
         }
     }
 }

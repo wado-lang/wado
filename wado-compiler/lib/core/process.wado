@@ -218,7 +218,7 @@ impl Command {
             Piped => {
                 let [rx, tx] = Stream::<u8>::new();
                 writer = Option::Some(tx);
-                Input::Piped(rx)
+                Input::Piped(rx);
             },
         };
         let spec = types::Command {
@@ -232,7 +232,9 @@ impl Command {
         };
         let Spawned { child, stdout, stderr, exit } = match Process::spawn(spec, null) {
             Ok(spawned) => spawned,
-            Err(code) => return Result::Err(child_error(&self.program, error_kind(code))),
+            Err(code) => {
+                return Result::Err(child_error(&self.program, error_kind(code)));
+            },
         };
         return Result::Ok(Child {
             stdin: writer,

@@ -790,7 +790,10 @@ impl eval_host::Host for EvalSession {
         let outcome = self.host.outcome(&self.caller, source, fuel).await;
         self.cpu = Some(self.host.cpu_permit().await);
         let mut eval = lock(&self.clock.eval);
-        let entered = eval.entered.take().expect("a test leaves only the eval it entered");
+        let entered = eval
+            .entered
+            .take()
+            .expect("a test leaves only the eval it entered");
         eval.paused += entered.elapsed();
         outcome
     }
@@ -822,7 +825,9 @@ impl TestClock {
     #[must_use]
     pub fn own(&self) -> Duration {
         let eval = lock(&self.eval);
-        let inside = eval.entered.map_or(Duration::ZERO, |entered| entered.elapsed());
+        let inside = eval
+            .entered
+            .map_or(Duration::ZERO, |entered| entered.elapsed());
         self.start.elapsed().saturating_sub(eval.paused + inside)
     }
 }

@@ -431,22 +431,22 @@ cannot be taken back.
 ## Roadmap
 
 - [x] The sandbox layer in `wado-host` with the Linux backend: the policy type,
-      the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
-      `close_range` in `pre_exec`. Done when the escape tests pass in CI on
-      Linux.
+  the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
+  `close_range` in `pre_exec`. Done when the escape tests pass in CI on
+  Linux.
 - [x] The macOS backend: the fixed profile, its parameters, and the
-      `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
-      macOS.
+  `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
+  macOS.
 - [x] `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
-      streams, the timeout, killing the process group on drop and on guest
-      exit, `--deny-process`, and `denied` for a mapping that is not the same
-      path.
+  streams, the timeout, killing the process group on drop and on guest
+  exit, `--deny-process`, and `denied` for a mapping that is not the same
+  path.
 - [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
-      `status` and `read`, with its stdlib reference and a cheatsheet entry.
+  `status` and `read`, with its stdlib reference and a cheatsheet entry.
 - [ ] Filtering the network per host through a proxy, for the guest and the
-      child together.
+  child together.
 - [ ] WSL2: confirm the Landlock ABI its kernel offers. Done when the escape
-      tests pass under WSL2.
+  tests pass under WSL2.
 
 ## Known gaps
 
