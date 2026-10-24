@@ -67,8 +67,12 @@ runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them. `expand` is a view, each stretched axis read through a stride of 0.
 - `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
-  dispatches. One writes the present keys and values into one buffer, the new
-  keys turned by the rotary tables. The next attends each query row over each
+  dispatches. One appends the new keys, turned by the rotary tables, and
+  values to the attention cache. The cache holds a power of two of positions,
+  so a step writes only its own positions, into the cache its past is in, and
+  binds what the step before bound. A step whose past is not the cache's last,
+  as a branch from an earlier past is, or that outgrows the cache, copies the
+  past to a cache of its own first. The next attends each query row over each
   part of `LANES` positions in a workgroup of its own: the turned query, its scores,
   their weights against the part's greatest, and the values they weigh. The
   last joins a row's parts, rescaling each to the row's greatest score. Gemma's

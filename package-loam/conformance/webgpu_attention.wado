@@ -23,7 +23,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Attention, Backend, Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Attention, Backend, Cpu, Placed, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 
 struct Batch {
@@ -57,6 +57,20 @@ struct Half {
 }
 
 struct One {
+}
+
+/// The positions of a chain's cache, past and present alike, so each step's
+/// presents are the next one's past.
+struct Cache {
+}
+
+/// What one step of a chain left on each backend.
+struct Stepped {
+    on_cpu: [Tensor<f32, [Batch, KvHead, Cache, Dim]>, Tensor<f32, [Batch, KvHead, Cache, Dim]>],
+    on_gpu: [Placed<f32, [Batch, KvHead, Cache, Dim]>, Placed<f32, [Batch, KvHead, Cache, Dim]>],
+    deviation: f32,
+    /// The bind groups the device made for the step.
+    bind_groups: i32,
 }
 
 /// The operands of one case: `seq` new positions after `past`, heads of 8,
@@ -182,4 +196,93 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         );
         println(`${c.name} ${worst}`);
     }
+
+    // A decoder's chain through the cache. A step shaped as the one before it
+    // makes no bind group, a branch from an earlier past reads that past
+    // alone, and a step past what the cache holds moves it to a larger one.
+    let empty: Tensor<f32, [Batch, KvHead, Cache, Dim]> = tensor([1, 1, 0, d], 4);
+    let cos: Tensor<f32, [Pos, Half]> = tensor([positions, 4], 6);
+    let sin: Tensor<f32, [Pos, Half]> = tensor([positions, 4], 7);
+    gpu.begin();
+    let start = Stepped {
+        on_cpu: [empty, empty],
+        on_gpu: [gpu.upload(&empty), gpu.upload(&empty)],
+        deviation: 0.0,
+        bind_groups: 0,
+    };
+    let prompt = step(&mut gpu, &start, 5, &cos, &sin);
+    println(`chain prompt ${prompt.deviation}`);
+    let first = step(&mut gpu, &prompt, 1, &cos, &sin);
+    println(`chain step ${first.deviation}`);
+    gpu.retain(&first.on_gpu.0);
+    gpu.retain(&first.on_gpu.1);
+    let second = step(&mut gpu, &first, 1, &cos, &sin);
+    assert second.bind_groups == 0, "a step shaped as the one before makes no bind group";
+    println(`chain repeated ${second.deviation}`);
+    gpu.retain(&second.on_gpu.0);
+    gpu.retain(&second.on_gpu.1);
+    let branch = step(&mut gpu, &first, 1, &cos, &sin);
+    println(`chain branched ${branch.deviation}`);
+    let grown = step(&mut gpu, &second, 60, &cos, &sin);
+    println(`chain grown ${grown.deviation}`);
+}
+
+/// `seq` new positions after the past `before` left, attended on both
+/// backends in a pass of its own.
+fn step(
+    gpu: &mut WebGpuBackend,
+    before: &Stepped,
+    seq: i32,
+    cos: &Tensor<f32, [Pos, Half]>,
+    sin: &Tensor<f32, [Pos, Half]>,
+) -> Stepped with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let options = Attention { heads: 4, kv_heads: 1, scale: 0.35, softcap: -1.0, window: -1, causal: true };
+    let [batch, d] = [1, 8];
+    let seed = (before.on_cpu.0.extents[2] + seq) as u32;
+    let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, seq, options.heads * d], seed);
+    let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 1);
+    let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 2);
+    let on_cpu = Cpu {}.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One>(
+        &q,
+        &k,
+        &v,
+        &before.on_cpu.0,
+        &before.on_cpu.1,
+        Option::Some(cos),
+        Option::Some(sin),
+        null,
+        &options,
+    );
+    gpu.retain(&before.on_gpu.0);
+    gpu.retain(&before.on_gpu.1);
+    gpu.begin();
+    let [gq, gk, gv, gcos, gsin] = [gpu.upload(&q), gpu.upload(&k), gpu.upload(&v), gpu.upload(cos), gpu.upload(sin)];
+    // An exporter reshapes the presents before they come back as the past,
+    // which rewrites the strides of the axes of extent 1.
+    let extents = before.on_cpu.0.extents;
+    let past_k = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.0, extents);
+    let past_v = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.1, extents);
+    let made = gpu.bind_groups();
+    let on_gpu = gpu.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One>(
+        &gq,
+        &gk,
+        &gv,
+        &past_k,
+        &past_v,
+        Option::Some(&gcos),
+        Option::Some(&gsin),
+        null,
+        &options,
+    );
+    let bind_groups = gpu.bind_groups() - made;
+    let [out, present_k, present_v] = [
+        gpu.download(&on_gpu.0),
+        gpu.download(&on_gpu.1),
+        gpu.download(&on_gpu.2),
+    ];
+    let deviation = f32::max(
+        deviation(&out.data, &on_cpu.0.data),
+        f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
+    );
+    return Stepped { on_cpu: [on_cpu.1, on_cpu.2], on_gpu: [on_gpu.1, on_gpu.2], deviation, bind_groups };
 }

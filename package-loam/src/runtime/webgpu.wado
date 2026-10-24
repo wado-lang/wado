@@ -111,6 +111,12 @@ struct Carried {
     at: i32,
 }
 
+/// The positions an attention cache has written, of the `capacity` it holds.
+struct Filled {
+    positions: i32,
+    capacity: i32,
+}
+
 /// A buffer no tensor holds, at its place in `buffers`.
 struct Spare {
     at: i32,
@@ -222,6 +228,11 @@ pub affine struct WebGpuBackend {
     retaining: HashSet<i32>,
     /// The buffers of earlier passes that the pass before this one retained.
     carried: List<Carried>,
+    /// What each attention cache holds, by slot. A step appends to the cache
+    /// its past is in only where that past ends at the last position written,
+    /// so a branch from an earlier past never writes over what a later step
+    /// reads.
+    filled: HashMap<i32, Filled>,
     /// The commands recorded and not yet submitted: none, or one encoder.
     recording: List<Recording>,
     /// The dispatches recorded and not yet submitted.
@@ -243,6 +254,7 @@ pub affine struct WebGpuBackend {
     alignment: i32,
     read_backs: i32,
     dispatches: i32,
+    bind_groups: i32,
     cpu: Cpu,
 }
 
@@ -333,6 +345,7 @@ impl WebGpuBackend {
             pass_start: 0,
             retaining: HashSet::new(),
             carried: [],
+            filled: HashMap::new(),
             recording: [],
             unsubmitted: 0,
             groups: Places::new(),
@@ -345,6 +358,7 @@ impl WebGpuBackend {
             alignment,
             read_backs: 0,
             dispatches: 0,
+            bind_groups: 0,
             cpu: Cpu {},
         });
     }
@@ -383,6 +397,12 @@ impl WebGpuBackend {
     /// at batch size 1.
     pub fn dispatches(&self) -> i32 {
         return self.dispatches;
+    }
+
+    /// How many bind groups have been made. A pass that binds what the one
+    /// before it bound makes none, which saves the host what it costs.
+    pub fn bind_groups(&self) -> i32 {
+        return self.bind_groups;
     }
 
     /// The buffer at `slot`: a kept one where it is negative, one of the pass
@@ -789,6 +809,7 @@ impl WebGpuBackend {
         spans: &List<Span>,
         key: List<i32>,
     ) -> i32 with (GpuDevice, GpuBuffer, GpuBindGroupLayout, GpuBindGroup) {
+        self.bind_groups += 1;
         let mut entries: List<GpuBindGroupEntry> = [];
         for let i of 0..<spans.len() {
             let s = spans[i];
@@ -1326,8 +1347,8 @@ impl WebGpuBackend {
         return Option::Some(permuted(&out, &inverse(&perm)));
     }
 
-    /// `group_query_attention` in three dispatches: one writes the present
-    /// keys and values, turned keys first, into one buffer, one attends each
+    /// `group_query_attention` in three dispatches: one appends the new keys,
+    /// turned, and values to the attention cache, one attends each
     /// query row over each part of `LANES` positions in a workgroup of its
     /// own, and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. `None` where the operands outgrow what a dispatch binds.
@@ -1346,7 +1367,8 @@ impl WebGpuBackend {
         let [heads, kv] = [options.heads, options.kv_heads];
         let total = past + s;
         let rows = batch * s * heads;
-        let n = batch * kv * total * d;
+        let capacity = self.cache_capacity(batch * kv * d, total);
+        let n = batch * kv * capacity * d;
         let groups = rows * total.div_ceil(LANES);
         let attended = groups * (d + 2);
         if 2 * n > self.max_binding || attended > self.max_binding || d > MAX_HEAD {
@@ -1356,40 +1378,55 @@ impl WebGpuBackend {
             Some([c, _]) => c.extents[1],
             None => 0,
         };
-        let extents = [batch, kv, total, d] as List<i32>;
+        let held = [batch, kv, capacity, d] as List<i32>;
+        let strides = row_major(&held);
         let mut tables: List<DeviceTensor> = [];
         if let Some([c, sn]) = rotary {
             tables = [*c, *sn];
         }
-        let mut present_operands = [*past_k, *past_v, *k, *v] as List<DeviceTensor>;
-        present_operands.extend(&tables);
-        // The presents' views before their buffer exists, for `binds`.
+        let mut append_operands = [*k, *v] as List<DeviceTensor>;
+        append_operands.extend(&tables);
+        // The cache's views before its buffer is known, for `binds`. The
+        // attention reads them over every position the cache holds, so its
+        // bindings stay those of the step before while the cache fills.
         let mut attend_operands: List<DeviceTensor> = [
             *q,
-            contiguous(PENDING, 0, extents),
-            contiguous(PENDING, n, extents),
+            contiguous(PENDING, 0, held),
+            contiguous(PENDING, n, held),
         ];
         attend_operands.extend(&tables);
         if let Some(b) = bias {
             let over = [batch, heads, s, total] as List<i32>;
             attend_operands.push(DeviceTensor { ..*b, strides: stretched(b, &over), extents: over });
         }
-        if !self.binds(&present_operands) || !self.binds(&attend_operands) {
+        if !self.binds(&append_operands) || !self.binds(&attend_operands) {
             return null;
         }
 
-        let presents = self.allocated(2 * n, false);
-        let [x, y] = grid(2 * n);
-        let mut present_head = element_params(2 * n, x, &extents);
-        push_all(&mut present_head, &([past, half] as List<i32>));
-        self.dispatch_bound(&present_operands, presents, 2 * n, present_head, |bindings| ShaderKey::Present([
+        let cache = match self.appendable(past_k, past_v, capacity, n, &strides, past) {
+            Some(slot) => slot,
+            None => {
+                let slot = self.allocated(2 * n, false);
+                self.copy(past_k, &DeviceTensor { slot, offset: 0, extents: past_k.extents, strides, half: false });
+                self.copy(past_v, &DeviceTensor { slot, offset: n, extents: past_v.extents, strides, half: false });
+                slot
+            },
+        };
+        self.filled[cache] = Filled { positions: total, capacity };
+        let appended = batch * kv * s * d;
+        let [x, y] = grid(2 * appended);
+        let mut append_head = element_params(2 * appended, x, &([batch, kv, s, d] as List<i32>));
+        push_all(&mut append_head, &([past, half] as List<i32>));
+        push_view(&mut append_head, 0, &strides);
+        append_head.push(n as u32);
+        self.dispatch_bound(&append_operands, cache, 2 * n, append_head, |bindings| ShaderKey::Append([
             bindings, half > 0,
         ]), [x, y, 1]);
 
-        let present_k = contiguous(presents, 0, extents);
-        let present_v = contiguous(presents, n, extents);
-        attend_operands[1] = present_k;
-        attend_operands[2] = present_v;
+        let present_k = DeviceTensor { slot: cache, offset: 0, extents: [batch, kv, total, d], strides, half: false };
+        let present_v = DeviceTensor { ..present_k, offset: n };
+        attend_operands[1] = DeviceTensor { ..present_k, extents: held };
+        attend_operands[2] = DeviceTensor { ..present_v, extents: held };
         let parts = self.allocated(attended, false);
         let [gx, gy] = spread(groups);
         let mut attend_head: List<u32> = [];
@@ -1409,6 +1446,45 @@ impl WebGpuBackend {
         let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(LANES) as u32, d as u32];
         self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [rx, ry, 1]);
         return Option::Some([contiguous(out, 0, [batch, s, heads * d]), present_k, present_v]);
+    }
+
+    /// The positions an attention cache holds once it holds `total`: a power
+    /// of two, at least `LANES`, so a step appends where the one before left
+    /// room. Exactly `total` where that outgrows a binding, and every step
+    /// then moves the cache.
+    fn cache_capacity(&self, per_position: i32, total: i32) -> i32 {
+        let mut capacity = LANES;
+        while capacity < total {
+            capacity *= 2;
+        }
+        if 2 * (per_position as i64) * (capacity as i64) > self.max_binding as i64 {
+            return total;
+        }
+        return capacity;
+    }
+
+    /// The cache `past_k` and `past_v` are in where a step appends to it in
+    /// place: one of `capacity` positions, their keys at its start and their
+    /// values `values` after, laid out by `strides`, and nothing written past
+    /// their `past` positions.
+    fn appendable(
+        &self,
+        past_k: &DeviceTensor,
+        past_v: &DeviceTensor,
+        capacity: i32,
+        values: i32,
+        strides: &List<i32>,
+        past: i32,
+    ) -> Option<i32> {
+        let slot = past_k.slot;
+        let Some(cache) = self.filled.get(slot) else {
+            return null;
+        };
+        let laid_out = past_v.slot == slot && reads_as(past_k, 0, strides) && reads_as(past_v, values, strides);
+        if laid_out && cache.positions == past && cache.capacity == capacity {
+            return Option::Some(slot);
+        }
+        return null;
     }
 
     /// Records the shader `shader` makes of the bindings `operands` take, as
@@ -1498,6 +1574,13 @@ impl Backend for WebGpuBackend {
                 self.release(c.at);
             }
         }
+        let mut filled: HashMap<i32, Filled> = HashMap::new();
+        for let c of &carried {
+            if let Some(cache) = self.filled.get(c.slot) {
+                filled[c.slot] = cache;
+            }
+        }
+        self.filled = filled;
         self.carried = carried;
         self.retaining = HashSet::new();
         for let at of 0..<self.groups.held.len() {
@@ -2204,12 +2287,20 @@ fn row_major(extents: &List<i32>) -> List<i32> {
     return strides;
 }
 
-/// Whether `t`'s elements lie row-major from its offset. An axis of extent 1
-/// steps nowhere, so its stride does not matter.
+/// Whether `t`'s elements lie row-major from its offset.
 fn is_contiguous(t: &DeviceTensor) -> bool {
-    let expected = row_major(&t.extents);
+    return reads_as(t, t.offset, &row_major(&t.extents));
+}
+
+/// Whether `t` reads the elements a view from `offset` with `strides` reads
+/// over its extents. An axis of extent 1 steps nowhere, so its stride does
+/// not matter, and a `reshape` rewrites it freely.
+fn reads_as(t: &DeviceTensor, offset: i32, strides: &List<i32>) -> bool {
+    if t.offset != offset {
+        return false;
+    }
     for let d of 0..<t.extents.len() {
-        if t.extents[d] != 1 && t.strides[d] != expected[d] {
+        if t.extents[d] != 1 && t.strides[d] != strides[d] {
             return false;
         }
     }
@@ -2490,8 +2581,8 @@ variant ShaderKey {
     NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32]),
     /// [`gather_shader`]'s arguments.
     Gather([i32, i32, bool]),
-    /// [`present_shader`]'s arguments.
-    Present([List<i32>, bool]),
+    /// [`append_shader`]'s arguments.
+    Append([List<i32>, bool]),
     /// [`attend_shader`]'s arguments.
     Attend([List<i32>, i32, bool, bool]),
     /// [`attend_join_shader`]'s argument.
@@ -2525,7 +2616,7 @@ impl ShaderKey {
                 *width,
             ),
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
-            Present([bindings, rotary]) => present_shader(bindings, *rotary),
+            Append([bindings, rotary]) => append_shader(bindings, *rotary),
             Attend([bindings, head, rotary, biased]) => attend_shader(bindings, *head, *rotary, *biased),
             AttendJoin(bindings) => attend_join_shader(bindings),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
@@ -2573,17 +2664,17 @@ ${indent}}
 `;
 }
 
-/// The WGSL writing the present keys and then values of `group_query_attention`,
-/// one invocation per element of `[2, batch, key heads, total, head]`: the
-/// past's, then the new positions', each key turned where `rotary`.
-/// Parameters: the count, the invocations per row, the extents `[batch, key
-/// heads, total, head]`, the past's length, the turned half's, then the views
-/// of the past keys, past values, new keys, new values, cosines and sines.
-fn present_shader(bindings: &List<i32>, rotary: bool) -> String {
-    let past_at = |k: i32, at: i32| view_wgsl(bindings, k, at, ["b", "h", "t", "e"]);
+/// The WGSL appending the new keys and then values of `group_query_attention`
+/// to the attention cache, one invocation per element of `[2, batch, key heads,
+/// new positions, head]`, each key turned where `rotary`. Parameters: the
+/// count, the invocations per row, the extents `[batch, key heads, new
+/// positions, head]`, the past's length, the turned half's, the view of the
+/// cache's keys, where its values start, then the views of the new keys, new
+/// values, cosines and sines.
+fn append_shader(bindings: &List<i32>, rotary: bool) -> String {
     let new_at = |k: i32, at: i32, col: String| view_wgsl(bindings, k, at, ["b", "s", col]);
     let key = if rotary {
-        turned_wgsl(bindings, 4, 26, "t", |c| new_at(2, 18, `h * d + ${c}`), "    ");
+        turned_wgsl(bindings, 2, 22, "t", |c| new_at(0, 14, `h * d + ${c}`), "    ");
     } else {
         "    let turned = x;\n";
     };
@@ -2598,26 +2689,18 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let r = i % n;
     let d = p[5];
     let e = r % d;
-    let t = (r / d) % p[4];
+    let s = (r / d) % p[4];
     let h = (r / (d * p[4])) % p[3];
     let b = r / (d * p[4] * p[3]);
-    let past = p[6];
+    let t = p[6] + s;
     let half = p[7];
-    if t < past {
-        if i < n {
-            out[i] = ${past_at(0, 8)};
-        } else {
-            out[i] = ${past_at(1, 13)};
-        }
-        return;
-    }
-    let s = t - past;
+    let at = u32(${view_index_wgsl(8, ["b", "h", "t", "e"])} + select(0, bitcast<i32>(p[13]), i >= n));
     if i >= n {
-        out[i] = ${new_at(3, 22, "h * d + e")};
+        out[at] = ${new_at(1, 18, "h * d + e")};
         return;
     }
-    let x = ${new_at(2, 18, "h * d + e")};
-${key}    out[i] = turned;
+    let x = ${new_at(0, 14, "h * d + e")};
+${key}    out[at] = turned;
 }
 `;
 }
