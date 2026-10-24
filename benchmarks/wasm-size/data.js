@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792838221891,
+  "lastUpdate": 1792842570630,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70149,6 +70149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/52551aaebc20d8b8d73968f6e9c7aa9195f0a092"
         },
         "date": 1792838220895,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "902f57dd1595dc303383727a970ce832e130a8bc",
+          "message": "Merge pull request #2439 from wado-lang/ccr-2a1ab409-7czdp5\n\nperf(lower): halve the value-copy analysis, 10% off compiling Gale",
+          "timestamp": "2026-10-24T20:28:38+09:00",
+          "tree_id": "61b03de89f9b03cbbba7866e9840d5d616ce5ea3",
+          "url": "https://github.com/wado-lang/wado/commit/902f57dd1595dc303383727a970ce832e130a8bc"
+        },
+        "date": 1792842569695,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
