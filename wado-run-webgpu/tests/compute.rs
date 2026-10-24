@@ -187,8 +187,9 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
 
 /// Grouped query attention runs on the device, with a past and without, turned
 /// in whole or in part, biased, capped and windowed, over one part of positions
-/// and over several, and along a chain of steps through its cache: appended in
-/// place, branched from an earlier past, and moved to a larger cache.
+/// and over several, along a chain of steps through its cache: appended in
+/// place, branched from an earlier past, and moved to a larger cache, and over
+/// a prompt whose parts grow to fit a binding.
 #[test]
 fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -198,7 +199,7 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 10, "stdout: {stdout}");
+    assert_eq!(lines.len(), 11, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')

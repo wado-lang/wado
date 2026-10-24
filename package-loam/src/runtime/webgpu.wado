@@ -272,11 +272,15 @@ global LANES: i32 = 256;
 
 /// The positions one workgroup of `attend_shader` scores, a power of two
 /// dividing `LANES`: the lanes split each position's dot among
-/// `LANES / ATTEND_PART` of them. Fewer positions a part means more parts for
+/// `LANES / ATTEND_PART` of them. The parts grow from it where a prompt's
+/// rows would outgrow a binding. Fewer positions a part means more parts for
 /// `attend_join_shader` to read, and more lanes a dot: on Gemma 3 (270M)'s 8
 /// tokens from a short prompt, the two shaders took 1.46 times as long on the
 /// device with parts of 16 as with parts of 4, and 0.99 times with parts of 2.
 global ATTEND_PART: i32 = 4;
+
+/// The fewest positions an attention cache holds, a power of two.
+global CACHE_LEAST: i32 = 64;
 
 /// The most workgroups one dispatch dimension takes, as WebGPU's default limit
 /// sets it.
@@ -1491,8 +1495,8 @@ impl WebGpuBackend {
 
     /// `group_query_attention` in three dispatches: one appends the new keys,
     /// turned, and values to the attention cache, one attends each
-    /// query row over each part of `ATTEND_PART` positions in a workgroup of
-    /// its own, and one joins each row's parts. `rotary` is the cosine and sine
+    /// query row over each part of its positions in a workgroup of its own,
+    /// and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. `None` where the operands outgrow what a dispatch binds.
     fn attended(
         &mut self,
@@ -1511,13 +1515,20 @@ impl WebGpuBackend {
         let rows = batch * s * heads;
         let capacity = self.cache_capacity(batch * kv * d, total);
         let n = batch * kv * capacity * d;
-        let groups = rows * total.div_ceil(ATTEND_PART);
         // The parts are held for every position the cache holds, as its
         // views are, so their bindings too stay those of the step before.
-        let attended = rows * capacity.div_ceil(ATTEND_PART) * (d + 2);
-        if 2 * n > self.max_binding || attended > self.max_binding || d > MAX_HEAD {
+        // Rows enough to outgrow a binding spread over the device in any
+        // parts, so the parts grow until they fit one.
+        let held_for = |part: i32| rows as i64 * capacity.div_ceil(part) as i64 * (d + 2) as i64;
+        let mut part = ATTEND_PART;
+        while part < LANES && held_for(part) > self.max_binding as i64 {
+            part *= 2;
+        }
+        if 2 * n > self.max_binding || held_for(part) > self.max_binding as i64 || d > MAX_HEAD {
             return null;
         }
+        let attended = held_for(part) as i32;
+        let groups = rows * total.div_ceil(part);
         let half = match rotary {
             Some([c, _]) => c.extents[1],
             None => 0,
@@ -1587,23 +1598,23 @@ impl WebGpuBackend {
         attend_head.push(if options.causal { 1 } else { 0 });
         let biased = bias matches { Some(_) };
         self.dispatch_bound(&attend_operands, parts, attended, attend_head, |bindings| ShaderKey::Attend([
-            bindings, d, half > 0, biased,
+            bindings, d, half > 0, biased, part,
         ]), [gx, gy, 1]);
 
         let out = self.allocated(rows * d, false);
         let [rx, ry] = spread(rows);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(ATTEND_PART) as u32, d as u32];
+        let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(part) as u32, d as u32];
         self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [rx, ry, 1]);
         return Option::Some([contiguous(out, 0, [batch, s, heads * d]), present_k, present_v]);
     }
 
     /// The positions an attention cache holds once it holds `total`: a power
-    /// of two, at least `LANES`, so a step appends where the one before left
-    /// room. Exactly `total` where that outgrows a binding, and every step
-    /// then moves the cache.
+    /// of two, at least `CACHE_LEAST`, so a step appends where the one before
+    /// left room. Exactly `total` where that outgrows a binding, and every
+    /// step then moves the cache.
     fn cache_capacity(&self, per_position: i32, total: i32) -> i32 {
-        let mut capacity = LANES;
+        let mut capacity = CACHE_LEAST;
         while capacity < total {
             capacity *= 2;
         }
@@ -2804,7 +2815,7 @@ variant ShaderKey {
     /// [`append_shader`]'s arguments.
     Append([List<i32>, bool]),
     /// [`attend_shader`]'s arguments.
-    Attend([List<i32>, i32, bool, bool]),
+    Attend([List<i32>, i32, bool, bool, i32]),
     /// [`attend_join_shader`]'s argument.
     AttendJoin(List<i32>),
     /// [`arg_max_shader`]'s arguments.
@@ -2840,7 +2851,7 @@ impl ShaderKey {
             ),
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
             Append([bindings, rotary]) => append_shader(bindings, *rotary),
-            Attend([bindings, head, rotary, biased]) => attend_shader(bindings, *head, *rotary, *biased),
+            Attend([bindings, head, rotary, biased, part]) => attend_shader(bindings, *head, *rotary, *biased, *part),
             AttendJoin(bindings) => attend_join_shader(bindings),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
         };
@@ -2929,7 +2940,7 @@ ${key}    out[at] = turned;
 }
 
 /// The WGSL attending one query row of `group_query_attention` over one part
-/// of `ATTEND_PART` positions per workgroup, for heads of `head` elements: the
+/// of `part` positions per workgroup, for heads of `head` elements: the
 /// query turned where `rotary`, its scores against each position's key scaled,
 /// capped, biased where `biased` and masked, and the values they weigh. A part
 /// writes its weighed values, its greatest score, and its weights' sum, each
@@ -2941,7 +2952,7 @@ ${key}    out[at] = turned;
 /// past's, the query heads per key head, the turned half's length, the scale
 /// and the cap as f32 bits, the window, whether causal, then the views of the
 /// queries, the present keys and values, the cosines and sines, and the bias.
-fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool) -> String {
+fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool, part: i32) -> String {
     let query_at = |c: String| view_wgsl(bindings, 0, 14, ["b", "s", `h * d + ${c}`]);
     let turning = if rotary {
         turned_wgsl(bindings, 3, 28, "position", query_at, "        ");
@@ -2954,12 +2965,12 @@ fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool) ->
     } else {
         "";
     };
-    let splits = LANES / ATTEND_PART;
-    assert splits * ATTEND_PART == LANES && splits & splits - 1 == 0, "a dot's parts add in halves";
+    let splits = LANES / part;
+    assert splits * part == LANES && splits & splits - 1 == 0, "a dot's parts add in halves";
     return `${buffers_wgsl(1 + max_of(bindings), null)}
 var<workgroup> query: array<f32, ${head}>;
 var<workgroup> partial: array<f32, ${LANES}>;
-var<workgroup> weights: array<f32, ${ATTEND_PART}>;
+var<workgroup> weights: array<f32, ${part}>;
 
 @compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
@@ -2967,9 +2978,9 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     if flat >= p[0] {
         return;
     }
-    let parts = (p[6] + ${ATTEND_PART - 1}u) / ${ATTEND_PART}u;
+    let parts = (p[6] + ${part - 1}u) / ${part}u;
     let row = flat / parts;
-    let first = flat % parts * ${ATTEND_PART}u;
+    let first = flat % parts * ${part}u;
     let seq = p[3];
     let heads = p[4];
     let d = p[5];
@@ -3024,17 +3035,17 @@ ${biasing}    }
     }
     workgroupBarrier();
     var most = none;
-    for (var i = 0u; i < ${ATTEND_PART}u; i++) {
+    for (var i = 0u; i < ${part}u; i++) {
         most = max(most, weights[i]);
     }
     workgroupBarrier();
-    if lid < ${ATTEND_PART}u {
+    if lid < ${part}u {
         let score = weights[lid];
         weights[lid] = select(exp(score - most), 0.0, score == none);
     }
     workgroupBarrier();
     let at = flat * (d + 2u);
-    let count = min(${ATTEND_PART}u, total - first);
+    let count = min(${part}u, total - first);
     let values = ${view_index_wgsl(23, ["b", "kh", "first"])};
     let next = bitcast<i32>(p[26]);
     let along = bitcast<i32>(p[27]);
@@ -3051,7 +3062,7 @@ ${biasing}    }
     }
     if lid == 0u {
         var sum = 0.0;
-        for (var i = 0u; i < ${ATTEND_PART}u; i++) {
+        for (var i = 0u; i < ${part}u; i++) {
             sum += weights[i];
         }
         out[at + d] = most;

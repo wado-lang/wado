@@ -74,10 +74,12 @@ runs.
   as a branch from an earlier past is, or that outgrows the cache, copies the
   past to a cache of its own first. The next attends each query row over each
   part of 4 positions in a workgroup of its own: the turned query, its scores,
-  their weights against the part's greatest, and the values they weigh. Sixteen
+  their weights against the part's greatest, and the values they weigh. 64
   lanes split each position's dot, as a lane a position summed Gemma's 256
   elements alone. The cache's parts are held for every position it holds, so
-  they too bind as the step before's did. The last joins a row's parts,
+  they too bind as the step before's did. A prompt whose rows would outgrow a
+  binding in parts of 4 takes larger parts, as many rows spread over the device
+  in any. The last joins a row's parts,
   rescaling each to the row's greatest score. Gemma's step over one token has 4
   query rows, so a workgroup a row left the device idle and grew slower with
   the sequence: at 600 positions a token took 1.9 times as long as with parts

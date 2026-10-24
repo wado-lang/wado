@@ -118,7 +118,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             biased: true,
             options: Attention { heads: 2, kv_heads: 2, scale: 0.5, softcap: -1.0, window: -1, causal: false },
         },
-        // Past 64 positions, a row's parts are several workgroups.
+        // Past the cache's first capacity, a row's parts are many workgroups.
         Case {
             name: "long",
             seq: 3,
@@ -127,7 +127,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             biased: true,
             options: Attention { heads: 2, kv_heads: 1, scale: 0.35, softcap: -1.0, window: -1, causal: true },
         },
-        // A window behind the first 64 positions masks a whole part.
+        // A window behind the first positions masks whole parts.
         Case {
             name: "windowed",
             seq: 1,
@@ -137,72 +137,16 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             options: Attention { heads: 4, kv_heads: 2, scale: 0.35, softcap: 2.0, window: 40, causal: true },
         },
     ];
-    let [batch, d, positions] = [2, 8, 160];
     for let c of cases {
-        let total = c.past + c.seq;
-        let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, c.seq, c.options.heads * d], 1);
-        let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 2);
-        let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 3);
-        let past_k: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 4);
-        let past_v: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 5);
-        let cos: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 6);
-        let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
-        let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
-        let turned = c.half > 0;
-        let on_cpu = Cpu {}.group_query_attention(
-            &q,
-            &k,
-            &v,
-            &past_k,
-            &past_v,
-            if turned { Option::Some(&cos) } else { null },
-            if turned { Option::Some(&sin) } else { null },
-            if c.biased { Option::Some(&bias) } else { null },
-            &c.options,
-        );
-        gpu.begin();
-        let [gq, gk, gv, gpk, gpv, gcos, gsin, gbias] = [
-            gpu.upload(&q),
-            gpu.upload(&k),
-            gpu.upload(&v),
-            gpu.upload(&past_k),
-            gpu.upload(&past_v),
-            gpu.upload(&cos),
-            gpu.upload(&sin),
-            gpu.upload(&bias),
-        ];
-        let on_gpu = gpu.group_query_attention(
-            &gq,
-            &gk,
-            &gv,
-            &gpk,
-            &gpv,
-            if turned { Option::Some(&gcos) } else { null },
-            if turned { Option::Some(&gsin) } else { null },
-            if c.biased { Option::Some(&gbias) } else { null },
-            &c.options,
-        );
-        let reads = gpu.read_backs();
-        let [out, present_k, present_v] = [
-            gpu.download(&on_gpu.0),
-            gpu.download(&on_gpu.1),
-            gpu.download(&on_gpu.2),
-        ];
-        // Only the three downloads read back: the kernel ran on the device.
-        assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
-        let worst = f32::max(
-            deviation(&out.data, &on_cpu.0.data),
-            f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
-        );
-        println(`${c.name} ${worst}`);
+        println(`${c.name} ${attended(&mut gpu, &c)}`);
     }
 
     // A decoder's chain through the cache. A step shaped as the one before it
     // makes no bind group, a branch from an earlier past reads that past
     // alone, and a step past what the cache holds moves it to a larger one.
-    let empty: Tensor<f32, [Batch, KvHead, Cache, Dim]> = tensor([1, 1, 0, d], 4);
-    let cos: Tensor<f32, [Pos, Half]> = tensor([positions, 4], 6);
-    let sin: Tensor<f32, [Pos, Half]> = tensor([positions, 4], 7);
+    let empty: Tensor<f32, [Batch, KvHead, Cache, Dim]> = tensor([1, 1, 0, 8], 4);
+    let cos: Tensor<f32, [Pos, Half]> = tensor([160, 4], 6);
+    let sin: Tensor<f32, [Pos, Half]> = tensor([160, 4], 7);
     gpu.begin();
     let start = Stepped {
         on_cpu: [empty, empty],
@@ -227,6 +171,83 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`chain branched ${branch.deviation}`);
     let grown = step(&mut gpu, &second, 60, &cos, &sin);
     println(`chain grown ${grown.deviation}`);
+
+    // A long prompt's query rows outgrow a binding of 8192 words in parts of
+    // `ATTEND_PART` positions, so they attend in larger ones.
+    let Some(mut bound) = WebGpuBackend::new() else {
+        return;
+    };
+    bound.limit_binding(8192);
+    let long_prompt = Case {
+        name: "bound",
+        seq: 64,
+        past: 0,
+        half: 4,
+        biased: false,
+        options: Attention { heads: 4, kv_heads: 1, scale: 0.35, softcap: -1.0, window: -1, causal: true },
+    };
+    println(`${long_prompt.name} ${attended(&mut bound, &long_prompt)}`);
+}
+
+/// How far `c` attended on the device sits from `Cpu`'s, over a batch of 2
+/// and heads of 8.
+fn attended(gpu: &mut WebGpuBackend, c: &Case) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let [batch, d, positions] = [2, 8, 160];
+    let total = c.past + c.seq;
+    let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, c.seq, c.options.heads * d], 1);
+    let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 2);
+    let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 3);
+    let past_k: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 4);
+    let past_v: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 5);
+    let cos: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 6);
+    let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
+    let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
+    let turned = c.half > 0;
+    let on_cpu = Cpu {}.group_query_attention(
+        &q,
+        &k,
+        &v,
+        &past_k,
+        &past_v,
+        if turned { Option::Some(&cos) } else { null },
+        if turned { Option::Some(&sin) } else { null },
+        if c.biased { Option::Some(&bias) } else { null },
+        &c.options,
+    );
+    gpu.begin();
+    let [gq, gk, gv, gpk, gpv, gcos, gsin, gbias] = [
+        gpu.upload(&q),
+        gpu.upload(&k),
+        gpu.upload(&v),
+        gpu.upload(&past_k),
+        gpu.upload(&past_v),
+        gpu.upload(&cos),
+        gpu.upload(&sin),
+        gpu.upload(&bias),
+    ];
+    let on_gpu = gpu.group_query_attention(
+        &gq,
+        &gk,
+        &gv,
+        &gpk,
+        &gpv,
+        if turned { Option::Some(&gcos) } else { null },
+        if turned { Option::Some(&gsin) } else { null },
+        if c.biased { Option::Some(&gbias) } else { null },
+        &c.options,
+    );
+    let reads = gpu.read_backs();
+    let [out, present_k, present_v] = [
+        gpu.download(&on_gpu.0),
+        gpu.download(&on_gpu.1),
+        gpu.download(&on_gpu.2),
+    ];
+    // Only the three downloads read back: the kernel ran on the device.
+    assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
+    return f32::max(
+        deviation(&out.data, &on_cpu.0.data),
+        f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
+    );
 }
 
 /// `seq` new positions after the past `before` left, attended on both
