@@ -399,8 +399,8 @@ impl WebGpuBackend {
         return self.dispatches;
     }
 
-    /// How many bind groups have been made. A pass that binds what the one
-    /// before it bound makes none, which saves the host what it costs.
+    /// How many bind groups have been made: a pass that binds what the one
+    /// before it bound makes none.
     pub fn bind_groups(&self) -> i32 {
         return self.bind_groups;
     }
@@ -1409,7 +1409,7 @@ impl WebGpuBackend {
                 let slot = self.allocated(2 * n, false);
                 self.copy(past_k, &DeviceTensor { slot, offset: 0, extents: past_k.extents, strides, half: false });
                 self.copy(past_v, &DeviceTensor { slot, offset: n, extents: past_v.extents, strides, half: false });
-                slot
+                slot;
             },
         };
         self.filled[cache] = Filled { positions: total, capacity };
@@ -1423,7 +1423,13 @@ impl WebGpuBackend {
             bindings, half > 0,
         ]), [x, y, 1]);
 
-        let present_k = DeviceTensor { slot: cache, offset: 0, extents: [batch, kv, total, d], strides, half: false };
+        let present_k = DeviceTensor {
+            slot: cache,
+            offset: 0,
+            extents: [batch, kv, total, d],
+            strides,
+            half: false,
+        };
         let present_v = DeviceTensor { ..present_k, offset: n };
         attend_operands[1] = DeviceTensor { ..present_k, extents: held };
         attend_operands[2] = DeviceTensor { ..present_v, extents: held };
@@ -1457,7 +1463,7 @@ impl WebGpuBackend {
         while capacity < total {
             capacity *= 2;
         }
-        if 2 * (per_position as i64) * (capacity as i64) > self.max_binding as i64 {
+        if 2 * per_position as i64 * capacity as i64 > self.max_binding as i64 {
             return total;
         }
         return capacity;

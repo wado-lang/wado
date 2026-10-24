@@ -206,7 +206,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     gpu.begin();
     let start = Stepped {
         on_cpu: [empty, empty],
-        on_gpu: [gpu.upload(&empty), gpu.upload(&empty)],
+        on_gpu: [
+            gpu.upload(&empty),
+            gpu.upload(&empty),
+        ],
         deviation: 0.0,
         bind_groups: 0,
     };
@@ -214,11 +217,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`chain prompt ${prompt.deviation}`);
     let first = step(&mut gpu, &prompt, 1, &cos, &sin);
     println(`chain step ${first.deviation}`);
-    gpu.retain(&first.on_gpu.0);
-    gpu.retain(&first.on_gpu.1);
     let second = step(&mut gpu, &first, 1, &cos, &sin);
     assert second.bind_groups == 0, "a step shaped as the one before makes no bind group";
     println(`chain repeated ${second.deviation}`);
+    // The step after the branch reads this past.
     gpu.retain(&second.on_gpu.0);
     gpu.retain(&second.on_gpu.1);
     let branch = step(&mut gpu, &first, 1, &cos, &sin);
@@ -256,7 +258,13 @@ fn step(
     gpu.retain(&before.on_gpu.0);
     gpu.retain(&before.on_gpu.1);
     gpu.begin();
-    let [gq, gk, gv, gcos, gsin] = [gpu.upload(&q), gpu.upload(&k), gpu.upload(&v), gpu.upload(cos), gpu.upload(sin)];
+    let [gq, gk, gv, gcos, gsin] = [
+        gpu.upload(&q),
+        gpu.upload(&k),
+        gpu.upload(&v),
+        gpu.upload(cos),
+        gpu.upload(sin),
+    ];
     // An exporter reshapes the presents before they come back as the past,
     // which rewrites the strides of the axes of extent 1.
     let extents = before.on_cpu.0.extents;
@@ -284,5 +292,10 @@ fn step(
         deviation(&out.data, &on_cpu.0.data),
         f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
     );
-    return Stepped { on_cpu: [on_cpu.1, on_cpu.2], on_gpu: [on_gpu.1, on_gpu.2], deviation, bind_groups };
+    return Stepped {
+        on_cpu: [on_cpu.1, on_cpu.2],
+        on_gpu: [on_gpu.1, on_gpu.2],
+        deviation,
+        bind_groups,
+    };
 }
