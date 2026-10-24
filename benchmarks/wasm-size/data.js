@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792787822991,
+  "lastUpdate": 1792802222507,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69949,6 +69949,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 294133,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77fd89e096a8a49c34e96acd597e789e726cf024",
+          "message": "Merge pull request #2432 from wado-lang/serde-internal-tag\n\nfeat(serde): internally tagged variants, and decode errors that name their path",
+          "timestamp": "2026-10-24T09:17:11+09:00",
+          "tree_id": "6a0752a38454ff5952f1a7b5756cc93a828b83e0",
+          "url": "https://github.com/wado-lang/wado/commit/77fd89e096a8a49c34e96acd597e789e726cf024"
+        },
+        "date": 1792802221609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
             "unit": "bytes"
           }
         ]
