@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792812279108,
+  "lastUpdate": 1792831936579,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70061,6 +70061,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f24cf18130ba901b72562c0f030e15b624aed9b6"
         },
         "date": 1792812278429,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2733c3d4a35c870b266a6df6da3e3869760d586",
+          "message": "Merge pull request #2437 from wado-lang/bench/serde-internal-tag\n\nfeat(loam): benchmark Gemma 3 against llama.cpp and native onnxruntime",
+          "timestamp": "2026-10-24T17:32:18+09:00",
+          "tree_id": "082f3dabecbf8e70acd1a158154225356a8f9bd4",
+          "url": "https://github.com/wado-lang/wado/commit/d2733c3d4a35c870b266a6df6da3e3869760d586"
+        },
+        "date": 1792831935670,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
