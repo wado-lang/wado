@@ -613,9 +613,9 @@ test {
 
 ### Trait Bounds on `!`
 
-`!` and a newtype over it implement every trait, and no `impl` is written for
-either, an inherent one included. No value of the type exists, so no method
-called on one can run:
+`!` and a newtype over it implement every trait without an `impl`. An `impl`
+for either, an inherent one included, is an error. No value of the type exists,
+so no method called on one can run:
 
 - An associated type projected from `!` is `!`.
 - A method taking `self` is never called, since the receiver never exists.

@@ -2553,12 +2553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // never resolves it as a method call, so `mc.id` carries no annotations
         // — intentional, like the `tuple.len()` short-circuits on
         // `MethodDispatch`. Reify re-detects the pattern from `for_of.iterable`.
-        let (actual_iterable, is_enumerate) = match &for_of.iterable {
-            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            _ => (&for_of.iterable, false),
-        };
+        let (actual_iterable, is_enumerate) = Self::split_enumerate(&for_of.iterable);
 
         // Resolve the iterable to determine its type
         let iterable_type_id = self.resolve_expr(actual_iterable, ctx, None);
