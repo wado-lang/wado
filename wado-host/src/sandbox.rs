@@ -309,10 +309,10 @@ impl Child {
             // The leader exited and every member is gone; nothing to signal.
             // Darwin answers EPERM instead when the group holds only zombies,
             // as it does while `wait` keeps the leader unreaped.
-            let nothing_to_signal = if cfg!(target_os = "macos") {
-                [Some(libc::ESRCH), Some(libc::EPERM)].contains(&err.raw_os_error())
-            } else {
-                err.raw_os_error() == Some(libc::ESRCH)
+            let nothing_to_signal = match err.raw_os_error() {
+                Some(libc::ESRCH) => true,
+                Some(libc::EPERM) => cfg!(target_os = "macos"),
+                _ => false,
             };
             if nothing_to_signal {
                 return Ok(());
