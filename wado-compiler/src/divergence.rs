@@ -145,7 +145,7 @@ pub(crate) fn expr_always_exits(types: &impl ExprTypes, expr: &ast::Expr) -> boo
         ast::Expr::FieldAccess(f) => exits(&f.expr),
         ast::Expr::TryOp(t) => exits(&t.expr),
         ast::Expr::Spread(inner, _) => exits(inner),
-        ast::Expr::Assign(a) => exits(&a.target) || exits(&a.value),
+        ast::Expr::Assign(a) => a.places().iter().any(exits) || exits(&a.value),
         ast::Expr::CompoundAssign(a) => exits(&a.target) || exits(&a.value),
         ast::Expr::ComparisonChain(c) => {
             exits(&c.first) || c.comparisons.iter().any(|cmp| exits(&cmp.right))
