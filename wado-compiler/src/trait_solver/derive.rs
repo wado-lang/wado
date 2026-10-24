@@ -468,10 +468,7 @@ mod tests {
         p.push_impl(concrete(ORD, decl(POINT)));
         let derived = vec![concrete(EQ, decl(POINT)), concrete(EQ, decl(WRAPPER))];
         derive_alongside(&mut p, ORD, derived);
-        let targets: Vec<SolverType> = p
-            .impls_of(ORD)
-            .map(|(_, def)| def.target.clone())
-            .collect();
+        let targets: Vec<SolverType> = p.impls_of(ORD).map(|(_, def)| def.target.clone()).collect();
         assert_eq!(targets, vec![decl(POINT), decl(WRAPPER)]);
     }
 
