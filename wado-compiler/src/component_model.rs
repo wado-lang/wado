@@ -1216,6 +1216,13 @@ pub fn cm_function_key(cm_import: &CmImport, operation: &str) -> String {
     )
 }
 
+/// [`cm_function_key`] read off the `#[cm]` payload `cm_name`; `None` when it
+/// names no CM import.
+#[must_use]
+pub fn cm_payload_function_key(cm_name: &str, operation: &str) -> Option<String> {
+    Some(cm_function_key(&CmImport::parse(cm_name)?, operation))
+}
+
 fn cm_function_name(cm_import: &CmImport, operation: &str) -> String {
     cm_import
         .function
@@ -3630,11 +3637,10 @@ impl CmInterfaceRegistry {
         cm_name: Option<&str>,
         operation: &str,
     ) -> Option<String> {
-        let cm_import = match cm_name {
-            Some(cm_name) => CmImport::parse(cm_name)?,
-            None => self.guest_effects.get(&owner)?.clone(),
-        };
-        Some(cm_function_key(&cm_import, operation))
+        match cm_name {
+            Some(cm_name) => cm_payload_function_key(cm_name, operation),
+            None => Some(cm_function_key(self.guest_effects.get(&owner)?, operation)),
+        }
     }
 
     /// Get all interfaces that need to be imported

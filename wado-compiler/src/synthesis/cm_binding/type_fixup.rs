@@ -4,9 +4,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{CmImport, Type};
+use crate::ast::Type;
 use crate::call_args::CallArgs;
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, cm_function_key};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, cm_payload_function_key};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -540,10 +540,7 @@ impl<'a> CmCallSites<'a> {
             return Some((key.clone(), CmCallKind::Function));
         }
         let info = func.method_info.as_ref()?;
-        let key = cm_function_key(
-            &CmImport::parse(info.cm_name.as_deref()?)?,
-            &info.method_name,
-        );
+        let key = cm_payload_function_key(info.cm_name.as_deref()?, &info.method_name)?;
         let kind = match expr.kind.as_method_call() {
             Some(_) => CmCallKind::Method,
             None => CmCallKind::Function,

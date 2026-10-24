@@ -4,10 +4,10 @@
 //! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
-use crate::ast::{CmImport, RestClause, Visibility};
+use crate::ast::{RestClause, Visibility};
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_function_key;
+use crate::component_model::cm_payload_function_key;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -2114,10 +2114,10 @@ fn wrap_async_result(
     span: token::Span,
 ) -> TirExpr {
     // The elaborator rejects a handler impl for a user-defined async effect.
-    let cm_import = op
+    let cm_function = op
         .cm_name
         .as_deref()
-        .and_then(CmImport::parse)
+        .and_then(|cm_name| cm_payload_function_key(cm_name, &op.name))
         .expect("a handled async operation binds a CM import");
     let (wrap_args, prelude) = if method_ret == TypeTable::UNIT {
         (
@@ -2131,7 +2131,7 @@ fn wrap_async_result(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: cm_wrap_async_func_name(&cm_function_key(&cm_import, &op.name)),
+                name: cm_wrap_async_func_name(&cm_function),
                 template: None,
                 monomorph_info: None,
                 method_info: None,

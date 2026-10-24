@@ -2179,6 +2179,11 @@ impl CmImport {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 
+    /// The interface name as a `use` writes it: `"wasi:cli/stdout@0.3.0"`.
+    pub fn interface_path_as_written(&self) -> String {
+        StrLit::new(self.interface_path()).as_written()
+    }
+
     /// Whether `name`, an interface name written in a `use`, names this
     /// interface: a name without a version names it at any version.
     pub fn is_named_by(&self, name: &CmImport) -> bool {

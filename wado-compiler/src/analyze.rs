@@ -7,8 +7,8 @@
 
 use crate::ast::{
     AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes,
-    InterfaceDecl, Item, Module, StrLit, UseDecl, UseItem, UseNameSpelling, Visibility,
-    WorldExport, cm_import_of, for_each_function, walk_generic_params, walk_item,
+    InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
+    cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -1262,7 +1262,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             if iface.name == interface_basename(cm) {
                                 format!("{}::{op}", iface.name)
                             } else {
-                                StrLit::new(cm.interface_path()).as_written()
+                                cm.interface_path_as_written()
                             }
                         })
                         .collect();
@@ -1289,7 +1289,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     sharing
                         .entry(basename)
                         .or_default()
-                        .push(StrLit::new(cm.interface_path()).as_written());
+                        .push(cm.interface_path_as_written());
                 }
             }
         }
@@ -1448,10 +1448,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 candidates: several
                     .iter()
                     .map(|(_, symbol)| {
-                        let cm = symbol
+                        symbol
                             .cm_import()
-                            .expect("an interface found by its `#[cm]`");
-                        StrLit::new(cm.interface_path()).as_written()
+                            .expect("an interface found by its `#[cm]`")
+                            .interface_path_as_written()
                     })
                     .collect(),
                 span,
