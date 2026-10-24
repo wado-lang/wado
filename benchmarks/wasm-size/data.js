@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792802222507,
+  "lastUpdate": 1792807617702,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69973,6 +69973,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/77fd89e096a8a49c34e96acd597e789e726cf024"
         },
         "date": 1792802221609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e24d3459dc1213f53a7ffcf185d3242ffe4f07c1",
+          "message": "Merge pull request #2434 from wado-lang/ccr-203ccd8a-ne0i2h\n\nchore(mise): lock every dev tool at its latest release",
+          "timestamp": "2026-10-24T10:46:48+09:00",
+          "tree_id": "39343e341ab476950f895cb153c66ad946231847",
+          "url": "https://github.com/wado-lang/wado/commit/e24d3459dc1213f53a7ffcf185d3242ffe4f07c1"
+        },
+        "date": 1792807617223,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
