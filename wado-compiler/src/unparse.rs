@@ -15,8 +15,8 @@ use crate::ast::{
     RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField,
     StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
     TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -788,8 +788,19 @@ impl<'a> Unparser<'a> {
 
     fn unparse_use_item(&mut self, item: &UseItem) {
         match item {
-            UseItem::Simple { name, alias, .. } => {
-                self.output.push_str(name);
+            UseItem::Simple {
+                name,
+                spelling,
+                alias,
+                ..
+            } => {
+                match spelling {
+                    UseNameSpelling::Ident => self.output.push_str(name),
+                    UseNameSpelling::InterfaceName(_) => {
+                        self.output
+                            .push_str(&StrLit::new(name.as_str()).as_written());
+                    }
+                }
                 if let Some(alias) = alias {
                     self.output.push_str(" as ");
                     self.output.push_str(alias);

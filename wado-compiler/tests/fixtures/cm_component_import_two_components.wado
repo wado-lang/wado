@@ -1,0 +1,9 @@
+// Two components composed into one program, each providing its own world
+// function.
+use { twin } from "./sub/wasm_import_cm_world_twin_a.wat" with { type: "wat" };
+use { other } from "./sub/wasm_import_cm_world_other.wat" with { type: "wat" };
+
+test {
+    assert twin() == 1;
+    assert other() == 3;
+}

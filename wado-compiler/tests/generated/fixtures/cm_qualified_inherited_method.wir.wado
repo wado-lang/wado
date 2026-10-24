@@ -11,20 +11,20 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//wasi/wasi:demo/EventTarget::tag" = fn(f64, i32);  // TypeId(3)
+type "functype//wasi/$wasi:demo/events@0.1.0#tag" = fn(f64, i32);  // TypeId(3)
 
-type "functype//cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(4)
+type "functype//cm_qualified_inherited_method.wado/$cm_binding__wasi:demo/events@0.1.0#tag" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(4)
 
 type "functype//cm_qualified_inherited_method.wado/$cm_export__run" = fn();  // TypeId(5)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/EventTarget::tag from "wasi/wasi:demo/EventTarget::tag";
+import fn wasi/$wasi:demo/events@0.1.0#tag from "wasi/$wasi:demo/events@0.1.0#tag";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with EventTarget {
+fn "cm_qualified_inherited_method.wado/$cm_binding__wasi:demo/events@0.1.0#tag"(self) with EventTarget {
     let $outptr: i32;
     let $str_ptr: i32;
     let $str_len: i32;
@@ -32,7 +32,7 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
     let arr_10: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:demo/EventTarget::tag"(builtin::f64_reinterpret_i64(self), $outptr);
+    "wasi/$wasi:demo/events@0.1.0#tag"(builtin::f64_reinterpret_i64(self), $outptr);
     $str_ptr = builtin::load_i32($outptr);
     arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
     i = 0;
@@ -53,7 +53,7 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
 }
 
 fn "cm_qualified_inherited_method.wado/$cm_export__run"() {
-    drop("cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(builtin::i64_reinterpret_f64(1)));
+    drop("cm_qualified_inherited_method.wado/$cm_binding__wasi:demo/events@0.1.0#tag"(builtin::i64_reinterpret_f64(1)));
     "wasi/task-return"(0);
 }
 

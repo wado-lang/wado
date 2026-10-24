@@ -18,6 +18,7 @@ pub mod reach;
 pub mod retention;
 pub mod synthesize;
 
+use crate::compiler_host::{SpanEmitter, in_span};
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -27,7 +28,7 @@ use crate::tir::{
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
     TypeId,
 };
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -178,44 +179,61 @@ pub fn plan(
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
+    profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
     // registered the rest.
     register_type_templates(flat);
-    let seed = analyze::collect_seed_types(flat);
-    let helpers = synthesize::synthesize_helpers(flat, seed);
+    let seed = in_span(profiler, "lower/value_copy/seed", || {
+        analyze::collect_seed_types(flat)
+    });
+    let helpers = in_span(profiler, "lower/value_copy/synthesize", || {
+        synthesize::synthesize_helpers(flat, seed)
+    });
     // Built after synthesis so the value-copy helpers (always owned) are present
     // in `flat.functions`, and shared: every summary below is a monotone
     // backward fixpoint over the same edges.
-    let call_graph = callgraph::CallGraph::build(flat);
-    let closure_captures = reach::ClosureCaptures::collect(flat);
-    let retained = retention::compute_retention(flat, &call_graph, &builtins, &closure_captures);
+    let call_graph = in_span(profiler, "lower/value_copy/callgraph", || {
+        callgraph::CallGraph::build(flat)
+    });
+    let closure_captures = in_span(profiler, "lower/value_copy/closure_captures", || {
+        reach::ClosureCaptures::collect(flat)
+    });
+    let retained = in_span(profiler, "lower/value_copy/retention", || {
+        retention::compute_retention(flat, &call_graph, &builtins, &closure_captures)
+    });
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
     // without the gate breaks the knot.
-    let seed_conventions = ownership::compute_return_conventions(
-        flat,
-        &call_graph,
-        &place::ReturnPaths::default(),
-        &builtins,
-        &retained.calls,
-        &confined_params,
-    );
-    let return_paths = place::compute_return_paths(
-        flat,
-        &call_graph,
-        &flat.type_table.borrow(),
-        &seed_conventions.returns_owned,
-        &builtins,
-    );
-    let conventions = ownership::compute_return_conventions(
-        flat,
-        &call_graph,
-        &return_paths,
-        &builtins,
-        &retained.calls,
-        &confined_params,
-    );
+    let seed_conventions = in_span(profiler, "lower/value_copy/conventions", || {
+        ownership::compute_return_conventions(
+            flat,
+            &call_graph,
+            &place::ReturnPaths::default(),
+            &builtins,
+            &retained.calls,
+            &confined_params,
+        )
+    });
+    let return_paths = in_span(profiler, "lower/value_copy/return_paths", || {
+        place::compute_return_paths(
+            flat,
+            &call_graph,
+            &flat.type_table.borrow(),
+            &seed_conventions.returns_owned,
+            &builtins,
+        )
+    });
+    let conventions = in_span(profiler, "lower/value_copy/conventions", || {
+        ownership::compute_return_conventions(
+            flat,
+            &call_graph,
+            &return_paths,
+            &builtins,
+            &retained.calls,
+            &confined_params,
+        )
+    });
     let list_index_assign = match flat
         .type_table
         .borrow()
@@ -242,24 +260,29 @@ pub fn plan(
             f.params.iter().map(|p| p.is_mut_ref).collect(),
         );
     }
-    let returns_receiver_alias = ownership::compute_receiver_alias(
-        flat,
-        &call_graph,
-        &return_paths,
-        &flat.type_table.borrow(),
-        &builtins,
-    );
+    let returns_receiver_alias = in_span(profiler, "lower/value_copy/receiver_alias", || {
+        ownership::compute_receiver_alias(
+            flat,
+            &call_graph,
+            &return_paths,
+            &flat.type_table.borrow(),
+            &builtins,
+        )
+    });
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
-    let mod_ref =
-        modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned, &builtins);
-    let observed_fields = observed::compute(
-        flat,
-        &retained.calls,
-        &mod_ref,
-        &ref_receiver_methods,
-        &closure_captures,
-    );
+    let mod_ref = in_span(profiler, "lower/value_copy/mod_ref", || {
+        modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned, &builtins)
+    });
+    let observed_fields = in_span(profiler, "lower/value_copy/observed", || {
+        observed::compute(
+            flat,
+            &retained.calls,
+            &mod_ref,
+            &ref_receiver_methods,
+            &closure_captures,
+        )
+    });
     ValueCopyPlan {
         helpers,
         mod_ref,
@@ -343,6 +366,30 @@ pub fn is_scalar_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// emits a non-identity helper, and every caller routes through it.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     needs_copy_in_env(type_id, None, type_table, 0)
+}
+
+/// [`needs_value_copy`], remembered for each type over one borrow of the type
+/// table: no mutation outlives the borrow, so no answer goes stale. A walk
+/// asks it of every expression, and each answer walks the type's members.
+pub struct CopyNeeds<'a> {
+    pub type_table: &'a TypeTable,
+    answers: TypeMemo<bool>,
+}
+
+impl<'a> CopyNeeds<'a> {
+    pub fn new(type_table: &'a TypeTable) -> Self {
+        Self {
+            type_table,
+            answers: TypeMemo::default(),
+        }
+    }
+
+    pub fn of(&self, type_id: TypeId) -> bool {
+        self.answers
+            .get_or_compute(self.type_table.type_key(type_id), || {
+                needs_value_copy(type_id, self.type_table)
+            })
+    }
 }
 
 /// The instantiation environment a template-term payload id resolves its

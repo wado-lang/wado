@@ -294,27 +294,27 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(31)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/wado-lang:web/Document::create_element" = fn(f64, i32, i32, i32, i32, i32) -> f64;  // TypeId(33)
+type "functype//wasi/$wado-lang:web/document#create-element" = fn(f64, i32, i32, i32, i32, i32) -> f64;  // TypeId(33)
 
-type "functype//wasi/wado-lang:web/Document::get_element_by_id" = fn(f64, i32, i32, i32);  // TypeId(34)
+type "functype//wasi/$wado-lang:web/document#get-element-by-id" = fn(f64, i32, i32, i32);  // TypeId(34)
 
-type "functype//wasi/wado-lang:web/Dom::document" = fn() -> f64;  // TypeId(35)
+type "functype//wasi/$wado-lang:web/global#document" = fn() -> f64;  // TypeId(35)
 
-type "functype//wasi/wado-lang:web/HtmlInputElement::value" = fn(f64, i32);  // TypeId(36)
+type "functype//wasi/$wado-lang:web/html-input-element#value" = fn(f64, i32);  // TypeId(36)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(37)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(37)
 
 type "functype//type_pattern_narrowing_holds_target.wado/from_effect" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
 type "functype//type_pattern_narrowing_holds_target.wado/$effect_dispatch__dep:../../../package-web/src/dom.wado/HtmlInputElement__value" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(39)
 
-type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__Dom_document" = fn() -> u64;  // TypeId(40)
+type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/global#document" = fn() -> u64;  // TypeId(40)
 
-type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__Document_create_element" = fn(u64, ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String") -> u64;  // TypeId(41)
+type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#create-element" = fn(u64, ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String") -> u64;  // TypeId(41)
 
-type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_by_id" = fn(u64, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>";  // TypeId(42)
+type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#get-element-by-id" = fn(u64, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>";  // TypeId(42)
 
-type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(43)
+type "functype//type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/html-input-element#value" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(43)
 
 type "functype//type_pattern_narrowing_holds_target.wado/$cm_callback__call" = fn(u32);  // TypeId(44)
 
@@ -404,11 +404,11 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wado-lang:web/Document::create_element from "wasi/wado-lang:web/Document::create_element";
-import fn wasi/wado-lang:web/Document::get_element_by_id from "wasi/wado-lang:web/Document::get_element_by_id";
-import fn wasi/wado-lang:web/Dom::document from "wasi/wado-lang:web/Dom::document";
-import fn wasi/wado-lang:web/HtmlInputElement::value from "wasi/wado-lang:web/HtmlInputElement::value";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wado-lang:web/document#create-element from "wasi/$wado-lang:web/document#create-element";
+import fn wasi/$wado-lang:web/document#get-element-by-id from "wasi/$wado-lang:web/document#get-element-by-id";
+import fn wasi/$wado-lang:web/global#document from "wasi/$wado-lang:web/global#document";
+import fn wasi/$wado-lang:web/html-input-element#value from "wasi/$wado-lang:web/html-input-element#value";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -445,7 +445,7 @@ fn "type_pattern_narrowing_holds_target.wado/from_effect"() with Dom {
                 global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/Dom = $local_0;
                 break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_1: $local_2_10;
             } else {
-                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_1: "type_pattern_narrowing_holds_target.wado/$cm_binding__Dom_document"();
+                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_1: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/global#document"();
             }
             unreachable;
         };
@@ -459,7 +459,7 @@ fn "type_pattern_narrowing_holds_target.wado/from_effect"() with Dom {
             global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/Document = $local_2_5;
             break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__get_element_by_id_0: $local_4;
         } else {
-            break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__get_element_by_id_0: "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_by_id"($local_2_10, element_id);
+            break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__get_element_by_id_0: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#get-element-by-id"($local_2_10, element_id);
         }
         unreachable;
     })) {
@@ -476,7 +476,7 @@ fn "type_pattern_narrowing_holds_target.wado/from_effect"() with Dom {
                     global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/HtmlInputElement = $local_1_12;
                     break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_2: element_id;
                 } else {
-                    break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_2: "type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value"($local_2_10);
+                    break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_2: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/html-input-element#value"($local_2_10);
                 }
                 unreachable;
             };
@@ -502,15 +502,15 @@ fn "type_pattern_narrowing_holds_target.wado/$effect_dispatch__dep:../../../pack
         global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/HtmlInputElement = $saved;
         return v;
     } else {
-        return "type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value"(self);
+        return "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/html-input-element#value"(self);
     }
 }
 
-fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Dom_document"() with Dom {
-    return builtin::i64_reinterpret_f64("wasi/wado-lang:web/Dom::document"());
+fn "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/global#document"() with Dom {
+    return builtin::i64_reinterpret_f64("wasi/$wado-lang:web/global#document"());
 }
 
-fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_create_element"(self, local_name, options) with Document {
+fn "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#create-element"(self, local_name, options) with Document {
     let $local_name_packed: i64;
     let $local_9: i64;
     let bytes_12: ref Array<u8>;
@@ -548,10 +548,10 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_create_elemen
         i_20 = builtin::i32_wrap_i64($local_9 >> 32_i64);
     } else {
     }
-    return builtin::i64_reinterpret_f64("wasi/wado-lang:web/Document::create_element"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($local_name_packed), builtin::i32_wrap_i64($local_name_packed >> 32_i64), self_14, ptr_13, i_20));
+    return builtin::i64_reinterpret_f64("wasi/$wado-lang:web/document#create-element"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($local_name_packed), builtin::i32_wrap_i64($local_name_packed >> 32_i64), self_14, ptr_13, i_20));
 }
 
-fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_by_id"(self, element_id) with Document {
+fn "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#get-element-by-id"(self, element_id) with Document {
     let $element_id_packed: i64;
     let $option_result: ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>";
     let bytes: ref Array<u8>;
@@ -572,7 +572,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_b
     };
     $element_id_packed = builtin::i64_extend_i32_u(ptr_9) | (builtin::i64_extend_i32_s(self_10) << 32_i64);
     self_10 = "mem/realloc"(0, 0, 8, 16);
-    "wasi/wado-lang:web/Document::get_element_by_id"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($element_id_packed), builtin::i32_wrap_i64($element_id_packed >> 32_i64), self_10);
+    "wasi/$wado-lang:web/document#get-element-by-id"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($element_id_packed), builtin::i32_wrap_i64($element_id_packed >> 32_i64), self_10);
     ptr_9 = builtin::load_u8(self_10);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>$0;
     if ptr_9 != 0 {
@@ -582,7 +582,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_b
     return $option_result;
 }
 
-fn "type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value"(self) with HtmlInputElement {
+fn "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/html-input-element#value"(self) with HtmlInputElement {
     let $outptr: i32;
     let $str_ptr: i32;
     let $str_len: i32;
@@ -590,7 +590,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value
     let arr_10: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wado-lang:web/HtmlInputElement::value"(builtin::f64_reinterpret_i64(self), $outptr);
+    "wasi/$wado-lang:web/html-input-element#value"(builtin::f64_reinterpret_i64(self), $outptr);
     $str_ptr = builtin::load_i32($outptr);
     arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
     i = 0;
@@ -689,7 +689,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_export__run"() {
             global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/Dom = $local_0;
             break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_3: $local_2_3;
         } else {
-            break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_3: "type_pattern_narrowing_holds_target.wado/$cm_binding__Dom_document"();
+            break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Dom__document_3: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/global#document"();
         }
         unreachable;
     };
@@ -705,7 +705,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_export__run"() {
                 global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/HtmlInputElement = $local_1_7;
                 break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_5: v;
             } else {
-                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_5: "type_pattern_narrowing_holds_target.wado/$cm_binding__HtmlInputElement_value"($local_2_3);
+                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_HtmlInputElement__value_5: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/html-input-element#value"($local_2_3);
             }
             unreachable;
         };
@@ -724,7 +724,7 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_export__run"() {
                 global:type_pattern_narrowing_holds_target.wado::$effect_dep:../../../package-web/src/dom.wado/Document = $local_3_16;
                 break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__create_element_8: $local_5;
             } else {
-                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__create_element_8: "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_create_element"($local_2_3, v, ref.null none);
+                break $inline__effect_dispatch__dep__________package_web_src_dom_wado_Document__create_element_8: "type_pattern_narrowing_holds_target.wado/$cm_binding__wado-lang:web/document#create-element"($local_2_3, v, ref.null none);
             }
             unreachable;
         };
@@ -912,7 +912,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

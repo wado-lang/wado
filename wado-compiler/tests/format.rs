@@ -1976,6 +1976,17 @@ fn test_format_use_multiple_items() {
 }
 
 #[test]
+fn test_format_use_keeps_a_string_named_import() {
+    let source = r#"use {"wasi:cli/stdout@0.3.0" as Out,println} from "wasi:cli";"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "use { \"wasi:cli/stdout@0.3.0\" as Out, println } from \"wasi:cli\";\n"
+    );
+    assert_format_preserves_ast(&formatted);
+}
+
+#[test]
 fn test_format_indentation() {
     let source = r"
 fn run() {

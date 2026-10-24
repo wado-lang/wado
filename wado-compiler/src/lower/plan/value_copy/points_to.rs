@@ -20,12 +20,11 @@
 //! The solve collapses each cycle of copies into one node, as every node on it
 //! ends with one set, and merges a node fed by one copy alone into its source.
 
-use std::cell::RefCell;
 use std::ops::Range;
 
 mod loc_set;
 
-pub use loc_set::LocSet;
+use loc_set::{Loc, LocSet};
 
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
@@ -44,7 +43,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{TypeKey, TypeMemo, TypeTable};
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.
@@ -58,7 +57,10 @@ pub struct PointsTo {
     locals: IndexMap<(Frame, u32), u32>,
     /// The frame and local each location node is, the inverse of `locals`.
     owners: IndexMap<u32, (Frame, u32)>,
+    /// Each node's set, holding locations by their index in `locations`.
     pts: Vec<LocSet>,
+    /// The node of each location, ascending.
+    locations: Vec<u32>,
     /// The node whose entry in `pts` each node's set is, flattened.
     rep: DisjointSets,
     /// The node the value each call argument hands its callee flows from, and
@@ -90,9 +92,25 @@ fn site_of(sites: &IndexMap<usize, (u32, Span)>, expr: &TirExpr) -> u32 {
     node
 }
 
+/// A node's set: the location nodes it holds, ascending.
+#[derive(Clone, Copy)]
+pub struct Locations<'a> {
+    set: &'a LocSet,
+    nodes: &'a [u32],
+}
+
+impl<'a> Locations<'a> {
+    pub fn iter(self) -> impl Iterator<Item = u32> + 'a {
+        self.set.iter().map(|Loc(index)| self.nodes[index as usize])
+    }
+}
+
 impl PointsTo {
-    fn set(&self, node: u32) -> &LocSet {
-        &self.pts[self.rep.root(node) as usize]
+    fn set(&self, node: u32) -> Locations<'_> {
+        Locations {
+            set: &self.pts[self.rep.root(node) as usize],
+            nodes: &self.locations,
+        }
     }
 
     /// The frame of the function `module`/`name`, `None` for one the analysis
@@ -149,13 +167,13 @@ impl PointsTo {
     /// value reaches where that holds a writable handle, and its own where a
     /// `&mut` parameter references it.
     #[must_use]
-    pub fn handed(&self, arg: &TirExpr) -> &LocSet {
+    pub fn handed(&self, arg: &TirExpr) -> Locations<'_> {
         self.set(site_of(&self.handed, arg))
     }
 
     /// The storage an assignment to, or a reference to, `place` denotes.
     #[must_use]
-    pub fn written(&self, place: &TirExpr) -> &LocSet {
+    pub fn written(&self, place: &TirExpr) -> Locations<'_> {
         self.set(site_of(&self.written, place))
     }
 
@@ -228,7 +246,7 @@ struct HoldsHandle<'a> {
     type_table: &'a TypeTable,
     fields: &'a StructFields,
     handle: Handle,
-    known: RefCell<IndexMap<TypeKey, bool>>,
+    known: TypeMemo<bool>,
 }
 
 impl<'a> HoldsHandle<'a> {
@@ -237,18 +255,14 @@ impl<'a> HoldsHandle<'a> {
             type_table,
             fields,
             handle,
-            known: RefCell::default(),
+            known: TypeMemo::default(),
         }
     }
 
     fn of(&self, ty: TypeId) -> bool {
-        let key = self.type_table.type_key(ty);
-        if let Some(&known) = self.known.borrow().get(&key) {
-            return known;
-        }
-        let answer = self.walk(ty, None, &mut IndexSet::default(), 0);
-        self.known.borrow_mut().insert(key, answer);
-        answer
+        self.known.get_or_compute(self.type_table.type_key(ty), || {
+            self.walk(ty, None, &mut IndexSet::default(), 0)
+        })
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -444,7 +458,15 @@ struct Carried {
 
 #[derive(Default)]
 struct Graph {
+    /// Each set holds locations by their index in `locations`: about one node
+    /// in ten is a location, so numbered apart they pack into dense words.
     pts: Vec<LocSet>,
+    /// The node of each location.
+    locations: Vec<u32>,
+    /// Each node's index in `locations`, where it is one.
+    location_of: Vec<Option<Loc>>,
+    /// Whether `solve` has put `locations` in node order.
+    numbered: bool,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
     rep: DisjointSets,
@@ -484,6 +506,7 @@ impl Graph {
         self.stores.push(Vec::new());
         self.sites.push(Vec::new());
         self.delta.push(LocSet::default());
+        self.location_of.push(None);
         id
     }
 
@@ -491,8 +514,7 @@ impl Graph {
         let callee = self.find(callee);
         self.sites[callee as usize].push(site);
         let at = self.sites[callee as usize].len() - 1;
-        let locs: Vec<u32> = self.pts[callee as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(callee) {
             self.bind(callee, at, loc);
         }
     }
@@ -536,11 +558,29 @@ impl Graph {
         self.rep.find(node)
     }
 
+    /// The location nodes in the set of `node`, a representative.
+    fn locations_in(&self, node: u32) -> Vec<u32> {
+        Locations {
+            set: &self.pts[node as usize],
+            nodes: &self.locations,
+        }
+        .iter()
+        .collect()
+    }
+
     fn add(&mut self, node: u32, loc: u32) {
         let node = self.find(node);
         if self.inert.contains(&node) {
             return;
         }
+        let loc = *self.location_of[loc as usize].get_or_insert_with(|| {
+            assert!(
+                !self.numbered,
+                "every location must be met before solve numbers them"
+            );
+            self.locations.push(loc);
+            Loc(u32::try_from(self.locations.len() - 1).expect("location count fits u32"))
+        });
         if self.pts[node as usize].insert(loc) {
             if self.delta[node as usize].is_empty() {
                 self.work.push(node);
@@ -584,8 +624,7 @@ impl Graph {
     fn load(&mut self, from: u32, to: u32) {
         let from = self.find(from);
         self.loads[from as usize].push(to);
-        let locs: Vec<u32> = self.pts[from as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(from) {
             self.copy(loc, to);
         }
     }
@@ -593,8 +632,7 @@ impl Graph {
     fn store(&mut self, into: u32, from: u32) {
         let into = self.find(into);
         self.stores[into as usize].push(from);
-        let locs: Vec<u32> = self.pts[into as usize].iter().collect();
-        for loc in locs {
+        for loc in self.locations_in(into) {
             self.copy(from, loc);
         }
     }
@@ -607,9 +645,7 @@ impl Graph {
         // location (a store writes it), what a load or a call feeds, and what
         // a location is added to.
         let mut fed: IndexSet<u32> = self.inert.clone();
-        for set in &self.pts {
-            fed.extend(set.iter());
-        }
+        fed.extend(self.locations.iter().copied());
         fed.extend(self.loads.iter().flatten().copied());
         for (&loc, target) in &self.targets {
             fed.insert(loc);
@@ -707,6 +743,7 @@ impl Graph {
     /// Point the edges `root` took from the nodes it absorbed at
     /// representatives, and carry along each merged node's own edges what they
     /// had not carried: the merged set's locations it lacked, and its delta.
+    /// Where it lacked any, its copies take the whole merged set.
     fn settle(&mut self, root: u32) {
         let r = root as usize;
         let merged_copy_to = std::mem::take(&mut self.copy_to[r]);
@@ -732,6 +769,9 @@ impl Graph {
                 missing
             })
             .collect();
+        // Many merged nodes copy into one target, so each target lacking
+        // anything takes the whole set once, not each node's missing apiece.
+        let mut lacking: IndexSet<u32> = IndexSet::default();
         for (c, missing) in carried.into_iter().zip(missing) {
             if missing.is_empty() {
                 continue;
@@ -740,17 +780,23 @@ impl Graph {
             for &to in &merged_copy_to[c.edges.copy_to] {
                 let to = self.find(to);
                 if to != root {
-                    self.add_all(to, &missing);
+                    lacking.insert(to);
                 }
             }
         }
+        let pts = std::mem::take(&mut self.pts[r]);
+        for to in lacking {
+            self.add_all(to, &pts);
+        }
+        self.pts[r] = pts;
     }
 
     /// Carry `locs`, new in `node`'s set, along the loads, stores and calls of
     /// `edges`; its copies are left to the caller.
     fn carry(&mut self, node: u32, locs: &LocSet, edges: &Edges) {
         let n = node as usize;
-        for loc in locs.iter() {
+        for Loc(index) in locs.iter() {
+            let loc = self.locations[index as usize];
             for i in edges.loads.clone() {
                 let to = self.loads[n][i];
                 self.copy(loc, to);
@@ -765,7 +811,33 @@ impl Graph {
         }
     }
 
+    /// Renumber the locations in the order of their nodes, so each set lists
+    /// its locations in node order however the build met them.
+    fn number_locations_in_node_order(&mut self) {
+        self.locations.sort_unstable();
+        let mut renumbered = vec![Loc(0); self.locations.len()];
+        for (index, &node) in (0..).zip(&self.locations) {
+            let at = &mut self.location_of[node as usize];
+            let Loc(old) = at.expect("each location has an index");
+            renumbered[old as usize] = Loc(index);
+            *at = Some(Loc(index));
+        }
+        for set in self.pts.iter_mut().chain(&mut self.delta) {
+            if set.is_empty() {
+                continue;
+            }
+            let mut locs: Vec<Loc> = set
+                .iter()
+                .map(|Loc(old)| renumbered[old as usize])
+                .collect();
+            locs.sort_unstable();
+            *set = locs.into_iter().collect();
+        }
+        self.numbered = true;
+    }
+
     fn solve(&mut self) {
+        self.number_locations_in_node_order();
         self.substitute();
         while let Some(node) = self.work.pop() {
             if self.find(node) != node {
@@ -853,13 +925,13 @@ impl Graph {
                     .iter()
                     .rposition(|&w| w == v)
                     .expect("a node leaves the stack only with its component");
-                let cycle: Vec<u32> = stack.drain(at..).collect();
-                for &w in &cycle {
+                for &w in &stack[at..] {
                     self.marks[w as usize].on_stack = false;
                 }
-                if cycle.len() > 1 {
-                    cycles.push(cycle);
+                if stack.len() - at > 1 {
+                    cycles.push(stack[at..].to_vec());
                 }
+                stack.truncate(at);
             }
         }
         for cycle in cycles {
@@ -1028,14 +1100,14 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
     let global_nodes: Vec<u32> = b.globals.values().copied().chain([b.escape]).collect();
     let mut rep = std::mem::take(&mut b.g.rep);
     rep.flatten();
-    let pts = std::mem::take(&mut b.g.pts);
     let locals = std::mem::take(&mut b.locals);
     let owners = locals.iter().map(|(&key, &node)| (node, key)).collect();
     let mut result = PointsTo {
         functions: FuncIndex::default(),
         locals,
         owners,
-        pts,
+        pts: std::mem::take(&mut b.g.pts),
+        locations: std::mem::take(&mut b.g.locations),
         rep,
         handed: std::mem::take(&mut b.handed),
         written: std::mem::take(&mut b.written),
@@ -1719,7 +1791,7 @@ mod tests {
         }
         for node in [v, w] {
             let node = g.find(node);
-            assert_eq!(g.pts[node as usize].iter().collect::<Vec<_>>(), [m]);
+            assert_eq!(g.locations_in(node), [m]);
         }
     }
 }
