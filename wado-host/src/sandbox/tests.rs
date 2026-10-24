@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::{
-    Access, Availability, Command, ExitStatus, Network, Policy, Stdio, availability, spawn,
+    Access, Availability, Command, ExitStatus, Network, Policy, Spawned, Stdio, availability, spawn,
 };
 
 const PROBE_VAR: &str = "WADO_SANDBOX_PROBE";
@@ -481,7 +481,7 @@ fn a_missing_program_reports_not_found() {
     assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::NotFound);
 }
 
-fn spawn_outside_the_grants(tree: &Tree) -> std::io::Result<super::Spawned> {
+fn spawn_outside_the_grants(tree: &Tree) -> std::io::Result<Spawned> {
     assert_available();
     let outside = write_script(&tree.outside());
     let policy = tree.policy(Network::Denied);
