@@ -1474,31 +1474,41 @@ impl<'a> Analyzer<'a> {
                 self.final_reads.push((read, index));
             }
         }
-        self.read_base(index, live, record);
-        live.insert(self.field_slots.whole(index));
+        self.read_base(index, None, live, record);
     }
 
     /// A read that hands on a projection rather than the local. The storage is
     /// read, so an earlier value-read is not final, but nothing takes the local.
-    /// The caller names which of its fields the read takes.
-    fn read_base(&mut self, index: u32, live: &mut IndexSet<u32>, record: bool) {
+    fn read_base(
+        &mut self,
+        index: u32,
+        field: Option<u32>,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
         if record && live.contains(&index) {
             self.non_final.insert(index);
         }
+        self.mark_read(index, field, live);
+    }
+
+    /// `index` is read here: the one `field` of it, or every field for `None`.
+    fn mark_read(&mut self, index: u32, field: Option<u32>, live: &mut IndexSet<u32>) {
         live.insert(index);
+        live.insert(match field {
+            Some(field) => self.field_slots.field(index, field),
+            None => self.field_slots.whole(index),
+        });
     }
 
     /// A place an expression is read *out of*. Move-side this is the read the
     /// default walk already made; share-side it consumes nothing.
     fn walk_place_base(&mut self, expr: &'a TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => {
-                self.read_base(*index, live, record);
-                live.insert(self.field_slots.whole(*index));
-            }
-            TirExprKind::FieldAccess { .. } if let Some((root, Some(top))) = as_materialize(expr) => {
-                self.read_base(root, live, record);
-                live.insert(self.field_slots.field(root, top));
+            TirExprKind::Local { .. } | TirExprKind::FieldAccess { .. }
+                if let Some((root, top)) = as_materialize(expr) =>
+            {
+                self.read_base(root, top, live, record);
             }
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
@@ -1554,14 +1564,10 @@ impl<'a> Analyzer<'a> {
         record: bool,
     ) -> Option<u32> {
         match &place.kind {
-            TirExprKind::Local { index, .. } => {
-                live.insert(*index);
-                live.insert(self.field_slots.whole(*index));
-                Some(*index)
-            }
-            TirExprKind::FieldAccess { .. } if let Some((root, Some(top))) = as_materialize(place) => {
-                live.insert(root);
-                live.insert(self.field_slots.field(root, top));
+            TirExprKind::Local { .. } | TirExprKind::FieldAccess { .. }
+                if let Some((root, top)) = as_materialize(place) =>
+            {
+                self.mark_read(root, top, live);
                 Some(root)
             }
             TirExprKind::FieldAccess { expr: inner, .. }
@@ -1578,8 +1584,7 @@ impl<'a> Analyzer<'a> {
                 if let Names::Place(projected) = self.resolver.names(place) =>
             {
                 self.walk_expr(place, live, record);
-                live.insert(projected.root);
-                live.insert(self.field_slots.whole(projected.root));
+                self.mark_read(projected.root, None, live);
                 Some(projected.root)
             }
             // A reference to a non-place (a fresh temporary) escapes nothing.
@@ -2616,7 +2621,12 @@ impl<'a> Analyzer<'a> {
     /// Live set where a `continue` resumes: the loop head's, what runs next
     /// being the next iteration rather than whatever follows the loop.
     fn continue_live(&mut self) -> IndexSet<u32> {
-        match self.exits.iter().rev().find_map(|e| e.continue_live.clone()) {
+        match self
+            .exits
+            .iter()
+            .rev()
+            .find_map(|e| e.continue_live.clone())
+        {
             Some(live) => live,
             None => self.every_local_live(),
         }
@@ -3104,8 +3114,7 @@ impl<'a> Analyzer<'a> {
             TirExprKind::Closure { captures, .. } => {
                 let sources: Vec<u32> = capture_source_locals(captures).collect();
                 for index in sources {
-                    live.insert(index);
-                    live.insert(self.field_slots.whole(index));
+                    self.mark_read(index, None, live);
                     if record {
                         self.mark_escaped(index, None);
                         self.mark_local_mutated(index, false, live);
