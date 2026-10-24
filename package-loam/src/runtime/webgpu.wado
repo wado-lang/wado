@@ -2760,6 +2760,7 @@ fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool) ->
         "";
     };
     let splits = LANES / ATTEND_PART;
+    assert splits * ATTEND_PART == LANES && splits & splits - 1 == 0, "a dot's parts add in halves";
     return `${buffers_wgsl(1 + max_of(bindings), null)}
 var<workgroup> query: array<f32, ${head}>;
 var<workgroup> partial: array<f32, ${LANES}>;
@@ -2823,7 +2824,6 @@ ${turning}        query[e] = turned;
             sc = softcap * tanh(sc / softcap);
         }
 ${biasing}    }
-    workgroupBarrier();
     if split == 0u {
         weights[lid / ${splits}u] = sc;
     }
@@ -2840,8 +2840,7 @@ ${biasing}    }
     workgroupBarrier();
     let at = flat * (d + 2u);
     let count = min(${ATTEND_PART}u, total - first);
-    let start = first;
-    let values = ${view_index_wgsl(23, ["b", "kh", "start"])};
+    let values = ${view_index_wgsl(23, ["b", "kh", "first"])};
     let next = bitcast<i32>(p[26]);
     let along = bitcast<i32>(p[27]);
     for (var e = lid; e < d; e += ${LANES}u) {
