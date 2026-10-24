@@ -1,0 +1,84 @@
+//! The `last` option: `forward` computes the last position alone, and returns
+//! what the whole graph computes there.
+
+use { Cpu, Tensor } from "lib:loam";
+use { assert_close } from "./oracle.wado";
+use { Batch, Embed, Seq, Vocab, Weights, forward } from "./last.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            options: {
+                layout: [
+                    { pattern: "X", axes: ["Batch", "Seq", "Embed"] },
+                    { pattern: "G", axes: ["Embed"] },
+                    { pattern: "W", axes: ["Embed", "Vocab"] },
+                ],
+                last: { Y: 1 },
+            },
+        },
+    };
+
+global X: List<f32> = [
+    0.5, -1.0, 2.0, 0.25, 1.5, 0.0, -0.5, 1.0, -2.0, 0.75, 1.25, -0.25,
+    1.0, 2.0, -1.5, 0.5, -0.75, 0.25, 1.75, -1.25, 0.0, -0.5, 1.5, 2.5,
+];
+global G: List<f32> = [1.0, 0.5, -1.0, 2.0];
+global W: List<f32> = [0.5, -1.0, 0.25, 1.0, 0.0, -0.5, -0.25, 1.5, 0.75, 2.0, -0.75, 1.0];
+
+/// What `last.onnxtext` computes at the last of `seq` positions, for each of
+/// `batch`, over `X`, `G` and `W` as declared above.
+fn last_rows(batch: i32, seq: i32) -> List<f32> {
+    let mut rows: List<f32> = [];
+    for let b of 0..<batch {
+        let at = |s: i32, e: i32| X[(b * seq + s) * 4 + e];
+        let mut a: List<f32> = [];
+        for let e of 0..<4 {
+            let mut sum = 0.0 as f32;
+            for let s of 0..<seq {
+                sum += f32::exp(at(s, e));
+            }
+            a.push(at(seq - 1, e) + f32::exp(at(seq - 1, e)) / sum);
+        }
+        let mut square = 0.0 as f32;
+        for let v of &a {
+            square += *v * *v;
+        }
+        let rms = f32::sqrt(square / 4.0);
+        for let v of 0..<3 {
+            let mut y = 0.0 as f32;
+            for let e of 0..<4 {
+                y += a[e] / rms * G[e] * W[e * 3 + v];
+            }
+            rows.push(y);
+        }
+    }
+    return rows;
+}
+
+fn run(batch: i32, seq: i32) -> Tensor<f32, [Batch, Seq, Vocab]> {
+    return forward(
+        &mut Cpu {},
+        &Tensor::<f32, [Batch, Seq, Embed]> { data: X[0..<batch * seq * 4].to_list(), extents: [batch, seq, 4] },
+        &Tensor::<f32, [Embed]> { data: G, extents: [4] },
+        &Tensor::<f32, [Embed, Vocab]> { data: W, extents: [4, 3] },
+        &Weights {}.prepare(&mut Cpu {}),
+    );
+}
+
+test "the last position is the one the whole graph computes there" {
+    let got = run(2, 3);
+    assert got.extents == [2, 1, 3];
+    assert_close(&got.data, &last_rows(2, 3));
+}
+
+test "one position is its own last" {
+    let got = run(2, 1);
+    assert got.extents == [2, 1, 3];
+    assert_close(&got.data, &last_rows(2, 1));
+}
+
+#[expect_trap]
+test "an empty sequence has no last position" {
+    run(2, 0);
+}

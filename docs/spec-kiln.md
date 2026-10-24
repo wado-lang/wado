@@ -189,7 +189,7 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, a map, a list of strings, and a flag.
+Loam's options hold a list of structs, two maps, a list of strings, and a flag.
 They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
@@ -203,6 +203,9 @@ export struct Options {
     pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],
+    /// Outputs `forward` returns only the last position of, each by the axis
+    /// it is cut along, so what computes the other positions is left out.
+    pub last: TreeMap<String, i32> = {},
     /// Whether operators fuse into one kernel where the plan finds they can.
     /// Off, every kernel writes its output, which is what a fused module is
     /// compared against.

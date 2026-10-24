@@ -861,7 +861,7 @@ fn infer_node(
         return flatten(node, &operand_at(node, shapes, 0), schema);
     }
     if op == "Slice" {
-        return sliced(node, &operand_at(node, shapes, 0), known, schema);
+        return sliced(node, &operand_at(node, shapes, 0), known, schema, owed);
     }
     if op == "ConstantOfShape" {
         return filled(node, known, schema, owed);
@@ -1147,11 +1147,28 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Sche
 }
 
 /// A `Slice` the run computes, since a bound or the data is only known then.
-/// An axis it narrows is new, for the output layout to name.
-fn sliced(node: &Node, x: &Shape, known: &HashMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
+/// An axis it narrows is new, for the output layout to name. One cut to one
+/// position no layout names keeps its name, as a reduction keeping its axis
+/// does, so the `last` option's cuts need no name. Where that position exists
+/// only for some inputs, as the last one of an axis that may be empty, the
+/// inputs owe it.
+fn sliced(
+    node: &Node,
+    x: &Shape,
+    known: &HashMap<String, Known>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     let mut axes = x.axes;
+    let named = schema.axes_for(&node.outputs[0]) matches { Some(_) };
     for let cut of slice_cuts(node, known, x)? {
+        if !named && let Some(conditions) = cut.extent.oneness() {
+            owed.extend(&conditions);
+            extents[cut.axis] = Extent::Static(1);
+            axes[cut.axis] = Axis { ..x.axes[cut.axis], extent: Extent::Static(1) };
+            continue;
+        }
         extents[cut.axis] = cut.extent;
         axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
     }
@@ -1880,7 +1897,7 @@ fn required_operands(op: &String) -> Option<i32> {
 }
 
 /// The operators whose output shape is their input's.
-fn is_unary_elementwise(op: &String) -> bool {
+pub fn is_unary_elementwise(op: &String) -> bool {
     return *op == "Identity" || *op == "Cast" || is_unary_operator(op);
 }
 

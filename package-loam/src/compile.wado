@@ -13,7 +13,7 @@ use { CheckpointFile, check_checkpoint, check_shards, placement, read_index } fr
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
-use { bind_dims, keep_outputs } from "./specialize.wado";
+use { bind_dims, keep_last, keep_outputs } from "./specialize.wado";
 
 /// The `generator.options` a `use ... with` site writes. See WEP 2026-09-20
 /// § "Axis Names Are Inferred From the Graph".
@@ -24,6 +24,9 @@ export struct Options {
     pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],
+    /// Outputs `forward` returns only the last position of, each by the axis
+    /// it is cut along, so what computes the other positions is left out.
+    pub last: TreeMap<String, i32> = {},
     /// Whether operators fuse into one kernel where the plan finds they can.
     /// Off, every kernel writes its output, which is what a fused module is
     /// compared against.
@@ -81,7 +84,14 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
     // An extent the algebra cannot discharge stops the build here. The one
     // tier below this is `forward`, which checks only an inequality over the
     // input symbols.
-    let checked = infer(&graph, &Schema { layout: options.layout }).map_err(|e| at(path, &e))?;
+    let schema = Schema { layout: options.layout };
+    let mut checked = infer(&graph, &schema).map_err(|e| at(path, &e))?;
+    if !options.last.is_empty() {
+        // Where a cut can move depends on each operand's rank and on which
+        // axes broadcast, which only the whole graph's check knows.
+        keep_last(&mut graph, &checked.shapes, &options.last).map_err(|e| at(path, &e))?;
+        checked = infer(&graph, &schema).map_err(|e| at(path, &e))?;
+    }
     return Result::Ok(Model { graph, checked, fuse: options.fuse });
 }
 

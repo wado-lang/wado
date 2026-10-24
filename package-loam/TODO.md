@@ -29,7 +29,8 @@ leaves this file, and `design.md` states what it built.
    number of ids, not with the vocabulary, and no pass holds a logit for every
    position and token. Finished when the Gemma 3 example ranks the next token
    from the last position alone, and its logits at given ids lie within the
-   tolerance of onnxruntime's at those ids.
+   tolerance of onnxruntime's at those ids. The `last` option does the first
+   half: it fixes the position at the build, as the last one along an axis.
 4. [ ] Decisions. A decision asks a model one question about a state and
    reads the probability of each answer from one pass, rather than generating
    text. Loam's decision module takes any model that gives narrowed logits,
