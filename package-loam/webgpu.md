@@ -85,7 +85,11 @@ runs.
   axis, four rows at a time. Its time grows with the rows, and the tiled
   product's does not: on GPT-2 (124M) the two meet at about seven. The lanes
   that read the weight together read where it is contiguous: one row's run of
-  columns, or one column of a transposed weight, such as Gemma's head.
+  columns, or one column of a transposed weight, such as Gemma's head. Across
+  a transposed weight a workgroup takes the most columns that still leave 128
+  workgroups, from 16 down to 2, and adds each column's parts in halves. A
+  layer's products of 256 to 2048 columns ran in 32 to 256 workgroups of 8
+  columns, too few reads at once for the device, and took 1.2 times as long.
 - `arg_max` ranks each part of 4096 elements of a lane in a workgroup of its
   own, then a lane's parts in another, and reads back one index per lane, as
   an f32, which holds a vocabulary's indices exactly. A language

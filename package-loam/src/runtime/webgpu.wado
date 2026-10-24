@@ -296,6 +296,11 @@ global NARROW_ROWS: i32 = 6;
 /// The invocations of one workgroup of `narrow_product_shader`.
 global NARROW_LANES: i32 = 256;
 
+/// The workgroups `narrow_columns` keeps a product across a transposed weight
+/// at: four for each of an RTX 4060 Ti's 34 multiprocessors, below which the
+/// device waits on too few reads at once.
+global NARROW_GROUPS: i32 = 128;
+
 /// The longest attention head `attend_shader` holds a query of in workgroup
 /// memory.
 global MAX_HEAD: i32 = 1024;
@@ -1117,7 +1122,7 @@ impl WebGpuBackend {
         let narrow = rows <= NARROW_ROWS;
         let across = rhs.strides[rb - 2] == 1 && rhs.strides[rb - 1] != 1;
         // The fewest columns a workgroup takes, which a wider read only raises.
-        let per_group = if narrow { narrow_columns(across, 1) } else { TILE };
+        let per_group = if narrow { narrow_columns(across, 1, cols) } else { TILE };
         let fits = count <= MAX_GROUPS
             && rows.div_ceil(TILE) <= MAX_GROUPS
             && cols.div_ceil(per_group) <= MAX_GROUPS
@@ -1200,10 +1205,11 @@ impl WebGpuBackend {
             let half = bound.views[1].half;
             let [key, row_groups, group_columns] = if narrow {
                 let width = word_width(&bound.views[1], across);
+                let lanes = narrow_columns(across, 1, cols);
                 [
-                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width]),
+                    ShaderKey::NarrowProduct([op, bound.bindings, br, continued, across, half, width, lanes]),
                     1,
-                    narrow_columns(across, width),
+                    narrow_columns(across, width, cols),
                 ];
             } else {
                 [
@@ -2590,7 +2596,7 @@ variant ShaderKey {
     /// [`product_shader`]'s arguments.
     Product([Expr, List<i32>, i32, bool, bool, bool]),
     /// [`narrow_product_shader`]'s arguments.
-    NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32]),
+    NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32, i32]),
     /// [`gather_shader`]'s arguments.
     Gather([i32, i32, bool]),
     /// [`append_shader`]'s arguments.
@@ -2618,7 +2624,7 @@ impl ShaderKey {
                 *half,
                 *across,
             ),
-            NarrowProduct([op, bindings, batch, continued, across, half, width]) => narrow_product_shader(
+            NarrowProduct([op, bindings, batch, continued, across, half, width, lanes]) => narrow_product_shader(
                 op,
                 bindings,
                 *batch,
@@ -2626,6 +2632,7 @@ impl ShaderKey {
                 *across,
                 *half,
                 *width,
+                *lanes,
             ),
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
             Append([bindings, rotary]) => append_shader(bindings, *rotary),
@@ -3216,10 +3223,13 @@ ${ELEMENTWISE_OPERATORS}`;
 /// workgroup per run of columns, its lanes splitting the inner axis and their
 /// sums added in workgroup memory, `NARROW` rows at a time. Where `across`,
 /// the right matrix is read along its inner axis, which is where it is
-/// contiguous, as a transposed weight is: a run of lanes reads one column. Otherwise a run of lanes reads one row's run of
-/// columns. The parameters and `half` are the tiled shader's. Where `width` is
-/// 2, the right matrix is bf16 and each lane reads a word, two elements of it:
-/// two steps of the inner axis where `across`, two columns otherwise.
+/// contiguous, as a transposed weight is: a run of lanes reads one column.
+/// Otherwise a run of lanes reads one row's run of columns. A workgroup
+/// computes `lanes` columns, as `narrow_columns` counts them for a lane
+/// reading one element. The parameters and `half` are the tiled shader's.
+/// Where `width` is 2, the right matrix is bf16 and each lane reads a word,
+/// two elements of it: two steps of the inner axis where `across`, two
+/// columns otherwise.
 fn narrow_product_shader(
     op: &Expr,
     bindings: &List<i32>,
@@ -3228,10 +3238,11 @@ fn narrow_product_shader(
     across: bool,
     half: bool,
     width: i32,
+    lanes: i32,
 ) -> String {
     assert width == 1 || half && width == 2;
-    let lanes = narrow_columns(across, 1);
     let splits = NARROW_LANES / lanes;
+    assert splits * lanes == NARROW_LANES && splits & splits - 1 == 0, "the parts add in halves";
     // The columns a lane sums, and the steps of the inner axis it reads at once.
     let [lane_cols, steps] = if across { [1, width] } else { [width, 1] };
     let [col, split, stride] = if across {
@@ -3287,6 +3298,15 @@ ${sum}            }
             partial[i * ${NARROW_LANES}u + lid] = sums[i];
         }
         workgroupBarrier();
+        // Each column's parts add in halves, so the first split holds the sum.
+        for (var h = ${splits / 2}u; h > 0u; h >>= 1u) {
+            if split < h {
+                for (var i = 0u; i < ${NARROW * lane_cols}u; i++) {
+                    partial[i * ${NARROW_LANES}u + lid] += partial[i * ${NARROW_LANES}u + lid + h * ${stride}];
+                }
+            }
+            workgroupBarrier();
+        }
         if split == 0u && col < cols {
             let first = col;
             for (var b = 0u; b < block; b++) {
@@ -3294,10 +3314,7 @@ ${sum}            }
                 for (var j = 0u; j < ${lane_cols}u; j++) {
                     let col = first + j;
                     if col < cols {
-                        var acc = ${start};
-                        for (var s = 0u; s < ${splits}u; s++) {
-                            acc += partial[(b * ${lane_cols}u + j) * ${NARROW_LANES}u + lid + s * ${stride}];
-                        }
+                        let acc = ${start} + partial[(b * ${lane_cols}u + j) * ${NARROW_LANES}u + lid];
 ${product_epilogue(op, bindings, batch, continued)}                    }
                 }
             }
@@ -3353,10 +3370,22 @@ fn right_index_wgsl(k: String, column: String = "col") -> String {
     return `u32(b_base + i32(${k}) * b_inner + i32(${column}) * b_col)`;
 }
 
-/// The columns one workgroup of [`narrow_product_shader`] computes, whose
-/// lanes read `width` elements at once.
-fn narrow_columns(across: bool, width: i32) -> i32 {
-    return if across { 8 } else { 32 * width };
+/// The columns one workgroup of [`narrow_product_shader`] computes of a
+/// product of `cols` columns, whose lanes read `width` elements at once.
+/// Where `across`, a column's lanes split the inner axis, so fewer columns a
+/// workgroup means more workgroups and a longer sum of each column's parts:
+/// the most columns that still leave `NARROW_GROUPS` workgroups, and at least
+/// 2. On Gemma 3 (270M)'s layers each of 2048, 1024, 640 and 256 columns runs
+/// fastest at the count this picks.
+fn narrow_columns(across: bool, width: i32, cols: i32) -> i32 {
+    if !across {
+        return 32 * width;
+    }
+    let mut columns = 16;
+    while columns > 2 && cols / columns < NARROW_GROUPS {
+        columns /= 2;
+    }
+    return columns;
 }
 
 /// Lines binding a product's extents, the bases of its two matrices for the

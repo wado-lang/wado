@@ -218,6 +218,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     }
     arg_maxes();
     narrow_products();
+    narrow_column_counts();
     half_weights();
 }
 
@@ -296,6 +297,22 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
 /// so the weight is kept row by row, its products along the rows run in
 /// chunks, its product across them on the CPU, and its gather in parts.
 global HALF_SPLIT: i32 = 40_000;
+
+/// Products of one row across a transposed weight of few columns and of many,
+/// whose workgroups each take a different count of them, in bf16 as a model's
+/// weights are.
+fn narrow_column_counts() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let one = tensor::<[Row, Inner, Col]>([1, 1, 640], 33);
+    for let columns of [256, 2048] as List<i32> {
+        let stored = halved(tensor::<[Long, Col]>([columns, 640], 34));
+        let on_cpu = Cpu {}.matmul_by_transposed(&one, &stored, null);
+        let across = gpu.matmul_by_rhs_transposed(&gpu.upload(&one), &gpu.keep_rhs(&stored), null);
+        println(`narrow columns ${columns} ${deviation(&gpu.download(&across).data, &on_cpu.data)}`);
+    }
+}
 
 /// Products of a few rows, as a model's step over one token makes, and of a
 /// short prompt's, in more than one block of rows, by a matrix read along
