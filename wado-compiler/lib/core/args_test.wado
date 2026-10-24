@@ -563,3 +563,26 @@ test "a hand-written impl may skip a field, but not probe a case for a payload" 
     assert parse::<Skipper>([]) matches { Ok(_) };
     assert parse::<UnitProbe>(["Tag"]) matches { Err(_) };
 }
+
+// A hand-written impl that recovers from a failed read: the failure it
+// swallowed is not the one a later field reports.
+struct Tolerant {
+    n: i32,
+}
+impl Deserialize for Tolerant {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Tolerant, DeserializeError> {
+        return Result::Ok(Tolerant { n: i32::deserialize(d).unwrap_or(0) });
+    }
+}
+
+struct Recovering {
+    a: Tolerant,
+    b: i32,
+}
+impl Deserialize for Recovering;
+
+test "a failure an impl recovered from is not reported for a later one" {
+    let e = parse::<Recovering>(["--a"]).unwrap_err();
+    assert e.kind matches { MissingArgument };
+    assert e.message == "missing field: b";
+}
