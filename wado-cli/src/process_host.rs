@@ -14,6 +14,8 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
 #[cfg(unix)]
 mod posix;
+#[cfg(test)]
+mod tests;
 #[cfg(unix)]
 pub use posix::ChildHandle;
 
@@ -86,10 +88,11 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
         return Ok(Answer::Unsupported(reason));
     }
     let mut grants = Vec::with_capacity(preopened_dirs.len());
-    for (host, guest) in preopened_dirs {
+    for (index, (host, guest)) in preopened_dirs.iter().enumerate() {
         let path = std::path::absolute(host)?;
-        // The child starts in the first grant, so `.` names it on both sides.
-        if guest != "." && Path::new(guest) != path {
+        // The child starts in the first grant, so there `.` names it on both
+        // sides; anywhere else `.` names another directory than the child's.
+        if !(index == 0 && guest == ".") && Path::new(guest) != path {
             return Ok(Answer::Denied(format!(
                 "the guest directory `{guest}` is the host directory `{}`, so a path in a child's arguments would name another file",
                 path.display()
@@ -178,11 +181,7 @@ impl types::HostChild for ProcessView<'_> {
     }
 
     fn drop(&mut self, child: Resource<ChildHandle>) -> wasmtime::Result<()> {
-        let handle = self.table.delete(child)?;
-        #[cfg(unix)]
-        handle.kill();
-        #[cfg(not(unix))]
-        match handle {}
+        self.table.delete(child)?;
         Ok(())
     }
 }

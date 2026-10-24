@@ -157,6 +157,23 @@ test "output and status close a piped stdin nobody can write" {
     assert cat.status().unwrap() == ExitStatus::Exited(0);
 }
 
+test "status reads no pipe it never hands out" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let script = "head -c 200000 /dev/zero; head -c 200000 /dev/zero >&2";
+    let status = Command::new("sh").args(["-c", script]).stdout_piped().stderr_piped().status();
+    assert status.unwrap() == ExitStatus::Exited(0);
+}
+
+test "wait closes a stdin the guest kept" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let child = Command::new("cat").stdin_piped().spawn().unwrap();
+    assert child.wait().unwrap() == ExitStatus::Exited(0);
+}
+
 test "the child sees only the guest's grants" {
     if availability() != Availability::Available {
         return;

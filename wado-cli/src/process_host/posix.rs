@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::task::{Context, Poll};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
@@ -122,13 +122,14 @@ pub(super) fn spawn<U>(
     };
     let child = Arc::new(spawned.child);
     let handle = store.get().table.push(ChildHandle(Arc::clone(&child)))?;
-    let exited = supervise(child, timeout.map(Duration::from_nanos), scratch)?;
     if let Input::Piped(data) = stdin {
         let fd = spawned.stdin.expect("a piped stdin has a host end");
         data.pipe(&mut store, PipeConsumer(pipe::Sender::from_owned_fd(fd)?))?;
     }
-    let stdout = route(&mut store, stdout, spawned.stdout)?;
-    let stderr = route(&mut store, stderr, spawned.stderr)?;
+    let mut copies = Vec::new();
+    let stdout = route(&mut store, stdout, spawned.stdout, &mut copies)?;
+    let stderr = route(&mut store, stderr, spawned.stderr, &mut copies)?;
+    let exited = supervise(child, timeout.map(Duration::from_nanos), scratch, copies)?;
     let exit = FutureReader::new(&mut store, async move {
         wasmtime::error::Ok(exited.await.expect("the waiter reports every child"))
     })?;
@@ -280,11 +281,13 @@ fn error_code(err: &io::Error) -> ErrorCode {
     }
 }
 
-/// The guest's end of one output stream, where it gets one.
+/// The guest's end of one output stream, where it gets one. A captured stream
+/// is copied on a thread pushed to `copies`.
 fn route<T: 'static>(
     mut store: impl AsContextMut<Data = T>,
     route: Route,
     fd: Option<OwnedFd>,
+    copies: &mut Vec<JoinHandle<()>>,
 ) -> wasmtime::Result<Option<StreamReader<u8>>> {
     match route {
         Route::Null | Route::Inherit => Ok(None),
@@ -294,14 +297,14 @@ fn route<T: 'static>(
             Ok(Some(StreamReader::new(&mut store, producer)?))
         }
         Route::Captured(sink) => {
-            copy_into(fd.expect("a captured stream has a host end"), sink)?;
+            copies.push(copy_into(fd.expect("a captured stream has a host end"), sink)?);
             Ok(None)
         }
     }
 }
 
 /// Copy a child's stream into a captured one until the child closes it.
-fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<()> {
+fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<JoinHandle<()>> {
     thread::Builder::new()
         .name("process-capture".to_owned())
         .spawn(move || {
@@ -321,16 +324,17 @@ fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<()> {
                     Err(_) => return,
                 }
             }
-        })?;
-    Ok(())
+        })
 }
 
 /// Wait for `child` on a thread of its own, enforcing `timeout`, and remove
-/// its scratch directory once it exits.
+/// its scratch directory once it exits. The exit is reported once `copies`
+/// have drained what the child wrote, so the guest never sees it first.
 fn supervise(
     child: Arc<Child>,
     timeout: Option<Duration>,
     scratch: TempDir,
+    copies: Vec<JoinHandle<()>>,
 ) -> io::Result<oneshot::Receiver<Result<ExitStatus, ErrorCode>>> {
     let (report, exited) = oneshot::channel();
     thread::Builder::new()
@@ -346,6 +350,9 @@ fn supervise(
             let timed_out =
                 timer.is_some_and(|timer| timer.join().unwrap_or_else(|p| resume_unwind(p)));
             drop(scratch);
+            for copy in copies {
+                copy.join().unwrap_or_else(|p| resume_unwind(p));
+            }
             let status = match waited {
                 Err(_) => Err(ErrorCode::Io),
                 Ok(_) if timed_out => Ok(ExitStatus::TimedOut),

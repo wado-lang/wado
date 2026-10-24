@@ -175,7 +175,7 @@ impl Command {
     /// read.
     pub fn output(&self) -> Result<Output, ProcessError> with Process {
         let limit = self.capture_limit;
-        let mut child = self.start(self.unwritten_stdin(), Stdio::Piped, Stdio::Piped)?;
+        let mut child = self.start(unhanded(self.stdin), Stdio::Piped, Stdio::Piped)?;
         let captured = capture(&mut child, limit);
         let status = child.wait()?;
         if captured.too_large {
@@ -186,17 +186,8 @@ impl Command {
 
     /// Run the child to its end and return how it ended.
     pub fn status(&self) -> Result<ExitStatus, ProcessError> with Process {
-        let child = self.start(self.unwritten_stdin(), self.stdout, self.stderr)?;
+        let child = self.start(unhanded(self.stdin), unhanded(self.stdout), unhanded(self.stderr))?;
         return child.wait();
-    }
-
-    /// `output` and `status` hand the guest no `Child` to write a piped stdin
-    /// through, so the child reads an empty one.
-    fn unwritten_stdin(&self) -> Stdio {
-        return match self.stdin {
-            Piped => Stdio::Null,
-            stdin => stdin,
-        };
     }
 
     /// Run the child to its end and return its stdout. Any end but
@@ -247,6 +238,15 @@ impl Command {
     }
 }
 
+/// `stdio` where the guest gets no `Child` to reach a pipe through, as under
+/// `output` and `status`: a pipe nobody reads or writes would block the child.
+fn unhanded(stdio: Stdio) -> Stdio {
+    return match stdio {
+        Piped => Stdio::Null,
+        other => other,
+    };
+}
+
 fn output_mode(stdio: Stdio) -> types::Output {
     return match stdio {
         Null => types::Output::Null,
@@ -283,10 +283,14 @@ pub affine struct Child {
 }
 
 impl Child {
-    /// Wait for the child to end. Its streams stay where they are, so read a
-    /// piped stdout first: a child blocked writing to a full pipe never ends.
+    /// Wait for the child to end. Nothing can reach a stream still left in the
+    /// `Child` once it is waited on, so `wait` closes each first: take a piped
+    /// stream out to use it.
     pub fn wait(self) -> Result<ExitStatus, ProcessError> {
         let mut child = self;
+        builtin::drop(child.stdin.take());
+        builtin::drop(child.stdout.take());
+        builtin::drop(child.stderr.take());
         let Some(ended) = child.exit.take().unwrap().read() else {
             unreachable();
         };
