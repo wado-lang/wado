@@ -4,7 +4,8 @@
 //! that moves.
 
 use crate::ast::{
-    AssignTarget, AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm, Stmt, UnaryOp,
+    AssignTarget, AstId, Block, Condition, ConditionElement, Expr, IdentExpr, Literal, MatchArm,
+    Stmt, UnaryOp,
 };
 use crate::hashmap::IndexMap;
 use crate::symbol::{Symbol, SymbolKind};

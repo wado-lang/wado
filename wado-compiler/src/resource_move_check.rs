@@ -6,8 +6,8 @@
 use std::rc::Rc;
 
 use crate::ast::{
-    self, AssignExpr, AssignTarget, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
-    IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
+    self, AssignExpr, AssignTarget, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr,
+    Function, IdentExpr, ImplBlock, Item, Pattern, SelfKind, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;

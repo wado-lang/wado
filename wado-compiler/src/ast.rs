@@ -3595,15 +3595,6 @@ pub enum AssignTarget {
     Destructuring { places: Vec<Expr>, span: Span },
 }
 
-impl AssignTarget {
-    pub fn span(&self) -> Span {
-        match self {
-            Self::Place(place) => place.span(),
-            Self::Destructuring { span, .. } => *span,
-        }
-    }
-}
-
 impl AssignExpr {
     /// The places this assignment writes, in the order it writes them.
     pub fn places(&self) -> &[Expr] {

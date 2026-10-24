@@ -6,9 +6,9 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
-    AssertStmt, AssignTarget, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt,
-    ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern,
-    ReturnStmt, Stmt, UnaryOp, WhileStmt, for_each_pattern_name,
+    AssertStmt, AssignTarget, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr,
+    ExprStmt, ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module,
+    Pattern, ReturnStmt, Stmt, UnaryOp, WhileStmt, for_each_pattern_name,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::logger::{Bail, Logger};
@@ -263,7 +263,9 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
                     .any(|c| expr_references_var(&c.right, name))
         }
         Expr::Assign(a) => {
-            a.places().iter().any(|place| expr_references_var(place, name))
+            a.places()
+                .iter()
+                .any(|place| expr_references_var(place, name))
                 || expr_references_var(&a.value, name)
         }
         Expr::CompoundAssign(ca) => {
