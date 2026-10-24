@@ -463,8 +463,8 @@ struct Carried {
 
 #[derive(Default)]
 struct Graph {
-    /// Each set holds locations by their index in `locations`: a few in ten
-    /// nodes are locations, so numbered apart they pack into dense words.
+    /// Each set holds locations by their index in `locations`: about one node
+    /// in ten is a location, so numbered apart they pack into dense words.
     pts: Vec<LocSet>,
     /// The node of each location.
     locations: Vec<u32>,
@@ -562,10 +562,12 @@ impl Graph {
 
     /// The location nodes in the set of `node`, a representative.
     fn locations_in(&self, node: u32) -> Vec<u32> {
-        self.pts[node as usize]
-            .iter()
-            .map(|index| self.locations[index as usize])
-            .collect()
+        Locations {
+            set: &self.pts[node as usize],
+            nodes: &self.locations,
+        }
+        .iter()
+        .collect()
     }
 
     fn add(&mut self, node: u32, loc: u32) {
@@ -740,6 +742,7 @@ impl Graph {
     /// Point the edges `root` took from the nodes it absorbed at
     /// representatives, and carry along each merged node's own edges what they
     /// had not carried: the merged set's locations it lacked, and its delta.
+    /// Where it lacked any, its copies take the whole merged set.
     fn settle(&mut self, root: u32) {
         let r = root as usize;
         let merged_copy_to = std::mem::take(&mut self.copy_to[r]);

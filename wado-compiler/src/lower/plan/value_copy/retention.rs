@@ -15,7 +15,7 @@
 //! can name the function values that reach one, and per functor type — the join
 //! over every expression minting a value of that type — where it cannot.
 
-use super::callgraph::CallGraph;
+use super::callgraph::{CallGraph, body_ids};
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
 use super::place::unwrap_ref;
@@ -799,11 +799,7 @@ pub fn compute_retention(
     // A body that read no row walks the same against grown rows, so a later
     // round starts from the bodies that read one; their callers follow.
     let mut reads_rows = vec![false; project.functions.len()];
-    let mut seeds: Vec<u32> = (0..)
-        .zip(&project.functions)
-        .filter(|(_, func)| func.borrow().body.is_some())
-        .map(|(id, _)| id)
-        .collect();
+    let mut seeds: Vec<u32> = body_ids(project).collect();
     loop {
         let mut round = Contributions::default();
         call_graph.solve_from(seeds, |id| {
@@ -873,7 +869,11 @@ pub fn compute_retention(
         if !grew {
             break;
         }
-        seeds = (0..).zip(&reads_rows).filter(|&(_, &reads)| reads).map(|(id, _)| id).collect();
+        seeds = (0..)
+            .zip(&reads_rows)
+            .filter(|&(_, &reads)| reads)
+            .map(|(id, _)| id)
+            .collect();
     }
 
     for func in &project.functions {

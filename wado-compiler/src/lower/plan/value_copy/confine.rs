@@ -15,10 +15,10 @@
 //! analysis over-approximates escape: unmodelled constructs, a closure's
 //! captures, and a handler body mark the parameters they reach.
 
+use super::CopyNeeds;
 use super::analyze::{collect_pattern_bindings, passes_through};
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
-use super::CopyNeeds;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{

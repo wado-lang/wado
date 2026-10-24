@@ -25,6 +25,14 @@ pub struct CallGraph {
     callees: Vec<Vec<u32>>,
 }
 
+/// The ids of the functions with a body.
+pub fn body_ids(project: &FlatPackage) -> impl Iterator<Item = u32> + '_ {
+    (0..)
+        .zip(&project.functions)
+        .filter(|(_, func)| func.borrow().body.is_some())
+        .map(|(id, _)| id)
+}
+
 impl CallGraph {
     pub fn build(project: &FlatPackage) -> Self {
         let n = project.functions.len();
@@ -128,13 +136,7 @@ impl CallGraph {
     /// `recompute(id)` reports a change, re-enqueue that function's callers.
     /// `recompute` returns whether the function's summary grew.
     pub fn solve(&self, project: &FlatPackage, recompute: impl FnMut(u32) -> bool) {
-        let bodies = project
-            .functions
-            .iter()
-            .enumerate()
-            .filter(|(_, func)| func.borrow().body.is_some())
-            .map(|(i, _)| i as u32);
-        self.solve_from(bodies, recompute);
+        self.solve_from(body_ids(project), recompute);
     }
 
     /// [`Self::solve`], recomputing first only `seeds` and then their callers.

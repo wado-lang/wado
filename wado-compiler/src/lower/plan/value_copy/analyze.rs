@@ -1,8 +1,8 @@
 //! The predicates the fold consults at each `$value_copy$T(...)` wrap site, and
 //! [`collect_seed_types`], which names the types those wraps can land on.
 
-use super::{CopyNeeds, needs_value_copy};
 use super::ownership::OwnedCalls;
+use super::{CopyNeeds, needs_value_copy};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
