@@ -517,6 +517,8 @@ type ImplKey = (FqTypeName, DefId);
 struct ImplEffects {
     declared: Vec<EffectRef>,
     target_args: Vec<FqTypeName>,
+    /// The impl's bounded parameters, whose impls fill its effect parameter.
+    bounds: Rc<[ReceiverBound]>,
 }
 
 /// Impl block `def`'s target arguments as written, rows included.
@@ -921,6 +923,7 @@ impl OwnedEffectData {
                             let entry = impl_effects.entry(key).or_insert_with(|| ImplEffects {
                                 declared: Vec::new(),
                                 target_args: spelled_target_args(&sem.types, defs.def_at(block.id)),
+                                bounds: Rc::clone(&bounds),
                             });
                             for effect in &declared {
                                 if !entry.declared.contains(effect) {
@@ -2010,8 +2013,13 @@ impl EffectIndex<'_> {
                     .map(Vec::as_slice)
                     .unwrap_or_default();
                 let target_args = spelled_target_args(self.types, block);
+                let bounds = self
+                    .receiver_bounds
+                    .get(&method)
+                    .map(|b| &**b)
+                    .unwrap_or_default();
                 brought.effects.extend(
-                    self.close_over_args(declared, &key, &target_args, &receiver_args)
+                    self.close_over_args(declared, bounds, &target_args, &receiver_args)
                         .into_iter()
                         .filter(|e| !e.is_param()),
                 );
@@ -2019,7 +2027,7 @@ impl EffectIndex<'_> {
                 match self.impl_effects.get(&(receiver, key)) {
                     Some(entry) => brought.effects.extend(self.close_over_args(
                         &entry.declared,
-                        &key,
+                        &entry.bounds,
                         &entry.target_args,
                         &receiver_args,
                     )),
@@ -2139,7 +2147,7 @@ impl EffectIndex<'_> {
                 Some((args, entry)) => {
                     brought.effects.extend(self.close_over_args(
                         &entry.declared,
-                        key,
+                        &entry.bounds,
                         &entry.target_args,
                         args,
                     ));
@@ -2169,15 +2177,16 @@ impl EffectIndex<'_> {
     }
 
     /// What an impl brings once its own effect parameter is filled from the
-    /// receiver's type arguments `args`: what each one implementing the trait
-    /// brings, and the row each has where the impl's `target_args` write the
-    /// parameter in a function type's row, which is how an adapter's impl
-    /// reaches the closure it holds. A variable in that row is solved where
-    /// the effects are read. An argument that is neither leaves the parameter.
+    /// receiver's type arguments `args`: what the impl of each open trait
+    /// bounding one of its parameters brings, and the row each argument has
+    /// where the impl's `target_args` write the parameter in a function type's
+    /// row, which is how an adapter's impl reaches the closure it holds. A
+    /// variable in that row is solved where the effects are read. An argument
+    /// that is neither leaves the parameter.
     fn close_over_args(
         &self,
         declared: &[EffectRef],
-        trait_key: &DefId,
+        bounds: &[ReceiverBound],
         target_args: &[FqTypeName],
         args: &[FqTypeName],
     ) -> IndexSet<EffectRef> {
@@ -2188,22 +2197,25 @@ impl EffectIndex<'_> {
                 continue;
             }
             let mut filled = false;
-            for (at, arg) in args.iter().enumerate() {
-                if let Some(written) = target_args.get(at) {
-                    filled |= rows_written_as(written, arg, effect, &mut out);
-                }
-                let Some(inner) = self.impl_effects.get(&(arg.head_only(), *trait_key)) else {
-                    continue;
-                };
-                filled = true;
-                out.extend(self.close_over_args(
-                    &inner.declared,
-                    trait_key,
-                    &inner.target_args,
-                    arg.args(),
-                ));
+            for (written, arg) in target_args.iter().zip(args) {
+                filled |= rows_written_as(written, arg, effect, &mut out);
             }
-            if !filled {
+            let mut brought = Brought::default();
+            for bound in bounds {
+                // The empty path is a blanket impl's receiver, the type
+                // itself, which `blanket_for` answers.
+                if let Some(arg) = bound
+                    .path
+                    .as_deref()
+                    .filter(|path| !path.is_empty())
+                    .and_then(|path| type_arg_at(args, path))
+                {
+                    self.bring(&bound.traits, &[type_arg(arg)], &mut brought);
+                }
+            }
+            out.extend(brought.effects);
+            // One bound left open keeps the parameter, whatever the others fill.
+            if brought.open || !(filled || brought.determined) {
                 out.insert(effect.clone());
             }
         }
