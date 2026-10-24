@@ -43,6 +43,16 @@ pub enum Consumer {
     Cast,
     /// `look(&t);`, which moves nothing.
     Borrow,
+    /// `keep(t);`, whose `affine T` parameter drops as `keep` returns.
+    GenericCall,
+    /// `let u = pass(t);`, through an `affine T` and back.
+    GenericPass,
+    /// `xs.push(t);` onto a fresh `List<Tok>`.
+    Push,
+    /// `let u = o.take();` out of a fresh `Option<Tok>`.
+    Take,
+    /// `for let x of xs {}` over a fresh `List<Tok>`, consuming it.
+    ForOf,
 }
 
 /// Where the consuming statement sits in the case's body.
@@ -109,7 +119,7 @@ impl Producer {
 
 impl Consumer {
     pub fn all() -> List<Consumer> {
-        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow];
+        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf];
     }
 
     fn statement(&self) -> String {
@@ -121,13 +131,18 @@ impl Consumer {
             Wrap => "let o = Option::Some(t);",
             Cast => "let w = t as Renamed;",
             Borrow => "let _ = look(&t);",
+            GenericCall => "keep(t);",
+            GenericPass => "let u = pass(t);",
+            Push => "let mut xs: List<Tok> = []; xs.push(t);",
+            Take => "let mut o = Option::Some(t); let u = o.take();",
+            ForOf => "let xs: List<Tok> = [t]; for let x of xs {}",
         };
     }
 
     /// Whether the value is gone once the statement ends, rather than held by
     /// a local of the block the statement runs in.
     fn drops_in_statement(&self) -> bool {
-        return self matches { Call | Drop };
+        return self matches { Call | Drop | GenericCall | ForOf };
     }
 
     fn moves(&self) -> bool {
@@ -306,6 +321,12 @@ fn emit_program(cases: &List<Case>, read_after: bool) -> String {
     w.end();
     w.blank();
     w.line("fn eat(t: Tok) {}");
+    w.blank();
+    w.line("fn keep<affine T>(x: T) {}");
+    w.blank();
+    w.begin("fn pass<affine T>(x: T) -> T");
+    w.line("return x;");
+    w.end();
     w.blank();
     w.begin("fn look(t: &Tok) -> i32");
     w.line("return t.id;");
