@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792831936579,
+  "lastUpdate": 1792838221891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70105,6 +70105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d2733c3d4a35c870b266a6df6da3e3869760d586"
         },
         "date": 1792831935670,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3036,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19828,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294961,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "52551aaebc20d8b8d73968f6e9c7aa9195f0a092",
+          "message": "Merge pull request #2436 from wado-lang/ccr-8dca5f71-587irx\n\nfeat: assign a tuple of places from a tuple value",
+          "timestamp": "2026-10-24T19:14:29+09:00",
+          "tree_id": "f5133d832d1adcd412156ae07d446d64e69b8d07",
+          "url": "https://github.com/wado-lang/wado/commit/52551aaebc20d8b8d73968f6e9c7aa9195f0a092"
+        },
+        "date": 1792838220895,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
