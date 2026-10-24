@@ -209,7 +209,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, gate.exec(), &mut touched);
-    touched.extend(project.rename_reshaped(candidates.keys().copied()));
+    touched.extend(project.rename_reshaped(candidates.keys().copied(), gate.exec()));
     scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
