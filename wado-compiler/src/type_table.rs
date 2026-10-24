@@ -7237,7 +7237,7 @@ static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
-static NO_SUBTERMS: IndexMap<TypeKey, TypeId> =IndexMap::with_hasher(FxBuildHasher);
+static NO_SUBTERMS: IndexMap<TypeKey, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_RENAMES: IndexMap<u32, u32> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value

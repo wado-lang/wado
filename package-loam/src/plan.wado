@@ -740,13 +740,7 @@ fn original(aliased: &HashMap<String, String>, tensor: &String) -> String {
 /// product a second could pair with. Only a fold makes it a row kernel: a
 /// value per row without one is read at each element of its row, as a
 /// broadcast is.
-fn joined(
-    group: &Group,
-    node: &Node,
-    join: &Option<Join>,
-    pairable: &Option<Pairable>,
-    checked: &Checked,
-) -> Group {
+fn joined(group: &Group, node: &Node, join: &Option<Join>, pairable: &Option<Pairable>, checked: &Checked) -> Group {
     return match join {
         Some(Contraction) => {
             let contracted = match group.contracted {

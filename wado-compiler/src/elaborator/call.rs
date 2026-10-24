@@ -710,7 +710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Answer each stand-in [`Self::with_packs_answered`] minted that its
+    /// Answer each stand-in [`Self::standing_in_open_packs`] minted that its
     /// argument left open, as an empty list literal does, with its tuple under
     /// what every argument answers of `packs`. One whose tuple still holds a
     /// pack stays open: the call reports that pack unanswered.

@@ -254,19 +254,21 @@ fn bound_paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, Gpu
     let a = tensor::<[Row, Inner, Long]>([1, 6, 8], 48);
     let b = halved(tensor::<[Long, Col]>([8, 64], 49));
     let c = halved(tensor::<[Long, Col]>([8, 64], 50));
-    // silu(operand(0)) * operand(1)
-    let gated = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
+    let op = gated();
     let mut cpu = Cpu {};
-    let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue { operands: [], op: gated });
+    let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue { operands: [], op });
     let bc = gpu.keep_rhs_paired(&b, &c);
     let uploaded = gpu.upload(&a);
     let mut dispatched = gpu.dispatches();
-    let plain = gpu.matmul_rhs_paired(&uploaded, &bc, Epilogue { operands: [], op: gated });
+    let plain = gpu.matmul_rhs_paired(&uploaded, &bc, Epilogue { operands: [], op });
     assert gpu.dispatches() == dispatched + 1;
     dispatched = gpu.dispatches();
-    let staged = gpu.matmul_rhs_paired_from(Prologue { operands: [gpu.read(&uploaded)], op: operand(0) }, &bc, Epilogue {
+    let staged = gpu.matmul_rhs_paired_from(Prologue {
+        operands: [gpu.read(&uploaded)],
+        op: operand(0),
+    }, &bc, Epilogue {
         operands: [],
-        op: gated,
+        op,
     });
     assert gpu.dispatches() == dispatched + 1;
     println(`bound paired ${deviation(&gpu.download(&plain).data, &on_cpu.data)}`);
@@ -281,6 +283,11 @@ fn rms_norm() -> Expr {
         UnaryOp::Sqrt,
     );
     return x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+}
+
+/// `silu(operand(0)) * operand(1)`, as a gated layer joins its two products.
+fn gated() -> Expr {
+    return operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
 }
 
 /// Two products of an RMS normalization by weights of 256 and 128 columns,
@@ -350,8 +357,7 @@ fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueu
     let scale = tensor::<[Long]>([640], 42);
     let b = halved(tensor::<[Long, Col]>([640, 256], 43));
     let c = halved(tensor::<[Long, Col]>([640, 256], 44));
-    // silu(operand(0)) * operand(1)
-    let gated = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
+    let op = gated();
     let cases = [
         ["step", tensor::<[Row, Inner, Long]>([1, 1, 640], 45)],
         ["few", tensor::<[Row, Inner, Long]>([2, 3, 640], 46)],
@@ -368,7 +374,7 @@ fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueu
         };
         let on_cpu = cpu.matmul_rhs_paired_from(cpu_a, &cpu.keep_rhs_paired(&b, &c), Epilogue {
             operands: [],
-            op: gated,
+            op,
         });
         let alone_cpu = cpu.matmul_rhs_from(cpu_a, &cpu.keep_rhs(&b), null);
         let uploaded = gpu.upload(&a);
@@ -382,7 +388,7 @@ fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueu
         };
         let on_gpu = gpu.matmul_rhs_paired_from(gpu_a, &gpu.keep_rhs_paired(&b, &c), Epilogue {
             operands: [],
-            op: gated,
+            op,
         });
         println(`prologue paired ${name} ${deviation(&gpu.download(&on_gpu).data, &on_cpu.data)}`);
         let alone_gpu = gpu.matmul_rhs_from(gpu_a, &gpu.keep_rhs(&b), null);
@@ -399,11 +405,7 @@ fn paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue,
     };
     let one = tensor::<[Row, Inner, Long]>([1, 1, 640], 35);
     let tile = tensor::<[Row, Inner, Long]>([1, 20, 640], 36);
-    // silu(operand(0)) * operand(1) + operand(2)
-    let op = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1)).binary(
-        BinaryOp::Add,
-        &operand(2),
-    );
+    let op = gated().binary(BinaryOp::Add, &operand(2));
     let exact = [
         halved(tensor::<[Long, Col]>([640, 256], 37)),
         halved(tensor::<[Long, Col]>([640, 256], 38)),

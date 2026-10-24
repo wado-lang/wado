@@ -241,7 +241,8 @@ plan pairs two matrix products of one left operand over one iteration space
 instead, and `forward` calls `matmul_rhs_paired` with the operators after them
 as its epilogue, which reads the two products as `operand(0)` and `operand(1)`.
 
-Each right matrix must be a weight its product alone reads. The backend then
+Each right matrix must be a weight its product alone reads, and the two must
+share one element type and one list of axes. The backend then
 keeps the two as one matrix of twice the columns, a column of the first, then
 the same column of the second (`Paired<N>`). On a device, a product of a few
 rows reading that matrix along its inner axis runs as one dispatch: a

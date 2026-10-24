@@ -444,14 +444,17 @@ impl MethodSig {
                 .iter()
                 .filter_map(|&(_, id)| table.param_slot(id))
                 .map(|index| {
-                    assert!(index < MOVED_SLOT_BASE, "a frame's slots must stay below the moved ones");
+                    assert!(
+                        index < MOVED_SLOT_BASE,
+                        "a frame's slots must stay below the moved ones"
+                    );
                     (index, MOVED_SLOT_BASE + index)
                 })
                 .collect()
         };
-        let sig = self
-            .decl
-            .instantiate_moving(type_table, substitution, projections, bound, &renames);
+        let sig =
+            self.decl
+                .instantiate_moving(type_table, substitution, projections, bound, &renames);
         let mut table = type_table.borrow_mut();
         let own_slots = self
             .own_type_params()
