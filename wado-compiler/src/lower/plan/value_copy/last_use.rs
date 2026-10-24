@@ -527,7 +527,7 @@ impl<'a> Analyzer<'a> {
             !r.contains(&local)
                 || write_cannot_reach(m, path)
                 || m.written
-                    .is_some_and(|written| !self.reach.reaches(written, *binds, true))
+                    .is_some_and(|written| !self.reach.write_reaches(written, *binds))
         });
         let root_given_away = inputs
             .consumed_reach

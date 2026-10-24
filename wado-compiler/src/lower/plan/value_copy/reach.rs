@@ -128,6 +128,18 @@ impl<'a> StorageReach<'a> {
             .is_none_or(|owned| self.walk(holder, &owned, by_value, &mut IndexSet::default()))
     }
 
+    /// Whether a write to a place of type `written` can change a `target` value
+    /// that may share that place's storage. A place reached through references
+    /// is the referent's, which holds what it shares by value.
+    #[must_use]
+    pub fn write_reaches(&self, written: TypeId, target: TypeId) -> bool {
+        let mut written = written;
+        while let Members::Reference(referent) = self.members(written) {
+            written = referent;
+        }
+        self.reaches(written, target, true)
+    }
+
     /// Whether a `holder` can reach storage a `target` value leads to, through
     /// the references it carries as well as what it owns: an iterator's `next`
     /// hands back an element of the list the iterator references.
