@@ -466,8 +466,16 @@ pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
     format!("{INTERNAL_PREFIX}{}", interface.interface_path())
 }
 
+/// The label the program imports the world function `function` of its
+/// `component`-th dependency under. Two dependencies may each export a world
+/// function of one name, and composition wires each label to its own; the
+/// label is a CM plain name, so it carries no `$`.
+pub fn cm_world_import_label(component: usize, function: &str) -> String {
+    format!("dependency{component}-{function}")
+}
+
 // A CM import's names are minted from its CM identifier
-// (`wasi:cli/stdout@0.3.0#write-via-stream`, or a world function's bare name),
+// (`wasi:cli/stdout@0.3.0#write-via-stream`, or a world function's label),
 // which is what identifies it: a Wado spelling such as `Stdout::write_via_stream`
 // is shared by same-named interfaces.
 
@@ -484,14 +492,6 @@ pub fn cm_binding_func_name(cm_identifier: &str) -> String {
 /// The lift of an async CM import, which `AsyncCall<T>` points to.
 pub fn cm_lift_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
-}
-
-/// The label the program imports the world function `function` of its
-/// `component`-th dependency under. Two dependencies may each export a world
-/// function of one name, and composition wires each label to its own; the
-/// label is a CM plain name, so it carries no `$`.
-pub fn cm_world_import_label(component: usize, function: &str) -> String {
-    format!("dependency{component}-{function}")
 }
 
 /// The function packaging a handler's result of an async CM import as the

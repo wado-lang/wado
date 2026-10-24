@@ -55,7 +55,7 @@ pub fn build_component(
     // is decided by the WIR-level plan (the single source of truth); codegen
     // reads it rather than re-deriving, and its job is to encode each.
     generate_cm_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
-    generate_cm_world_func_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
+    generate_cm_world_func_imports(&mut builder, &mut ctx, project);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -3909,16 +3909,11 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    // A world function (Phase 9) is imported under its label, which the plan
-    // keys it by, and wired to its own component's export.
+    // A world function (Phase 9) is imported under its label and wired to its
+    // own component's export.
     let world_funcs: Vec<(&WorldFunctionSite, &str)> = project
         .cm_interface_registry
         .world_import_functions()
-        .filter(|func| {
-            import_plan
-                .iter()
-                .any(|e| e.kind == ImportKind::WorldFunction && e.fq == func.cm_identifier())
-        })
         .map(|func| {
             let site = func.world.as_ref().expect("a world function has a site");
             (site, func.wasi_func_name.as_str())
@@ -4091,30 +4086,18 @@ fn subtype_refusal(
         .map(|e| e.message().replace('\n', ": "))
 }
 
-/// A bare top-level `func` import per world-level function in the plan, matching
-/// the dependency's world-level export. Value types go through the export side's
+/// A bare top-level `func` import per world-level function, matching the
+/// dependency's world-level export. Value types go through the export side's
 /// engine, so `stream<T>` and `future<T>` are defined before the func type
 /// references them; a component-defined named type is rejected.
 fn generate_cm_world_func_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[ImportEntry],
 ) {
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    let world_funcs: Vec<CmFunctionInfo> = project
-        .cm_interface_registry
-        .world_import_functions()
-        .cloned()
-        .collect();
     let mut type_gen = CmTypeGen::new();
-    for func in &world_funcs {
-        if !import_plan
-            .iter()
-            .any(|e| e.kind == ImportKind::WorldFunction && e.fq == func.cm_identifier())
-        {
-            continue;
-        }
+    for func in project.cm_interface_registry.world_import_functions() {
         let local_name = func.local_alias_name();
         let label = func.cm_identifier();
         let func_type_name = format!("world-func-type-{label}");
@@ -4159,9 +4142,7 @@ fn generate_cm_world_func_imports(
     }
 }
 
-/// Alias `func` out of its interface instance under its own local name. Two
-/// Wado names binding one CM operation are two `func`s here, so each gets its
-/// own alias and the core module imports whichever one its call site named.
+/// Alias `func` out of its interface instance under its own local name.
 fn alias_interface_func(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -4184,12 +4165,7 @@ fn lower_wasi_functions(
     // World functions (Phase 9): canon-lower each like an interface method —
     // asynchronously when the dependency exports an `async func`, so the caller
     // drives the subtask through its `AsyncCall<T>`.
-    let world_funcs: Vec<CmFunctionInfo> = project
-        .cm_interface_registry
-        .world_import_functions()
-        .cloned()
-        .collect();
-    for func in &world_funcs {
+    for func in project.cm_interface_registry.world_import_functions() {
         let local_name = func.local_alias_name();
         if !ctx.has_comp_func(&local_name) {
             continue;
