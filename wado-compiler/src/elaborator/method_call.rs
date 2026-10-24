@@ -2297,6 +2297,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let generic_name =
             MethodName::format_local(&receiver_name, trait_name_opt.as_ref(), &static_call.method);
+        let block = match &selected {
+            Some(r) => self.tysys.block_of(r),
+            None => declaration.and_then(|def| self.tysys.declaring_block(def)),
+        };
+        self.enforce_static_block_bounds(block, &struct_type_args, static_call.span);
         let template = match &selected {
             Some(r) => self.tysys.static_template(r, &receiver_name),
             None => declaration.map(|def| self.tysys.signatures.declared_template(def)),
@@ -3429,6 +3434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
         let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
+        self.enforce_static_block_bounds(self.tysys.block_of(&method_ref), impl_type_args, span);
 
         let return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
@@ -3569,12 +3575,7 @@ impl TypeSystem {
     /// Read off target arguments: `impl Default for List<T>` declares no parameters.
     /// A block inheriting its trait's default supplies it without declaring it.
     fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
-        let selected = selected?;
-        let impl_def = selected.supplying_block.or_else(|| {
-            self.signatures
-                .method_sig(selected.method_id?)?
-                .declaring_impl
-        })?;
+        let impl_def = self.block_of(selected?)?;
         let table = self.type_table.borrow();
         let open = table
             .impl_target_args(impl_def)
@@ -3598,10 +3599,20 @@ impl TypeSystem {
             );
             return Some(TemplateId::derived(selected.module.clone(), &info));
         };
-        let block = selected
+        Some(TemplateId::in_block(def, self.block_of(selected)?))
+    }
+
+    /// The impl block a static selection's body is emitted for: the one
+    /// supplying it, else the one declaring it.
+    pub(super) fn block_of(&self, selected: &StaticMethodRef) -> Option<DefId> {
+        selected
             .supplying_block
-            .or_else(|| self.signatures.method_sig(def)?.declaring_impl)?;
-        Some(TemplateId::in_block(def, block))
+            .or_else(|| self.declaring_block(selected.method_id?))
+    }
+
+    /// The impl block declaring method `def`, `None` for a trait's own.
+    pub(super) fn declaring_block(&self, def: DefId) -> Option<DefId> {
+        self.signatures.method_sig(def)?.declaring_impl
     }
 
     /// The module a concrete block hosts its function in — its own.

@@ -2001,6 +2001,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     }
+                    let block = resolved
+                        .found()
+                        .and_then(|callee| self.tysys.block_of(&callee.method_ref));
+                    self.enforce_static_block_bounds(block, &impl_type_args_inferred, call.span);
                     let method_ref = resolved
                         .found()
                         .map(|callee| callee.method_ref.clone())

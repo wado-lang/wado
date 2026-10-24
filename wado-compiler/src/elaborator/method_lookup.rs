@@ -1028,22 +1028,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(&args),
                 )
             });
-        let Some(UnmetImplBound {
+        unmet.is_some_and(|unmet| self.report_unmet(unmet, span))
+    }
+
+    /// Enforce the bounds of the impl block a static call selected at the
+    /// receiver arguments it names, which no lookup filtered the block by.
+    pub(super) fn enforce_static_block_bounds(
+        &mut self,
+        block: Option<DefId>,
+        receiver_args: &[TypeId],
+        span: Span,
+    ) {
+        let Some(block) = block else {
+            return;
+        };
+        if let Some(unmet) = self.tysys.unmet_impl_bound(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            block,
+            None,
+            Some(receiver_args),
+        ) {
+            self.report_unmet(unmet, span);
+        }
+    }
+
+    /// Report `unmet` through the bound enforcement. Whether it reported one.
+    fn report_unmet(&mut self, unmet: UnmetImplBound, span: Span) -> bool {
+        let UnmetImplBound {
             param,
             type_arg,
             missing,
-        }) = unmet
-        else {
-            return false;
-        };
+        } = unmet;
         match missing {
-            UnmetKind::Trait(trait_) => {
-                let trait_name = trait_
-                    .canonical()
-                    .map(|decl| self.tysys.type_table.borrow().def_name(decl).to_string())
-                    .unwrap_or_default();
-                !self.enforce_single_bound_args(type_arg, &trait_name, Some(&trait_), &param, span)
-            }
+            UnmetKind::Trait(trait_) => !self.enforce_single_bound_args(
+                type_arg,
+                trait_.base_name(),
+                Some(&trait_),
+                &param,
+                span,
+            ),
             UnmetKind::Affine => {
                 let type_name = self.tysys.type_id_to_string(type_arg);
                 let _ = self.emit(TypeError::AffineArgument {
@@ -1054,6 +1078,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 true
             }
         }
+    }
+
+    /// [`Self::report_unmet_impl_bound`] over `ty`'s impls of the prelude
+    /// trait `item`.
+    pub(super) fn report_unmet_trait_impl_bound(
+        &mut self,
+        ty: TypeId,
+        item: CompilerItem,
+        span: Span,
+    ) -> bool {
+        let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+            return false;
+        };
+        self.report_unmet_impl_bound(ty, span, |s, def| {
+            s.tysys.signatures.impl_trait(def) == Some(trait_)
+        })
     }
 
     /// Whether a call of `method_name` on `receiver` may wait for the

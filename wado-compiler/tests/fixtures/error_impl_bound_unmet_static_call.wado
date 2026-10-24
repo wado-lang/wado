@@ -1,0 +1,43 @@
+// A static method of an impl block holds the block's bounds at the call, as
+// an instance method does: `Wrap::<String>::make` is rejected where it is
+// written, in every spelling, whether or not the body reaches the bound.
+
+use dep from "./sub/error_impl_bound_unmet_static_call_dep.wado";
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Tag> Wrap<T> {
+    fn make(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+
+    fn tag_of(v: T) -> i32 {
+        return v.tag();
+    }
+}
+
+test {
+    let a = Wrap::make("s");
+    let b = Wrap::<String>::make("s");
+    let c = Wrap::<String>::tag_of("s");
+    let d = dep::Wrap::make("s");
+    let e = dep::Wrap::<String>::make("s");
+}
+
+__DATA__
+{
+    "compile_error": "type 'String' does not implement trait 'Tag' required by bound on 'T'",
+    "compile_error_count": 5
+}

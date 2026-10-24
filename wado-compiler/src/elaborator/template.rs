@@ -113,7 +113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.type_lookup(),
             receiver,
             &trait_,
-        ) {
+        ) || self.report_unmet_trait_impl_bound(receiver, item, span)
+        {
             return;
         }
         let (type_name, trait_name) = {

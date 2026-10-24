@@ -2646,7 +2646,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     iterable_type_id
                 }
             } else {
-                if iterable_type_id != TypeTable::ERROR {
+                if iterable_type_id != TypeTable::ERROR
+                    && !self.report_unmet_trait_impl_bound(
+                        iterable_type_id,
+                        CompilerItem::IntoIterator,
+                        for_of.span,
+                    )
+                {
                     let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
                     let _ = self.emit(TypeError::MissingTraitImpl {
                         type_name,
@@ -2935,6 +2941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().get(iter_type),
                 ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
             )
+            && !self.report_unmet_trait_impl_bound(iter_type, CompilerItem::Iterator, span)
         {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
