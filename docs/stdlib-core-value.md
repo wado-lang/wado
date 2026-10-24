@@ -227,6 +227,10 @@ _Fields are private._
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+##### `fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError>`
+
+An object holds a key once, so nothing repeats it.
+
 ### `pub struct ValueVariantAccess`
 
 Reads a variant case: a bare name, or a single-key object holding the

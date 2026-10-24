@@ -98,8 +98,8 @@ fn "bug_fusion_untaken_case_payload_effects.wado/noisy$dae[return]"(n) with Stdo
     new_used = "bug_fusion_untaken_case_payload_effects.wado/$cm_binding__Stdout_write_via_stream"(new_used = n; n = 0; new_used);
     n = start_15;
     start_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_15 = n; n = 0; start_15, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_15 = new_used; new_used = 0; start_15);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n = new_used; new_used = 0; n);
     return;
 }
 
@@ -131,23 +131,21 @@ fn "bug_fusion_untaken_case_payload_effects.wado/run"() with Stdout {
             new_used = "bug_fusion_untaken_case_payload_effects.wado/$cm_binding__Stdout_write_via_stream"(new_used = v; v = 0; new_used);
             v = start_17;
             start_17 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = v; v = 0; start_17, $local_3.repr, $local_3.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = new_used; new_used = 0; start_17);
+            "core:rt/write_string_to_stream$dae[add_newline]"(v, $local_3.repr, $local_3.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(v = new_used; new_used = 0; v);
             break $fused_check;
         }
         "bug_fusion_untaken_case_payload_effects.wado/noisy$dae[return]"(n_0);
         break $fused_check;
     };
     n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_17 = builtin::i32_wrap_i64(x >> 32_i64);
+    v = builtin::i32_wrap_i64(x >> 32_i64);
     new_used = "bug_fusion_untaken_case_payload_effects.wado/$cm_binding__Stdout_write_via_stream"(new_used = n_0; n_0 = 0; new_used);
-    n_0 = start_17;
-    start_17 = 0;
-    start_17 = n_0;
-    n_0 = 0;
+    n_0 = v;
+    v = 0;
     $local_3 = global:bug_fusion_untaken_case_payload_effects.wado::$const_obj_1;
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = new_used; new_used = 0; start_17);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(n_0, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_0 = new_used; new_used = 0; n_0);
 }
 
 fn "bug_fusion_untaken_case_payload_effects.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -324,7 +322,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(5)), 0, $mv$message$repr, 0, 4);
     builtin::array_set_u8(new_repr, 4, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 5);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 5);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

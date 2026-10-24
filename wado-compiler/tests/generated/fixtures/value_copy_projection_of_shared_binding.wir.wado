@@ -66,9 +66,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:value_copy_projection_of_shared_binding.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 };
-global global:value_copy_projection_of_shared_binding.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
-global global:value_copy_projection_of_shared_binding.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(72);
+global global:value_copy_projection_of_shared_binding.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 };
+global global:value_copy_projection_of_shared_binding.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
+global global:value_copy_projection_of_shared_binding.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(72);
 
 fn "value_copy_projection_of_shared_binding.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
@@ -81,9 +81,9 @@ fn "value_copy_projection_of_shared_binding.wado/run"() with Stdout {
     let $sroa_$sroa_e_axes_121_repr_126: ref "Array<core:prelude/string.wado/String>";
     builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $sroa_$sroa_e_axes_121_repr_126(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72), used: 1 })), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(90), used: 1 });
     local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 1;
-    builtin::array_copy<u8>(local.tee $load_0($local_3.repr), 0, global:value_copy_projection_of_shared_binding.wado::$const_obj_2, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_0($local_3.repr), 0, global:value_copy_projection_of_shared_binding.wado::$const_obj_3, 0, 1);
     $local_3.used = 2;
-    builtin::array_copy<u8>($load_0, 1, global:value_copy_projection_of_shared_binding.wado::$const_obj_1, 0, 1);
+    builtin::array_copy<u8>($load_0, 1, global:value_copy_projection_of_shared_binding.wado::$const_obj_2, 0, 1);
     other_70 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_e_axes_121_repr_126, 0);
     $inline_core_prelude_string_wado_String__internal_push_string_24: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_24 local.tee n_82(other_70.used) == 0;
@@ -100,18 +100,16 @@ fn "value_copy_projection_of_shared_binding.wado/run"() with Stdout {
     new_used_86 = "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(new_used_86 = n_82; n_82 = 0; new_used_86);
     n_82 = start_87;
     start_87 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_87 = n_82; n_82 = 0; start_87, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_87 = new_used_86; new_used_86 = 0; start_87);
-    start_87 = builtin::i32_wrap_i64(local.tee $cm_pair_7_98("wasi/stream-new"()));
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_82, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_82 = new_used_86; new_used_86 = 0; n_82);
+    n_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_98("wasi/stream-new"()));
     new_used_86 = builtin::i32_wrap_i64($cm_pair_7_98 >> 32_i64);
-    n_82 = "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(n_82 = start_87; start_87 = 0; n_82);
-    start_87 = new_used_86;
+    start_87 = "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(start_87 = n_82; n_82 = 0; start_87);
+    n_82 = new_used_86;
     new_used_86 = 0;
-    new_used_86 = start_87;
-    start_87 = 0;
-    $local_3 = global:value_copy_projection_of_shared_binding.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_86, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_86 = n_82; n_82 = 0; new_used_86);
+    $local_3 = global:value_copy_projection_of_shared_binding.wado::$const_obj_1;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(n_82, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_82 = start_87; start_87 = 0; n_82);
 }
 
 fn "value_copy_projection_of_shared_binding.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -205,7 +203,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(2)), 0, $mv$message$repr, 0, 1);
     builtin::array_set_u8(new_repr, 1, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 2);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 2);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

@@ -330,6 +330,8 @@ _Fields are private._
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+##### `fn tag<S: AsStrSlice>(&mut self, key: S, on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError>`
+
 ### `pub struct CborVariantAccess`
 
 _Fields are private._

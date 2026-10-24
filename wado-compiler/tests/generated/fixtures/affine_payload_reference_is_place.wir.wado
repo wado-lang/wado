@@ -157,7 +157,7 @@ fn "affine_payload_reference_is_place.wado/run"() with Stdout {
             if ref.is_null($moved_5_5) == 0 {
                 if $moved_5_5.discriminant == 0 {
                 } else {
-                    "affine_payload_reference_is_place.wado/affine_payload_reference_is_place.wado/Tok^core:prelude/traits.wado/Drop::drop$sroa[self.n]"(local.tee $moved_2(ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($moved_5_5).payload_0).n);
+                    "affine_payload_reference_is_place.wado/affine_payload_reference_is_place.wado/Tok^core:prelude/traits.wado/Drop::drop$sroa[self.n]"(ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($moved_5_5).payload_0.n);
                 }
             }
             unreachable;
@@ -170,63 +170,61 @@ fn "affine_payload_reference_is_place.wado/run"() with Stdout {
         $moved_4_136 = "affine_payload_reference_is_place.wado/$cm_binding__Stdout_write_via_stream"($moved_4_136 = start_26; start_26 = 0; $moved_4_136);
         start_26 = new_used_25;
         new_used_25 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_3.repr, $local_3.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = $moved_4_136; $moved_4_136 = 0; new_used_25);
+        "core:rt/write_string_to_stream$dae[add_newline]"(start_26, $local_3.repr, $local_3.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = $moved_4_136; $moved_4_136 = 0; start_26);
         if ref.is_null($temp_6) == 0 {
-            new_used_25 = $temp_6.n;
+            start_26 = $temp_6.n;
             $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
             if @unlikely(local.tee $moved_4_136(0 + 5) > builtin::array_len($local_3.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $moved_4_136);
             }
-            start_26 = $local_3.used;
+            new_used_25 = $local_3.used;
             $local_3.used = $moved_4_136;
-            builtin::array_copy<u8>($local_3.repr, start_26, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
-            start_26 = new_used_25 < 0;
-            new_used_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(new_used_25); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
-            start_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_26, new_used_25);
-            "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_26, x_39, new_used_25);
-            new_used_25 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
-            start_26 = builtin::i32_wrap_i64(x_39 >> 32_i64);
-            $moved_4_136 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_136 = new_used_25; new_used_25 = 0; $moved_4_136);
-            "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_3.repr, $local_3.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = $moved_4_136; $moved_4_136 = 0; new_used_25);
+            builtin::array_copy<u8>($local_3.repr, new_used_25, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
+            new_used_25 = start_26 < 0;
+            start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(start_26); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
+            new_used_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, new_used_25, start_26);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, new_used_25, x_39, start_26);
+            start_26 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
+            new_used_25 = builtin::i32_wrap_i64(x_39 >> 32_i64);
+            $moved_4_136 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_136 = start_26; start_26 = 0; $moved_4_136);
+            "core:rt/write_string_to_stream$dae[add_newline]"(start_26 = new_used_25; new_used_25 = 0; start_26, $local_3.repr, $local_3.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = $moved_4_136; $moved_4_136 = 0; start_26);
         }
         if ref.is_null($replaced_3) == 0 {
             if $replaced_3.discriminant == 0 {
             } else {
-                new_used_25 = local.tee $temp_6(ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($replaced_3).payload_0).n;
+                start_26 = ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($replaced_3).payload_0.n;
                 $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
                 if @unlikely(local.tee $moved_4_136(0 + 5) > builtin::array_len($local_3.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $moved_4_136);
                 }
-                start_26 = $local_3.used;
+                new_used_25 = $local_3.used;
                 $local_3.used = $moved_4_136;
-                builtin::array_copy<u8>($local_3.repr, start_26, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
-                start_26 = new_used_25 < 0;
-                new_used_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(new_used_25); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
-                start_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_26, new_used_25);
-                "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_26, x_39, new_used_25);
-                new_used_25 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
-                start_26 = builtin::i32_wrap_i64(x_39 >> 32_i64);
-                $moved_4_136 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_136 = new_used_25; new_used_25 = 0; $moved_4_136);
-                "core:rt/write_string_to_stream$dae[add_newline]"(new_used_25 = start_26; start_26 = 0; new_used_25, $local_3.repr, $local_3.used);
-                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_25 = $moved_4_136; $moved_4_136 = 0; new_used_25);
+                builtin::array_copy<u8>($local_3.repr, new_used_25, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
+                new_used_25 = start_26 < 0;
+                start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(start_26); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
+                new_used_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, new_used_25, start_26);
+                "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, new_used_25, x_39, start_26);
+                start_26 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
+                new_used_25 = builtin::i32_wrap_i64(x_39 >> 32_i64);
+                $moved_4_136 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_136 = start_26; start_26 = 0; $moved_4_136);
+                "core:rt/write_string_to_stream$dae[add_newline]"(start_26 = new_used_25; new_used_25 = 0; start_26, $local_3.repr, $local_3.used);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = $moved_4_136; $moved_4_136 = 0; start_26);
             }
         }
     } else {
     }
-    new_used_25 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
+    start_26 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
     $moved_4_136 = builtin::i32_wrap_i64(x_39 >> 32_i64);
-    start_26 = "affine_payload_reference_is_place.wado/$cm_binding__Stdout_write_via_stream"(start_26 = new_used_25; new_used_25 = 0; start_26);
-    new_used_25 = $moved_4_136;
+    new_used_25 = "affine_payload_reference_is_place.wado/$cm_binding__Stdout_write_via_stream"(new_used_25 = start_26; start_26 = 0; new_used_25);
+    start_26 = $moved_4_136;
     $moved_4_136 = 0;
-    $moved_4_136 = new_used_25;
-    new_used_25 = 0;
     $local_3 = global:affine_payload_reference_is_place.wado::$const_obj_2;
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($moved_4_136, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_136 = start_26; start_26 = 0; $moved_4_136);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_26, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = new_used_25; new_used_25 = 0; start_26);
     if ref.is_null($sroa_o_value_131) == 0 {
         if local.tee $replaced_3((if ref.is_null(local.tee inner(ref.cast "affine_payload_reference_is_place.wado//Outer::Has"($sroa_o_value_131).payload_0)) -> ref null "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>" {
             ref.null none;
@@ -234,24 +232,24 @@ fn "affine_payload_reference_is_place.wado/run"() with Stdout {
             inner.value;
         })).discriminant == 0 {
         } else {
-            $moved_4_136 = local.tee $temp_6(ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($replaced_3).payload_0).n;
+            start_26 = ref.cast "core:prelude/types.wado//Option<affine_payload_reference_is_place.wado/Tok>::Some"($replaced_3).payload_0.n;
             $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-            if @unlikely(local.tee start_26(0 + 5) > builtin::array_len($local_3.repr)) {
+            if @unlikely(local.tee new_used_25(0 + 5) > builtin::array_len($local_3.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_26);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_25);
             }
-            new_used_25 = $local_3.used;
-            $local_3.used = start_26;
-            builtin::array_copy<u8>($local_3.repr, new_used_25, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
-            new_used_25 = $moved_4_136 < 0;
-            $moved_4_136 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s($moved_4_136); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
-            new_used_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, new_used_25, $moved_4_136);
-            "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, new_used_25, x_39, $moved_4_136);
-            $moved_4_136 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
-            new_used_25 = builtin::i32_wrap_i64(x_39 >> 32_i64);
-            start_26 = "wasi/wasi:cli/Stdout::write_via_stream"(start_26 = $moved_4_136; $moved_4_136 = 0; start_26);
-            "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_136 = new_used_25; new_used_25 = 0; $moved_4_136, $local_3.repr, $local_3.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_136 = start_26; start_26 = 0; $moved_4_136);
+            $moved_4_136 = $local_3.used;
+            $local_3.used = new_used_25;
+            builtin::array_copy<u8>($local_3.repr, $moved_4_136, global:affine_payload_reference_is_place.wado::$const_obj_1, 0, 5);
+            $moved_4_136 = start_26 < 0;
+            start_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(start_26); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
+            $moved_4_136 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, $moved_4_136, start_26);
+            "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $moved_4_136, x_39, start_26);
+            start_26 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
+            $moved_4_136 = builtin::i32_wrap_i64(x_39 >> 32_i64);
+            new_used_25 = "wasi/wasi:cli/Stdout::write_via_stream"(new_used_25 = start_26; start_26 = 0; new_used_25);
+            "core:rt/write_string_to_stream$dae[add_newline]"(start_26 = $moved_4_136; $moved_4_136 = 0; start_26, $local_3.repr, $local_3.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = new_used_25; new_used_25 = 0; start_26);
         }
     }
 }
@@ -460,7 +458,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, $mv$message$repr, 0, 3);
     builtin::array_set_u8(new_repr, 3, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 4);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 4);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

@@ -361,8 +361,6 @@ test {
 `key`, beside the fields of its payload, rather than as the key around it (see
 [Serialized Shapes](./spec-serialization.md#serialized-shapes)).
 
-> Not yet implemented: `#[wire(tag = "...")]` is not recognized.
-
 #### Positional Fields
 
 `#[wire(positional)]` marks a struct field as ordinal: when deserializing, it is

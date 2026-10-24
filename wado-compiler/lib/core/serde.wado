@@ -151,10 +151,38 @@ pub struct DeserializeError {
     /// Byte offset into the input, or `-1` where the failure has no position —
     /// a whole-value rejection, or a format that counts nothing.
     pub offset: i64,
+    /// Where in the value the failure is, as the fields and elements it was
+    /// reached through: `model.vocab`, `added_tokens[2].id`. Empty at the root.
+    pub path: String = "",
+}
+
+/// Called where a read already failed, so a read that succeeds pays nothing
+/// for its path.
+impl DeserializeError {
+    /// This error, reached through the field `name`.
+    pub fn within_field<S: AsStrSlice>(&self, name: S) -> DeserializeError {
+        return self.within(`${name}`);
+    }
+
+    /// This error, reached through the element or entry `key`: a list's index,
+    /// a map's key, written as `Inspect` writes it.
+    pub fn within_item<K: Inspect>(&self, key: &K) -> DeserializeError {
+        return self.within(`[${key:?}]`);
+    }
+
+    fn within(&self, step: String) -> DeserializeError {
+        let mut e = *self;
+        e.path = if e.path.is_empty() || e.path.starts_with("[") { `${step}${e.path}` } else { `${step}.${e.path}` };
+        return e;
+    }
 }
 
 impl Display for DeserializeError {
     fn fmt(&self, f: &mut Formatter) {
+        if !self.path.is_empty() {
+            f.write_str(&self.path);
+            f.write_str(": ");
+        }
         f.write_str(&self.message);
         if self.offset >= 0 {
             f.write_str(` at offset ${self.offset}`);
@@ -271,6 +299,15 @@ pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, Deserializ
         ));
     }
     return Result::Ok(next);
+}
+
+/// The string an internal tag holds, read from `d` once `DeserializeStruct::tag`
+/// has found it under `key`, which an error names in its path.
+pub fn read_tag<D: Deserializer, S: AsStrSlice>(d: &mut D, key: S) -> Result<String, DeserializeError> {
+    return match d.deserialize_string() {
+        Ok(tag) => Result::Ok(tag),
+        Err(e) => Result::Err(e.within_field(key)),
+    };
 }
 
 #[compiler_item("serialize_seq")]
@@ -466,6 +503,21 @@ pub trait DeserializeStruct with () {
 
     #[compiler_item("deserialize_struct_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
+
+    /// The string under `key`, wherever it stands among the entries: an
+    /// internally tagged variant's case. Every entry is looked at, so a repeat
+    /// of `key` meets `on_duplicate` as a repeated field does, and an accepted
+    /// one gives the last string. The entries are then read again from the
+    /// first, where `next_field` passes `key`'s over as a key no field has. An
+    /// error reading the string names `key` in its path; one reading past
+    /// another entry names nothing, as `next_field`'s skip does. A format that
+    /// cannot look ahead keeps the default, which refuses rather than read the
+    /// wrong case.
+    fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type(
+            `this format cannot read an internally tagged variant, whose tag is "${key}"`,
+        ));
+    }
 }
 
 #[compiler_item("deserialize_variant")]
@@ -1306,12 +1358,24 @@ impl<T: Deserialize> Deserialize for List<T> {
         let mut seq = d.begin_seq()?;
         // Peek at the first element before allocating backing storage, so an
         // empty array allocates none at all.
-        let first_opt = seq.next_element()?;
+        let first_opt = match seq.next_element() {
+            Ok(first) => first,
+            Err(e) => {
+                builtin::cold_path();
+                return Result::Err(e.within_item(&0));
+            },
+        };
         if let Some(first_elem) = first_opt {
             let mut items: List<T> = List::with_capacity(2);
             items.push(first_elem);
             loop {
-                let next_opt = seq.next_element()?;
+                let next_opt = match seq.next_element() {
+                    Ok(next) => next,
+                    Err(e) => {
+                        builtin::cold_path();
+                        return Result::Err(e.within_item(&items.len()));
+                    },
+                };
                 if let Some(item) = next_opt {
                     items.push(item);
                 } else {
@@ -1349,11 +1413,23 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         let mut va = d.begin_variant("Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
-            let val = va.payload()?;
+            let val = match va.payload() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_field("Ok"));
+                },
+            };
             va.end()?;
             return Result::Ok(Result::Ok(val));
         } else if name == "Err" {
-            let val = va.payload()?;
+            let val = match va.payload() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_field("Err"));
+                },
+            };
             va.end()?;
             return Result::Ok(Result::Err(val));
         }
@@ -1362,6 +1438,234 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
             message: `unknown Result variant: ${name}`,
             offset: -1,
         });
+    }
+}
+
+/// Writes an internally tagged case through its payload's own `Serialize`: the
+/// payload's `begin_struct` opens the object with the tag as its first field.
+struct TaggedCaseSerializer<S: Serializer> {
+    inner: &mut S,
+    tag: String,
+    case_name: String,
+}
+
+impl<S: Serializer> TaggedCaseSerializer<S> {
+    /// The compiler admits a payload only where the derivation writes it as one
+    /// struct (`check_internal_tag`), which calls nothing else.
+    fn no_struct<T>(&self) -> Result<T, SerializeError> {
+        unreachable();
+    }
+}
+
+impl<S: Serializer> Serializer for TaggedCaseSerializer<S> {
+    type SeqSerializer = NoCompound;
+    type MapSerializer = NoCompound;
+    type StructSerializer = S::StructSerializer;
+    type VariantSerializer = NoCompound;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn serialize_string<T: AsStrSlice>(&mut self, v: T) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn is_human_readable(&self) -> bool {
+        return self.inner.is_human_readable();
+    }
+
+    fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
+        return self.inner.serialize_tag(tag);
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_struct<T: AsStrSlice>(&mut self, name: T, fields: i32) -> Result<S::StructSerializer, SerializeError> {
+        let mut st = self.inner.begin_struct(name, fields + 1)?;
+        st.field(&self.tag, &self.case_name)?;
+        return Result::Ok(st);
+    }
+
+    fn serialize_unit_variant<T: AsStrSlice, T1: AsStrSlice>(
+        &mut self,
+        type_name: T,
+        variant_name: T1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_variant<T: AsStrSlice, T1: AsStrSlice>(
+        &mut self,
+        type_name: T,
+        variant_name: T1,
+        disc: i32,
+    ) -> Result<NoCompound, SerializeError> {
+        return self.no_struct();
+    }
+}
+
+/// Reads an internally tagged case's payload through its own `Deserialize`,
+/// from the object its tag was read from: the payload's `begin_struct` takes
+/// that object as already begun.
+struct TaggedCaseDeserializer<A: DeserializeStruct> {
+    access: A,
+    on_duplicate: DuplicateFieldPolicy,
+}
+
+impl<A: DeserializeStruct> TaggedCaseDeserializer<A> {
+    /// The compiler admits a payload only where the derivation reads it as one
+    /// struct (`check_internal_tag`), which calls nothing else.
+    fn no_struct<T>(&self) -> Result<T, DeserializeError> {
+        unreachable();
+    }
+}
+
+impl<A: DeserializeStruct> Deserializer for TaggedCaseDeserializer<A> {
+    type SeqAccess = NoCompound;
+    type MapAccess = NoCompound;
+    type StructAccess = A;
+    type VariantAccess = NoCompound;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return self.on_duplicate;
+    }
+
+    fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<A, DeserializeError> {
+        return Result::Ok(self.access);
+    }
+
+    fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
+        return self.no_struct();
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return self.no_struct();
+    }
+}
+
+/// The schema of a unit case's object, which holds nothing but its tag.
+struct NoFields {
+}
+
+impl FieldSchema for NoFields {
+    fn lookup(key: ByteSlice) -> Option<i32> {
+        return null;
+    }
+
+    fn positional_at(rank: i32) -> Option<i32> {
+        return null;
     }
 }
 
@@ -1391,6 +1695,16 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
+                // A compile-time fact, so an untagged variant keeps none of this.
+                if let Some(tag) = ReflectVariant::<V>::wire_tag() {
+                    if case.is_unit() {
+                        let mut st = s.begin_struct(&type_name, 1)?;
+                        st.field(&tag, &name)?;
+                        return st.end();
+                    }
+                    let payload = case.extract(self);
+                    return payload.serialize(&mut TaggedCaseSerializer { inner: s, tag, case_name: name });
+                }
                 if case.is_unit() {
                     return s.serialize_unit_variant(&type_name, &name, case.discriminant());
                 }
@@ -1506,7 +1820,13 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                             &wire_name(&members[i], policy),
                         )?;
                     }
-                    let value: F = sd.value()?;
+                    let value: F = match sd.value() {
+                        Ok(value) => value,
+                        Err(e) => {
+                            builtin::cold_path();
+                            return Result::Err(e.within_field(wire_name(&members[i], policy)));
+                        },
+                    };
                     slots[i] = Option::Some(value);
                     taken = true;
                 }
@@ -1537,8 +1857,32 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for V {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<V, DeserializeError> {
         let members = ReflectVariant::<V>::members();
-        let mut va = d.begin_variant(&Reflect::<V>::type_name(), members.len())?;
         let policy = Reflect::<V>::wire_name_policy();
+        if let Some(tag) = ReflectVariant::<V>::wire_tag() {
+            let on_duplicate = d.on_duplicate_field();
+            let mut sd = d.begin_struct(&Reflect::<V>::type_name(), members.len())?;
+            let name = sd.tag(&tag, on_duplicate)?;
+            for let case of members {
+                if wire_name(&case, policy) == name {
+                    if case.is_unit() {
+                        while let Some(_) = sd.next_field::<NoFields>()? {
+                            sd.skip()?;
+                        }
+                        sd.end()?;
+                        return Result::Ok(case.make());
+                    }
+                    let payload = P::deserialize(&mut TaggedCaseDeserializer { access: sd, on_duplicate })?;
+                    return Result::Ok(case.construct(payload));
+                }
+            }
+            return Result::Err(DeserializeError {
+                kind: DeserializeErrorKind::UnknownVariant,
+                message: `unknown variant: ${name}`,
+                offset: -1,
+                path: tag,
+            });
+        }
+        let mut va = d.begin_variant(&Reflect::<V>::type_name(), members.len())?;
         let key = case_key(&mut va)?;
         for let case of members {
             // `wire_name` resolves at the use site, where the member and the
@@ -1553,7 +1897,13 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for 
                     va.end()?;
                     return Result::Ok(case.make());
                 }
-                let payload: P = va.payload()?;
+                let payload: P = match va.payload() {
+                    Ok(payload) => payload,
+                    Err(e) => {
+                        builtin::cold_path();
+                        return Result::Err(e.within_field(wire_name(&case, policy)));
+                    },
+                };
                 va.end()?;
                 return Result::Ok(case.construct(payload));
             }

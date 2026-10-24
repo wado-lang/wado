@@ -3620,6 +3620,9 @@ pub struct TirVariantDecl {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
     pub wire_name_policy: Option<NamePolicy>,
+    /// `#[wire(tag = "...")]` — the key an internally tagged case is written
+    /// under.
+    pub wire_tag: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -3749,7 +3752,7 @@ pub struct TirTraitMethod {
 /// syntax boundary and rejects anything else with a diagnostic, so downstream
 /// synthesis never needs to re-parse a trait-name string. A `From` marker
 /// never reaches here: `marker` writes it out as an ordinary impl.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SynthTrait {
     Serialize,
     Deserialize,
