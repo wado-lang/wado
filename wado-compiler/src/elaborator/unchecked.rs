@@ -1,7 +1,7 @@
 //! Where `unchecked` may stand: before a call whose callee a `contract` clause
 //! binds, by its own clauses or by its trait's.
 
-use crate::ast::{self, AstVisitor, Expr, IndexExpr, Item, Module, UnaryOp};
+use crate::ast::{self, AstVisitor, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::DefId;
 use crate::elaborator::sem::ModuleSemantics;
@@ -141,13 +141,14 @@ impl AstVisitor for Finder<'_> {
         };
         if let Some((places, value)) = assignment {
             for place in places {
-                match unchecked_subscript(place) {
-                    Some((index, span)) => {
-                        self.report(ASSIGNED, span);
-                        self.visit_expr(&index.expr);
-                        self.visit_expr(&index.index);
-                    }
-                    None => self.visit_expr(place),
+                if let Expr::Index(index) = place
+                    && let Some(span) = index.unchecked
+                {
+                    self.report(ASSIGNED, span);
+                    self.visit_expr(&index.expr);
+                    self.visit_expr(&index.index);
+                } else {
+                    self.visit_expr(place);
                 }
             }
             self.visit_expr(value);
@@ -181,14 +182,6 @@ impl Finder<'_> {
             message: message.to_string(),
             span: Some(DiagnosticSpan::from_span(&span, None)),
         });
-    }
-}
-
-/// The subscript `place` is, with the span of the `unchecked` marking it.
-fn unchecked_subscript(place: &Expr) -> Option<(&IndexExpr, Span)> {
-    match place {
-        Expr::Index(index) => index.unchecked.map(|span| (&**index, span)),
-        _ => None,
     }
 }
 

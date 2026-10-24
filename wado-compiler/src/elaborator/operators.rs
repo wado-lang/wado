@@ -77,8 +77,12 @@ impl AssignValue<'_> {
 /// Where an assignment writes, resolved before the value it takes.
 enum WritePlace {
     /// `recv[i] = v` through `IndexAssign`, its dispatch already recorded.
-    IndexAssign { output_type: TypeId },
-    Place { target_type: TypeId },
+    IndexAssign {
+        output_type: TypeId,
+    },
+    Place {
+        target_type: TypeId,
+    },
 }
 
 impl WritePlace {
@@ -1141,9 +1145,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .then_some("cannot assign through immutable reference")
     }
 
-    /// Whether an `Index` assignment target reaching `assign_to_target`'s general
+    /// Whether an `Index` assignment target reaching `check_write`'s general
     /// path is an assignable place — index-assignable receivers already returned
-    /// above. A read-only `Index` access lowers to `*recv.index(i)` over
+    /// there. A read-only `Index` access lowers to `*recv.index(i)` over
     /// `&Output`, so writing through it is an immutable-reference error; an
     /// `IndexValue` access is a by-value call and no place at all.
     fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
@@ -1427,8 +1431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // classified from the AST + recorded facts.
         let is_valid_lvalue = match target_ast {
             ast::Expr::FieldAccess(_) => true,
-            // The IndexAssign path at the top of `assign_to_target` already
-            // returned for index-assignable receivers, so an `Index` target
+            // `WritePlace::IndexAssign` already returned above, so an `Index` target
             // here is a tuple index (a place), a read-only `Index` /
             // `IndexValue` trait access (not a place), or an unindexable
             // receiver (already diagnosed by `resolve_index`).

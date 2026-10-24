@@ -246,7 +246,10 @@ impl WritePlace {
             Self::Place(target) => target,
         };
         let kind = match target.kind {
-            TirExprKind::GlobalVarGet { module_source, name } => TirExprKind::GlobalVarSet {
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => TirExprKind::GlobalVarSet {
                 module_source,
                 name,
                 value: Box::new(value),
@@ -2921,9 +2924,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Assign(assign) => match assign.destructuring_targets() {
                 Some(targets) => self.reify_destructuring_assign(assign, targets, ctx),
-                None => {
-                    self.reify_write(&assign.target, &assign.value, span, ctx)
-                }
+                None => self.reify_write(&assign.target, &assign.value, span, ctx),
             },
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`
@@ -5506,8 +5507,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )];
         for (place, (name, index, type_id)) in places.into_iter().zip(bindings) {
-            let element =
-                self.handed_on(TirExpr::new(TirExprKind::Local { index, name }, type_id, span));
+            let element = self.handed_on(TirExpr::new(
+                TirExprKind::Local { index, name },
+                type_id,
+                span,
+            ));
             stmts.push(TirStmt::new(
                 TirStmtKind::Expr(place.write(element, span)),
                 span,
