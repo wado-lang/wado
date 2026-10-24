@@ -40,8 +40,7 @@ with its start and duration, so `--each '^nir/iteration'` shows how the NIR
 fixed point converges round by round.
 
 The trace is wall time. A phase that runs on the `wado-opt-*` workers spends
-more CPU than its row shows, and a serial phase spends the same. Comparing a
-row with the profile's CPU for that phase tells which is which.
+more CPU than its row shows; a serial phase spends the same.
 
 ## CPU: the sampling profile
 

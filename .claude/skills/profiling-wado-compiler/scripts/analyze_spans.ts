@@ -83,9 +83,8 @@ const print = (node: Node, depth: number): void => {
   const rows = [...node.children].sort((a, b) => b[1].wall - a[1].wall);
   for (const [key, child] of rows) {
     if (child.wall < min) continue;
-    const share = end > 0 ? (100 * child.wall) / end : 0;
     console.log(
-      `${child.wall.toFixed(2).padStart(7)}s ${share.toFixed(1).padStart(6)}% ${String(child.count).padStart(6)} ${String(child.peakMiB).padStart(6)}  ${"  ".repeat(depth)}${key}`,
+      `${child.wall.toFixed(2).padStart(7)}s ${((100 * child.wall) / end).toFixed(1).padStart(6)}% ${String(child.count).padStart(6)} ${String(child.peakMiB).padStart(6)}  ${"  ".repeat(depth)}${key}`,
     );
     print(child, depth + 1);
   }
