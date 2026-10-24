@@ -5,7 +5,7 @@
 
 use super::ProviderMismatch;
 use super::component_context::{CmTypeKey, ComponentModelContext};
-use crate::ast::{AstId, CmImport, NamedType, Type};
+use crate::ast::{AstId, CmImport, NamedType, Type, cm_function_path};
 use crate::canonical::{
     CanonicalIntrinsic, CmDecl, CmDeclKind, CmFuturePayload, CmPayloadType, CmScalarType,
     CmStreamPayload,
@@ -3861,14 +3861,22 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
     // The component's own items are left alone, so a lift the program does not
     // import still names a core export. That export stays as a stub, and what
     // only its body reached is what the collection takes away.
+    // The component names a lift's core export by its own interface name, not
+    // the one the program imports it under.
     let unused: IndexSet<String> = project
         .cm_interface_registry
         .interfaces()
-        .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
-        .flat_map(|interface| {
-            interface.functions.into_iter().filter_map(|func| {
+        .filter_map(|interface| {
+            let exported = asset
+                .component_interfaces
+                .iter()
+                .find(|exported| exported.import == interface.path)?;
+            Some((exported.export.clone(), interface))
+        })
+        .flat_map(|(export, interface)| {
+            interface.functions.into_iter().filter_map(move |func| {
                 let used = project.used_wasi_functions.contains(&func.cm_identifier());
-                (!used).then(|| func.cm_identifier())
+                (!used).then(|| cm_function_path(&export, &func.wasi_func_name))
             })
         })
         .collect();
@@ -3939,10 +3947,10 @@ fn compose_dependency_components(
         for (namespace, asset) in &project.wasm_assets {
             // Each (dependency export, program import) this asset satisfies.
             let provides: Vec<(&str, String)> = asset
-                .component_interface_fqs
+                .component_interfaces
                 .iter()
-                .filter(|fq| dependency_fqs.contains(fq.as_str()))
-                .map(|fq| (fq.as_str(), fq.clone()))
+                .filter(|exported| dependency_fqs.contains(exported.import.as_str()))
+                .map(|exported| (exported.export.as_str(), exported.import.clone()))
                 .chain(
                     world_funcs
                         .iter()

@@ -16,6 +16,7 @@ use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
 use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
+use sha2::{Digest, Sha256};
 use std::fmt;
 use std::hash::Hash;
 
@@ -466,12 +467,35 @@ pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
     format!("{INTERNAL_PREFIX}{}", interface.interface_path())
 }
 
-/// The label the program imports the world function `function` of its
-/// `component`-th dependency under. Two dependencies may each export a world
-/// function of one name, and composition wires each label to its own; the
-/// label is a CM plain name, so it carries no `$`.
-pub fn cm_world_import_label(component: usize, function: &str) -> String {
-    format!("dependency{component}-{function}")
+// A name a dependency component exports is its own: two dependencies may each
+// export a world function, or an interface, of one name. The program imports
+// each under a name tagged with its component, and composition wires that name
+// to the component's export. The names are CM names, so they carry no `$`.
+
+/// The tag of the dependency whose canonical namespace is `component`: a
+/// digest, so it depends on no order the dependencies are met in.
+fn cm_dependency_tag(component: &str) -> String {
+    let digest = Sha256::digest(component.as_bytes());
+    let hex: String = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("dependency{hex}")
+}
+
+/// The label the program imports the world function `function` of the
+/// dependency `component` under.
+pub fn cm_world_import_label(component: &str, function: &str) -> String {
+    format!("{}-{function}", cm_dependency_tag(component))
+}
+
+/// The interface the program imports the interface `interface` the dependency
+/// `component` exports as.
+pub fn cm_dependency_interface(interface: &ast::CmImport, component: &str) -> ast::CmImport {
+    ast::CmImport {
+        package: format!("{}-{}", interface.package, cm_dependency_tag(component)),
+        ..interface.clone()
+    }
 }
 
 // A CM import's names are minted from its CM identifier

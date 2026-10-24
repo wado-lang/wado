@@ -1059,10 +1059,6 @@ pub struct CmInterfaceRegistry {
     /// declaring each -> its key in `functions`.
     world_imports: IndexMap<AstId, String>,
 
-    /// The components exporting a world function, each by its ordinal in
-    /// [`cm_world_import_label`].
-    world_components: IndexSet<ModuleSource>,
-
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
@@ -3590,7 +3586,9 @@ impl CmInterfaceRegistry {
                 })
                 .collect();
             let (params, callbacks) = self.value_params(params);
-            let (ordinal, _) = self.world_components.insert_full(component.clone());
+            let namespace = component
+                .wasm_canonical_namespace()
+                .expect("a world function comes from a component asset");
             let func_info = CmFunctionInfo {
                 // A world import sits above any interface, so it has no
                 // package or interface path to name.
@@ -3607,7 +3605,7 @@ impl CmInterfaceRegistry {
                 return_type: unwrap_async_call_if_async(func.is_async, &func.return_type),
                 world: Some(WorldFunctionSite {
                     component: component.clone(),
-                    label: cm_world_import_label(ordinal, cm_func_name),
+                    label: cm_world_import_label(&namespace, cm_func_name),
                 }),
             };
             self.bind(&func_info)?;

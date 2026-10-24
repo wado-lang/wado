@@ -8,7 +8,7 @@
 use crate::ast::{
     AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes,
     InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
-    cm_import_of, for_each_function, walk_generic_params, walk_item,
+    cm_import_of, cm_interface_name_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -644,8 +644,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Interface(effect) => {
-                    // Extract effect-level CM import from attributes
-                    let effect_cm_import = cm_import_of(&effect.attrs).cloned();
+                    let effect_cm_import = cm_interface_name_of(&effect.attrs);
 
                     let kind = SymbolKind::Effect(EffectSymbol {
                         methods: effect.methods.iter().map(|m| m.name.clone()).collect(),
@@ -1231,14 +1230,18 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// is, so the two consume alike. A name the module declares itself, or one
     /// two default interfaces share, stays behind its interface.
     fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
-        let mut owners: hashmap::IndexMap<&str, Vec<(&InterfaceDecl, &CmImport)>> =
+        let mut owners: hashmap::IndexMap<&str, Vec<(&InterfaceDecl, CmImport)>> =
             hashmap::IndexMap::default();
-        for (iface, cm) in exported_interfaces(module).filter(|(_, cm)| cm.is_package_default()) {
+        let named = exported_interfaces(module).map(|(iface, _)| {
+            let name = cm_interface_name_of(&iface.attrs).expect("an exported interface is named");
+            (iface, name)
+        });
+        for (iface, name) in named.filter(|(_, name)| name.is_package_default()) {
             for op in &iface.methods {
                 owners
                     .entry(op.name.as_str())
                     .or_default()
-                    .push((iface, cm));
+                    .push((iface, name.clone()));
             }
         }
         for (op, ifaces) in owners {
@@ -1280,9 +1283,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         let mut sharing: hashmap::IndexMap<String, Vec<String>> = hashmap::IndexMap::default();
         for item in &module.items {
             if let Item::Interface(decl) = item
-                && let Some(cm) = cm_import_of(&decl.attrs)
+                && let Some(cm) = cm_interface_name_of(&decl.attrs)
             {
-                let basename = interface_basename(cm);
+                let basename = interface_basename(&cm);
                 if decl.name != basename
                     && !self.symbols.is_defined_in_module(module_source, &basename)
                 {

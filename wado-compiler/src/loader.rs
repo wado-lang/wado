@@ -30,7 +30,7 @@ use crate::name::{
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
-use crate::wit_consume::{ComponentBindings, build_bindings};
+use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
 use crate::{bind, hashmap, parser, stdlib};
 
 /// Error that can occur during module loading
@@ -386,8 +386,8 @@ pub struct WasmAsset {
     pub bytes: Vec<u8>,
     /// Function exports in wasm order. Empty for a component asset.
     pub function_exports: Vec<WasmExportSig>,
-    /// Exported interface FQs; non-empty marks this as a CM component to compose in.
-    pub component_interface_fqs: Vec<String>,
+    /// Exported interfaces; non-empty marks this as a CM component to compose in.
+    pub component_interfaces: Vec<ExportedInterface>,
 }
 
 impl WasmAsset {
@@ -1744,7 +1744,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             WasmAsset {
                 bytes: core_wasm_bytes,
                 function_exports,
-                component_interface_fqs: Vec::new(),
+                component_interfaces: Vec::new(),
             },
         );
         Ok(())
@@ -1800,7 +1800,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             WasmAsset {
                 bytes,
                 function_exports: Vec::new(),
-                component_interface_fqs: bindings.interface_fqs,
+                component_interfaces: bindings.interfaces,
             },
         );
         Ok(())
@@ -1823,7 +1823,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 return Err(err("expected a component, found a WIT package".to_string()));
             }
         };
-        build_bindings(&resolve, world).map_err(err)
+        build_bindings(&resolve, world, source).map_err(err)
     }
 
     /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths

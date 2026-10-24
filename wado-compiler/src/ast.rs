@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO,
-    UNAVAILABLE, WASM_MODULE,
+    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
+    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -1957,6 +1957,21 @@ impl Attribute {
 #[must_use]
 pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
     attrs.iter().find_map(Attribute::as_cm_import)
+}
+
+/// The interface name a `use` spells the interface carrying `attrs` by: the
+/// one an imported component exports it under (`#[cm_export]`), where that is
+/// not the CM import it binds, else that import.
+#[must_use]
+pub fn cm_interface_name_of(attrs: &[Attribute]) -> Option<CmImport> {
+    let exported = attrs.iter().find(|a| a.name == CM_EXPORT).map(|a| {
+        let name = a
+            .args
+            .first()
+            .expect("`#[cm_export]` takes the interface name");
+        CmImport::parse(name.as_str()).expect("`#[cm_export]` names an interface")
+    });
+    exported.or_else(|| cm_import_of(attrs).cloned())
 }
 
 /// The world-level function import among `attrs`, wherever it sits: the bare
