@@ -3502,7 +3502,8 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type);
                     elem_substitution.insert(pack_idx, override_ty);
-                    elem_substitution.insert(TypeTable::pack_walk_slot(pack_idx, walk), override_ty);
+                    elem_substitution
+                        .insert(TypeTable::pack_walk_slot(pack_idx, walk), override_ty);
                     self.pin_binding_types(
                         &mut elem_body,
                         binding_local_idx,

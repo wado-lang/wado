@@ -4610,8 +4610,7 @@ impl GenericParam {
     /// mints reads as `_` at its use sites and appears in no list, and so does
     /// the pack a `[..X]` repeating a non-pack `X` mints.
     pub fn is_written(&self) -> bool {
-        !(self.is_effect && self.name == EFFECT_HOLE)
-            && repeated_element(&self.name).is_none()
+        !(self.is_effect && self.name == EFFECT_HOLE) && repeated_element(&self.name).is_none()
     }
 
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).

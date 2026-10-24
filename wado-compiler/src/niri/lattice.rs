@@ -555,7 +555,7 @@ impl Interpreter<'_> {
                 let [arr] = args else {
                     unreachable!("`array_len` takes an array");
                 };
-                let Lattice::Const(v) = self.operand_to_lattice(body, arr.expr) else {
+                let Lattice::Const(v) = self.projected_lattice(body, arr.expr) else {
                     return Lattice::Unevaluated;
                 };
                 v.seq_len().map_or(Lattice::Unevaluated, |len| {

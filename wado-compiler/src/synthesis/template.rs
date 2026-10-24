@@ -19,9 +19,7 @@ use crate::elaborator::trait_env::{
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name,
-};
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
 use crate::synthesis::common::{
     deref_expr, field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr,
     ref_expr,

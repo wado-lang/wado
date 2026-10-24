@@ -3404,7 +3404,8 @@ impl TypeTable {
     /// Whether `id` mentions the type parameter or pack at slot `index`.
     fn mentions_param_slot(&self, id: TypeId, index: u32) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { index: at, .. } | ResolvedType::TypePack { index: at, .. }
+            ResolvedType::TypeParam { index: at, .. }
+            | ResolvedType::TypePack { index: at, .. }
                 if *at == index =>
             {
                 true
@@ -5961,7 +5962,9 @@ impl TypeTable {
                 ..
             } if repeated_element(name).is_some() => type_pack_name(&type_name(*element)),
             ResolvedType::TypePack { name, .. } => type_pack_name(name),
-            ResolvedType::PackElement { pack, walk } => pack_element_name(self.pack_name(*pack), *walk),
+            ResolvedType::PackElement { pack, walk } => {
+                pack_element_name(self.pack_name(*pack), *walk)
+            }
         }
     }
 

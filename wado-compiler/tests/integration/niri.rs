@@ -25,9 +25,8 @@ use wado_compiler::nir::{
     NirParam, NirUnaryOp, ParamAbi, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind,
-    StmtNode, Tracked,
+    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind,
+    ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode, Tracked,
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{

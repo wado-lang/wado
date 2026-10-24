@@ -41,9 +41,9 @@ use crate::nir::{
     NirTypeParam, NirVariantCase, NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
-    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode, Tracked,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId,
+    StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};

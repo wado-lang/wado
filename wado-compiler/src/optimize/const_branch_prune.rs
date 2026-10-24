@@ -235,7 +235,9 @@ fn unused_label_flattenable(body: &Body, label: &str, inner: BlockId) -> bool {
 fn stmt_dominated(body: &Body, stmt: StmtId) -> bool {
     let base = match &body.stmts[stmt].kind {
         StmtKind::If { .. } => is_empty_if(body, stmt),
-        StmtKind::LabeledBlock { label, block, .. } => unused_label_flattenable(body, label, *block),
+        StmtKind::LabeledBlock { label, block, .. } => {
+            unused_label_flattenable(body, label, *block)
+        }
         StmtKind::Expr(e)
             if e.as_value()
                 .is_some_and(|v| matches!(body.values.kind(v), ValueKind::Unit)) =>

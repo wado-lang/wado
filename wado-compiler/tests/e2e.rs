@@ -449,7 +449,10 @@ fn holes_match(mut wir: &str, holes: &[Hole<'_>], texts: &[&str]) -> bool {
         }
         let serial = &wir[..len];
         if !hole.name.is_empty() {
-            match taken.iter().find(|(taken_name, _)| *taken_name == hole.name) {
+            match taken
+                .iter()
+                .find(|(taken_name, _)| *taken_name == hole.name)
+            {
                 Some((_, first)) if *first != serial => return false,
                 Some(_) => {}
                 None => taken.push((hole.name, serial)),

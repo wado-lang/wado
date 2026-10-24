@@ -12,8 +12,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{fused_block_label, serial_suffixed, threaded_block_label};
 use crate::nir::{NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
-    StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;

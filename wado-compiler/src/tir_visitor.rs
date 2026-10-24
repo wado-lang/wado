@@ -2,9 +2,7 @@
 //! `TirOptVisitor` to mutate with change tracking. Plus a few shared TIR queries.
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind};
 
 /// Trait for mutable traversal of TIR trees.
 ///

@@ -628,7 +628,7 @@ impl Interpreter<'_> {
         };
         let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
             self.eval_operand(body, at),
-            self.eval_operand(body, source),
+            self.eval_referent(body, source),
             self.eval_operand(body, from),
             self.eval_operand(body, len),
         ) else {
@@ -659,6 +659,16 @@ impl Interpreter<'_> {
         }
         self.reduce_in_place(body, e);
         self.reduce_to_lattice(body, e)
+    }
+
+    /// [`Self::eval_operand`] for an operand only read through: an alias local
+    /// reads as the place it names, which a value position must refuse.
+    fn eval_referent(&mut self, body: &mut Body, op: Operand) -> Lattice {
+        if named_local(body, op).is_some_and(|index| self.frame.place_aliases.contains_key(&index))
+        {
+            return self.projected_lattice(body, op);
+        }
+        self.eval_operand(body, op)
     }
 
     /// Evaluate a block in expression position by executing its statements —

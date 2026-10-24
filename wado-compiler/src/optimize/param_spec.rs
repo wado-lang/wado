@@ -18,7 +18,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
+use crate::niri::{
+    Callee, CalleeMap, CtfeBuiltinMap, GlobalKey, build_callee_map, build_ctfe_builtin_map,
+};
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
@@ -60,6 +62,14 @@ enum FieldConst {
     /// clone builds it once and its reads name that one object, as the
     /// caller's reads named the one it passed.
     Literal(Arc<ConstLiteral>),
+    /// `&GLOBAL` for an immutable global: every read of it names what the
+    /// caller's reference named.
+    GlobalRef {
+        module_source: ModuleSource,
+        name: String,
+        global_type: ConstType,
+        ref_type: ConstType,
+    },
 }
 
 /// The type of a constant: its key says which constants are one, and its id
@@ -111,10 +121,15 @@ enum ConstLiteral {
 
 impl FieldConst {
     /// The constant an operand holds, or `None` otherwise.
-    fn of_operand(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
+    fn of_operand(
+        body: &Body,
+        types: &TypeTable,
+        immutable: &IndexSet<GlobalKey>,
+        op: Operand,
+    ) -> Option<Self> {
         match op {
             Operand::Value(_) => Self::of_scalar(body, types, op),
-            Operand::Expr(expr) => Self::of_literal(body, types, expr),
+            Operand::Expr(expr) => Self::of_literal(body, types, immutable, expr),
         }
     }
 
@@ -141,7 +156,12 @@ impl FieldConst {
         }
     }
 
-    fn of_literal(body: &Body, types: &TypeTable, expr: ExprId) -> Option<Self> {
+    fn of_literal(
+        body: &Body,
+        types: &TypeTable,
+        immutable: &IndexSet<GlobalKey>,
+        expr: ExprId,
+    ) -> Option<Self> {
         let node = &body.exprs[expr];
         let literal = match &node.kind {
             ExprKind::PackedArray(data) if data.len() <= MAX_SEQ_ELEMENTS => {
@@ -157,12 +177,28 @@ impl FieldConst {
                 fields: fields
                     .iter()
                     .map(|f| {
-                        let value = Self::of_operand(body, types, f.value)?;
+                        let value = Self::of_operand(body, types, immutable, f.value)?;
                         let ty = ConstType::of(types, body.operand_type(f.value));
                         Some((f.field_index, f.name.clone(), value, ty))
                     })
                     .collect::<Option<_>>()?,
             },
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: Operand::Expr(inner),
+            } if let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[*inner].kind
+                && immutable.contains(&(module_source.clone(), name.clone())) =>
+            {
+                return Some(FieldConst::GlobalRef {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    global_type: ConstType::of(types, body.exprs[*inner].type_id),
+                    ref_type: ConstType::of(types, node.type_id),
+                });
+            }
             _ => return None,
         };
         Some(FieldConst::Literal(Arc::new(literal)))
@@ -187,6 +223,29 @@ impl FieldConst {
             FieldConst::Char(c) => ValueKind::Char(*c),
             FieldConst::Literal(literal) => {
                 return literal.build(engine, types, at, span).map(Operand::Expr);
+            }
+            FieldConst::GlobalRef {
+                module_source,
+                name,
+                global_type,
+                ref_type,
+            } => {
+                if !ref_type.admits(types, at) {
+                    return None;
+                }
+                let global = engine.alloc_expr(
+                    ExprKind::GlobalVarGet {
+                        module_source: module_source.clone(),
+                        name: name.clone(),
+                    },
+                    global_type.id,
+                    span,
+                );
+                let reference = ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: Operand::Expr(global),
+                };
+                return Some(Operand::Expr(engine.alloc_expr(reference, at, span)));
             }
         };
         Some(Operand::Value(engine.body.values.alloc_unshared(kind, at)))
@@ -369,6 +428,8 @@ struct Signatures {
     /// and cloning one member splits a cycle the return-ABI analysis reasons
     /// about whole.
     scalar_specializable: Vec<bool>,
+    /// The globals no write reaches, whose `&G` a clone may name again.
+    immutable_globals: IndexSet<GlobalKey>,
 }
 
 impl Signatures {
@@ -421,6 +482,12 @@ impl Signatures {
             specializable,
             param_fixed,
             scalar_specializable,
+            immutable_globals: project
+                .globals
+                .iter()
+                .filter(|g| !g.wado_mutable)
+                .map(|g| (g.module_source.clone(), g.name.clone()))
+                .collect(),
         }
     }
 
@@ -506,8 +573,10 @@ fn collect_local_uses(
                     uses.writes.push((*field_index, None));
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
-                    uses.writes
-                        .push((*field_index, FieldConst::of_operand(body, types, *value)));
+                    uses.writes.push((
+                        *field_index,
+                        FieldConst::of_operand(body, types, &signatures.immutable_globals, *value),
+                    ));
                 } else {
                     uses.reads.insert(*field_index);
                 }
@@ -776,6 +845,7 @@ fn summarize_params(
 fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
+    immutable: &IndexSet<GlobalKey>,
     value: Operand,
     expected: Option<TypeKey>,
 ) -> Option<FieldConsts> {
@@ -802,7 +872,8 @@ fn struct_literal_consts(
         fields
             .iter()
             .filter_map(|field| {
-                FieldConst::of_operand(body, types, field.value).map(|c| (field.field_index, c))
+                FieldConst::of_operand(body, types, immutable, field.value)
+                    .map(|c| (field.field_index, c))
             })
             .collect(),
     )
@@ -840,7 +911,9 @@ fn collect_roots(
         let expected = locals
             .get(local as usize)
             .and_then(|l| struct_base(l.type_id, types));
-        let Some(consts) = struct_literal_consts(body, types, value, expected) else {
+        let Some(consts) =
+            struct_literal_consts(body, types, &signatures.immutable_globals, value, expected)
+        else {
             invalid.insert(local);
             return;
         };
@@ -937,7 +1010,13 @@ fn collect_roots(
             let expected = locals
                 .get(*local as usize)
                 .and_then(|l| struct_base(l.type_id, types));
-            let Some(assigned) = struct_literal_consts(body, types, *rebind, expected) else {
+            let Some(assigned) = struct_literal_consts(
+                body,
+                types,
+                &signatures.immutable_globals,
+                *rebind,
+                expected,
+            ) else {
                 consts.clear();
                 break;
             };
@@ -1138,6 +1217,7 @@ fn select_sites(
                         locals,
                         body,
                         types,
+                        immutable: &signatures.immutable_globals,
                         facts,
                         roots,
                     },
@@ -1197,6 +1277,7 @@ struct SelectField<'a> {
     locals: &'a [NirLocal],
     body: &'a Body,
     types: &'a TypeTable,
+    immutable: &'a IndexSet<GlobalKey>,
     facts: &'a IndexMap<(FuncId, u32), ParamFacts>,
     roots: &'a IndexMap<u32, FieldConsts>,
 }
@@ -1222,7 +1303,13 @@ fn select_field_bindings(
             }
         }
         // A literal written at the call is the only name its object has.
-        None => match struct_literal_consts(caller.body, caller.types, arg, Some(pointee)) {
+        None => match struct_literal_consts(
+            caller.body,
+            caller.types,
+            caller.immutable,
+            arg,
+            Some(pointee),
+        ) {
             Some(consts) => {
                 literal = consts;
                 &literal
@@ -1911,10 +1998,13 @@ fn redirect_const_reads(
             FieldConst::Int(..)
             | FieldConst::Float(..)
             | FieldConst::Bool(_)
-            | FieldConst::Char(_) => match value.operand_at(engine, types, type_id, span) {
-                Some(operand) => operand,
-                None => continue,
-            },
+            | FieldConst::Char(_)
+            | FieldConst::GlobalRef { .. } => {
+                match value.operand_at(engine, types, type_id, span) {
+                    Some(operand) => operand,
+                    None => continue,
+                }
+            }
         };
         engine.redirect_expr(read, operand);
         rewritten = true;

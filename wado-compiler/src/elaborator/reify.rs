@@ -84,6 +84,7 @@ use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
 use crate::format_spec::FormatKind;
+use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::name::{
     DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
@@ -107,7 +108,6 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 use crate::unparse::{unparse_expr_source, unparse_instance_pattern, unparse_pattern_source};
-use crate::hashmap;
 
 /// A template's text and holes as reify assembles it: one segment more than
 /// holes, each segment cooked and raw, and each hole with its specifier as
@@ -4798,14 +4798,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .borrow_mut()
             .make_compiler_struct(CompilerItem::String);
         if holes.is_empty() {
-            let [cooked, _] = segments.pop().expect("a template has one segment more than holes");
+            let [cooked, _] = segments
+                .pop()
+                .expect("a template has one segment more than holes");
             return TirExpr::new(TirExprKind::StringLiteral(cooked), string_type, span);
         }
         let lone_string = {
             let tt = self.tysys.type_table.borrow();
             matches!(holes.as_slice(), [(value, None)]
                 if tt.type_key(value.type_id) == tt.type_key(string_type))
-                && segments.iter().all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
+                && segments
+                    .iter()
+                    .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
         };
         if lone_string {
             return holes.pop().expect("matched one hole").0;
@@ -4821,16 +4825,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unzip();
         let shape = TemplateShape { holes };
         let template_ty = self.reify_template_type(shape, span);
-        let (literal, holes) = self.reify_template_literal(template_ty, values, &segments, span, ctx);
+        let (literal, holes) =
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
         let (func, type_args) = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let mut func = method_ref(&tt, CompilerItem::StringFormat);
-            func.template = Some(tt.compiler_items().require_template(CompilerItem::StringFormat));
+            func.template = Some(
+                tt.compiler_items()
+                    .require_template(CompilerItem::StringFormat),
+            );
             let hole_types = tt
                 .template_shape_of_type(template_ty)
                 .expect("a template type has a shape")
                 .hole_types();
-            (func, vec![template_ty, tt.template_holes_tuple(&hole_types)])
+            (
+                func,
+                vec![template_ty, tt.template_holes_tuple(&hole_types)],
+            )
         };
         let call = TirExpr::new(
             TirExprKind::Call {
@@ -4895,7 +4906,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .into_iter()
             .map(|raw| [unescape_template_segment(&raw), raw])
             .collect();
-        let (literal, holes) = self.reify_template_literal(template_ty, values, &segments, span, ctx);
+        let (literal, holes) =
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
 
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
@@ -5039,36 +5051,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.template_segment_type(),
             )
         };
-        let name = match self.pending_template_segments.get(text) {
-            Some((global, _)) => global.name.clone(),
-            None => {
-                let name = template_segment_global_name(self.pending_template_segments.len());
-                let literal = TirExpr::new(
-                    TirExprKind::StringLiteral(text.to_string()),
-                    string_type,
-                    span,
-                );
-                let (init, init_fn) = self.split_global_initializer(
-                    &name,
-                    string_type,
-                    literal,
-                    LocalFrame::default(),
-                    span,
-                );
-                let global = TirGlobal {
-                    name: name.clone(),
-                    ty: string_type,
-                    init,
-                    param: None,
-                    wado_mutable: false,
-                    visibility: Visibility::Private,
-                    module_source: self.emitted_module_source.clone(),
-                    span,
-                };
-                self.pending_template_segments
-                    .insert(text.to_string(), (global, init_fn));
-                name
-            }
+        let name = if let Some((global, _)) = self.pending_template_segments.get(text) {
+            global.name.clone()
+        } else {
+            let name = template_segment_global_name(self.pending_template_segments.len());
+            let literal = TirExpr::new(
+                TirExprKind::StringLiteral(text.to_string()),
+                string_type,
+                span,
+            );
+            let (init, init_fn) = self.split_global_initializer(
+                &name,
+                string_type,
+                literal,
+                LocalFrame::default(),
+                span,
+            );
+            let global = TirGlobal {
+                name: name.clone(),
+                ty: string_type,
+                init,
+                param: None,
+                wado_mutable: false,
+                visibility: Visibility::Private,
+                module_source: self.emitted_module_source.clone(),
+                span,
+            };
+            self.pending_template_segments
+                .insert(text.to_string(), (global, init_fn));
+            name
         };
         let read = TirExpr::new(
             TirExprKind::GlobalVarGet {
