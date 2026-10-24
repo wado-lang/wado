@@ -754,13 +754,13 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
     let b: ref Array<u8>;
     let i_36: i32;
     let v_38: ref "core:args//ArgsError";
-    let $licm_used_71: i32;
+    let $licm_used_65: i32;
     consumed = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(), used: 0 };
     i_2 = 0;
-    $licm_used_71 = argv.used;
+    $licm_used_65 = argv.used;
     b41: block {
         l42: loop {
-            break_if b41 i_2 >= $licm_used_71;
+            break_if b41 i_2 >= $licm_used_65;
             if @unlikely(local.tee used_21(consumed.used) >= builtin::array_len(consumed.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(consumed);
@@ -774,19 +774,19 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
     de = struct.new "core:args//ArgvDeserializer" { tokens: argv, pos: 0, after_dd: 0, cur_is_option: 0, cur_inline: ref.null none, cur_name: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, cur_written: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, consumed: consumed, forced: ref.null none, err: ref.null none, unknown_case: ref.null none };
     let $mv$$vr_15$1: ref null "multi_value_return_inlined_if_tail.wado//RunCli";
     let $mv$$vr_15$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$licm_used_71, $mv$$vr_15$1, $mv$$vr_15$2] = "core:serde/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/Deserialize::deserialize<core:args/ArgvDeserializer>$sroa[return]"(de);
-    e_6 = (if $licm_used_71 == 0 -> ref "core:serde//DeserializeError" {
+    multivalue_bind [$licm_used_65, $mv$$vr_15$1, $mv$$vr_15$2] = "core:serde/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/Deserialize::deserialize<core:args/ArgvDeserializer>$sroa[return]"(de);
+    e_6 = (if $licm_used_65 == 0 -> ref "core:serde//DeserializeError" {
         v_4 = ref.as_non_null($mv$$vr_15$1);
         return 0, v_4, ref.null none;
-    } else if @likely($licm_used_71 == 1) -> ref "core:serde//DeserializeError" {
+    } else if @likely($licm_used_65 == 1) -> ref "core:serde//DeserializeError" {
         ref.as_non_null($mv$$vr_15$2);
     } else {
         unreachable;
     });
     bad = struct.new "core:args//ArgsError" { kind: local.tee bad((if ref.is_null(local.tee $local_11(de.err)) == 0 -> ref "core:args//ArgsError" {
-        let $variant_payload_13: ref "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
-        $licm_used_71 = local.tee $variant_payload_13(ref.as_non_null($local_11)).0;
-        if local.tee raised($variant_payload_13.1).kind == local.tee i_2(e_6.kind) -> ref "core:args//ArgsError" {
+        let $variant_payload_7: ref "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
+        $licm_used_65 = local.tee $variant_payload_7(ref.as_non_null($local_11)).0;
+        if local.tee raised($variant_payload_7.1).kind == local.tee i_2(e_6.kind) -> ref "core:args//ArgsError" {
             if $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
                 a = local.tee $load_9(raised.message).repr;
                 used_21 = $load_9.used;
@@ -807,7 +807,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
             } -> ref "core:args//ArgsError" {
-                struct.new "core:args//ArgsError" { kind: $licm_used_71, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                struct.new "core:args//ArgsError" { kind: $licm_used_65, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, b, 0, $licm_used_65); a, used: $licm_used_65 } };
             } else if i_2 == 2 -> ref "core:args//ArgsError" {
                 if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
                     local.tee bad(ref.as_non_null($local_12));
@@ -822,7 +822,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                         3;
                     } else {
                         4;
-                    }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                    }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
                 }
             } else {
                 return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee v_38("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -835,7 +835,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, b, 0, $licm_used_65); a, used: $licm_used_65 } };
             }
         } else if i_2 == 2 -> ref "core:args//ArgsError" {
             if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
@@ -851,7 +851,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
             }
         } else {
             return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee v_38("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -864,7 +864,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                 3;
             } else {
                 4;
-            }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
         }
     } else {
         if local.tee i_2(e_6.kind) == 2 -> ref "core:args//ArgsError" {
@@ -881,7 +881,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
             }
         } else {
             return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -894,7 +894,7 @@ fn "core:args/core/args/parse<multi_value_return_inlined_if_tail.wado/RunCli>$sr
                 3;
             } else {
                 4;
-            }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
         }
     })).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } };
     return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(bad, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
