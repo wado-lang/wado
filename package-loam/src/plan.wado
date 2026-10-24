@@ -3,7 +3,7 @@
 //! See WEP 2026-09-20 § "Fusion Is Decided by Operator Kind" and
 //! `package-loam/webgpu.md`.
 
-use { HashMap, HashSet } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use {
     GROUP_QUERY_ATTENTION,
     Graph,
@@ -292,6 +292,10 @@ pub variant Decision {
     /// Computed inside the product kernel that writes the tensor named, as
     /// that product reads its left operand: the kernel's prologue.
     Prologue(String),
+    /// A product computed by the product kernel that writes the tensor named,
+    /// whose weight's columns that kernel's weight holds after its own, and
+    /// read as a view of what it writes.
+    Concatenated(String),
     /// Written as a tensor, for the reason given.
     Written(Reason),
 }
@@ -338,6 +342,9 @@ pub struct Plan {
     /// The weights a backend holds as a product's right operand, as
     /// `rhs_weights` finds them.
     pub rhs: HashMap<String, bool>,
+    /// The products each product kernel computes by weights concatenated
+    /// along their columns, by the first of them, in the graph's order.
+    pub concats: HashMap<String, List<String>>,
 }
 
 impl Plan {
@@ -544,6 +551,17 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         }
         decisions[tensor] = decision;
     }
+    let concats = if fuse {
+        concatenated(graph, checked, &heads, &by_rhs, &rhs);
+    } else {
+        HashMap::<String, List<String>>::new();
+    };
+    for let [first, parts] of concats.entries() {
+        for let part of parts[1..<parts.len()].to_list() {
+            decisions[part] = Decision::Concatenated(*first);
+            heads[part] = *first;
+        }
+    }
     let mut rows = HashMap::<String, Shape>::new();
     for let [head, group] of groups.entries() {
         if let Some(space) = group.rows {
@@ -558,7 +576,84 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             }
         }
     }
-    return Plan { decisions, rows, lowered, spreads, pairs, rhs };
+    return Plan { decisions, rows, lowered, spreads, pairs, rhs, concats };
+}
+
+/// The products of one left operand computed as one product, by their
+/// weights' columns concatenated, by the first of them: two or more, each a
+/// `MatMul` that is a kernel alone (`heads`), by a weight held as stored for
+/// it alone (`rhs`), the weights of one row axis and element, and the products
+/// over one set of leading axes.
+fn concatenated(
+    graph: &Graph,
+    checked: &Checked,
+    heads: &HashMap<String, String>,
+    by_rhs: &List<Option<String>>,
+    rhs: &HashMap<String, bool>,
+) -> HashMap<String, List<String>> {
+    let mut members = HashMap::<String, i32>::new();
+    for let [_, head] of heads.entries() {
+        members[*head] = members.get(*head).unwrap_or(0) + 1;
+    }
+    let mut reads = HashMap::<String, i32>::new();
+    for let node of &graph.nodes {
+        for let t of node.reads() {
+            reads[t] = reads.get(t).unwrap_or(0) + 1;
+        }
+    }
+    let mut dtypes = HashMap::<String, String>::new();
+    for let vi of &graph.initializers {
+        dtypes[vi.name] = vi.dtype;
+    }
+    // The products each could join, by their left operand, in the graph's order.
+    let mut by_lhs = TreeMap::<String, List<i32>>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        let tensor = node.outputs[0];
+        if let Some(lhs) = by_rhs[at]
+            && node.op == "MatMul"
+            && heads.get(tensor) == Option::Some(tensor)
+            && members[tensor] == 1
+            && rhs.get(node.inputs[1]) == Option::Some(false)
+            && reads[node.inputs[1]] == 1 {
+            let mut at_lhs = by_lhs.get(lhs).unwrap_or([]);
+            at_lhs.push(at);
+            by_lhs[lhs] = at_lhs;
+        }
+    }
+    let joins = |a: &Node, b: &Node| {
+        let [wa, wb] = [checked.shapes[a.inputs[1]], checked.shapes[b.inputs[1]]];
+        let [oa, ob] = [checked.shapes[a.outputs[0]], checked.shapes[b.outputs[0]]];
+        if !same_axis(&wa, 0, &wb, 0) || dtypes[a.inputs[1]] != dtypes[b.inputs[1]] || oa.rank() != ob.rank() {
+            return false;
+        }
+        for let i of 0..<oa.rank() - 1 {
+            if !same_axis(&oa, i, &ob, i) {
+                return false;
+            }
+        }
+        return true;
+    };
+    let mut concats = HashMap::<String, List<String>>::new();
+    for let [_, products] of by_lhs.entries() {
+        let mut left = *products;
+        while left.len() >= 2 {
+            let first = &graph.nodes[left[0]];
+            let mut parts: List<String> = [first.outputs[0]];
+            let mut rest: List<i32> = [];
+            for let at of left[1..<left.len()].to_list() {
+                if joins(first, &graph.nodes[at]) {
+                    parts.push(graph.nodes[at].outputs[0]);
+                } else {
+                    rest.push(at);
+                }
+            }
+            if parts.len() >= 2 {
+                concats[parts[0]] = parts;
+            }
+            left = rest;
+        }
+    }
+    return concats;
 }
 
 /// The product kernel that takes `tensor` in as its prologue, read at `reads`:

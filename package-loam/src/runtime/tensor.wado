@@ -934,6 +934,32 @@ pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Ten
     };
 }
 
+/// Two matrices' columns side by side: `A`'s, then `B`'s. Products of one left
+/// operand by matrices concatenated so are one product, whose columns are each
+/// product's in turn.
+pub struct Concat<A, B> {
+}
+
+/// `a`'s columns, then `b`'s, as `Concat` says.
+pub fn concat_columns<E, K, A, B>(a: &Tensor<E, [K, A]>, b: &Tensor<E, [K, B]>) -> Tensor<E, [K, Concat<A, B>]>
+    contract a.extents[0] == b.extents[0]
+{
+    let [k, n, m] = [a.extents[0], a.extents[1], b.extents[1]];
+    let mut data = List::<E>::with_capacity(k * (n + m));
+    for let r of 0..<k {
+        for let j of 0..<n {
+            data.push(a.data[r * n + j]);
+        }
+        for let j of 0..<m {
+            data.push(b.data[r * m + j]);
+        }
+    }
+    return Tensor {
+        data,
+        extents: [k, n + m],
+    };
+}
+
 /// The left operand `a` computes, as the kernel the plan would otherwise have
 /// written it with: a row kernel where it folds, an elementwise one where not.
 pub fn prologue_tensor<affine Bk: Backend, Axes>(

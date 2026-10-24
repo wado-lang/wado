@@ -187,14 +187,17 @@ pub fn emit(
     let kept = kept_literals(&literals, checked);
     let decided = plan(graph, checked, fuse);
     let rhs = decided.rhs;
-    let paired = paired_weights(graph, checked, &decided, &rhs, &held);
-    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &paired, &placement);
+    let together = Together {
+        paired: paired_weights(graph, checked, &decided, &rhs, &held),
+        concat: concat_weights(graph, &decided),
+    };
+    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
         scalars,
         rhs,
-        paired,
+        paired: together.paired,
     };
     emit_forward(&mut w, graph, checked, &decided, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
     return Result::Ok(w.to_string());
@@ -359,9 +362,10 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired", "Prologue",
-    "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "extents_mismatch", "from_end",
-    "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
+    "Attention", "Backend", "BinaryOp", "Concat", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "Paired",
+    "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "concat_columns", "extent_mismatch",
+    "extents_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent",
+    "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -447,19 +451,18 @@ fn emit_weights(
     held: &HashMap<String, String>,
     kept: &List<String>,
     rhs: &HashMap<String, bool>,
-    paired: &HashMap<String, String>,
+    together: &Together,
     placement: &Placement,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
     prepared.add_generic(BACKEND_BOUND);
-    let seconds = seconds_of(paired);
+    let elsewhere = together.elsewhere();
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
-        // A pair is held in its first weight's field.
-        if !seconds.contains(vi.name) {
-            prepared.add_pub_field(ident, weight_type(checked, rhs, paired, &vi.name));
+        if !elsewhere.contains(vi.name) {
+            prepared.add_pub_field(ident, weight_type(checked, rhs, together, &vi.name));
         }
     }
     for let tensor of kept {
@@ -481,7 +484,7 @@ fn emit_weights(
     for let vi of &graph.initializers {
         hosts[vi.name] = `&self.${names.get(&vi.name)}`;
     }
-    emit_prepared_fields(w, graph, checked, names, held, rhs, paired, &hosts);
+    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts);
     emit_kept_fields(w, names, kept);
     w.end_with(";");
     w.end();
@@ -489,14 +492,14 @@ fn emit_weights(
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, rhs, paired, kept, placement);
+    emit_constructor(w, graph, checked, names, held, rhs, together, kept, placement);
     if !kept.is_empty() {
         emit_kept(w, checked, names, kept);
     }
 }
 
 /// Each initializer's `Prepared` field, from its host tensor in `hosts`, and
-/// each pair `paired` holds from its two.
+/// each pair or concatenation `together` holds from its weights.
 fn emit_prepared_fields(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -504,19 +507,26 @@ fn emit_prepared_fields(
     names: &Names,
     held: &HashMap<String, String>,
     rhs: &HashMap<String, bool>,
-    paired: &HashMap<String, String>,
+    together: &Together,
     hosts: &HashMap<String, String>,
 ) {
-    let seconds = seconds_of(paired);
+    let elsewhere = together.elsewhere();
     for let vi of &graph.initializers {
-        if seconds.contains(vi.name) {
+        if elsewhere.contains(vi.name) {
             continue;
         }
         let ident = names.get(&vi.name);
         let host = hosts[vi.name];
-        let call = if let Some(second) = paired.get(vi.name) {
-            let verb = if converted(checked, held, &vi.name) { "prepare_rhs_paired" } else { "keep_rhs_paired" };
+        let converted = converted(checked, held, &vi.name);
+        let call = if let Some(second) = together.paired.get(vi.name) {
+            let verb = if converted { "prepare_rhs_paired" } else { "keep_rhs_paired" };
             `backend.${verb}(${host}, ${hosts[second]})`;
+        } else if let Some(parts) = together.concat.get(vi.name) {
+            let mut joined = host;
+            for let part of parts[1..<parts.len()].to_list() {
+                joined = `&concat_columns(${joined}, ${hosts[part]})`;
+            }
+            `backend.${if converted { "prepare_rhs" } else { "keep_rhs" }}(${joined})`;
         } else {
             preparation(checked, held, &vi.name, host, weight_holding(rhs, &vi.name));
         };
@@ -524,13 +534,62 @@ fn emit_prepared_fields(
     }
 }
 
-/// The second weights of `paired`'s pairs.
-fn seconds_of(paired: &HashMap<String, String>) -> HashSet<String> {
-    let mut seconds = HashSet::<String>::new();
-    for let [_, second] of paired.entries() {
-        seconds.insert(*second);
+/// The weights a backend holds together: in pairs, each pair's first mapped to
+/// its second, and concatenated, each run's first mapped to the run.
+struct Together {
+    paired: HashMap<String, String>,
+    concat: HashMap<String, List<String>>,
+}
+
+impl Together {
+    /// The weights held in another's field: each pair's second, and every
+    /// weight of a run but its first.
+    fn elsewhere(&self) -> HashSet<String> {
+        let mut held = HashSet::<String>::new();
+        for let [_, second] of self.paired.entries() {
+            held.insert(*second);
+        }
+        for let [_, parts] of self.concat.entries() {
+            for let part of parts[1..<parts.len()].to_list() {
+                held.insert(part);
+            }
+        }
+        return held;
     }
-    return seconds;
+
+    /// The column axis the weight `tensor` is held under, `n` being its own
+    /// column axis's position.
+    fn columns(&self, checked: &Checked, tensor: &String, n: i32) -> String {
+        let own = checked.shapes[*tensor].axes[n].name;
+        if self.paired.contains_key(*tensor) {
+            return `Paired<${own}>`;
+        }
+        let Some(parts) = self.concat.get(*tensor) else {
+            return own;
+        };
+        let mut joined = own;
+        for let part of parts[1..<parts.len()].to_list() {
+            joined = `Concat<${joined}, ${checked.shapes[part].axes[n].name}>`;
+        }
+        return joined;
+    }
+}
+
+/// The weights of the products each product kernel computes by weights
+/// concatenated, by the first weight, in the order the plan concatenates them.
+fn concat_weights(graph: &Graph, decided: &Plan) -> HashMap<String, List<String>> {
+    let mut weight_of = HashMap::<String, String>::new();
+    for let node of &graph.nodes {
+        if node.op == "MatMul" {
+            weight_of[node.outputs[0]] = node.inputs[1];
+        }
+    }
+    let mut concat = HashMap::<String, List<String>>::new();
+    for let [_, parts] of decided.concats.entries() {
+        let weights: List<String> = parts.into_iter().map(|p| weight_of[*p]).collect();
+        concat[weights[0]] = weights;
+    }
+    return concat;
 }
 
 /// `Kept`, the `kept` literals as the backend holds them, built once by
@@ -624,21 +683,14 @@ fn weight_holding(rhs: &HashMap<String, bool>, tensor: &String) -> Holding {
     };
 }
 
-/// The weight `tensor` as `Prepared` holds it: with its partner where
-/// `paired` pairs it first.
-fn weight_type(
-    checked: &Checked,
-    rhs: &HashMap<String, bool>,
-    paired: &HashMap<String, String>,
-    tensor: &String,
-) -> String {
+/// The weight `tensor` as `Prepared` holds it: with the weights `together`
+/// holds in its field.
+fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, together: &Together, tensor: &String) -> String {
     let Some(transposed) = rhs.get(*tensor) else {
         return prepared_type(checked, tensor);
     };
-    let shape = checked.shapes[*tensor];
     let [k, n] = if transposed { [1, 0] } else { [0, 1] };
-    let columns = if paired.contains_key(*tensor) { `Paired<${shape.axes[n].name}>` } else { shape.axes[n].name };
-    return `${BACKEND_PARAM}::Rhs<${shape.axes[k].name}, ${columns}>`;
+    return `${BACKEND_PARAM}::Rhs<${checked.shapes[*tensor].axes[k].name}, ${together.columns(checked, tensor, n)}>`;
 }
 
 /// The weights a backend holds in pairs, each pair's first mapped to its
@@ -689,7 +741,8 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Prepared::embedded` where the graph carries every initializer's data, and
 /// `Prepared::load` reading the rest from a safetensors checkpoint otherwise.
 /// Each tensor is prepared as it is read, so the host copy of one weight at a
-/// time is all that lives beside the prepared ones.
+/// time, or of the weights held together, is all that lives beside the
+/// prepared ones.
 fn emit_constructor(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -697,7 +750,7 @@ fn emit_constructor(
     names: &Names,
     held: &HashMap<String, String>,
     rhs: &HashMap<String, bool>,
-    paired: &HashMap<String, String>,
+    together: &Together,
     kept: &List<String>,
     placement: &Placement,
 ) {
@@ -740,7 +793,7 @@ fn emit_constructor(
         };
         hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
     }
-    emit_prepared_fields(w, graph, checked, names, held, rhs, paired, &hosts);
+    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts);
     emit_kept_fields(w, names, kept);
     w.end_with(if loads { ");" } else { ";" });
     w.end();
@@ -1123,6 +1176,10 @@ fn scope_body(
             },
             Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, fuse)?),
             Kernel => {
+                // The first product of a concatenation binds this one.
+                if decided.of(&node.outputs[0]) matches { Concatenated(_) } {
+                    continue;
+                }
                 let spread = decided.spread_of(&node.outputs[0]);
                 let Some(term) = node_term(&node, checked, exprs, symbols, graph.opset, &spread)? else {
                     body.extend(&kernel_calls(&node, checked, names, exprs, symbols, graph.opset)?);
@@ -1139,10 +1196,38 @@ fn scope_body(
                     continue;
                 }
                 body.push(bound_to(&output, term.call(&space, &decided.rows_of(&output), &exprs.paired), names, exprs));
+                if let Some(parts) = decided.concats.get(output) {
+                    body.extend(&concat_parts(checked, &parts, names, exprs));
+                }
             },
         }
     }
     return Result::Ok(body);
+}
+
+/// The products `parts` as views of their concatenation, which the first's
+/// name holds: each later one, then the first, shadowing it.
+fn concat_parts(checked: &Checked, parts: &List<String>, names: &Names, exprs: &mut Operands) -> List<String> {
+    let mut whole = checked.shapes[parts[0]];
+    let last = whole.rank() - 1;
+    let mut columns = whole.axes[last].name;
+    for let part of parts[1..<parts.len()].to_list() {
+        columns = `Concat<${columns}, ${checked.shapes[part].axes[last].name}>`;
+    }
+    whole.axes[last].name = columns;
+    let operand = `&${names.get(&parts[0])}`;
+    let mut views: List<String> = [];
+    let mut start = 0;
+    for let part of *parts {
+        let cut = checked.shapes[part].axes[last];
+        let length = cut.static_extent();
+        let call = slice_axis_call(&"f32", &whole, last, &cut.name, &operand, [`${start}`, `${length}`], 1);
+        views.push(bound_to(&part, call, names, exprs));
+        start += length;
+    }
+    // The first's view reads the name it then takes.
+    views.push(views.remove(0));
+    return views;
 }
 
 /// A node's kernel calls, each bound to the output it computes.

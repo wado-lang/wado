@@ -638,6 +638,78 @@ test "a row kernel products by inputs read is written" {
     assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
 }
 
+/// The plan of three products of one normalized input by weights of 3, 2 and
+/// 3 columns, each returned, the first read through `first`.
+fn concatenated_plan(first: String) -> Plan {
+    let source = `
+g (float[N, 4] X) => (float[N, 3] Y, float[N, 2] R, float[N, 3] T)
+<int64[1] Axes = {1}, float[4, 3] W, float[4, 2] V, float[4, 3] U>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    D = Sqrt(M)
+    H = Div(X, D)
+    P = MatMul(H, W)
+    R = MatMul(H, V)
+    T = MatMul(H, U)
+    Y = ${first}(P)
+}
+`;
+    let mut layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "U",
+            ["Feat", "Out"],
+        ],
+        [
+            "V",
+            ["Feat", "Two"],
+        ],
+        [
+            "R",
+            ["Batch", "Two"],
+        ],
+    ];
+    for let t of ["P", "T", "Y"] {
+        layout.push([
+            t,
+            ["Batch", "Out"],
+        ]);
+    }
+    layout.push([
+        "M",
+        ["Batch", "One"],
+    ]);
+    layout.push([
+        "D",
+        ["Batch", "One"],
+    ]);
+    layout.push([
+        "*",
+        ["Batch", "Feat"],
+    ]);
+    return plan_of(source, layout);
+}
+
+test "products of one input by weights, each a kernel alone, are one product" {
+    let p = concatenated_plan("Identity");
+    assert p.concats.len() == 1;
+    assert p.concats.get("P") == Option::Some(["P", "R", "T"]);
+    assert p.of(&"R") == Decision::Concatenated("P");
+    assert p.of(&"T") == Decision::Concatenated("P");
+    assert p.of(&"H") == Decision::Prologue("P");
+}
+
+test "a product with an operator after it is not concatenated" {
+    let p = concatenated_plan("Relu");
+    assert p.concats.get("R") == Option::Some(["R", "T"]);
+    assert p.of(&"P") == fused("Y");
+    assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
+}
+
 test "a window takes in no operator after it" {
     let source = `
 g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y)

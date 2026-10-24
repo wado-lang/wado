@@ -340,6 +340,14 @@ operands into one buffer first, so it moves them twice.
 Merging attention heads after their transpose is a `reshape` no strides say, so
 the device copies it: one dispatch a layer that a view cannot spare.
 
+Products of one input are concatenated only where each is a kernel alone, by a
+weight as stored. A projection with a bias after it, as some models give
+attention's query, key and value, stays a product of its own, and so does one
+by a transposed weight. Over more than one row, a part of a concatenation is
+strided by the whole product's row, so a `reshape` merging its rows with an
+axis after them copies it, as Gemma 3's query and key normalization over heads
+does on a prompt.
+
 A buffer of the pass is released when the next pass begins, never while this
 one runs, so a pass holds every tensor it computes at once.
 

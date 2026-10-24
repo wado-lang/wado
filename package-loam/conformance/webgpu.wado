@@ -25,12 +25,14 @@ use {
 use {
     Backend,
     BinaryOp,
+    Concat,
     Cpu,
     Epilogue,
     Prologue,
     Tensor,
     UnaryOp,
     WebGpuBackend,
+    concat_columns,
     constant,
     element_count,
     operand,
@@ -234,6 +236,66 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     half_weights();
     paired_products();
     prologue_products();
+    concatenated_products();
+}
+
+/// Two products of an RMS normalization by weights of 256 and 128 columns,
+/// concatenated, for a step's one row, a few rows of a batch and a tile of
+/// rows, each part read as a view by a row kernel normalizing it.
+fn concatenated_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let x = operand(0);
+    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
+        UnaryOp::Sqrt,
+    );
+    let norm = x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+    let scaled = x.binary(BinaryOp::Div, &x.binary(BinaryOp::Mul, &x).row_sum(null).unary(UnaryOp::Sqrt));
+    let scale = tensor::<[Long]>([640], 48);
+    let b = halved(tensor::<[Long, Col]>([640, 256], 49));
+    let c = halved(tensor::<[Long, Inner]>([640, 128], 50));
+    let bc = concat_columns(&b, &c);
+    for let [name, a] of [
+        ["step", tensor::<[Row, Inner, Long]>([1, 1, 640], 51)],
+        ["few", tensor::<[Row, Inner, Long]>([2, 3, 640], 52)],
+        ["tile", tensor::<[Row, Inner, Long]>([1, 20, 640], 53)],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>]> {
+        let mut cpu = Cpu {};
+        let cpu_a = Prologue {
+            operands: [
+                cpu.read(&a),
+                cpu.read_suffix::<[Row, Inner], [Long]>(&scale),
+            ],
+            op: norm,
+        };
+        let cpu_whole = cpu.matmul_rhs_from(cpu_a, &cpu.keep_rhs(&bc), null);
+        let cpu_first = cpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Col, []>(&cpu_whole, 2, 0, 256, 1);
+        let cpu_second = cpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Inner, []>(&cpu_whole, 2, 256, 128, 1);
+        let first_cpu = cpu.rows::<[Row, Inner, Col], [Row, Inner, Col]>([cpu.read(&cpu_first)], &scaled, 1, false);
+        let second_cpu = cpu.rows::<[Row, Inner, Inner], [Row, Inner, Inner]>(
+            [cpu.read(&cpu_second)],
+            &scaled,
+            1,
+            false,
+        );
+        let uploaded = gpu.upload(&a);
+        let kept = gpu.keep(&scale);
+        let gpu_a = Prologue {
+            operands: [
+                gpu.read(&uploaded),
+                gpu.read_suffix::<[Row, Inner], [Long]>(&kept),
+            ],
+            op: norm,
+        };
+        let whole = gpu.matmul_rhs_from(gpu_a, &gpu.keep_rhs(&bc), null);
+        let first = gpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Col, []>(&whole, 2, 0, 256, 1);
+        let second = gpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Inner, []>(&whole, 2, 256, 128, 1);
+        let first_gpu = gpu.rows::<[Row, Inner, Col], [Row, Inner, Col]>([gpu.read(&first)], &scaled, 1, false);
+        let second_gpu = gpu.rows::<[Row, Inner, Inner], [Row, Inner, Inner]>([gpu.read(&second)], &scaled, 1, false);
+        println(`concatenated first ${name} ${deviation(&gpu.download(&first_gpu).data, &first_cpu.data)}`);
+        println(`concatenated second ${name} ${deviation(&gpu.download(&second_gpu).data, &second_cpu.data)}`);
+    }
 }
 
 /// Products of an RMS normalization each workgroup computes itself, as a

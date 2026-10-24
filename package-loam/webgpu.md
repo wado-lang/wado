@@ -247,6 +247,18 @@ workgroup's lanes sum an even column and the one after it, and the lane
 holding the even one applies the epilogue to both sums. Any other product runs
 as the product by the whole matrix, then the epilogue over its two halves.
 
+#### Products of one input read apart are one product
+
+Attention's query, key and value are three products of one input, each read by
+a kernel of its own, so they do not pair. The plan concatenates the products
+of one left operand that are each a kernel alone, over one set of leading
+axes, each by a weight as stored that its product alone reads, the weights of
+one row axis and element. The backend keeps their weights as one matrix whose
+columns are each weight's in turn (`Concat<A, B>`), and `forward` computes the
+one product and reads each part as a view of its columns (`slice_axis`), which
+a device writes nothing for. The parts are one kernel, so the normalization
+before them is its prologue.
+
 #### A normalization is its product's prologue
 
 A normalization before a layer is a row group that only the layer's products
@@ -263,8 +275,8 @@ workgroup memory, which its lanes then read as the left matrix. Every
 workgroup repeats the fold, which costs the rows' reads again per workgroup
 and saves a dispatch and the normalized tensor's write and read. A product of
 more rows, of rows too long for workgroup memory, or a pair of products by
-weights that are not transposed, writes the prologue with the row kernel it would otherwise
-have had.
+weights that are not transposed, writes the prologue with the row kernel it
+would otherwise have had.
 
 #### What a layer costs
 
