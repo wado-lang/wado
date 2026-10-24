@@ -21,10 +21,10 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-10-22 with rustc 1.98.1, Zig 0.16.0, wasi-sdk 34.0, and Moonbit
-0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
-host-dependent, so a row whose toolchain has not moved does not need
-remeasuring.
+Measured 2026-10-22 with rustc 1.98.1, wasi-sdk 34.0, and Moonbit 0.1.20260920
+(`peter-jerry-ye/wasi` 0.25.0). The Zig rows were measured 2026-10-24 with Zig
+0.17.0. Sizes are toolchain- but not host-dependent, so a row whose toolchain
+has not moved does not need remeasuring.
 
 ### hello_world
 
@@ -33,7 +33,7 @@ remeasuring.
 | wado     |        3,053 |
 | c        |        4,195 |
 | moonbit  |        9,313 |
-| zig      |       32,248 |
+| zig      |       31,421 |
 | rust     |       40,080 |
 
 ### pi_approx
@@ -43,7 +43,7 @@ remeasuring.
 | wado     |        7,382 |
 | c        |       17,988 |
 | moonbit  |       23,593 |
-| zig      |       38,054 |
+| zig      |       36,087 |
 | rust     |       59,314 |
 
 ### zlib
@@ -54,7 +54,7 @@ Reads gzip data from stdin and decompresses it.
 | -------- | -----------: | -------------------------------------- |
 | wado     |       19,623 | stdin + gzip decompress (core:zlib)    |
 | c        |       34,571 | stdin + gzip decompress (zlib 1.3.1)   |
-| zig      |       48,300 | stdin + gzip decompress (std.compress) |
+| zig      |       47,393 | stdin + gzip decompress (std.compress) |
 | rust     |       89,688 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
