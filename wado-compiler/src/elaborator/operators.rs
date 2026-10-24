@@ -1006,6 +1006,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // No impl answered, and the WIR lowering has no opcode for this
         // operand, so reject here: `scalar_kind` would panic instead.
         if expr_type != TypeTable::ERROR && self.tysys.unary_operand_requires_trait(op, expr_type) {
+            if self.report_unmet_operator_bound(expr_type, item, span) {
+                return Some(TypeTable::ERROR);
+            }
             let operand = self.tysys.type_table.borrow().type_name(expr_type);
             let _ = self.emit(TypeError::OperatorNotApplicable {
                 op: op_symbol.to_string(),
@@ -1384,12 +1387,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => false,
         };
 
+        // An `ERROR` target was diagnosed where it was resolved.
         if !is_valid_lvalue {
-            // Report error for invalid assignment target
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign to an expression that is not a place".to_string(),
-                span: target_ast.span(),
-            });
+            if target_type != TypeTable::ERROR {
+                let _ = self.emit(TypeError::CannotMutate {
+                    message: "cannot assign to an expression that is not a place".to_string(),
+                    span: target_ast.span(),
+                });
+            }
             return TypeTable::ERROR;
         }
 
@@ -1577,11 +1582,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Report the bound that keeps `operand`'s impl of the operator trait
+    /// `item` from applying, if one does. Whether one was reported.
+    fn report_unmet_operator_bound(
+        &mut self,
+        operand: TypeId,
+        item: CompilerItem,
+        span: Span,
+    ) -> bool {
+        let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+            return false;
+        };
+        self.report_unmet_impl_bound(operand, span, |s, def| {
+            s.tysys.signatures.impl_trait(def) == Some(trait_)
+        })
+    }
+
     /// Report that `left` does not implement the trait `op` dispatches to, with
     /// the reason chain saying why. Under `#![no_prelude]` the trait is absent,
     /// and no chain explains its absence.
     fn operator_not_implemented(&mut self, op: BinaryOp, left: TypeId, span: Span) -> TypeId {
         let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+        if self.report_unmet_operator_bound(left, item, span) {
+            return TypeTable::ERROR;
+        }
         let trait_name = self
             .tysys
             .type_table

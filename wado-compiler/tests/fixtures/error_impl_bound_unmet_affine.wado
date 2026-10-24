@@ -1,0 +1,28 @@
+// A method whose impl block leaves its parameter unmarked, called on a receiver
+// holding an affine argument there, reports the kind it misses, not an absent
+// method.
+
+affine struct Conn {
+    n: i32,
+}
+
+affine struct Holder<affine T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn peek(&self) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let h = Holder { v: Conn { n: 1 } };
+    let a = h.peek();
+}
+
+__DATA__
+{
+    "compile_error": ":21:13: analysis error: affine type 'Conn' given for 'T', which may be copied; `affine T` would admit it",
+    "compile_errors_not_contains": ["no method"]
+}

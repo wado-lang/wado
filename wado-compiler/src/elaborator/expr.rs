@@ -2260,6 +2260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
+        let mut key_type = None;
         if !struct_name.is_empty() {
             // Only a key synthesis cannot type (a compound literal, whose type
             // the impl supplies) falls back to pre-selecting an impl for its
@@ -2276,6 +2277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|(i, _)| i.index_type)
             });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
+            key_type = Some(index_type);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
             if let Some(expected) = self.tysys.pointee_of(index_type) {
@@ -2441,14 +2443,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Fallback: report error for unsupported indexing
-        let type_name = self.tysys.type_table.borrow().type_name(expr_type);
-        let _ = self.emit(TypeError::MissingTraitImpl {
-            type_name,
-            trait_name: "Index or IndexValue".to_string(),
-            span: index.span,
+        let subscript_traits = [
+            CompilerItem::IndexValue,
+            CompilerItem::IndexRef,
+            CompilerItem::IndexRefMut,
+        ]
+        .map(|item| self.tysys.compiler_trait_def(item));
+        let reported = key_type.is_some_and(|key| {
+            self.report_unmet_impl_bound(base_type_id, index.span, |s, def| {
+                let trait_def = s.tysys.signatures.impl_trait(def);
+                trait_def.is_some()
+                    && subscript_traits.contains(&trait_def)
+                    && s.impl_takes_key(def, key)
+            })
         });
-        TypeTable::UNKNOWN
+        if !reported {
+            let type_name = self.tysys.type_table.borrow().type_name(expr_type);
+            let _ = self.emit(TypeError::MissingTraitImpl {
+                type_name,
+                trait_name: "IndexValue or IndexRef".to_string(),
+                span: index.span,
+            });
+        }
+        TypeTable::ERROR
     }
 
     /// The key type of the `Index` / `IndexAssign` impl dispatching

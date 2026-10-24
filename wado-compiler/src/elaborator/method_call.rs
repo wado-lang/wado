@@ -650,19 +650,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
-            let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
-            let hint = if self.tysys.trait_declares_method(ord, method_name, |_| true) {
-                self.tysys.ord_withheld_note(base_type_id)
-            } else {
-                None
-            };
-            let _ = self.emit(TypeError::MethodNotFound {
-                type_name,
-                method_name: method_name.to_string(),
-                hint: hint.unwrap_or_default(),
-                span,
-            });
+            if !self.report_unmet_impl_bound(base_type_id, span, |s, def| {
+                s.impl_offers_method(def, method_name)
+            }) {
+                let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+                let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+                let hint = if self.tysys.trait_declares_method(ord, method_name, |_| true) {
+                    self.tysys.ord_withheld_note(base_type_id)
+                } else {
+                    None
+                };
+                let _ = self.emit(TypeError::MethodNotFound {
+                    type_name,
+                    method_name: method_name.to_string(),
+                    hint: hint.unwrap_or_default(),
+                    span,
+                });
+            }
             MethodInfo::undeclared(TypeTable::ERROR)
         };
 

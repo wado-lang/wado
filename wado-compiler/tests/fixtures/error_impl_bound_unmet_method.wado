@@ -1,0 +1,53 @@
+// A method whose impl block has a bound the receiver's arguments do not meet
+// reports that bound, with why the argument misses it, not an absent method.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Tag> Wrap<T> {
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Tag> Named for Wrap<T> {
+    fn name(&self) -> String {
+        return "wrap";
+    }
+}
+
+struct NoOrd {
+    f: fn(),
+}
+
+test {
+    let w = Wrap { v: "s" };
+    let a = w.get();
+    let n = w.name();
+    let mut l: List<NoOrd> = [];
+    l.sort();
+}
+
+__DATA__
+{
+    "compile_errors_contains": [
+        "type 'String' does not implement trait 'Tag' required by bound on 'T'",
+        "type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'\n  note: `NoOrd` does not implement `Ord` because field `f` of type `fn() -> ()` does not implement `Ord`"
+    ],
+    "compile_errors_not_contains": ["no method"]
+}

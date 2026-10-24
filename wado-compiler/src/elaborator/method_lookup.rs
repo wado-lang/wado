@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding};
+use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -971,6 +971,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
+    /// Whether impl block `def` offers `method_name` to a call: an inherent
+    /// block declaring it, or a trait block whose trait declares it and is in
+    /// scope, as the lookup order has it.
+    pub(super) fn impl_offers_method(&self, def: DefId, method_name: &str) -> bool {
+        let header = impl_header(&self.tysys.trait_env, &ImplBlockRef(def));
+        let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
+        let Some(trait_) = header.trait_def() else {
+            return declares(&header.methods);
+        };
+        (declares(&header.methods)
+            || self
+                .tysys
+                .trait_env
+                .decl_header_of(&trait_)
+                .is_some_and(|decl| declares(&decl.methods)))
+            && self
+                .tysys
+                .resolutions
+                .decl_in_scope(self.frame_module(), trait_)
+    }
+
+    /// Report the bound that keeps the impls `offers` picks from answering
+    /// `receiver`: the first that reaches it but whose bound its arguments
+    /// miss. Whether one was reported; the caller says the impl is absent
+    /// where none was.
+    pub(super) fn report_unmet_impl_bound(
+        &mut self,
+        receiver: TypeId,
+        span: Span,
+        offers: impl Fn(&Self, DefId) -> bool,
+    ) -> bool {
+        let Some(head) = self.tysys.struct_name_for_type(receiver) else {
+            return false;
+        };
+        let target = self.impl_target_of(receiver, &DeclName::new(&head));
+        let args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(receiver)
+            .unwrap_or_default();
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let unmet = trait_env
+            .all_impl_keys(&target)
+            .into_iter()
+            .find_map(|def| {
+                if !offers(self, def) || !self.tysys.impl_reaches(def, Some(&args)) {
+                    return None;
+                }
+                self.tysys.unmet_impl_bound(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    def,
+                    Some(receiver),
+                    Some(&args),
+                )
+            });
+        let Some(UnmetImplBound {
+            param,
+            type_arg,
+            missing,
+        }) = unmet
+        else {
+            return false;
+        };
+        match missing {
+            UnmetKind::Trait(trait_) => {
+                let trait_name = trait_
+                    .canonical()
+                    .map(|decl| self.tysys.type_table.borrow().def_name(decl).to_string())
+                    .unwrap_or_default();
+                !self.enforce_single_bound_args(type_arg, &trait_name, Some(&trait_), &param, span)
+            }
+            UnmetKind::Affine => {
+                let type_name = self.tysys.type_id_to_string(type_arg);
+                let _ = self.emit(TypeError::AffineArgument {
+                    type_name,
+                    param_name: param,
+                    span,
+                });
+                true
+            }
+        }
+    }
+
     /// Whether a call of `method_name` on `receiver` may wait for the
     /// variables a pending call is to answer in its arguments, as Rust's
     /// method probe lets it. The one impl that may answer the method answers
@@ -1069,25 +1154,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (key, type_args.clone())
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
-        // As the order has it: a trait's methods are candidates only where the
-        // trait is in scope.
-        let in_scope = |trait_: DefId| {
-            self.tysys
-                .resolutions
-                .decl_in_scope(self.frame_module(), trait_)
-        };
         let mut candidates = Vec::new();
         for def in trait_env.all_impl_keys(&key) {
             let header = impl_header(&trait_env, &ImplBlockRef(def));
             let declared = match (kind, header.trait_def()) {
-                (ImplKind::Inherent, None) => declares(&header.methods),
-                (ImplKind::Trait, Some(trait_)) => {
-                    (declares(&header.methods)
-                        || trait_env
-                            .decl_header_of(&trait_)
-                            .is_some_and(|decl| declares(&decl.methods)))
-                        && in_scope(trait_)
+                (ImplKind::Inherent, None) | (ImplKind::Trait, Some(_)) => {
+                    self.impl_offers_method(def, method_name)
                 }
                 (ImplKind::Inherent, Some(_)) | (ImplKind::Trait, None) => false,
             };
