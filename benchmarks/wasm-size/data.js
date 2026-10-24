@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792855028898,
+  "lastUpdate": 1792878494422,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70237,6 +70237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/96c011217b24a1f61b92662e5fa716691699158d"
         },
         "date": 1792855027903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "59ffce44171ceb1473702ab2376d292302d48600",
+          "message": "Merge pull request #2442 from wado-lang/ccr-265861c3-ck1jgj\n\nfix(optimize): stop the -O1 freeze crashing on displaced nodes",
+          "timestamp": "2026-10-25T06:28:47+09:00",
+          "tree_id": "7aab48e34f8305223c76fb74b2fd79b955730e49",
+          "url": "https://github.com/wado-lang/wado/commit/59ffce44171ceb1473702ab2376d292302d48600"
+        },
+        "date": 1792878493532,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
