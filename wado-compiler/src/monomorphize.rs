@@ -234,7 +234,7 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
-        ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { .. }
         | ResolvedType::GenericInstance { .. }

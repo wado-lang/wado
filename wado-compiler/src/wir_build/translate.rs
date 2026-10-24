@@ -249,13 +249,11 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 user_params.push(wir_type);
             }
         }
-        let result_wirs: Vec<WirType> = if functor.canonical_return == TypeTable::UNIT
-            || functor.canonical_return == TypeTable::NEVER
-        {
-            vec![]
-        } else {
-            vec![ctx.type_id_to_wir_type(type_table, functor.canonical_return)]
-        };
+        let result_wirs: Vec<WirType> =
+            match ctx.type_id_to_wir_type(type_table, functor.canonical_return) {
+                WirType::Unit => vec![],
+                wir_type => vec![wir_type],
+            };
         let _ = type_table;
 
         // Decide vtable schema for this functor by looking the canonical
