@@ -2671,12 +2671,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
-    /// where `iterable` has a tuple type containing `TypePack` elements.
-    ///
-    /// The body is resolved once with the loop variable having the `TypePack` type.
-    /// The monomorphizer will expand this after type substitution resolves the
-    /// `TypePack` to a concrete tuple.
     /// What a for-of binds per element: the element, or `[i32, element]` under
     /// `.enumerate()`.
     fn for_of_binding_type(&mut self, is_enumerate: bool, element: TypeId) -> TypeId {
@@ -2690,6 +2684,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
+    /// where `iterable` has a tuple type containing `TypePack` elements.
+    ///
+    /// The body is resolved once with the loop variable having the `TypePack` type.
+    /// The monomorphizer will expand this after type substitution resolves the
+    /// `TypePack` to a concrete tuple.
     fn resolve_variadic_for_of(
         &mut self,
         for_of: &ForOfStmt,
