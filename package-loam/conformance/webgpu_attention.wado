@@ -191,7 +191,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
 
 /// How far `c` attended on the device sits from `Cpu`'s, over a batch of 2
 /// and heads of 8.
-fn attended(gpu: &mut WebGpuBackend, c: &Case) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+fn attended(
+    gpu: &mut WebGpuBackend,
+    c: &Case,
+) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let [batch, d, positions] = [2, 8, 160];
     let total = c.past + c.seq;
     let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, c.seq, c.options.heads * d], 1);
@@ -244,9 +247,15 @@ fn attended(gpu: &mut WebGpuBackend, c: &Case) -> f32 with (GpuDevice, GpuQueue,
     ];
     // Only the three downloads read back: the kernel ran on the device.
     assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
+    return furthest([out.data, present_k.data, present_v.data], [on_cpu.0.data, on_cpu.1.data, on_cpu.2.data]);
+}
+
+/// How far the attended rows and the present keys and values `got` sit from
+/// `expected`, at the furthest of the three.
+fn furthest(got: [List<f32>, List<f32>, List<f32>], expected: [List<f32>, List<f32>, List<f32>]) -> f32 {
     return f32::max(
-        deviation(&out.data, &on_cpu.0.data),
-        f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
+        deviation(&got.0, &expected.0),
+        f32::max(deviation(&got.1, &expected.1), deviation(&got.2, &expected.2)),
     );
 }
 
@@ -309,14 +318,10 @@ fn step(
         gpu.download(&on_gpu.1),
         gpu.download(&on_gpu.2),
     ];
-    let deviation = f32::max(
-        deviation(&out.data, &on_cpu.0.data),
-        f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
-    );
     return Stepped {
         on_cpu: [on_cpu.1, on_cpu.2],
         on_gpu: [on_gpu.1, on_gpu.2],
-        deviation,
+        deviation: furthest([out.data, present_k.data, present_v.data], [on_cpu.0.data, on_cpu.1.data, on_cpu.2.data]),
         bind_groups,
     };
 }

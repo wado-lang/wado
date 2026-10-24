@@ -208,16 +208,19 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
                 return true;
             }
             let read = readers.get(o).unwrap_or([]);
-            return !read.is_empty() && read.into_iter().all(|r| cut.get(r) matches {
-                Some(p) && reads_only_at_position(&graph.nodes[r], &p, &o)
-            });
+            return !read.is_empty()
+                && read.into_iter().all(|r| cut.get(r) matches { Some(p) && reads_only_at_position(
+                    &graph.nodes[r],
+                    &p,
+                    &o,
+                ) });
         });
         if kept {
             cut[i] = positional;
         }
     }
-    // A cut of another output along the same axis made these already, ahead
-    // of the slices it made, so they go first again, ahead of this cut's.
+    // The bounds precede every slice. A cut of another output along the same
+    // axis made them already, and the walk below drops those.
     let starts = `loam.last${axis}.starts`;
     let ends = `loam.last${axis}.ends`;
     let axes = `loam.last${axis}.axes`;
@@ -295,7 +298,9 @@ fn positional_reads(node: &Node, shapes: &HashMap<String, Shape>, axis: i32) -> 
     if node.outputs.len() != 1 || out.rank() < -axis {
         return null;
     }
-    let first_alone = || -> List<bool> { (0..<node.inputs.len()).map(|j| j == 0).collect() };
+    let first_alone = || -> List<bool> {
+        (0..<node.inputs.len()).map(|j| j == 0).collect();
+    };
     if is_unary_elementwise(&node.op) || is_binary_elementwise(&node.op) {
         return Option::Some(node.inputs.into_iter().map(|_| true).collect());
     }

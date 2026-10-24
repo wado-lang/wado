@@ -577,7 +577,9 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             Some(space) => same_space(&space, &group.out),
             None => true,
         };
-        if group.contracted matches { None } && writes_rows && decisions[*head] matches { Written(Reader(Contraction)) } {
+        if group.contracted matches { None }
+            && writes_rows
+            && decisions[*head] matches { Written(Reader(Contraction)) } {
             let reads = readers.get(*head).unwrap_or([]);
             if let Some(product) = prologue_head(graph, head, &reads, &by_rhs, &heads) {
                 decisions[*head] = Decision::Prologue(product);
@@ -816,7 +818,7 @@ impl OperandUses {
 
 /// Whether `node` gathers whole rows of a float matrix, as an embedding
 /// lookup does.
-pub fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
+fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
     if node.op != "Gather" {
         return false;
     }

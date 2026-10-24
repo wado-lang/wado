@@ -1524,10 +1524,11 @@ impl WebGpuBackend {
         while part < LANES && held_for(part) > self.max_binding as i64 {
             part *= 2;
         }
-        if 2 * n > self.max_binding || held_for(part) > self.max_binding as i64 || d > MAX_HEAD {
+        let attended = held_for(part);
+        if 2 * n > self.max_binding || attended > self.max_binding as i64 || d > MAX_HEAD {
             return null;
         }
-        let attended = held_for(part) as i32;
+        let attended = attended as i32;
         let groups = rows * total.div_ceil(part);
         let half = match rotary {
             Some([c, _]) => c.extents[1],

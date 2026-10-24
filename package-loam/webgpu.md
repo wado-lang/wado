@@ -79,8 +79,8 @@ runs.
   elements alone. The cache's parts are held for every position it holds, so
   they too bind as the step before's did. A prompt whose rows would outgrow a
   binding in parts of 4 takes larger parts, as many rows spread over the device
-  in any. The last joins a row's parts,
-  rescaling each to the row's greatest score. Gemma's step over one token has 4
+  in any. The last joins a row's parts, rescaling each to the row's greatest
+  score. Gemma's step over one token has 4
   query rows, so a workgroup a row left the device idle and grew slower with
   the sequence: at 600 positions a token took 1.9 times as long as with parts
   of 64 positions. Parts of 4 with the dot split took Gemma's 8 tokens from a
@@ -268,8 +268,10 @@ read, by weights, as their left operand. The plan makes such a group, one that
 takes no contraction in, the prologue of the products' kernel, and `forward`
 calls `matmul_rhs_from` or `matmul_rhs_paired_from` with it. A row group still
 takes no contraction: the prologue is a kernel of its own that the product
-computes rather than reads. The plan finds prologues after every kernel is
-formed, since a kernel the plan has not finished may still take a product in.
+computes rather than reads. The product computes it over the rows it reads, so
+a group that folds rows is one only where it writes them whole, not one value
+per row. The plan finds prologues after every kernel is formed, since a kernel
+the plan has not finished may still take a product in.
 
 On a device, a product of a few rows runs it in the product's dispatch. Each
 workgroup folds a block of rows and computes the block's elements into

@@ -29,6 +29,7 @@ use {
     Concat,
     Cpu,
     Epilogue,
+    Expr,
     Prologue,
     Tensor,
     UnaryOp,
@@ -239,6 +240,16 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     concatenated_products();
 }
 
+/// A row of 640 over its root mean square, scaled by `operand(1)`, as a
+/// decoder normalizes a layer's input.
+fn rms_norm() -> Expr {
+    let x = operand(0);
+    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
+        UnaryOp::Sqrt,
+    );
+    return x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+}
+
 /// Two products of an RMS normalization by weights of 256 and 128 columns,
 /// concatenated, for a step's one row, a few rows of a batch and a tile of
 /// rows, each part read as a view by a row kernel normalizing it.
@@ -246,11 +257,8 @@ fn concatenated_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, Gpu
     let Some(mut gpu) = WebGpuBackend::new() else {
         return;
     };
+    let norm = rms_norm();
     let x = operand(0);
-    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
-        UnaryOp::Sqrt,
-    );
-    let norm = x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
     let scaled = x.binary(BinaryOp::Div, &x.binary(BinaryOp::Mul, &x).row_sum(null).unary(UnaryOp::Sqrt));
     let scale = tensor::<[Long]>([640], 48);
     let b = halved(tensor::<[Long, Col]>([640, 256], 49));
@@ -305,11 +313,7 @@ fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueu
     let Some(mut gpu) = WebGpuBackend::new() else {
         return;
     };
-    let x = operand(0);
-    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
-        UnaryOp::Sqrt,
-    );
-    let norm = x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+    let norm = rms_norm();
     let scale = tensor::<[Long]>([640], 42);
     let b = halved(tensor::<[Long, Col]>([640, 256], 43));
     let c = halved(tensor::<[Long, Col]>([640, 256], 44));

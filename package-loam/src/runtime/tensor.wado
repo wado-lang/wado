@@ -951,7 +951,11 @@ pub struct Columns<E, K, N> {
 impl<E, K, N> Columns<E, K, N> {
     /// `a`'s columns, for `then` to place others after.
     pub fn of(a: &Tensor<E, [K, N]>) -> Columns<E, K, N> {
-        return Columns { rows: a.extents[0], parts: [&a.data], widths: [a.extents[1]] };
+        return Columns {
+            rows: a.extents[0],
+            parts: [&a.data],
+            widths: [a.extents[1]],
+        };
     }
 
     /// These columns, then `b`'s.
