@@ -475,6 +475,10 @@ cannot be taken back.
 - Seatbelt cannot stop a descendant from calling `setsid`. On macOS such a
   descendant survives its group's kill and keeps the child's grants after the
   guest exits.
+- Darwin's `killpg` answers `EPERM` both for a group holding only zombies and
+  for a live member the guest's user cannot signal (a setuid program). The
+  macOS backend reads `EPERM` as the first, so a group kill that missed such a
+  member reports success.
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
 - `sandbox-exec` is marked deprecated in its manual page. macOS still ships it,
