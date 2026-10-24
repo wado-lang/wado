@@ -13,25 +13,11 @@ use crate::canonical::{
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
-<<<<<<< HEAD
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeKind,
     CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME, FIELDS_WADO_NAME, InstanceSink,
-    RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
+    RESPONSE_WADO_NAME, ResKind, WorldFunctionSite, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
-||||||| 52551aaeb
-    CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
-    CmInterfaceRegistry, CmTypeGen, CmTypeKind, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
-    FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
-    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
-    cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
-=======
-    CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
-    CmInterfaceRegistry, CmTypeGen, CmTypeKind, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
-    FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, WorldFunctionSite,
-    classify_future_payload_from_ast, classify_stream_payload_from_ast, cm_decl_in_interface,
-    cm_instance_key, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
->>>>>>> origin/main
     wado_primitive_name_to_cm,
 };
 use crate::coverage;
