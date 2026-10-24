@@ -1117,25 +1117,32 @@ impl TypeTable {
 
     /// The fields a struct of shape `id` holds: a literal's as written, a
     /// template's one per hole typed by [`Self::hole_field_type`], then each
-    /// segment as a `String`, cooked and raw.
+    /// segment as a [`Self::template_segment_type`], cooked and raw.
     pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {
         match self.anon_structs[id.0 as usize].shape.clone() {
             AnonShape::Fields(fields) => fields,
             AnonShape::Template(shape) => {
-                let string_type = self.make_compiler_struct(CompilerItem::String);
+                let segment_type = self.template_segment_type();
                 let holes =
                     shape.holes.iter().enumerate().map(|(k, hole)| {
                         (TemplateShape::field_name(k), self.hole_field_type(hole.ty))
                     });
                 let segments = shape
                     .segment_keys()
-                    .map(|key| (shape.segment_field(key).0, string_type));
+                    .map(|key| (shape.segment_field(key).0, segment_type));
                 holes.chain(segments).collect()
             }
             AnonShape::Synthetic(name) => {
                 unreachable!("synthetic shape `{name}` carries its fields itself")
             }
         }
+    }
+
+    /// What a template value holds a segment as: a reference to the immutable
+    /// global holding its text, so building one allocates nothing.
+    pub fn template_segment_type(&mut self) -> TypeId {
+        let string_type = self.make_compiler_struct(CompilerItem::String);
+        self.make_ref(string_type)
     }
 
     /// Whether shape `id` mentions a type parameter, so that only a

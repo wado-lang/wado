@@ -39,9 +39,9 @@ Three things the language has grown since decide the shape:
 
 Together they let the static part of a template live where a tag body reads
 it as a constant. Its specifiers, its arity and the type at each hole live in
-a _type_. Its literal segments live in the value, as fields every call site
-writes as literals. That is what makes a tagged template cost what the untagged
-one costs.
+a _type_. Its literal segments live in the value, as references to globals
+holding each text once. That is what makes a tagged template cost what the
+untagged one costs.
 
 ## Decision
 
@@ -82,7 +82,10 @@ reached only through the bound the tag declares.
 
 The value holds one field per hole, then the literal text: each segment twice,
 with escapes processed and as written. The text is per site, so it lives in the
-value, and the type stays one per shape.
+value, and the type stays one per shape. A segment field is a `&String` to an
+immutable global, one per distinct text in the module, so building the value
+allocates nothing for its text, and a tag reads a segment as a `StrSlice` over
+it.
 
 The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
 is its holes, each spelled as its type and specifier, cut to 50 characters with
@@ -119,10 +122,10 @@ pub trait ReflectTemplate: Reflect {
 
     /// The literal text of `t` after the last hole; the whole template when it
     /// has none. Escapes processed.
-    fn tail(t: &Self) -> String;
+    fn tail(t: &Self) -> StrSlice;
 
     /// `tail(t)` with escapes preserved.
-    fn raw_tail(t: &Self) -> String;
+    fn raw_tail(t: &Self) -> StrSlice;
 }
 ```
 
@@ -140,10 +143,10 @@ impl<T, V> TemplateHole<T, V> {
 
     /// The literal text of `t` between the previous hole (or the start) and
     /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> String;
+    pub fn lit(&self, t: &T) -> StrSlice;
 
     /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> String;
+    pub fn raw(&self, t: &T) -> StrSlice;
 
     /// The hole's value in `t`. A read-only use shares the storage, as a
     /// `StructField::get` does; only a mutation copies.
@@ -160,8 +163,8 @@ impl<T, V> TemplateHole<T, V> {
 }
 ```
 
-`index()` and `has_spec()` return constants of the shape. `lit` and `raw` read
-the text out of `t`, which at a literal site is the constant written there.
+`index()` and `has_spec()` return constants of the shape. `lit` and `raw` view
+the text `t` refers to, which at a literal site is the constant written there.
 `fmt`'s body is synthesized per hole, so the choice of trait method — a
 compile-time decision, as in an untagged template — is closed inside it. The
 tag never sees a pre-rendered `String` it did not ask for, and a tag that
@@ -185,19 +188,24 @@ sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`
 lowers to
 
 ```wado
+global $template_text$0: String = "SELECT * FROM users WHERE id = ";
+global $template_text$1: String = " AND name = ";
+global $template_text$2: String = "";
+
 $tagged: {
     sql($Tmpl_a3f1 {
         h0: id, h1: &user.name,
-        s0: "SELECT * FROM users WHERE id = ", r0: "SELECT * FROM users WHERE id = ",
-        s1: " AND name = ", r1: " AND name = ",
-        s2: "", r2: "",
+        s0: &$template_text$0, r0: &$template_text$0,
+        s1: &$template_text$1, r1: &$template_text$1,
+        s2: &$template_text$2, r2: &$template_text$2,
     })
 }
 ```
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
 its hole holds the handle. `s{k}` is segment `k` with escapes processed, `r{k}`
-as written. A hole that names storage is read or referenced
+as written; the two share a global where they spell one text. A hole that names
+storage is read or referenced
 where it stands: a local, a global, or a field or element path rooted at one. Any
 other hole expression is evaluated once into a local of the block, which the
 literal then reads or references.
@@ -321,12 +329,10 @@ What the tag body compiles to, once monomorphized, inlined and folded:
 - `members()` is a closed constant expression: globalization hoists it, and
   every `index()` / `has_spec()` is a field projected out of that global,
   which `niri` folds to the literal.
-- `lit(t)` / `raw(t)` is a segment field of the template, at an index
-  `members()` makes constant. The site writes the segment as a literal, so
-  `param_spec` specializes the tag on it, one clone per distinct text, and
-  `push_str(h.lit(&t))` is the same instruction sequence as
-  `push_str("SELECT …")`. A segment field the tag never reads is evaluated at
-  the call and passed nowhere.
+- `lit(t)` / `raw(t)` views a segment field of the template, at an index
+  `members()` makes constant. The field is a reference to an immutable global,
+  so the call site pays one `global.get` per segment and allocates nothing. A
+  segment field the tag never reads is passed nowhere.
 - `get()` is a projection of the template struct's field at a constant index,
   folded to a direct field read after inlining, as `StructField::get` is. Its
   result binds read-only in every tag above, so the value-copy planner shares

@@ -13,6 +13,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::flat_package::FlatPackage;
+use crate::lower::wide_int_literal::method_ref;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
@@ -1323,9 +1324,7 @@ pub(super) fn generate_hole_bridge_helpers(
             value_type: hole_type,
         })
         .collect();
-    let string_type = type_table
-        .borrow_mut()
-        .make_compiler_struct(CompilerItem::String);
+    let segment_type = type_table.borrow_mut().template_segment_type();
     let segments: Vec<ReadBridgeMember> = shape
         .segment_keys()
         .map(|key| {
@@ -1334,8 +1333,8 @@ pub(super) fn generate_hole_bridge_helpers(
                 name,
                 key,
                 index,
-                field_type: string_type,
-                value_type: string_type,
+                field_type: segment_type,
+                value_type: segment_type,
             }
         })
         .collect();
@@ -1599,6 +1598,14 @@ fn generate_template_reflect_impls(
         &module.type_table.borrow(),
         CompilerItem::ReflectTemplateHole,
     );
+    let tail_view = {
+        let mut tt = module.type_table.borrow_mut();
+        TailView {
+            segment_type: tt.template_segment_type(),
+            view_type: tt.make_compiler_struct(CompilerItem::StrSlice),
+            view: method_ref(&tt, CompilerItem::StringView),
+        }
+    };
     let (members_method, tail_method, raw_tail_method) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -1650,7 +1657,7 @@ fn generate_template_reflect_impls(
             generate_template_tail_fn(
                 &target.shape.segment_field(key),
                 ref_struct_type,
-                env.string_type,
+                &tail_view,
                 trait_method_info(receiver, template_trait_name, method),
                 span,
             )
@@ -1703,23 +1710,35 @@ fn generate_template_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// Build `Shape^ReflectTemplate::tail(t: &Shape)` (or `raw_tail`): the read of
+/// What a synthesized `tail` reads a segment as, and calls to view it.
+struct TailView {
+    segment_type: TypeId,
+    view_type: TypeId,
+    view: FunctionRef,
+}
+
+/// Build `Shape^ReflectTemplate::tail(t: &Shape)` (or `raw_tail`): the view of
 /// the last segment's `field`.
 fn generate_template_tail_fn(
     (field_name, field_index): &(String, u32),
     ref_struct_type: TypeId,
-    string_type: TypeId,
+    tail_view: &TailView,
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
     let qualified_name = method_info.to_mangled_name();
-    let read = field_access_local(
+    let segment = field_access_local(
         0,
         "t",
         ref_struct_type,
         *field_index,
         field_name,
-        string_type,
+        tail_view.segment_type,
+        span,
+    );
+    let read = TirExpr::new(
+        TirExprKind::method_call(Box::new(segment), tail_view.view.clone(), vec![], vec![]),
+        tail_view.view_type,
         span,
     );
     let params = vec![TirParam {
@@ -1735,7 +1754,7 @@ fn generate_template_tail_fn(
         qualified_name,
         method_info,
         params,
-        string_type,
+        tail_view.view_type,
         TirBlock::new(vec![return_stmt(read, span)], span),
         locals,
     )

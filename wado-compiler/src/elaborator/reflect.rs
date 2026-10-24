@@ -952,7 +952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_compiler_struct(CompilerItem::String)
+                    .make_compiler_struct(CompilerItem::StrSlice)
             };
             let param_is_mut = arg_param_is_mut(method != methods.members);
             self.record_type_param_reflect_dispatch(
@@ -980,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_compiler_struct(CompilerItem::String)
+                .make_compiler_struct(CompilerItem::StrSlice)
         };
 
         let (base_name, module_source) = self

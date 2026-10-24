@@ -88,8 +88,8 @@ use crate::lexer::defaults_to_float;
 use crate::name::{
     DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
-    widened_half_local_name,
+    minted_name, range_local_name, template_block_label, template_hole_local,
+    template_segment_global_name, test_function_name, widened_half_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
@@ -493,6 +493,8 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The template shapes reify mints (`reify_template_type`), flushed with
     /// `pending_local_structs` and reify-owned for the same reason.
     pub(crate) pending_template_structs: Vec<TirStruct>,
+    /// The global each distinct template segment text is held in, by text.
+    pub(crate) pending_template_segments: IndexMap<String, (TirGlobal, Option<TirFunction>)>,
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
@@ -622,6 +624,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
             pending_template_structs: Vec::new(),
+            pending_template_segments: IndexMap::default(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
             probes_emitted: IndexSet::default(),
@@ -1014,6 +1017,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         for template_struct in std::mem::take(&mut self.pending_template_structs) {
             tir_module.add_struct(template_struct);
+        }
+        for (global, init_fn) in std::mem::take(&mut self.pending_template_segments).into_values() {
+            tir_module.globals.push(global);
+            if let Some(init_fn) = init_fn {
+                tir_module.add_function(init_fn);
+            }
         }
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
@@ -4991,21 +5000,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             fields.push(field);
         }
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(CompilerItem::String);
         for key in shape.segment_keys() {
             let (k, raw) = TemplateShape::segment_of(key);
             let (name, field_index) = shape.segment_field(key);
             fields.push(TirStructField {
                 name,
-                value: TirExpr::new(
-                    TirExprKind::StringLiteral(segments[k][usize::from(raw)].clone()),
-                    string_type,
-                    span,
-                ),
+                value: self.template_segment_ref(&segments[k][usize::from(raw)], span),
                 field_index,
             });
         }
@@ -5025,6 +5025,65 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 lets: stmts,
                 serial,
             },
+        )
+    }
+
+    /// `&G`, `G` the immutable global holding `text`, minted on its first use
+    /// in the module.
+    fn template_segment_ref(&mut self, text: &str, span: Span) -> TirExpr {
+        let (string_type, segment_type) = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            (
+                tt.make_compiler_struct(CompilerItem::String),
+                tt.template_segment_type(),
+            )
+        };
+        let name = match self.pending_template_segments.get(text) {
+            Some((global, _)) => global.name.clone(),
+            None => {
+                let name = template_segment_global_name(self.pending_template_segments.len());
+                let literal = TirExpr::new(
+                    TirExprKind::StringLiteral(text.to_string()),
+                    string_type,
+                    span,
+                );
+                let (init, init_fn) = self.split_global_initializer(
+                    &name,
+                    string_type,
+                    literal,
+                    LocalFrame::default(),
+                    span,
+                );
+                let global = TirGlobal {
+                    name: name.clone(),
+                    ty: string_type,
+                    init,
+                    param: None,
+                    wado_mutable: false,
+                    visibility: Visibility::Private,
+                    module_source: self.current_module_source.clone(),
+                    span,
+                };
+                self.pending_template_segments
+                    .insert(text.to_string(), (global, init_fn));
+                name
+            }
+        };
+        let read = TirExpr::new(
+            TirExprKind::GlobalVarGet {
+                module_source: self.current_module_source.clone(),
+                name,
+            },
+            string_type,
+            span,
+        );
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(read),
+            },
+            segment_type,
+            span,
         )
     }
 

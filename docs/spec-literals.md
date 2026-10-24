@@ -1106,8 +1106,9 @@ preserved), `get(&t)` (the value, `V`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states).
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
-last hole. `index()` and `has_spec()` are constants of the shape. A hole handle
-is minted only by `members()`.
+last hole. A segment is a `StrSlice` over text the program holds once, so
+reading one copies nothing. `index()` and `has_spec()` are constants of the
+shape. A hole handle is minted only by `members()`.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple

@@ -160,6 +160,8 @@ pub enum CompilerItem {
     /// codegen (CM binding, serde, format) refers to it through this
     /// item so the Rust side never hard-codes the struct name.
     String,
+    /// `StrSlice` — the view a synthesized `ReflectTemplate::tail` answers.
+    StrSlice,
     /// `Case<T, P>` — the per-case member struct minted by
     /// `ReflectVariant::members()` (WEP 2026-06-13 §3e).
     ReflectVariantCase,
@@ -535,6 +537,9 @@ pub enum CompilerItem {
     /// `String::len` — the byte length the NIR `append_fuse` rewrite reads
     /// before a fused reservation advances it.
     StringLen,
+    /// `String::internal_view` — the view of a template segment a synthesized
+    /// `ReflectTemplate::tail` answers.
+    StringView,
     /// `String::internal_reserve_uninit` — the single capacity check the NIR
     /// `append_fuse` rewrite emits for a whole run of appends.
     StringReserveUninit,
@@ -770,6 +775,7 @@ impl CompilerItem {
         Self::KilnRequest,
         Self::KilnNoOptions,
         Self::String,
+        Self::StrSlice,
         Self::Option,
         Self::Result,
         Self::Ordering,
@@ -917,6 +923,7 @@ impl CompilerItem {
         Self::StringPushChar,
         Self::StringPushAscii,
         Self::StringLen,
+        Self::StringView,
         Self::StringReserveUninit,
         Self::StringSetByteUnchecked,
         Self::StringWriteStrAt,
@@ -1023,6 +1030,7 @@ impl CompilerItem {
             Self::KilnRequest => "kiln_request",
             Self::KilnNoOptions => "kiln_no_options",
             Self::String => "string",
+            Self::StrSlice => "str_slice",
             Self::Option => "option",
             Self::Result => "result",
             Self::Ordering => "ordering",
@@ -1206,6 +1214,7 @@ impl CompilerItem {
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
             Self::StringLen => "string_len",
+            Self::StringView => "string_view",
             Self::StringReserveUninit => "string_reserve_uninit",
             Self::StringSetByteUnchecked => "string_set_byte_unchecked",
             Self::StringWriteStrAt => "string_write_str_at",
@@ -1324,6 +1333,7 @@ impl CompilerItem {
             | Self::RangeExclusive
             | Self::RangeInclusive
             | Self::String
+            | Self::StrSlice
             | Self::Option
             | Self::Result
             | Self::Ordering
@@ -1415,6 +1425,7 @@ impl CompilerItem {
             | Self::StringPushChar
             | Self::StringPushAscii
             | Self::StringLen
+            | Self::StringView
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
@@ -1609,6 +1620,7 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::KilnNoOptions
             | Self::String
+            | Self::StrSlice
             | Self::ReflectVariantCase
             | Self::ReflectStructField
             | Self::ReflectEnumCase
@@ -1729,6 +1741,7 @@ impl CompilerItem {
             | Self::StringPushChar
             | Self::StringPushAscii
             | Self::StringLen
+            | Self::StringView
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt

@@ -543,6 +543,13 @@ impl String {
         return self.used;
     }
 
+    /// The whole string as a view; `as_str_slice` without the trait, so the
+    /// compiler can name it.
+    #[compiler_item("string_view")]
+    internal fn internal_view(&self) -> StrSlice {
+        return StrSlice::internal_new(&self.repr as &Array<u8>, 0, self.used);
+    }
+
     /// Check if the string is empty
     pub fn is_empty(&self) -> bool {
         return self.used == 0;
@@ -1302,6 +1309,7 @@ impl From<char> for String {
 
 /// A view of part of a string, its ends on UTF-8 character boundaries.
 /// Creating one copies nothing.
+#[compiler_item("str_slice")]
 pub struct StrSlice {
     repr: &Array<u8>,
     start: i32,
@@ -1943,7 +1951,7 @@ pub trait AsStrSlice: Eq<String> + Display with () {
 
 impl AsStrSlice for String {
     fn as_str_slice(&self) -> StrSlice {
-        return StrSlice::internal_new(&self.repr as &Array<u8>, 0, self.used);
+        return self.internal_view();
     }
 
     fn internal_append_to(&self, out: &mut String) {

@@ -274,11 +274,11 @@ pub trait ReflectTemplate: Reflect with () {
     /// The literal text after the last hole of `t` — the whole template when
     /// it has none — with escapes processed.
     #[compiler_item("reflect_template_tail")]
-    fn tail(t: &Self) -> String;
+    fn tail(t: &Self) -> StrSlice;
 
     /// `tail(t)` with escapes preserved.
     #[compiler_item("reflect_template_raw_tail")]
-    fn raw_tail(t: &Self) -> String;
+    fn raw_tail(t: &Self) -> StrSlice;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -429,13 +429,13 @@ impl<T, V> TemplateHole<T, V> {
 
     /// The literal text in `t` between the previous hole (or the start) and
     /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index);
+    pub fn lit(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index).internal_view();
     }
 
     /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index + 1);
+    pub fn raw(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index + 1).internal_view();
     }
 
     /// Whether the hole wrote a `:spec`.
