@@ -90,8 +90,12 @@ needed; `node analyze_native_profile.ts ...` just works.
 ## Linux setup
 
 ```sh
-# samply needs perf_event_paranoid <= 1, even as root
+# samply reads perf_event_paranoid itself and refuses above 1, even as root
+# with CAP_PERFMON. The setting is host-wide: put it back after profiling.
+old=$(cat /proc/sys/kernel/perf_event_paranoid)
 echo '1' | sudo tee /proc/sys/kernel/perf_event_paranoid
+# ... profile ...
+echo "$old" | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 # `addr2line` is part of binutils — usually already installed
 addr2line --version >/dev/null || sudo apt-get install -y binutils
