@@ -30,11 +30,11 @@ fn job(base: String, names: &List<String>) -> Option<[String, List<String>]> {
     let path = fs::join(GRAMMARS, `${base}.g4`);
     if let Some(stem) = base.strip_suffix("Parser") {
         let lexer = `${stem}Lexer.g4`;
-        if names.contains_str(lexer.as_str_slice()) {
+        if names.contains_str(&lexer) {
             return Some([stem.to_string(), [fs::join(GRAMMARS, lexer), path]]);
         }
     } else if let Some(stem) = base.strip_suffix("Lexer") {
-        if names.contains_str(`${stem}Parser.g4`.as_str_slice()) {
+        if names.contains_str(`${stem}Parser.g4`) {
             return null;
         }
     }
