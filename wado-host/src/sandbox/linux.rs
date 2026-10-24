@@ -140,7 +140,11 @@ fn std_stdio(stdio: Stdio) -> StdStdio {
 }
 
 /// Runs in the child between `fork` and `exec`.
-fn confine_self(ruleset: &OwnedFd, filter: &[libc::sock_filter], cwd: Option<&File>) -> io::Result<()> {
+fn confine_self(
+    ruleset: &OwnedFd,
+    filter: &[libc::sock_filter],
+    cwd: Option<&File>,
+) -> io::Result<()> {
     // A group of its own, so the host's kill reaches every descendant; the
     // filter below keeps them from leaving it.
     // SAFETY: each call below is a plain system call on memory the parent built.
@@ -149,7 +153,9 @@ fn confine_self(ruleset: &OwnedFd, filter: &[libc::sock_filter], cwd: Option<&Fi
         check(unsafe { libc::fchdir(dir.as_raw_fd()) })?;
     }
     check(unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) })?;
-    check_long(unsafe { libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0u32) })?;
+    check_long(unsafe {
+        libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0u32)
+    })?;
     let program = libc::sock_fprog {
         len: u16::try_from(filter.len()).expect("the filter is built short"),
         filter: filter.as_ptr().cast_mut(),
@@ -166,7 +172,12 @@ fn confine_self(ruleset: &OwnedFd, filter: &[libc::sock_filter], cwd: Option<&Fi
     // Marked close-on-exec rather than closed, so the descriptor the standard
     // library reports a failed `exec` through survives until the `exec`.
     check_long(unsafe {
-        libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, libc::CLOSE_RANGE_CLOEXEC)
+        libc::syscall(
+            libc::SYS_close_range,
+            3u32,
+            u32::MAX,
+            libc::CLOSE_RANGE_CLOEXEC,
+        )
     })?;
     Ok(())
 }
@@ -362,7 +373,9 @@ impl Assembler {
         for insn in &self.insns {
             match insn {
                 Insn::Label(label) => positions.push((*label, index)),
-                Insn::Load(_) | Insn::JumpIfEq(..) | Insn::JumpIfGe(..) | Insn::Ret(_) => index += 1,
+                Insn::Load(_) | Insn::JumpIfEq(..) | Insn::JumpIfGe(..) | Insn::Ret(_) => {
+                    index += 1
+                }
             }
         }
         let position = |target: Label| {

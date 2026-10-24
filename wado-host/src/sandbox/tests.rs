@@ -35,12 +35,20 @@ fn probe() {
         "tcp" => {
             // SAFETY: plain system calls on a socket this probe owns.
             let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-            if fd < 0 { -1 } else { unsafe { libc::close(fd) } }
+            if fd < 0 {
+                -1
+            } else {
+                unsafe { libc::close(fd) }
+            }
         }
         "udp" => {
             // SAFETY: as above.
             let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
-            if fd < 0 { -1 } else { unsafe { libc::close(fd) } }
+            if fd < 0 {
+                -1
+            } else {
+                unsafe { libc::close(fd) }
+            }
         }
         "unix" => match std::os::unix::net::UnixStream::connect(arg) {
             Ok(_) => 0,
@@ -52,7 +60,11 @@ fn probe() {
             // SAFETY: the forked child makes two system calls and exits.
             match unsafe { libc::fork() } {
                 0 => unsafe {
-                    let code = if libc::setsid() < 0 { *libc::__errno_location() } else { 0 };
+                    let code = if libc::setsid() < 0 {
+                        *libc::__errno_location()
+                    } else {
+                        0
+                    };
                     libc::_exit(code)
                 },
                 pid => {
@@ -145,8 +157,10 @@ fn assert_available() {
 
 fn run(policy: &Policy, program: &Path, args: &[&str], env: &[(&str, &str)]) -> ExitStatus {
     let args: Vec<OsString> = args.iter().map(OsString::from).collect();
-    let env: Vec<(OsString, OsString)> =
-        env.iter().map(|(k, v)| (OsString::from(k), OsString::from(v))).collect();
+    let env: Vec<(OsString, OsString)> = env
+        .iter()
+        .map(|(k, v)| (OsString::from(k), OsString::from(v)))
+        .collect();
     let spawned = spawn(&Command {
         program,
         args: &args,
@@ -162,7 +176,12 @@ fn run(policy: &Policy, program: &Path, args: &[&str], env: &[(&str, &str)]) -> 
 }
 
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
-    run(policy, Path::new("/bin/sh"), &["-c", script], &[("PATH", "/usr/bin:/bin")])
+    run(
+        policy,
+        Path::new("/bin/sh"),
+        &["-c", script],
+        &[("PATH", "/usr/bin:/bin")],
+    )
 }
 
 /// This test binary under `policy`, with its own directory readable, performing
@@ -173,7 +192,12 @@ fn probe_under(mut policy: Policy, act: &str) -> ExitStatus {
     run(
         &policy,
         &exe,
-        &["--exact", "sandbox::tests::probe", "--test-threads=1", "--quiet"],
+        &[
+            "--exact",
+            "sandbox::tests::probe",
+            "--test-threads=1",
+            "--quiet",
+        ],
         &[(PROBE_VAR, act)],
     )
 }
@@ -269,7 +293,10 @@ fn no_input_is_pushed_into_a_terminal() {
     let tree = Tree::new();
     // Stdin is `/dev/null`, so an unconfined TIOCSTI fails with ENOTTY; only
     // the filter answers EPERM.
-    assert_eq!(probe_under(tree.policy(Network::Denied), "tiocsti"), REFUSED);
+    assert_eq!(
+        probe_under(tree.policy(Network::Denied), "tiocsti"),
+        REFUSED
+    );
 }
 
 #[test]
@@ -277,15 +304,24 @@ fn reaches_no_process_outside_the_sandbox() {
     assert_available();
     let tree = Tree::new();
     let host = std::process::id().to_string();
-    assert_eq!(probe_under(tree.policy(Network::Denied), &format!("signal:{host}")), REFUSED);
-    assert_eq!(probe_under(tree.policy(Network::Denied), &format!("ptrace:{host}")), REFUSED);
+    assert_eq!(
+        probe_under(tree.policy(Network::Denied), &format!("signal:{host}")),
+        REFUSED
+    );
+    assert_eq!(
+        probe_under(tree.policy(Network::Denied), &format!("ptrace:{host}")),
+        REFUSED
+    );
 }
 
 #[test]
 fn no_io_uring() {
     assert_available();
     let tree = Tree::new();
-    assert_eq!(probe_under(tree.policy(Network::Denied), "io_uring"), REFUSED);
+    assert_eq!(
+        probe_under(tree.policy(Network::Denied), "io_uring"),
+        REFUSED
+    );
 }
 
 #[test]
@@ -317,10 +353,19 @@ fn inherits_no_descriptor_the_host_held_open() {
     // SAFETY: the descriptor was just opened and is owned here alone.
     let held = unsafe { OwnedFd::from_raw_fd(raw) };
     let mut contents = String::new();
-    File::from(held.try_clone().unwrap()).read_to_string(&mut contents).unwrap();
+    File::from(held.try_clone().unwrap())
+        .read_to_string(&mut contents)
+        .unwrap();
     assert_eq!(contents, "secret");
-    let status = probe_under(tree.policy(Network::Denied), &format!("fd:{}", held.as_raw_fd()));
-    assert_eq!(status, ExitStatus::Exited(2), "the descriptor must be closed in the child");
+    let status = probe_under(
+        tree.policy(Network::Denied),
+        &format!("fd:{}", held.as_raw_fd()),
+    );
+    assert_eq!(
+        status,
+        ExitStatus::Exited(2),
+        "the descriptor must be closed in the child"
+    );
 }
 
 #[test]
@@ -343,7 +388,9 @@ fn starts_in_the_directory_it_is_given() {
     })
     .unwrap();
     let mut out = String::new();
-    File::from(spawned.stdout.unwrap()).read_to_string(&mut out).unwrap();
+    File::from(spawned.stdout.unwrap())
+        .read_to_string(&mut out)
+        .unwrap();
     assert_eq!(spawned.child.wait().unwrap(), OK);
     assert_eq!(out, "here");
 }
@@ -353,8 +400,10 @@ fn a_group_kill_ends_every_descendant() {
     assert_available();
     let tree = Tree::new();
     let policy = tree.policy(Network::Denied);
-    let args: Vec<OsString> =
-        ["-c", "sleep 60 & sleep 60; wait"].iter().map(OsString::from).collect();
+    let args: Vec<OsString> = ["-c", "sleep 60 & sleep 60; wait"]
+        .iter()
+        .map(OsString::from)
+        .collect();
     let spawned = spawn(&Command {
         program: Path::new("/bin/sh"),
         args: &args,
@@ -373,7 +422,9 @@ fn a_group_kill_ends_every_descendant() {
     );
     // Every descendant held the pipe's write end; EOF means each one is gone.
     let mut rest = Vec::new();
-    File::from(spawned.stdout.unwrap()).read_to_end(&mut rest).unwrap();
+    File::from(spawned.stdout.unwrap())
+        .read_to_end(&mut rest)
+        .unwrap();
     // A signal to a reaped group is a no-op rather than a stray kill.
     spawned.child.signal_group(libc::SIGKILL).unwrap();
 }
@@ -411,5 +462,8 @@ fn a_program_outside_the_grants_reports_permission_denied() {
         stderr: Stdio::Null,
         policy: &policy,
     });
-    assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::PermissionDenied);
+    assert_eq!(
+        result.err().unwrap().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
 }

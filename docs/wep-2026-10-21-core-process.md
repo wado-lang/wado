@@ -104,6 +104,8 @@ On Linux, seccomp covers what Landlock does not:
   runs in the user's shell, outside any sandbox. Landlock's device `ioctl` rule
   does not reach a descriptor the child inherited.
 - `ptrace`.
+- `io_uring_setup`. A ring performs its operations, opening a socket among
+  them, without the system calls seccomp sees.
 
 ### Starting a confined child
 
@@ -126,9 +128,16 @@ Landlock takes each rule as a descriptor rather than a path. The rules for the
 guest's grants come from the descriptors of its preopens, which the host already
 holds, so no path is resolved a second time between the check and the use.
 
-The macOS profile is one fixed SBPL text in the host's source. Each path reaches
-it as a parameter, `-D GRANT_0=/path`, read as `(subpath (param "GRANT_0"))`,
-so no path is ever spliced into SBPL and no escaping can rewrite the policy.
+The macOS profile's text holds no path. A fixed base in the host's source is
+followed by one rule per grant, `(subpath (param "P0"))`, and each path reaches
+it as a parameter, `-D P0=/path`. No path is spliced into SBPL, so no escaping
+can rewrite the policy. Seatbelt matches the real path, so each parameter is
+one: the path a grant's descriptor names (`F_GETPATH`), or the baseline path
+canonicalized. The profile allows no `file-ioctl`, so no input reaches a
+terminal.
+
+`sandbox-exec` reports a program it cannot start only on its own stderr, so
+the host checks that the program exists before spawning it.
 
 ### Descriptors
 
@@ -138,7 +147,9 @@ it was opened with whatever the child's grants. Rust's standard library opens
 every descriptor with `O_CLOEXEC`, but the descriptors `wado` itself inherited
 from its parent carry no such flag.
 
-- Linux calls `close_range(3, ~0, 0)` in `pre_exec`, after the confinement.
+- Linux calls `close_range(3, ~0, CLOSE_RANGE_CLOEXEC)` in `pre_exec`, after
+  the confinement. Marked rather than closed, the descriptor the standard
+  library reports a failed `exec` through survives until the `exec`.
 - macOS sets `POSIX_SPAWN_CLOEXEC_DEFAULT`, and the spawn's file actions place
   the child's stdio at 0, 1 and 2. `POSIX_SPAWN_SETPGROUP` gives the child its
   process group.
@@ -205,7 +216,7 @@ child may read more than the guest. It is defined, not open-ended:
 | Purpose                         | Linux                                                    | macOS                                 |
 | ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
 | Loader and shared libraries     | `/lib*`, `/etc/ld.so.cache`                              | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs              | `/usr`, `/usr/local`, `/nix/store`                       | `/usr`, `/opt/homebrew`, `/opt/local` |
+| Installed programs              | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
 | Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`             | `/private/etc/…`, mDNSResponder       |
 | TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
 | Locale and time zones           | `/usr/share/zoneinfo`, locale data                       | the same                              |
@@ -455,6 +466,9 @@ cannot be taken back.
   inherited terminal or none.
 - `sandbox-exec` is marked deprecated in its manual page. macOS still ships it,
   and nothing public replaces it.
+- On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
+  which then exits with a status, rather than failing the spawn with
+  `not-permitted`.
 
 ## Related WEPs
 

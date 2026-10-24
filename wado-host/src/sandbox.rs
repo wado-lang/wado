@@ -158,6 +158,8 @@ const BASELINE_READ: &[&str] = &[
     "/System",
     "/opt/homebrew",
     "/opt/local",
+    "/private/etc/localtime",
+    "/private/var/db/timezone",
     "/dev/urandom",
     "/dev/random",
     "/dev/zero",
@@ -181,7 +183,6 @@ const BASELINE_NETWORK_READ: &[&str] = &[
     "/private/etc/resolv.conf",
     "/private/etc/hosts",
     "/private/etc/ssl",
-    "/private/var/run/mDNSResponder",
 ];
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -236,7 +237,10 @@ pub fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         Availability::Available,
         "spawning requires a host that can confine a child"
     );
-    assert!(command.program.is_absolute(), "the program must be resolved to an absolute path");
+    assert!(
+        command.program.is_absolute(),
+        "the program must be resolved to an absolute path"
+    );
     backend::spawn(command)
 }
 
