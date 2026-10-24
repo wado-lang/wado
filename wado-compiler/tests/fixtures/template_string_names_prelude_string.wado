@@ -1,15 +1,12 @@
-// An untagged template is sugar for the prelude's `format`, so it names that
-// tag even where a module item takes the name (spec-literals § Template Strings).
-use { println, Stdout } from "core:cli";
-
-fn format(x: i32) -> i32 {
-    return x * 2;
-}
+// An untagged template is sugar for `String::format`, so it names the prelude's
+// `String` even where an import takes the name (spec-literals § Template
+// Strings).
+use { println as String, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let n = builtin::black_box(21);
-    println(`n=${format(n)}`);
+    String(`n=${n}`);
 }
 
 __DATA__
-{"stdout": "n=42\n"}
+{"stdout": "n=21\n"}

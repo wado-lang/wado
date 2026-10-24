@@ -30,12 +30,6 @@ assert decoded matches { Ok(s) && s == "Wado" };
 Whether `a` and `b` point to one place, not merely to equal values. `==`
 on references compares the values.
 
-### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
-
-The tag an untagged template is sugar for: every hole rendered through its
-specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
-See WEP 2026-01-10.
-
 ### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
 
 Whether two byte strings are equal, in time that does not depend on where
@@ -4846,10 +4840,16 @@ _Fields are private._
 
 Create a new empty string.
 
+#### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
+
+The tag an untagged template is sugar for: every hole rendered through
+its specifier into one buffer. `` `x=${x}` `` is
+`` String::format`x=${x}` ``. See WEP 2026-01-10.
+
 #### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 
 The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as `format` renders them. See
+is `"a\\nb"`, its holes rendered as `String::format` renders them. See
 WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`

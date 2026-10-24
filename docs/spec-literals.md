@@ -589,8 +589,8 @@ let s = "\uDE00";
 A template string is written in backticks. It is sugar for a call of the
 `String::format` tag, so `` `x=${x}` `` means `` String::format`x=${x}` `` and
 has the type `String` (see [Tagged Template Literals](#tagged-template-literals)).
-It names the prelude's `String` even where another item named `String` is in
-scope, and in a module without the prelude.
+It names the prelude's `String` even where an import takes the name `String`,
+and in a module without the prelude.
 
 `${expr}` interpolates the value of `expr`, and everything else is literal text.
 A bare `{` or `}` is literal, so JSON-like content needs no escaping:

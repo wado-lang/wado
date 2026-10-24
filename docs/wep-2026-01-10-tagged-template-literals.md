@@ -289,7 +289,7 @@ that cannot name the bound passes its tag a concrete value instead.
 
 An untagged template is sugar for a call of the `String::format` tag, which a
 program may also call by name. It names the prelude's `String` wherever it
-stands, even where another `String` is in scope or the module has no prelude.
+stands, even where an import takes the name or the module has no prelude.
 The tag is a static method rather than a prelude function, as `String::raw` is,
 so it leaves the name `format` free for a program's own items:
 
@@ -853,11 +853,11 @@ warm-up phase takes that cost. Three runs:
 
 | Template        | `String::format` time per iteration, untagged = 1 |
 | --------------- | ------------------------------------------------- |
-| the four holes  | 0.80 to 0.82                              |
-| `${i:05}` alone | 1.03 to 1.04                              |
-| `${f:.2}` alone | 1.03 to 1.06                              |
-| `${i:#x}` alone | 1.06 to 1.11                              |
-| `${p:?}` alone  | 0.99 to 1.04                              |
+| the four holes  | 0.80 to 0.82                                      |
+| `${i:05}` alone | 1.03 to 1.04                                      |
+| `${f:.2}` alone | 1.03 to 1.06                                      |
+| `${i:#x}` alone | 1.06 to 1.11                                      |
+| `${p:?}` alone  | 0.99 to 1.04                                      |
 
 ## Known gaps
 
