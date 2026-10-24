@@ -1393,7 +1393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             target_ast.span(),
                         )
                     {
-                        return TypeTable::ERROR;
+                        return Err(());
                     }
                 }
             }
@@ -1494,45 +1494,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             _ => Lvalue::NotAPlace,
         };
-<<<<<<< HEAD
-
-        if !is_valid_lvalue {
-            // An `ERROR` target was diagnosed where it was resolved.
-            if target_type != TypeTable::ERROR {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: "cannot assign to an expression that is not a place".to_string(),
-                    span: target_ast.span(),
-                });
-            }
-            return TypeTable::ERROR;
-        }
-
-        // Reify rebuilds the `Assign` from the AST + recorded
-        // target / value types; project only the (unit) result type. The
-        // target + value were resolved above for their side effects, and the
-        // l-value validation / global-mutability checks already ran.
-        TypeTable::UNIT
-||||||| d2733c3d4
-
-        if !is_valid_lvalue {
-            // Report error for invalid assignment target
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign to an expression that is not a place".to_string(),
-                span: target_ast.span(),
-            });
-            return TypeTable::ERROR;
-        }
-
-        // Reify rebuilds the `Assign` from the AST + recorded
-        // target / value types; project only the (unit) result type. The
-        // target + value were resolved above for their side effects, and the
-        // l-value validation / global-mutability checks already ran.
-        TypeTable::UNIT
-=======
         let message = match lvalue {
             // Reify rebuilds the `Assign` from the AST and the recorded types.
             Lvalue::Place => return TypeTable::UNIT,
             Lvalue::Reported => return TypeTable::ERROR,
+            // An `ERROR` target was diagnosed where it was resolved.
+            Lvalue::NotAPlace if place.value_type() == TypeTable::ERROR => {
+                return TypeTable::ERROR;
+            }
             Lvalue::ThroughImmutableRef => "cannot assign through immutable reference",
             Lvalue::NotAPlace => "cannot assign to an expression that is not a place",
         };
@@ -1541,7 +1510,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: target_ast.span(),
         });
         TypeTable::ERROR
->>>>>>> origin/main
     }
 
     /// Resolve `target op= value` as `target = target op value`, TIR-direct. The
