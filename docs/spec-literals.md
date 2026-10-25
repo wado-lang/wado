@@ -1130,7 +1130,9 @@ through the bounds the item declares, as for any call.
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
 storage changes nothing the tag sees: `` String::format`${a} ${bump(&mut a)}` ``
-renders `a` as it was before `bump` ran. A tag may carry effects,
+renders `a` as it was before `bump` ran. A place whose type is affine is the
+exception: it cannot be copied, so the tag reads it as it is once every hole has
+run, and `` `${c:?} ${c.bump()}` `` renders `c` after the bump. A tag may carry effects,
 which the caller declares as for any call, and return any type.
 
 The `String::format` tag renders each hole through its specifier into one

@@ -890,6 +890,11 @@ warm-up phase takes that cost. Three runs:
   internal symbol (`$tmpl$…`) rather than by the name above. How the value
   prints is open: as the template it was written as, or as a struct of its
   holes.
+- A hole that is an affine place is read where the tag runs, not at its own
+  position, since it cannot be copied. A later hole that writes it shows
+  through: `` `${c:?} ${c.bump()}` `` renders `c` after the bump. The
+  specification states this as an exception to evaluation order, and
+  `template_affine_place_hole_reads_after_later_holes.wado` pins it.
 - The monomorphization-time diagnostics the variadic WEP lists — call site,
   element index, body location — are what a failing tag body reports through,
   and are still open there.
