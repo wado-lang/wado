@@ -370,7 +370,7 @@ impl Query<'_> {
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
         if !match_target(&def.target, ty, &mut bindings, &mut deferred)
-            || !self.projections_met(&deferred, &bindings)
+            || self.projections_refuted(&deferred, &bindings)
         {
             return None;
         }
@@ -468,7 +468,7 @@ impl Query<'_> {
                             None => {
                                 let from = deferred.len();
                                 if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred)
-                                    || !self.projections_met(&deferred[from..], &bindings)
+                                    || self.projections_refuted(&deferred[from..], &bindings)
                                 {
                                     return None;
                                 }
@@ -478,6 +478,11 @@ impl Query<'_> {
                     requests.extend(answer.requests);
                 }
             }
+        }
+        // A projection may name a parameter only a later pin binds, so each is
+        // read in full once every answer has bound what it binds.
+        if !self.projections_met(&deferred, &bindings) {
+            return None;
         }
         let matched: Vec<Option<SolverType>> = bindings
             .iter()
@@ -506,6 +511,19 @@ impl Query<'_> {
                         .unwrap_or_else(|| arg.clone())
                 })
                 .collect(),
+        })
+    }
+
+    /// Whether a projection a match met, readable at `bindings` already, holds
+    /// something other than what it was matched against.
+    fn projections_refuted(
+        &mut self,
+        deferred: &[(SolverType, SolverType)],
+        bindings: &[Option<Binding>],
+    ) -> bool {
+        deferred.iter().any(|(projection, met)| {
+            self.at_bindings(projection, bindings)
+                .is_some_and(|expected| expected != self.normalized(met))
         })
     }
 
