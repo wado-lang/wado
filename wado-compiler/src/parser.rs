@@ -1,6 +1,7 @@
 // The parser implementation of Wado with recursive descent parser.
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
+use crate::ast::MAX_GENERIC_PARAMS;
 use crate::ast::{
     AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
     AssociatedTypeDecl, AstId, AstIdSpace, AstVisitor, AttrArg, AttrEntry, AttrItem, AttrObject,
@@ -31,7 +32,6 @@ use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, l
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
-use crate::ast::MAX_GENERIC_PARAMS;
 use crate::{ast, format_spec, hashmap};
 
 pub struct Parser {
