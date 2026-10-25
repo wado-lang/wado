@@ -232,6 +232,24 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// A path through a namespace import to an interface's type prints back whole,
+/// in a type, a literal and a pattern.
+#[test]
+fn test_format_keeps_interface_type_paths() {
+    let source = concat!(
+        "fn x_of(p: comp::Geo::Point) -> u32 {\n",
+        "    let comp::Geo::Point { x } = comp::Geo::Point { x: 1 };\n",
+        "    return match comp::Geo::Shape::Dot {\n",
+        "        comp::Geo::Shape::Circle(r) => r,\n",
+        "        comp::Geo::Shape::Dot => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A string outside an expression keeps its escapes as written, as an
 /// expression's string literal does, though the compiler reads its value.
 #[test]

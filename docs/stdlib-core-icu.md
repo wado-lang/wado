@@ -11,18 +11,18 @@ toolchain. A name it does not answer is `null`, never an approximate set:
 ## Synopsis
 
 ```wado
-assert has(BinaryProperty::Uppercase, 'À');
+assert has(Properties::BinaryProperty::Uppercase, 'À');
 assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 ```
 
 ## Functions
 
-### `pub fn has(property: BinaryProperty, ch: char) -> bool`
+### `pub fn has(property: Properties::BinaryProperty, ch: char) -> bool`
 
 Whether `ch` has the property. Total, and the name costs nothing at run
 time: an enum case is a number, and ICU4X bakes each property as a static.
 
-### `pub fn set(property: BinaryProperty) -> List<[u32, u32]>`
+### `pub fn set(property: Properties::BinaryProperty) -> List<[u32, u32]>`
 
 The property's inclusive code point ranges, lowest first.
 
@@ -50,11 +50,11 @@ ranges.
 
 ### `pub interface Properties`
 
-#### `fn has(property: BinaryProperty, ch: char) -> bool`
+#### `fn has(property: Properties::BinaryProperty, ch: char) -> bool`
 
 `#[cm]` `#[cm_params("property", "ch")]`
 
-#### `fn set(property: BinaryProperty) -> List<[u32, u32]>`
+#### `fn set(property: Properties::BinaryProperty) -> List<[u32, u32]>`
 
 `#[cm]` `#[cm_params("property")]`
 
@@ -68,7 +68,7 @@ ranges.
 
 ## Enums
 
-### `pub enum BinaryProperty`
+### `pub enum Properties::BinaryProperty`
 
 #### `Alnum`
 

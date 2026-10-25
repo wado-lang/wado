@@ -17,7 +17,7 @@
 //! end-of-input (ANTLR4 tolerates unterminated comments).
 
 use icu from "core:icu";
-use { BinaryProperty } from "core:icu";
+use { Properties } from "core:icu";
 use { char_at } from "../runtime/lex.wado";
 
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
@@ -363,7 +363,7 @@ pub fn is_rule_name_upper(c: char) -> bool {
     if c <= '\u{007F}' {
         return 'A' <= c <= 'Z';
     }
-    return icu::has(BinaryProperty::Uppercase, c);
+    return icu::has(Properties::BinaryProperty::Uppercase, c);
 }
 
 /// ANTLR4's `NameChar`.
