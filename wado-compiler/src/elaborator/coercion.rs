@@ -294,7 +294,10 @@ impl Scope {
             return false;
         }
         let vars = tt.infer_vars_in(ty);
-        !vars.is_empty() && vars.iter().all(|&var| self.reported_holes.contains(&tt.type_key(var)))
+        !vars.is_empty()
+            && vars
+                .iter()
+                .all(|&var| self.reported_holes.contains(&tt.type_key(var)))
     }
 
     /// Whether a pending call holds literals waiting at the variable `var`.

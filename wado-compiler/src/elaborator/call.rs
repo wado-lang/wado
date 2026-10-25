@@ -3550,11 +3550,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             format!("`{prefix}::<...>::{suffix}()`")
         };
+        let names: Vec<String> = impl_unresolved
+            .iter()
+            .chain(&method_unresolved)
+            .map(|(_, name)| name.clone())
+            .collect();
         let owner = format!("`{prefix}::{suffix}`");
-        // As a free function's: nothing here could answer a slot, so a sink
-        // the value reaches may yet, a sibling branch's type among them.
-        let defers = expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a));
-        let blame = format!("of {owner}; add a turbofish ({turbofish}) or a type annotation");
+        let defers = self.defers_uninferred(args, expected_type);
+        let message = TypeError::cannot_infer_message(&names, &owner, &turbofish);
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_params: &[ast::GenericParam] = sig
             .declaring_impl
@@ -3567,32 +3570,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if type_args.len() <= *slot {
                     type_args.resize(slot + 1, TypeTable::ERROR);
                 }
-                if !defers {
-                    type_args[*slot] = TypeTable::ERROR;
-                    continue;
-                }
-                let var = self.mint_infer_var_named(name);
-                self.attach_infer_var_blame(var, span, name.clone(), blame.clone());
-                let param = if declaring {
-                    impl_params.iter().find(|p| &p.name == name)
+                type_args[*slot] = if defers {
+                    let param = if declaring {
+                        impl_params.iter().find(|p| &p.name == name)
+                    } else {
+                        sig.own_params.get(*slot)
+                    };
+                    let bounds =
+                        param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
+                    self.mint_infer_hole(span, message.clone(), name.clone(), bounds)
                 } else {
-                    sig.own_params.get(*slot)
+                    TypeTable::ERROR
                 };
-                if let Some(param) = param {
-                    let bounds = self.declared_bounds(param, None, &[]);
-                    self.attach_infer_var_bounds(var, name.clone(), bounds, span);
-                }
-                type_args[*slot] = var;
             }
         }
         if !defers {
-            let names: Vec<String> = impl_unresolved
-                .iter()
-                .chain(&method_unresolved)
-                .map(|(_, name)| name.clone())
-                .collect();
-            let _ = self.emit(TypeError::cannot_infer(&names, &owner, &turbofish, span));
+            let _ = self.emit(TypeError::CannotInferType { message, span });
         }
+    }
+
+    /// Whether a call nothing at the call site answers a slot of leaves it to
+    /// a sink its value reaches, a sibling branch's type among them: where no
+    /// type is expected of it and its arguments hold no variable of their own.
+    fn defers_uninferred(&self, args: &[TypeId], expected_type: Option<TypeId>) -> bool {
+        expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a))
     }
 
     /// Each of `sig`'s declaring block's parameters whose argument in
@@ -3781,22 +3782,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let can_defer =
-            expected_type.is_none() && args.iter().all(|a| !self.type_has_infer_hole(*a));
-        if !can_defer {
+        if !self.defers_uninferred(args, expected_type) {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
 
         let func_name = callee.name();
-        let message = format!(
-            "cannot infer type parameter {} of function `{func_name}`; \
-             add a turbofish (`{func_name}::<...>()`) or a type annotation",
-            unresolved_names
-                .iter()
-                .map(|n| format!("`{n}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
+        let message = TypeError::cannot_infer_message(
+            &unresolved_names,
+            &format!("function `{func_name}`"),
+            &format!("`{func_name}::<...>()`"),
         );
 
         let mut new_args: Vec<TypeId> = Vec::with_capacity(n);

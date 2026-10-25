@@ -3391,7 +3391,10 @@ impl TypeTable {
     /// declaring it, and so means nothing where its arguments are unknown.
     pub fn reads_trait_params(&self, sig: &AssocTypeSig, written: &TraitRef) -> bool {
         let params: Vec<TypeId> = sig.frame.params.iter().flatten().copied().collect();
-        written.args.iter().any(|&arg| self.mentions_any(arg, &params))
+        written
+            .args
+            .iter()
+            .any(|&arg| self.mentions_any(arg, &params))
     }
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
@@ -5611,7 +5614,8 @@ impl TypeTable {
     }
 
     fn mentions_key(&self, id: TypeId, keys: &[TypeKey]) -> bool {
-        keys.contains(&self.type_key(id)) || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
+        keys.contains(&self.type_key(id))
+            || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.

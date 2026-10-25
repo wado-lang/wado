@@ -318,7 +318,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// enclosing declaration's `scope_params`.
     fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
         let table = self.tysys.type_table.borrow();
-        self.tysys.is_unbound_type_param(t) && !table.type_keys(scope_params).contains(&table.type_key(t))
+        self.tysys.is_unbound_type_param(t)
+            && !table.type_keys(scope_params).contains(&table.type_key(t))
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {

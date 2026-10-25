@@ -1652,18 +1652,24 @@ impl TypeError {
         turbofish: &str,
         span: Span,
     ) -> TypeError {
+        TypeError::CannotInferType {
+            message: Self::cannot_infer_message(names, owner, turbofish),
+            span,
+        }
+    }
+
+    /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
+    /// never answered.
+    pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
         let named = names
             .iter()
             .map(|n| format!("`{n}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {named} of {owner}; \
-                 add a turbofish ({turbofish}) or a type annotation"
-            ),
-            span,
-        }
+        format!(
+            "cannot infer type parameter {named} of {owner}; \
+             add a turbofish ({turbofish}) or a type annotation"
+        )
     }
 
     /// This error as its `(code, message, span)` triple, which is what
