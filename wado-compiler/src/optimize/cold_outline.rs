@@ -1,5 +1,5 @@
-//! Move what a `cold_path()` marker opens into a function of its own, so that
-//! `inline`'s cold discount describes the callee instead of promising a split.
+//! Move a block's cold run into a function of its own, so that `inline`'s cold
+//! discount describes the callee instead of promising a split.
 //!
 //! A function's root block is a region only when more than one site calls the
 //! function, since that is when the inliner copies its cold tail into each one.
@@ -33,7 +33,7 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::is_cold_marker;
+use super::arena_query::{ColdRuns, control_escapes};
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -84,12 +84,12 @@ struct Exits {
     never: TypeId,
 }
 
-/// A cold region: the statements after a `cold_path()` marker, to the end of
-/// the block holding it.
+/// A cold region: a block's cold run, less the marker it keeps.
 struct Region {
     block: BlockId,
-    /// Position of the marker in `block`; the region is everything after it.
-    marker: usize,
+    /// Where the run starts in `block`.
+    start: usize,
+    marker: StmtId,
     stmts: Vec<StmtId>,
     /// Locals of the enclosing frame the region reads, which the helper takes
     /// as parameters past the ones it inherits. Ascending.
@@ -151,14 +151,26 @@ fn find_region(
     }
     let params = func.params.len();
     let type_table = project.type_table.borrow();
+    let runs = ColdRuns::of(body, Some(cold));
     let root = root_copied.then_some((body.root(), false));
     for (block, under_loop) in root.into_iter().chain(valueless_blocks(body, &type_table)) {
-        let stmts = &body.blocks[block].stmts;
-        let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
+        let Some(start) = runs.start(block) else {
             continue;
         };
-        let region: Vec<StmtId> = stmts[marker + 1..].to_vec();
-        if buys_nothing(body, &type_table, cold, &region, params) {
+        // The marker stays behind, ahead of the call, to hint the branch; a run
+        // a nested construct covers has none of its own to keep, and its
+        // markers are reached inside it.
+        let stmts = &body.blocks[block].stmts;
+        let Some(marker) = stmts[start..].iter().position(|&s| runs.is_marker(body, s)) else {
+            continue;
+        };
+        let marker = stmts[start + marker];
+        let region: Vec<StmtId> = stmts[start..]
+            .iter()
+            .copied()
+            .filter(|&s| s != marker)
+            .collect();
+        if buys_nothing(body, &type_table, &runs, &region, params) {
             continue;
         }
         compiler_trace!(
@@ -166,7 +178,7 @@ fn find_region(
             "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
-            region_size(body, &type_table, Some(cold), &region),
+            region_size(body, &type_table, &runs, &region),
         );
         if let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
         {
@@ -181,6 +193,7 @@ fn find_region(
             });
             return Some(Region {
                 block,
+                start,
                 marker,
                 args,
                 return_type: if diverges { exits.never } else { exits.unit },
@@ -244,12 +257,11 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
 fn buys_nothing(
     body: &Body,
     type_table: &TypeTable,
-    cold: FuncId,
+    runs: &ColdRuns,
     region: &[StmtId],
     param_count: usize,
 ) -> bool {
-    region.is_empty()
-        || region_size(body, type_table, Some(cold), region) <= call_site_size(param_count)
+    region.is_empty() || region_size(body, type_table, runs, region) <= call_site_size(param_count)
 }
 
 /// How one local the region mentions gets to the helper.
@@ -432,59 +444,6 @@ impl LocalRefs {
     }
 }
 
-/// Whether control can leave the region. A `return` always can. A `break` or
-/// `continue` only does when its target — a label, or the nearest enclosing
-/// loop — is outside, which the region's own labels and loop depth decide.
-fn control_escapes(body: &Body, region: &[StmtId]) -> bool {
-    let mut labels: Vec<&str> = Vec::new();
-    region
-        .iter()
-        .any(|&s| escapes_from(body, NodeRef::Stmt(s), &mut labels, 0))
-}
-
-fn escapes_from<'a>(
-    body: &'a Body,
-    node: NodeRef,
-    labels: &mut Vec<&'a str>,
-    loops: usize,
-) -> bool {
-    let scoped = |labels: &mut Vec<&'a str>, label: &'a str, block, loops| {
-        labels.push(label);
-        let out = escapes_from(body, NodeRef::Block(block), labels, loops);
-        labels.pop();
-        out
-    };
-    match node {
-        NodeRef::Stmt(s) => match &body.stmts[s].kind {
-            StmtKind::Return { .. } => return true,
-            StmtKind::Continue => return loops == 0,
-            StmtKind::Break { label, .. } => match label {
-                None => return loops == 0,
-                Some(l) if !labels.contains(&l.as_str()) => return true,
-                Some(_) => {}
-            },
-            StmtKind::Loop { body: b } => {
-                return escapes_from(body, NodeRef::Block(*b), labels, loops + 1);
-            }
-            StmtKind::LabeledBlock { label, block, .. } => {
-                return scoped(labels, label, *block, loops);
-            }
-            _ => {}
-        },
-        NodeRef::Expr(e) => {
-            if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[e].kind {
-                return scoped(labels, label, *block, loops);
-            }
-        }
-        _ => {}
-    }
-    let mut escaped = false;
-    body.for_each_child(node, |c| {
-        escaped = escaped || escapes_from(body, c, labels, loops);
-    });
-    escaped
-}
-
 /// Move `region` into a function of its own and leave a call in its place.
 fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
     let id = project.next_func_id();
@@ -543,8 +502,8 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
         span,
     });
     let block = &mut body.blocks[region.block];
-    block.stmts.truncate(region.marker + 1);
-    block.stmts.push(stmt);
+    block.stmts.truncate(region.start);
+    block.stmts.extend([region.marker, stmt]);
 }
 
 /// The function a region becomes: the enclosing function's frame, and the

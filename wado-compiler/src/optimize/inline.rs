@@ -35,7 +35,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, is_cold_marker, unreached_through};
+use super::arena_query::{self, ColdRuns, unreached_through};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -132,36 +132,13 @@ fn is_zero_extension(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
     unsigned && wasm_shape(type_table, to) == Some(PrimitiveType::I64)
 }
 
-/// How a statement ends the reachable, hot portion of its block, for the inline
-/// cost walk in [`CostWalk::block`].
-enum BlockCut {
-    /// Not a cut — keep accumulating cost.
-    None,
-    /// A `cold_path()` marker: this statement and everything after it is cold,
-    /// so neither contributes (counted as zero).
-    Cold,
-    /// An unconditional divergence (a `return` / `break` / `continue`, or a call
-    /// to a `-> !` function such as `panic`): the statement itself is counted,
-    /// but the unreachable tail after it is not.
-    Diverges,
-}
-
-/// Classify whether a statement cuts off the rest of its block from the inline
-/// cost estimate.
-fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, cold: Option<FuncId>) -> BlockCut {
-    if cold.is_some_and(|cold| is_cold_marker(body, stmt, cold)) {
-        return BlockCut::Cold;
-    }
-    match &body.stmts[stmt].kind {
-        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
-        StmtKind::Expr(e)
-            if e.as_expr()
-                .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)) =>
-        {
-            BlockCut::Diverges
-        }
-        _ => BlockCut::None,
-    }
+/// Whether a statement diverges unconditionally (a `return` / `break` /
+/// `continue`, or a call to a `-> !` function such as `panic`), so the tail of
+/// its block after it is unreachable and never emitted.
+fn diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
+    body.terminates(stmt)
+        || matches!(&body.stmts[stmt].kind, StmtKind::Expr(e)
+            if e.as_expr().is_some_and(|e| type_table.is_never(body.exprs[e].type_id)))
 }
 
 /// Which of a body's two prices a walk is computing. Both are counted in
@@ -170,7 +147,7 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, cold: Option<Fun
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Price {
     /// What a caller pays to *run* one copy — the question the inline threshold
-    /// asks. A `cold_path()` marker ends its block.
+    /// asks. A block's cold run is no part of it.
     Hot,
     /// What the module pays to *hold* one copy — the question the growth budget
     /// asks. Cold code counts; only what a divergence makes unreachable does
@@ -187,7 +164,7 @@ enum Price {
 struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
-    cold: Option<FuncId>,
+    cold: &'a ColdRuns,
     price: Price,
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
@@ -210,7 +187,7 @@ pub(super) struct ConstView<'a> {
 type SeenValues = IndexSet<ValueId>;
 
 impl<'a> CostWalk<'a> {
-    fn new(body: &'a Body, type_table: &'a TypeTable, cold: Option<FuncId>, price: Price) -> Self {
+    fn new(body: &'a Body, type_table: &'a TypeTable, cold: &'a ColdRuns, price: Price) -> Self {
         Self {
             body,
             type_table,
@@ -375,43 +352,34 @@ impl<'a> CostWalk<'a> {
     }
 
     /// What an `if` costs over its operands. A guard, an arm-less `if` whose
-    /// arm opens with `cold_path()`, is laid out of line and never merges back,
-    /// so running it costs the test and a jump and splits no region: one
+    /// arm is cold throughout, is laid out of line and never merges back, so
+    /// running it costs the test and a jump and splits no region: one
     /// [`weight::OP`]. Pricing it as a [`weight::BRANCH`] held `Slice::slice`
     /// back once the `contract` checks of its two `i32::clamp` calls were
     /// copied into it, and with it every fold of a constant slice.
     fn branch_weight(&self, then_block: BlockId, else_block: Option<BlockId>) -> usize {
         let guard = self.price == Price::Hot
             && else_block.is_none()
-            && self.body.blocks[then_block]
-                .stmts
-                .first()
-                .is_some_and(|&s| {
-                    matches!(
-                        block_cut(self.body, s, self.type_table, self.cold),
-                        BlockCut::Cold
-                    )
-                });
+            && self.cold.start(then_block) == Some(0);
         if guard { weight::OP } else { weight::BRANCH }
     }
 
-    /// Cost of a NIR block, stopping once the rest of it becomes cold or
-    /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
-    /// `cold_path()` marker drops the marker and, at [`Price::Hot`], everything
-    /// after it; a diverging statement (`return` / `break` / `continue` or a
-    /// `-> !` call such as `panic`) is itself charged but cuts off its
-    /// unreachable tail at either price.
+    /// Cost of a NIR block: at [`Price::Hot`], the part ahead of its cold run.
+    /// A marker emits nothing, and a diverging statement is itself charged but
+    /// cuts off its unreachable tail at either price.
     fn block(&self, block: BlockId, seen: &mut SeenValues) -> usize {
+        let stmts = match self.price {
+            Price::Hot => self.cold.hot(self.body, block),
+            Price::Size => &self.body.blocks[block].stmts,
+        };
         let mut total = 0;
-        for &stmt in &self.body.blocks[block].stmts {
-            match block_cut(self.body, stmt, self.type_table, self.cold) {
-                BlockCut::Cold if self.price == Price::Hot => break,
-                BlockCut::Cold => {}
-                BlockCut::Diverges => {
-                    total += self.stmt(stmt, seen);
-                    break;
-                }
-                BlockCut::None => total += self.stmt(stmt, seen),
+        for &stmt in stmts {
+            if self.cold.is_marker(self.body, stmt) {
+                continue;
+            }
+            total += self.stmt(stmt, seen);
+            if diverges(self.body, stmt, self.type_table) {
+                break;
             }
         }
         total
@@ -611,7 +579,7 @@ impl<'a> CostWalk<'a> {
             }
 
             // Control flow. Cold arms contribute nothing: `block` stops at a
-            // `cold_path()` marker or a diverging statement within each one.
+            // cold run or a diverging statement within each one.
             ExprKind::If {
                 condition,
                 then_branch,
@@ -694,12 +662,7 @@ const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines. `spliced`
 /// prices its calls — see [`CostWalk::splicing`]; empty prices them as ABI edges.
-fn inline_cost(
-    body: &Body,
-    type_table: &TypeTable,
-    cold: Option<FuncId>,
-    spliced: &[usize],
-) -> usize {
+fn inline_cost(body: &Body, type_table: &TypeTable, cold: &ColdRuns, spliced: &[usize]) -> usize {
     CostWalk::new(body, type_table, cold, Price::Hot)
         .splicing(spliced)
         .whole_body()
@@ -710,7 +673,7 @@ fn inline_cost(
 /// store, so this parts company with [`inline_cost`] exactly where a callee
 /// keeps a rare heavy arm: `TreeBuilder::push_row` in the Gale runtime prices at
 /// 27 hot and 166 by size.
-fn inline_size(body: &Body, type_table: &TypeTable, cold: Option<FuncId>) -> usize {
+fn inline_size(body: &Body, type_table: &TypeTable, cold: &ColdRuns) -> usize {
     CostWalk::new(body, type_table, cold, Price::Size).whole_body()
 }
 
@@ -721,7 +684,7 @@ fn inline_size(body: &Body, type_table: &TypeTable, cold: Option<FuncId>) -> usi
 pub(super) fn region_size(
     body: &Body,
     type_table: &TypeTable,
-    cold: Option<FuncId>,
+    cold: &ColdRuns,
     stmts: &[StmtId],
 ) -> usize {
     let walk = CostWalk::new(body, type_table, cold, Price::Size);
@@ -755,7 +718,7 @@ fn net_cost(gross: usize, param_count: usize) -> usize {
 fn inline_cost_folded(
     body: &Body,
     type_table: &TypeTable,
-    cold: Option<FuncId>,
+    cold: &ColdRuns,
     view: &ConstView<'_>,
     spliced: &[usize],
 ) -> usize {
@@ -881,28 +844,27 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// them than the callee does. `safepoint_calls` says which calls are one. The
 /// literal a `return` hands back is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
-/// that takes it apart deletes it. Code past a `cold_path()` marker is no part
-/// of the run.
+/// that takes it apart deletes it. A cold run is no part of the run.
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
-    cold: Option<FuncId>,
+    cold: &ColdRuns,
     safepoint_calls: &[bool],
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
-        cold: Option<FuncId>,
+        cold: &'a ColdRuns,
         safepoint_calls: &'a [bool],
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
-            for &stmt in &self.body.blocks[block].stmts {
-                match block_cut(self.body, stmt, self.type_table, self.cold) {
-                    BlockCut::Cold => return false,
-                    BlockCut::Diverges => return self.node(NodeRef::Stmt(stmt)),
-                    BlockCut::None if self.node(NodeRef::Stmt(stmt)) => return true,
-                    BlockCut::None => {}
+            for &stmt in self.cold.hot(self.body, block) {
+                if self.node(NodeRef::Stmt(stmt)) {
+                    return true;
+                }
+                if diverges(self.body, stmt, self.type_table) {
+                    break;
                 }
             }
             false
@@ -1066,7 +1028,7 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     let Some(body) = &func.body else {
         return scan;
     };
-    let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+    let cold = ColdRuns::of(body, cold_path).exprs(body);
     let looped = looped_exprs(body);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
@@ -1502,7 +1464,7 @@ enum Site {
     Plain,
     /// Inside a loop of the caller, or anywhere in a function only loops reach.
     Loop,
-    /// After a `cold_path()` marker, or anywhere in a function only such sites
+    /// In a cold run, or anywhere in a function only such sites
     /// reach: only `#[inline(always)]` and a splice no bigger than the call
     /// happen here, since anything else only bloats code that rarely runs.
     Cold,
@@ -1588,7 +1550,7 @@ fn classify_callee(
     barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
-    cold: Option<FuncId>,
+    cold: &ColdRuns,
     foldable: &[bool],
     loopy: &[bool],
     safepoint_calls: &[bool],
@@ -2232,7 +2194,7 @@ pub fn inline_functions(
         {
             return 0;
         }
-        let gross = inline_cost(body, type_table, cold, &[]);
+        let gross = inline_cost(body, type_table, &ColdRuns::of(body, cold), &[]);
         if func.inline_hint == InlineHint::Always
             || net_cost(gross, func.params.len()) <= effective_threshold(&func, inline_threshold)
         {
@@ -2243,8 +2205,12 @@ pub fn inline_functions(
     });
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
+        let runs = func
+            .body
+            .as_ref()
+            .map_or_else(ColdRuns::default, |b| ColdRuns::of(b, cold));
         let size = match func.body.as_ref() {
-            Some(b) if pricing => inline_size(b, type_table, cold),
+            Some(b) if pricing => inline_size(b, type_table, &runs),
             _ => 0,
         };
         let view = func
@@ -2261,7 +2227,7 @@ pub fn inline_functions(
             &barred_cycle_members,
             type_table,
             inline_threshold,
-            cold,
+            &runs,
             &foldable,
             &loopy,
             &safepoint_calls,
@@ -2281,14 +2247,14 @@ pub fn inline_functions(
         let candidate = (verdict.reach != Reach::Nowhere).then(|| {
             let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(body, type_table, cold, &spliced),
+                InlineHint::Always => inline_cost(body, type_table, &runs, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
             let shrinks = called_cold[i] && {
                 let written = if pricing {
                     size
                 } else {
-                    inline_size(body, type_table, cold)
+                    inline_size(body, type_table, &runs)
                 };
                 net_cost(written, func.params.len()) == 0
             };
@@ -2485,11 +2451,12 @@ pub fn inline_functions(
             if entry == Site::Loop {
                 frame.loop_calls.push(call_counts(body, root, &carried));
             }
+            let mut runs = ColdRuns::of(body, cold);
             inline_calls_in_block(
                 body,
                 root,
                 candidates,
-                cold,
+                &mut runs,
                 &mut frame,
                 type_table,
                 &mut inlined_funcs,
@@ -2677,14 +2644,13 @@ fn carried_calls(
 }
 
 /// Inline function calls in a block, each statement processed in place. `site`
-/// is the context the block's calls sit in; a `cold_path()` marker turns it
-/// [`Site::Cold`] for the rest of the block, and a loop body is a
-/// [`Site::Loop`].
+/// is the context the block's calls sit in; the block's cold run is a
+/// [`Site::Cold`], and a loop body is a [`Site::Loop`].
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: Candidates<'_>,
-    cold: Option<FuncId>,
+    cold: &mut ColdRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -2699,8 +2665,9 @@ fn inline_calls_in_block(
         Loop(BlockId),
         None,
     }
-    for stmt_id in body.blocks[block].stmts.clone() {
-        if cold.is_some_and(|cold| is_cold_marker(body, stmt_id, cold)) {
+    let start = cold.start(block);
+    for (i, stmt_id) in body.blocks[block].stmts.clone().into_iter().enumerate() {
+        if start == Some(i) {
             site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
@@ -3775,7 +3742,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: Candidates<'_>,
-    cold: Option<FuncId>,
+    cold: &mut ColdRuns,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -3803,6 +3770,7 @@ fn inline_calls_in_expr(
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }
+        cold.add_under(body, e);
         let left = Cell::new(candidates.rescan_cap);
         inline_calls_in_expr(
             body,

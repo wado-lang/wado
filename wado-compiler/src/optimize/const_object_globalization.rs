@@ -22,8 +22,8 @@ use crate::tir::{ArrayElementAccess, ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::{
-    bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,
-    collect_reads, expr_mentions_local, is_cold_marker, is_local, promoted_local_reads,
+    ColdRuns, bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,
+    collect_reads, expr_mentions_local, is_local, promoted_local_reads,
     reachable_nodes, strip_refs,
 };
 use crate::ast::Visibility;
@@ -353,14 +353,11 @@ fn collect_candidates(
     let leaked_ref_args = ref_args_that_escape(body, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
+    let cold = ColdRuns::of(body, cold_path);
     let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Block(block) = node {
-            let stmts = &body.blocks[block].stmts;
-            let hot = cold_path
-                .and_then(|cold| stmts.iter().position(|&s| is_cold_marker(body, s, cold)))
-                .unwrap_or(stmts.len());
-            stack.extend(stmts[..hot].iter().map(|&s| NodeRef::Stmt(s)));
+            stack.extend(cold.hot(body, block).iter().map(|&s| NodeRef::Stmt(s)));
             continue;
         }
         if let NodeRef::Stmt(s) = node

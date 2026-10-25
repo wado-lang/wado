@@ -637,6 +637,11 @@ assert opt matches { Some(x) && x > 0 };
 other side of its branch is the likely one. It does not change what the program
 computes.
 
+That path is every point each run through which passes the marker. It takes
+what follows the marker in its block, and what precedes it back to the last
+statement that can leave the block first, by a `return`, a `break`, a
+`continue` or a `?`.
+
 It is a statement rather than a condition wrapper, so it works anywhere a branch
 body does. That includes an `if let` or `match` arm, where no boolean condition
 is available:

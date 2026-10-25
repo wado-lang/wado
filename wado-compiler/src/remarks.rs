@@ -20,7 +20,7 @@ use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-use crate::optimize::arena_query::cold_exprs;
+use crate::optimize::arena_query::ColdRuns;
 use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -449,9 +449,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
             if region.reads_outer || region.writes_outer {
                 continue;
             }
-            let cold = cold.get_or_insert_with(|| {
-                cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default()
-            });
+            let cold = cold.get_or_insert_with(|| ColdRuns::of(body, cold_path).exprs(body));
             let surviving = surviving_calls(body, region.expr, &names, cold);
             let cause = match (region.refusal, surviving.is_empty()) {
                 (Some(refusal), _) => refusal.describe().to_string(),

@@ -12,7 +12,7 @@ use cranelift_entity::EntityRef;
 
 use super::value_copy::mutation::{Witness, expr_witnesses};
 use crate::hashmap;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
@@ -498,7 +498,7 @@ pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
 }
 
 /// Whether `stmt` is a bare `cold_path()` call.
-pub(super) fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
+fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
         return false;
     };
@@ -508,27 +508,269 @@ pub(super) fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
 }
 
-/// Every expression a `cold_path()` marker makes cold: those under the marker's
-/// statement and the ones after it in its block.
-pub(crate) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
-    let mut out = IndexSet::default();
-    body.for_each_reachable_node(|node| {
-        let NodeRef::Block(block) = node else {
-            return;
-        };
+/// What the `cold_path()` markers of one body make cold: per block, the
+/// position from which its statements, and everything under them, run only on
+/// a path through a marker. That is the marker's basic block, which in nested
+/// IR is a point every path through which passes the marker: the statements
+/// after it, and the ones ahead of it that cannot leave the block first. A
+/// statement covers its block as a marker does when every path through it
+/// passes one: a loop or a labeled block whose block is cold from its start,
+/// or a branch each of whose arms is.
+#[derive(Default)]
+pub(crate) struct ColdRuns {
+    marker: Option<FuncId>,
+    starts: IndexMap<BlockId, usize>,
+}
+
+impl ColdRuns {
+    /// The runs of `body`, or none when the program names no marker.
+    pub(crate) fn of(body: &Body, marker: Option<FuncId>) -> Self {
+        let mut starts = IndexMap::default();
+        if let Some(marker) = marker {
+            RunScan {
+                body,
+                marker,
+                starts: &mut starts,
+            }
+            .block(body.root());
+        }
+        Self { marker, starts }
+    }
+
+    /// Record the runs under `e`, a subtree spliced in since.
+    pub(crate) fn add_under(&mut self, body: &Body, e: ExprId) {
+        if let Some(marker) = self.marker {
+            RunScan {
+                body,
+                marker,
+                starts: &mut self.starts,
+            }
+            .expr(e);
+        }
+    }
+
+    /// Whether `stmt` is a marker, which emits nothing.
+    pub(crate) fn is_marker(&self, body: &Body, stmt: StmtId) -> bool {
+        self.marker
+            .is_some_and(|marker| is_cold_marker(body, stmt, marker))
+    }
+
+    /// Where `block` turns cold, if it does.
+    pub(crate) fn start(&self, block: BlockId) -> Option<usize> {
+        self.starts.get(&block).copied()
+    }
+
+    /// The statements of `block` ahead of its cold run: all of them when it has
+    /// none.
+    pub(crate) fn hot<'b>(&self, body: &'b Body, block: BlockId) -> &'b [StmtId] {
         let stmts = &body.blocks[block].stmts;
-        let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
-            return;
-        };
-        for &stmt in &stmts[marker..] {
+        &stmts[..self.start(block).unwrap_or(stmts.len())]
+    }
+
+    /// The statement each cold run opens with.
+    pub(crate) fn heads<'b>(&'b self, body: &'b Body) -> impl Iterator<Item = StmtId> + 'b {
+        self.starts
+            .iter()
+            .map(|(&block, &start)| body.blocks[block].stmts[start])
+    }
+
+    /// Every statement a cold run holds, those nested under them aside.
+    fn cold_stmts<'b>(&'b self, body: &'b Body) -> impl Iterator<Item = StmtId> + 'b {
+        self.starts
+            .iter()
+            .flat_map(|(&block, &start)| body.blocks[block].stmts[start..].iter().copied())
+    }
+
+    /// Every expression a cold run holds.
+    pub(crate) fn exprs(&self, body: &Body) -> IndexSet<ExprId> {
+        let mut out = IndexSet::default();
+        for stmt in self.cold_stmts(body) {
             body.for_each_node_under(NodeRef::Stmt(stmt), |n| {
                 if let NodeRef::Expr(e) = n {
                     out.insert(e);
                 }
             });
         }
+        out
+    }
+}
+
+/// One walk over a body's reachable blocks, recording each cold run.
+struct RunScan<'a> {
+    body: &'a Body,
+    marker: FuncId,
+    starts: &'a mut IndexMap<BlockId, usize>,
+}
+
+impl RunScan<'_> {
+    /// Record `block`'s cold run, and answer whether it covers the whole block.
+    fn block(&mut self, block: BlockId) -> bool {
+        let body = self.body;
+        let stmts = &body.blocks[block].stmts;
+        // Every statement is visited, so the runs nested under each are recorded.
+        let covering: Vec<bool> = stmts.iter().map(|&s| self.covers(s)).collect();
+        let Some(first) = covering.iter().position(|&c| c) else {
+            return false;
+        };
+        let start = stmts[..first]
+            .iter()
+            .rposition(|&s| control_escapes(body, &[s]))
+            .map_or(0, |i| i + 1);
+        self.starts.insert(block, start);
+        start == 0
+    }
+
+    /// Whether every path through `stmt` passes a marker.
+    fn covers(&mut self, stmt: StmtId) -> bool {
+        let body = self.body;
+        if is_cold_marker(body, stmt, self.marker) {
+            return true;
+        }
+        match &body.stmts[stmt].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let cond = self.operand(*condition);
+                self.branches(cond, std::iter::once(*then_block), *else_block)
+            }
+            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => self.block(*b),
+            StmtKind::Let { value: op, .. }
+            | StmtKind::LetDestructure { value: op, .. }
+            | StmtKind::Expr(op)
+            | StmtKind::Return { value: Some(op) }
+            | StmtKind::Break {
+                value: Some(op), ..
+            } => self.operand(*op),
+            StmtKind::Return { value: None } | StmtKind::Break { value: None, .. } => false,
+            StmtKind::Continue => false,
+        }
+    }
+
+    /// Whether every path through `op` passes a marker. A promoted value holds
+    /// no block, so only an expression can.
+    fn operand(&mut self, op: Operand) -> bool {
+        op.as_expr().is_some_and(|e| self.expr(e))
+    }
+
+    fn expr(&mut self, e: ExprId) -> bool {
+        let body = self.body;
+        match &body.exprs[e].kind {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.operand(*condition);
+                self.branches(cond, std::iter::once(*then_branch), *else_branch)
+            }
+            ExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                let scrutinee = self.operand(*scrutinee);
+                self.branches(scrutinee, arms.iter().copied(), Some(*default))
+            }
+            ExprKind::LabeledBlock { block, .. } => self.block(*block),
+            // A guard runs only when the arms before it fail to match, and an
+            // arm's body only when its own pattern and guard pass; the match is
+            // exhaustive, so every path enters one body.
+            ExprKind::Match { expr, arms } => {
+                let scrutinee = self.operand(*expr);
+                let mut every_arm = true;
+                for arm in arms {
+                    if let Some(guard) = arm.guard {
+                        self.operand(guard);
+                    }
+                    every_arm &= self.operand(arm.body);
+                }
+                scrutinee || every_arm
+            }
+            // Every other expression evaluates each of its operands.
+            _ => {
+                let mut covered = false;
+                body.for_each_child(NodeRef::Expr(e), |child| {
+                    if let NodeRef::Expr(c) = child {
+                        covered |= self.expr(c);
+                    }
+                });
+                covered
+            }
+        }
+    }
+
+    /// Whether every path through a branch passes a marker: through the part
+    /// every path runs (`head`), or through each arm. A missing `otherwise`
+    /// falls through without entering an arm.
+    fn branches(
+        &mut self,
+        head: bool,
+        arms: impl Iterator<Item = BlockId>,
+        otherwise: Option<BlockId>,
+    ) -> bool {
+        let mut every_arm = otherwise.is_some();
+        for arm in arms.chain(otherwise) {
+            every_arm &= self.block(arm);
+        }
+        head || every_arm
+    }
+}
+
+/// Whether control can leave the statements `stmts` other than by falling off
+/// their end. A `return` always can. A `break` or `continue` only does when its
+/// target — a label, or the nearest enclosing loop — is outside, which the
+/// statements' own labels and loop depth decide.
+pub(super) fn control_escapes(body: &Body, stmts: &[StmtId]) -> bool {
+    let mut labels: Vec<&str> = Vec::new();
+    stmts
+        .iter()
+        .any(|&s| escapes_from(body, NodeRef::Stmt(s), &mut labels, 0))
+}
+
+fn escapes_from<'a>(
+    body: &'a Body,
+    node: NodeRef,
+    labels: &mut Vec<&'a str>,
+    loops: usize,
+) -> bool {
+    let scoped = |labels: &mut Vec<&'a str>, label: &'a str, block, loops| {
+        labels.push(label);
+        let out = escapes_from(body, NodeRef::Block(block), labels, loops);
+        labels.pop();
+        out
+    };
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Return { .. } => return true,
+            StmtKind::Continue => return loops == 0,
+            StmtKind::Break { label, .. } => match label {
+                None => return loops == 0,
+                Some(l) if !labels.contains(&l.as_str()) => return true,
+                Some(_) => {}
+            },
+            StmtKind::Loop { body: b } => {
+                return escapes_from(body, NodeRef::Block(*b), labels, loops + 1);
+            }
+            StmtKind::LabeledBlock { label, block, .. } => {
+                return scoped(labels, label, *block, loops);
+            }
+            _ => {}
+        },
+        NodeRef::Expr(e) => {
+            if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[e].kind {
+                return scoped(labels, label, *block, loops);
+            }
+        }
+        _ => {}
+    }
+    let mut escaped = false;
+    body.for_each_child(node, |c| {
+        escaped = escaped || escapes_from(body, c, labels, loops);
     });
-    out
+    escaped
 }
 
 /// The functions no entry reaches through `edges`, indexed by store position:
@@ -578,7 +820,7 @@ pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>)
             let Some(body) = f.body.as_ref().filter(|_| !f.is_dead) else {
                 return hot;
             };
-            let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+            let cold = ColdRuns::of(body, cold_path).exprs(body);
             body.for_each_reachable_node(|node| {
                 if let NodeRef::Expr(e) = node
                     && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind

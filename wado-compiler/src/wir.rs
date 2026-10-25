@@ -1749,16 +1749,16 @@ pub enum WirInstr {
 }
 
 impl WirInstr {
-    /// True when the branch `body` contains a `cold_path()` marker. Descends
-    /// through transparent grouping (`Block` / `Seq`), so desugarings still
-    /// match, but stops at nested control flow (`If` / `Loop`): a marker inside
-    /// an inner branch belongs to that branch, not this one.
+    /// True when the branch `body` is cold throughout: it opens with a
+    /// `cold_path()` marker, which `wir_build` puts where each cold run starts.
+    /// Descends through transparent grouping (`Block` / `Seq`), so desugarings
+    /// still match.
     pub fn marks_cold_path(body: &[Self]) -> bool {
-        body.iter().any(|instr| match instr {
-            Self::ColdPath => true,
-            Self::Block { body, .. } | Self::Seq(body) => Self::marks_cold_path(body),
+        match body.first() {
+            Some(Self::ColdPath) => true,
+            Some(Self::Block { body, .. } | Self::Seq(body)) => Self::marks_cold_path(body),
             _ => false,
-        })
+        }
     }
 
     /// Returns true if this instruction always diverges (all execution paths

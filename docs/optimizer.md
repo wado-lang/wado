@@ -245,18 +245,22 @@ once-guard, and in the default arm of a switch.
 A marker makes its basic block cold. A basic block is a straight run of code
 that control enters only at its start and leaves only at its end. Wado's IR
 nests blocks rather than listing basic blocks, so the optimizer reads the same
-rule as post-dominance: a point is cold when every path from it passes the
-marker.
+rule through dominance: a point is cold when every path through it passes the
+marker. The code after the marker in its block is cold, and so is the code
+before it, back to the last statement that can leave the block first.
 
 - In `if bad { let m = describe(x); panic(m); }`, every path through `describe`
   reaches the marker reify puts ahead of `panic`, so `describe` is cold too.
 - In `if let Some(v) = fast(k) { return v; } cold_path(); return slow(k);`, the
   guard can return before the marker, so the guard stays hot and only what
   follows it is cold.
+- In `if c { if d { cold_path(); a } else { cold_path(); b } }`, every path
+  through the outer arm passes one of the two markers, so the outer arm is cold
+  as a whole.
 
 Every pass that reads a marker reads this one rule: the inliner's prices,
 `cold_outline`'s regions, the callees only cold code calls, the remarks, and the
-branch hints. Not every pass reads it this way yet.
+branch hints.
 
 ### Hints and Flags
 
