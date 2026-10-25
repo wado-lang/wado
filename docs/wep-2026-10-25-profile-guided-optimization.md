@@ -3,21 +3,23 @@
 ## Context
 
 The optimizer already leans on cold paths. `builtin::cold_path()` marks code
-that rarely runs, and every pass that reads the marker acts on it. Among them:
+that rarely runs, and every pass that reads the marker acts on it:
 
 - `nir/cold_outline` moves the marked region into a function of its own.
 - `nir/inline` prices a callee without its cold tail. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
   is taken.
-- `const_object_globalization`, `param_spec`, `match_to_switch` and `peephole`
-  leave cold code as it is.
+- `param_spec` mints no specialized clone for a cold call site, and
+  `const_object_globalization` skips a function that runs only on a cold path.
 - `infer_branch_hints` turns the marker into a Wasm branch hint, and wasmtime
   lays out the cold side out of line.
 
-Every one of these marks is a guess. An author writes `cold_path()` where they
-believe a path is rare. `infer_branch_hints` adds the paths that end in a trap.
-Nothing tells the compiler which paths a real run takes, so a guess that is
-wrong stays wrong, and a rare path nobody marked is optimized as if it were hot.
+An author's marker is a guess: it goes where they believe a path is rare. Only
+a path that ends in a trap is known to be cold. `infer_branch_hints` hints
+those, and `match_to_switch` marks the default arm of an exhaustive switch,
+which traps. Nothing tells the compiler which paths a real run takes, so a guess
+that is wrong stays wrong, and a rare path nobody marked is optimized as if it
+were hot.
 
 The compiler already measures which code runs. `wado test --coverage` plans a
 region for each branch and body from the AST, inserts a probe at the start of
@@ -66,12 +68,13 @@ keyword to the reserved vocabulary, and it would not run under `wado test`.
 ### `wado test --pgo` records the profile
 
 `wado test --pgo` compiles the package's workloads with probes and runs only
-them. Recording belongs to the test runner, as coverage does, since a workload
-is a test. The flag is not named `--profile`, which already means the sampling
-profiler of `wado run --profile` and `wado test --profile`. A probe counts
-every run of its region. It measures the package's modules, its
-dependencies' and the `core:` modules, since a workload's hot path runs through
-all three.
+them. A probe counts every run of its region. It measures the package's
+modules, its dependencies' and the `core:` modules, since a workload's hot path
+runs through all three.
+
+Recording belongs to the test runner, as coverage does, since a workload is a
+test. The flag is not named `--profile`, which already means the sampling
+profiler of `wado run --profile` and `wado test --profile`.
 
 The recording compile does not read an existing profile. A profile is then a
 function of the source and the workloads alone, and recording twice gives the
@@ -164,18 +167,18 @@ an author learns when to record again.
 
 ### A region that never ran is marked cold
 
-Reify inserts a `builtin::cold_path()` at the start of each region whose count
-is zero and whose enclosing region ran, in every function the profile covers.
-Reify is where coverage inserts its probes, so a region means the same thing to
-both. From there, the optimizer's existing passes act on the marker as they do
-on one the author wrote.
+In every function the profile covers, reify inserts a `builtin::cold_path()`
+at the start of each outermost region whose count is zero. Reify is where
+coverage inserts its probes, so a region means the same thing to both. From
+there, the optimizer's passes act on the marker as they do on one the author
+wrote.
 
-A function whose body region never ran is cold as a whole, with one marker at
-its start. A region inside one already marked gets none: `cold_outline` would
-otherwise outline each branch of a function that never ran into a function of
-its own, and both sides of its `if`s would carry a marker. A region that ran
-any number of times gets no marker. Using the counts beyond zero, to optimize a
-hot path harder than the rest, is left to a later proposal.
+A function whose body region never ran thus gets one marker, at its start, and
+nothing inside it. Marking every region with a zero count would have
+`cold_outline` outline each branch of such a function into a function of its
+own, and put a marker on both sides of its `if`s. A region that ran any number
+of times gets no marker. Using the counts beyond zero, to optimize a hot path
+harder than the rest, is left to a later proposal.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
@@ -203,14 +206,15 @@ A test checks what a program computes, which a profile never changes, so the
 test world has no use for one by default. `-f pgo` turns it on there, mainly for
 fuzzing the application of profiles.
 
-`-f no-cold-paths` ignores every `cold_path()`, the author's and the profile's.
-It drops the markers before any pass reads them, so `cold_outline`, the inliner
-and the branch hints all see none. With `-f no-pgo` beside it, three builds of
-one program can be compared: no cold paths, the author's only, and the author's
-plus the profile's.
+`-f no-cold-paths` ignores every `cold_path()` the author or the profile put
+there. It drops the markers before any pass reads them, so no pass sees one.
+The two flags give three builds of one program: `-f no-cold-paths` has no
+markers, `-f no-pgo` has the author's only, and the default has the author's
+and the profile's.
 
-`-f no-cold-paths` leaves alone the hints `infer_branch_hints` derives from
-traps. Those follow from what the program does when it traps, not from a guess.
+`-f no-cold-paths` leaves alone what the compiler knows from traps: the hints
+`infer_branch_hints` derives and the markers `match_to_switch` writes. Those
+follow from what the program does, not from a guess.
 
 The existing `-f no-branch-hinting` is a different cut. It drops the markers
 only at WIR build, after every NIR pass has read them, and it also skips the
@@ -228,11 +232,10 @@ level.
 ## Roadmap
 
 1. [ ] Counting probes. The probe counts, the runner reads the counts when a
-   test returns, and LCOV carries them. `mise run test-stdlib` under
-   `--coverage`, before and after, in a table with the command beside it,
-   shows what counting costs.
-2. [ ] `#[workload]`. The attribute is parsed and run as a test, and spec
-   fixtures state it.
+   test returns, and LCOV carries them. `mise run test-stdlib-coverage`, before
+   and after, in a table with the command beside it, shows what counting costs.
+2. [ ] `#[workload]`. The attribute runs as a test, is an error beside
+   `#[expect_trap]` or `#[TODO]`, and e2e fixtures state both.
 3. [ ] `wado test --pgo`. It records the workloads into `pgo/`, with the
    per-function hash.
 4. [ ] Applying the profile. Reify marks the regions that never ran, a function
@@ -243,9 +246,9 @@ level.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
-   three builds the flags give. A workload
-   runs a smaller input than the benchmark measures, so the table does not
-   judge a profile on the run that trained it.
+   three builds the flags give. A workload runs a smaller input than the
+   benchmark measures, so the table does not judge a profile on the run that
+   trained it.
 
 ## Known gaps
 
