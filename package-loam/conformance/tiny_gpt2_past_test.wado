@@ -5,7 +5,7 @@
 //! computes. Each step reproduces the logits onnxruntime computes for it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { Cache, assert_close, ints_of, past, tensor_of } from "./oracle.wado";
 use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
@@ -29,18 +29,6 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
             },
         },
     };
-
-/// The keys and values so far, one `[data, extents]` per layer's key and
-/// value in the order the graphs name them. Each module declares a tensor type
-/// of its own, so the cache crosses from one to the other as its elements.
-type Cache = List<[List<f32>, List<i32>]>;
-
-/// Entry `i` of the cache, under the axes the input it is passed as names:
-/// no two layers' heads meet, so each layer's are an axis of their own.
-fn past<A>(cache: &Cache, i: i32) -> Tensor<f32, A> {
-    let [data, extents] = cache[i];
-    return Tensor { data, extents };
-}
 
 /// The logits for `token` after the positions `cache` holds, and the cache
 /// grown by its position.

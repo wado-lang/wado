@@ -147,8 +147,8 @@ impl Axes {
     }
 
     /// Record that `axis` was declared with the `dim_param` `word` at `tensor`,
-    /// which joins it with every axis declared so. `order` is where the graph
-    /// declares it. `Err` holds the two words a `layout` gave them apart.
+    /// which joins it with every axis declared so. The graph declares in the
+    /// order of the calls. `Err` holds the two words a `layout` gave them apart.
     pub fn declare(&mut self, axis: &Axis, word: &String, tensor: &String) -> Result<(), [String, String]> {
         let root = self.find(&axis.name);
         self.classes[root].params.push(Declared { order: self.declarations, word: *word, tensor: *tensor });
@@ -290,14 +290,10 @@ impl Axes {
         if !is_variable(&read.name) {
             return read.name;
         }
-        let class = self.classes[read.name];
-        if let Some(word) = class.author {
-            return word.0;
+        if let Some(w) = self.word(&read.name) {
+            return w.word;
         }
-        if !class.params.is_empty() {
-            return class.params[0].word;
-        }
-        return class.origin;
+        return self.origin(&read.name);
     }
 
     /// The word the graph names root `root`'s class with, and where it said
