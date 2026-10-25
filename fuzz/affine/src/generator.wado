@@ -196,7 +196,7 @@ impl Consumer {
             Take => "let mut o = Option::Some(t); let u = o.take();",
             ForOf => `let xs: List<${ty}> = [t]; for let x of xs {}`,
             Handle => "with Ask => t do { let _ = Ask::ask(); }",
-            Forward => `let mut s = Sink { n: 0 }; with Sink${ty} => &mut s do { let _ = Sink${ty}::put(t); }`,
+            Forward => `let mut sink = Sink { n: 0 }; with Sink${ty} => &mut sink do { let _ = Sink${ty}::put(t); }`,
         };
     }
 
