@@ -24,130 +24,6 @@ use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
             module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
-                layout: [
-                    {
-                        pattern: "input_ids",
-                        axes: ["Batch", "Seq"],
-                    },
-                    // Without a past the keys are the sequence itself, so the
-                    // mask over them and the sequence share one axis.
-                    {
-                        pattern: "attention_mask",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "use_cache_branch",
-                        axes: ["One"],
-                    },
-                    {
-                        pattern: "past_key_values.*",
-                        axes: ["Batch", "Head", "Past", "Dim"],
-                    },
-                    {
-                        pattern: "present.*",
-                        axes: ["Batch", "Head", "Seq", "Dim"],
-                    },
-                    {
-                        pattern: "transformer.wte.weight*",
-                        axes: ["Vocab", "Embed"],
-                    },
-                    {
-                        pattern: "transformer.wpe.weight*",
-                        axes: ["Pos", "Embed"],
-                    },
-                    {
-                        pattern: "*ln_1.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*ln_2.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*c_attn.weight*",
-                        axes: ["Embed", "Qkv"],
-                    },
-                    {
-                        pattern: "*c_attn.bias*",
-                        axes: ["Qkv"],
-                    },
-                    {
-                        pattern: "*attn.c_proj.weight*",
-                        axes: ["(Head Dim)", "Embed"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.weight*",
-                        axes: ["Embed", "Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.bias*",
-                        axes: ["Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_proj.weight*",
-                        axes: ["Inner", "Embed"],
-                    },
-                    {
-                        pattern: "onnx::MatMul_1588*",
-                        axes: ["Embed", "Vocab"],
-                    },
-                    {
-                        pattern: "*attn.bias*",
-                        axes: ["Batch", "Head", "Pos", "Pos"],
-                    },
-                    {
-                        pattern: "/transformer/Range_output_0",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_2_output_0",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_4_output_0",
-                        axes: ["Batch", "Head", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_5_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                    {
-                        pattern: "*/c_attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Qkv"],
-                    },
-                    {
-                        pattern: "*/c_proj/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/c_fc/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Inner"],
-                    },
-                    {
-                        pattern: "*/attn/Split_output_*",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_2_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_3_output_0",
-                        axes: ["Batch", "Head", "Seq", "Pos"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_4_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                ],
             },
         },
     };
@@ -156,7 +32,7 @@ global STEPS: i32 = 8;
 
 /// How many tokens the model reads at most: one position per row of `wpe`.
 fn positions() -> i32 {
-    return gpt2::Pos::EXTENT;
+    return gpt2::TransformerWpeWeightMerged00::EXTENT;
 }
 
 /// The longest prompt `greedy` extends by `steps`. The last token it picks is
@@ -165,24 +41,29 @@ fn longest_prompt(steps: i32) -> i32 {
     return positions() - steps + 1;
 }
 
-/// The keys and values so far, one per layer's key and value in the order the
-/// graph names them.
-type Cache = List<Tensor<f32, [gpt2::Batch, gpt2::Head, gpt2::Past, gpt2::Dim]>>;
+/// The keys and values so far, one `[data, extents]` per layer's key and
+/// value in the order the graph names them. A present is as long as the past
+/// and the step together, an axis of its own, so the cache crosses back as its
+/// elements.
+type Cache = List<[List<f32>, List<i32>]>;
+
+/// Entry `i` of the cache, under the axes the input it is passed as names.
+fn past<A>(cache: &Cache, i: i32) -> Tensor<f32, A> {
+    let [data, extents] = cache[i];
+    return Tensor { data, extents };
+}
 
 /// No positions yet, which takes the branch without a past.
 fn empty_cache() -> Cache {
     let mut cache: Cache = [];
     for let _ of 0..<10 {
-        cache.push(Tensor {
-            data: [],
-            extents: [gpt2::Batch::EXTENT, 4, 0, 8],
-        });
+        cache.push([[], [gpt2::BatchSize::EXTENT, 4, 0, 8]]);
     }
     return cache;
 }
 
 /// The token the logits rank first at the last position.
-fn best(logits: &Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
+fn best(logits: &Tensor<f32, [gpt2::BatchSize, gpt2::SequenceLength, gpt2::Logits2]>) -> i32 {
     let vocab = logits.extents[2];
     let row = (logits.extents[1] - 1) * vocab;
     let mut top = 0;
@@ -197,43 +78,47 @@ fn best(logits: &Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
 /// The token after `tokens` and the positions `cache` holds, and the cache
 /// grown by `tokens`' positions.
 fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Prepared<Cpu>) -> [i32, Cache] {
-    let past = cache[0].extents[2];
-    let length = past + tokens.len();
+    let past_length = cache[0].1[2];
+    let length = past_length + tokens.len();
     let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
     let o = gpt2::forward(
         &mut Cpu {},
-        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
             data: ids,
-            extents: [gpt2::Batch::EXTENT, tokens.len()],
+            extents: [gpt2::BatchSize::EXTENT, tokens.len()],
         },
-        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
             data: List::<i64>::filled(length, 1),
-            extents: [gpt2::Batch::EXTENT, length],
+            extents: [gpt2::BatchSize::EXTENT, length],
         },
-        &cache[0],
-        &cache[1],
-        &cache[2],
-        &cache[3],
-        &cache[4],
-        &cache[5],
-        &cache[6],
-        &cache[7],
-        &cache[8],
-        &cache[9],
-        &Tensor::<bool, [gpt2::One]> {
-            data: [past > 0],
+        &past(cache, 0),
+        &past(cache, 1),
+        &past(cache, 2),
+        &past(cache, 3),
+        &past(cache, 4),
+        &past(cache, 5),
+        &past(cache, 6),
+        &past(cache, 7),
+        &past(cache, 8),
+        &past(cache, 9),
+        &Tensor::<bool, [gpt2::UseCacheBranch0]> {
+            data: [past_length > 0],
             extents: [1],
         },
         weights,
     );
-    let presents = [
-        o.present_0_key, o.present_0_value, o.present_1_key, o.present_1_value, o.present_2_key, o.present_2_value,
-        o.present_3_key, o.present_3_value, o.present_4_key, o.present_4_value,
+    let grown: Cache = [
+        [o.present_0_key.data, o.present_0_key.extents],
+        [o.present_0_value.data, o.present_0_value.extents],
+        [o.present_1_key.data, o.present_1_key.extents],
+        [o.present_1_value.data, o.present_1_value.extents],
+        [o.present_2_key.data, o.present_2_key.extents],
+        [o.present_2_value.data, o.present_2_value.extents],
+        [o.present_3_key.data, o.present_3_key.extents],
+        [o.present_3_value.data, o.present_3_value.extents],
+        [o.present_4_key.data, o.present_4_key.extents],
+        [o.present_4_value.data, o.present_4_value.extents],
     ];
-    let mut grown: Cache = [];
-    for let p of presents {
-        grown.push(Tensor { data: p.data, extents: p.extents });
-    }
     return [best(&o.logits), grown];
 }
 
