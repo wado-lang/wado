@@ -1134,8 +1134,6 @@ impl TypeSystem {
         // an unbounded chain.
         while chain.len() < 8 {
             let written_instead = match tr {
-                OnBoundTrait::Ord => self.ord_withheld_note(type_id),
-                OnBoundTrait::Hash => self.hash_withheld_note(type_id),
                 OnBoundTrait::Eq
                     if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
                 {
@@ -1144,7 +1142,7 @@ impl TypeSystem {
                         self.type_id_to_string(type_id)
                     ))
                 }
-                _ => None,
+                _ => self.comparison_withheld_note(tr, type_id),
             };
             if let Some(why) = written_instead {
                 chain.push(why);
@@ -1270,7 +1268,7 @@ impl TypeSystem {
                 return true;
             }
             OnBoundTrait::Ord if self.ord_withheld_by(type_id).is_some() => return false,
-            OnBoundTrait::Hash if self.hash_withheld_note(type_id).is_some() => return false,
+            OnBoundTrait::Hash if self.hash_withheld_by(type_id).is_some() => return false,
             _ => {}
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1515,29 +1513,64 @@ impl TypeSystem {
         ))
     }
 
-    /// Why `type_id` has no `Hash`, where a written comparison is the cause:
-    /// it may equate values whose members differ, which a derived `hash`
-    /// would tell apart. The cause is the first link of the newtype chain
-    /// writing one, below every link writing `Hash`. A primitive's `Hash` is
-    /// written or absent, never withheld.
-    pub(super) fn hash_withheld_note(&self, type_id: TypeId) -> Option<String> {
+    /// The link of `type_id`'s newtype chain, itself included, that leaves it
+    /// no `Hash`, with the comparison it writes: the first writing `eq` or
+    /// `cmp`, below every link writing `Hash`. That comparison may equate
+    /// values whose members differ, which a derived `hash` would tell apart. A
+    /// primitive's `Hash` is written or absent, never withheld.
+    fn hash_withheld_by(&self, type_id: TypeId) -> Option<(TypeId, CompilerItem)> {
         let hash = self.compiler_trait_def(CompilerItem::Hash)?;
-        let (link, method) = {
-            let tt = self.type_table.borrow();
-            let solver = self.solver();
-            let mut link = type_id;
-            loop {
-                if matches!(tt.get(link), ResolvedType::Primitive(_))
-                    || written_impl_reaches(&self.trait_env, hash, link, &tt)
-                {
-                    return None;
-                }
-                if let Some(written) = solver.hash_withheld_by(&tt, link) {
-                    break (link, tt.compiler_items().trait_method_name(written).to_string());
-                }
-                link = tt.get_newtype_base(link)?;
+        let tt = self.type_table.borrow();
+        let solver = self.solver();
+        let mut link = type_id;
+        loop {
+            if matches!(tt.get(link), ResolvedType::Primitive(_))
+                || written_impl_reaches(&self.trait_env, hash, link, &tt)
+            {
+                return None;
             }
-        };
+            if let Some(written) = solver.hash_withheld_by(&tt, link) {
+                return Some((link, written));
+            }
+            link = tt.get_newtype_base(link)?;
+        }
+    }
+
+    /// Why `type_id` has no `tr`, where a written comparison withholds it.
+    pub(super) fn comparison_withheld_note(
+        &self,
+        tr: OnBoundTrait,
+        type_id: TypeId,
+    ) -> Option<String> {
+        match tr {
+            OnBoundTrait::Ord => self.ord_withheld_note(type_id),
+            OnBoundTrait::Hash => self.hash_withheld_note(type_id),
+            OnBoundTrait::Eq
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::Default
+            | OnBoundTrait::Reflect
+            | OnBoundTrait::ReflectStruct
+            | OnBoundTrait::ReflectVariant
+            | OnBoundTrait::ReflectEnum
+            | OnBoundTrait::ReflectFlags
+            | OnBoundTrait::ReflectNewtype
+            | OnBoundTrait::ReflectTemplate
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect => None,
+        }
+    }
+
+    /// Why `type_id` has no `Hash`, where a written comparison is the cause.
+    fn hash_withheld_note(&self, type_id: TypeId) -> Option<String> {
+        let (link, written) = self.hash_withheld_by(type_id)?;
+        let method = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_method_name(written)
+            .to_string();
         Some(format!(
             "`{}` writes `{method}`, so no `Hash` is derived for it; write `hash` beside it",
             self.type_id_to_string(link),

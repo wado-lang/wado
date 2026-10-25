@@ -1256,14 +1256,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
-        let withheld = match on_bound {
-            OnBoundTrait::Ord => self.tysys.ord_withheld_note(target_type_id),
-            OnBoundTrait::Hash => self.tysys.hash_withheld_note(target_type_id),
-            OnBoundTrait::Default => Some(
+        let withheld = if on_bound == OnBoundTrait::Default {
+            Some(
                 self.tysys
                     .default_withheld_note(&self.type_lookup(), target_type_id),
-            ),
-            _ => None,
+            )
+        } else {
+            self.tysys
+                .comparison_withheld_note(on_bound, target_type_id)
         };
         if let Some(why) = withheld {
             let _ = self.emit(types::TypeError::MarkerWithheld {

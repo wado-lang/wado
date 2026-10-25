@@ -1627,9 +1627,7 @@ impl SolverBridge {
                 CompilerItem::Ord
                 | CompilerItem::Hash
                 | CompilerItem::Serialize
-                | CompilerItem::Deserialize => {
-                    &declarations[..handles_from]
-                }
+                | CompilerItem::Deserialize => &declarations[..handles_from],
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);

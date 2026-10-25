@@ -1220,9 +1220,8 @@ and serde, a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
 A `fn`-typed member blocks `Eq`, `Ord`, `Hash`, and serde. A plain `enum` and a
 `flags` type have no members, so they satisfy `Eq`, `Ord`, `Hash`, and serde
-outright.
-A float member blocks `Hash` alone: `f32` and `f64` compare but do not hash.
-[Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
+outright. A float member blocks `Hash` alone: `f32` and `f64` compare but do not
+hash. [Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
 derived `Eq` and `Ord` compares.
 
 A generic declaration derives once, for every instantiation whose type
@@ -1271,9 +1270,8 @@ test {
 ```
 
 For `Eq`, `Ord`, `Hash`, `Default`, and serde, a marker is also a conformance
-check. A
-type that is not eligible is a compile error at the marker's own span, with a
-reason chain:
+check. A type that is not eligible is a compile error at the marker's own span,
+with a reason chain:
 
 <!-- {"fixture":"spec_traits_marker_ineligible.wado"} -->
 

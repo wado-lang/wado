@@ -158,8 +158,8 @@ pub trait Hash: Eq with () {
 and flags types, and written for tuples, `List`, `String`, integers, `char` and
 `bool`. Every implementation keeps `a == b` implying equal hashes, so a written
 `eq` or `cmp` withholds the derived `hash`, which would feed members the
-comparison ignores. `String` and `StrSlice`
-hash alike, so `HashMap<String, V>` offers `get_str` as `TreeMap` does.
+comparison ignores. `String` and `StrSlice` hash alike, so
+`HashMap<String, V>` offers `get_str` as `TreeMap` does.
 
 The hash function is a seeded multiply-and-fold hash, chosen by measurement.
 Each word is folded into the state by a full-width multiply with a seeded key,
