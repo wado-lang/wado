@@ -212,15 +212,16 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                         | Linux                                                    | macOS                                 |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries     | `/lib*`, `/etc/ld.so.cache`                              | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs              | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`             | `/private/etc/…`, mDNSResponder       |
-| TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
-| Locale and time zones           | `/usr/share/zoneinfo`, locale data                       | the same                              |
-| Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
-| Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
+| Purpose                        | Linux                                                    | macOS                                 |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
+| Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
+| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
+| System configuration           | `/etc`                                                   | `/private/etc`                        |
+| Name resolution (network only) | `/etc` alone                                             | mDNSResponder                         |
+| TLS certificates               | `/etc` alone                                             | the keychain                          |
+| Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
+| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
+| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
@@ -235,7 +236,11 @@ child may read more than the guest. It is defined, not open-ended:
   name resolution goes through it. A socket such as D-Bus is a path to a
   privileged service. On Linux, glibc resolves through `resolv.conf` without
   one.
-- With the network not granted, the name resolution and TLS rows drop out.
+- `/etc` is open whole. A toolchain reads its settings there (a JDK's
+  `java.security` lives in `/etc/java-*`), and what it holds is the system's,
+  readable by every user. A secret under it, such as `/etc/shadow` or an SSH
+  host key, is readable by root alone, which the guest's user is not.
+- With the network not granted, mDNSResponder's socket drops out.
 
 ### Grants
 
