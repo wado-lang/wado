@@ -132,9 +132,9 @@ It is that call where all of these hold:
   (`self.items`), or a dereference of one. A local a closure captures counts.
   A global, a call, or any other expression that could yield a different
   container, falls back.
-- Each index is a literal, a constant, a local, or arithmetic over them. An
-  index read out of `c` (`c[c[0]]`), or one reading a mutable global, falls
-  back.
+- Each index is a literal, a constant, a local, a field path from a local
+  (`p.a`), or arithmetic over them. An index read out of `c` (`c[c[0]]`,
+  `c[c.k]`), or one reading a mutable global, falls back.
 - No index local, and no `mut` reference local that `c` dereferences (`r` in
   `*r`), is referenced or captured anywhere in the body. The desugaring's first
   `index_assign` could otherwise write through that reference, and its second
@@ -143,7 +143,9 @@ It is that call where all of these hold:
   is not `mut` cannot be rebound, and a reference to the container itself does
   not count either: a write through it changes the container's contents, never
   which container `c` names.
-- `c`'s type implements `IndexSwap` at the index type.
+- `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects. A
+  container indexed by more than one key swaps by that one, and keeps the
+  desugaring where it has no `IndexSwap` there.
 
 The call evaluates `c`, `j` and `i` once each, in that order: the order in which
 the desugaring's right side first reads them, so an index that traps (a
@@ -209,10 +211,11 @@ functions. It anchors to the statement and adds a note that names the cause:
   container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
+- an index is not one of the operands above, or it reads the container;
 - the container is not reached from a local;
 - an index reads a mutable global, or an index local or a `mut` reference local
   the container is reached through is referenced or captured;
-- the container's type does not implement `IndexSwap`.
+- the container's type does not implement `IndexSwap` at the key.
 
 A scalar has no value copy, so a scalar target is never reported.
 
@@ -260,17 +263,19 @@ compound assignment to a tuple (`[a, b] += [1, 2]`).
 
 `unchecked xs[i]` vouches for a `List` index contract. Nothing says where
 `unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
-always checks both indices.
+always checks both indices. A right side that marks its reads
+(`[unchecked xs[j], unchecked xs[i]]`) is not read as the targets, so it keeps
+the desugaring: an affine element fails to compile, with no note naming why.
 
 ### What counts as referencing an index local
 
 Whether an index local, or a `mut` reference local the container is reached
 through, is referenced or captured is read from the syntax of the item holding
-the statement, by name. A method call on the local counts,
-since its receiver may be taken `&self` or `&mut self`, and so does any
-mention inside a closure that is not the closure's own parameter. A
-transposition indexed by `i` falls back where the same item calls `i.abs()`,
-or binds an unrelated `i` that a closure reads.
+the statement, by name. A method call on the local counts, since its receiver
+may be taken `&self` or `&mut self`, and so does any mention inside a closure
+of a name the closure does not bind itself. A transposition indexed by `i`
+falls back where the same item calls `i.abs()`, or binds an unrelated `i` that
+a closure reads without binding it.
 
 ### A permutation of owned targets with a readable reference copies
 

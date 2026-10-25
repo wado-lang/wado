@@ -1105,19 +1105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(clean) => {
                         match self.resolve_index_swap(assign.id, &transposition, clean, ctx) {
                             Ok(type_id) => {
-                                // Reify reads none of the right side, but a
-                                // name in it is still a reference. Its
-                                // subscripts are places, not element reads.
-                                let ast::Expr::TupleLiteral(value) = &assign.value else {
-                                    unreachable!("a transposition's right side is a tuple");
-                                };
-                                for element in &value.elements {
-                                    let ast::Expr::Index(subscript) = element else {
-                                        unreachable!("a transposition reads two subscripts");
-                                    };
-                                    self.resolve_expr(&subscript.expr, ctx, None);
-                                    self.resolve_expr(&subscript.index, ctx, None);
-                                }
+                                self.resolve_unread_subscripts(assign, ctx);
                                 return type_id;
                             }
                             Err(cause) => cause,
@@ -1127,6 +1115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Reading::NotAPermutation => Some(DestructuringFallback::NotAPermutation),
             Reading::OtherContainers => Some(DestructuringFallback::OtherContainer),
+            Reading::UnplainIndex => Some(DestructuringFallback::UnplainIndex),
             Reading::Permutation if targets.iter().all(|t| self.is_owned_place(t, ctx)) => {
                 Some(DestructuringFallback::ReferenceReadable)
             }
@@ -1194,9 +1183,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a transposition as its container's `index_swap`, recording the
-    /// dispatch reify replays. `Err` falls back to the desugaring, with nothing
-    /// recorded and no local taken, and says why where the desugaring does not
-    /// report an error.
+    /// dispatch reify replays. `Err` falls back to the desugaring, with no
+    /// dispatch recorded and no local taken, and says why where the desugaring
+    /// does not report an error. The desugaring resolves again what this
+    /// resolved: its facts replace these, and the logger reports a repeated
+    /// diagnostic once.
     fn resolve_index_swap(
         &mut self,
         assign_id: AstId,
@@ -1229,24 +1220,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Err(None);
         }
         let base_type_id = self.tysys.through_ref(container_type);
-        let found = self.index_dispatch_head(base_type_id).and_then(|head| {
-            let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
-            self.index_lookup_or_newtype_base(
+        let no_index_swap = |this: &Self, key: Option<TypeId>| {
+            let tt = this.tysys.type_table.borrow();
+            Err(Some(DestructuringFallback::NoIndexSwap {
+                container: tt.type_name(base_type_id),
+                key: key.map(|key| tt.type_name(key)),
+            }))
+        };
+        let Some(head) = self.index_dispatch_head(base_type_id) else {
+            return no_index_swap(self, None);
+        };
+        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
+        let lookup = |this: &mut Self, key: Option<TypeId>| {
+            this.index_lookup_or_newtype_base(
                 &head,
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                Elaborator::find_index_swap_trait_impl,
+                |s, n, t| s.find_index_swap_trait_impl(n, t, key),
             )
-        });
-        let Some((info, _)) = found else {
-            return Err(Some(DestructuringFallback::NoIndexSwap {
-                container: self.tysys.type_table.borrow().type_name(base_type_id),
-            }));
+        };
+        // The key a read of `c[i]` would select an impl by selects this one.
+        let key_class = self.synthesize_arg_class(transposition.i, ctx);
+        let key = self
+            .index_key_type(container_type, &key_class)
+            .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));
+        let Some((info, _)) = lookup(self, key) else {
+            return no_index_swap(self, key);
         };
         let index_type = info.index_type;
-        let j_type = self.resolve_expr(transposition.j, ctx, index_type);
         let i_type = self.resolve_expr(transposition.i, ctx, index_type);
+        let j_type = self.resolve_expr(transposition.j, ctx, index_type);
         if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
             return Ok(TypeTable::ERROR);
         }
@@ -1258,8 +1262,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Err(Some(DestructuringFallback::Rebindable));
         }
         if let Some(index_type) = index_type {
-            self.typecheck(j_type, index_type, transposition.j.span());
             self.typecheck(i_type, index_type, transposition.i.span());
+            self.typecheck(j_type, index_type, transposition.j.span());
         }
         // Reserve reify's `$da_N` for the second index, so both walks allocate
         // the same frame.
@@ -1279,6 +1283,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         Ok(TypeTable::UNIT)
+    }
+
+    /// Resolve the parts of a transposition `index_swap` reads none of: the
+    /// second target's container, and the right side. A name there is still a
+    /// reference, and a subscript there is a place, not an element read.
+    fn resolve_unread_subscripts(&mut self, assign: &ast::AssignExpr, ctx: &mut FunctionContext) {
+        let (
+            ast::AssignTarget::Destructuring { places, .. },
+            ast::Expr::TupleLiteral(value),
+        ) = (&assign.target, &assign.value)
+        else {
+            unreachable!("a transposition assigns a tuple to two targets");
+        };
+        let ast::Expr::Index(second) = &places[1] else {
+            unreachable!("a transposition's targets are subscripts");
+        };
+        self.resolve_expr(&second.expr, ctx, None);
+        for element in &value.elements {
+            let ast::Expr::Index(subscript) = element else {
+                unreachable!("a transposition reads two subscripts");
+            };
+            self.resolve_expr(&subscript.expr, ctx, None);
+            self.resolve_expr(&subscript.index, ctx, None);
+        }
     }
 
     /// Whether `place` is owned: a local, or a field path from one, reached
@@ -1304,6 +1332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.reads_mutable_global(&binary.left) || self.reads_mutable_global(&binary.right)
             }
             ast::Expr::Unary(unary) => self.reads_mutable_global(&unary.expr),
+            ast::Expr::FieldAccess(_) => self.reads_mutable_global(index.place_root()),
             _ => false,
         }
     }

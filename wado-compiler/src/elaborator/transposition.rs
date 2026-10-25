@@ -5,8 +5,8 @@
 //! global, and that the type implements `IndexSwap`.
 
 use crate::ast::{
-    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, IndexExpr, Literal,
-    Module, UnaryOp, walk_expr, walk_function,
+    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, IndexExpr, Item,
+    Literal, Module, Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -17,6 +17,9 @@ pub(super) enum Reading<'a> {
     Transposition(Transposition<'a>),
     /// Two subscripts exchanged, of containers not written as one path.
     OtherContainers,
+    /// Two subscripts of one container exchanged, an index of which is not an
+    /// operand [`Transposition`] admits.
+    UnplainIndex,
     /// Any other reordering of the targets.
     Permutation,
 }
@@ -43,14 +46,20 @@ impl<'a> Reading<'a> {
         if !same(&first.expr, &second.expr) || !is_container_path(&first.expr) {
             return Self::OtherContainers;
         }
-        if !is_index_operand(&first.index) || !is_index_operand(&second.index) {
-            return Self::Permutation;
-        }
-        Self::Transposition(Transposition {
+        let transposition = Transposition {
             container: &first.expr,
             i: &first.index,
             j: &second.index,
-        })
+        };
+        // An index read out of the container could change with the first write.
+        let root = transposition.container_root();
+        if !is_index_operand(transposition.i)
+            || !is_index_operand(transposition.j)
+            || transposition.index_locals().contains(&root)
+        {
+            return Self::UnplainIndex;
+        }
+        Self::Transposition(transposition)
     }
 }
 
@@ -90,13 +99,26 @@ impl<'a> Transposition<'a> {
     pub(super) fn of(assign: &'a AssignExpr) -> Option<Self> {
         match Reading::of(assign) {
             Reading::Transposition(transposition) => Some(transposition),
-            Reading::NotAPermutation | Reading::OtherContainers | Reading::Permutation => None,
+            Reading::NotAPermutation
+            | Reading::OtherContainers
+            | Reading::UnplainIndex
+            | Reading::Permutation => None,
         }
     }
 
     /// The local the container is reached from.
     pub(super) fn container_root(&self) -> &'a str {
         root_local(self.container).expect("a container path starts from a local")
+    }
+
+    /// The locals the indices read, each field path by the local it starts
+    /// from.
+    fn index_locals(&self) -> Vec<&'a str> {
+        let mut locals = Vec::new();
+        for index in [self.i, self.j] {
+            collect_idents(index, &mut locals);
+        }
+        locals
     }
 }
 
@@ -110,21 +132,29 @@ pub(super) struct Clean {
     pub(super) container_root_referenced: bool,
 }
 
-/// The destructuring assignments in `modules` that [`Transposition::of`]
-/// reads, where no index local is referenced or captured anywhere in the
-/// function holding it. Every module's, since a default body is walked in
-/// each module that takes it.
+/// The destructuring assignments that [`Transposition::of`] reads, where no
+/// index local is referenced or captured anywhere in the function holding it:
+/// in every item of a module whose bodies are walked, and in every trait,
+/// since a default body is walked in each module that takes it.
 pub(super) fn transpositions<'m>(
-    modules: impl IntoIterator<Item = &'m Module>,
+    modules: impl IntoIterator<Item = (&'m Module, BodiesWalked)>,
 ) -> IndexMap<AstId, Clean> {
     let mut scan = Scan::default();
-    for module in modules {
+    for (module, walked) in modules {
         for item in &module.items {
-            scan.visit_item(item);
-            scan.settle();
+            if walked == BodiesWalked::Yes || matches!(item, Item::Trait(_)) {
+                scan.visit_item(item);
+                scan.settle();
+            }
         }
     }
     scan.found
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum BodiesWalked {
+    Yes,
+    No,
 }
 
 #[derive(Default)]
@@ -133,8 +163,9 @@ struct Scan<'ast> {
     /// a closure captures, in the function being walked. Keyed by name, so a
     /// shadowed binding counts too.
     referenced: IndexSet<&'ast str>,
-    /// The parameters of each closure being walked, innermost last.
-    closure_params: Vec<IndexSet<&'ast str>>,
+    /// The names each closure being walked binds itself, its parameters and
+    /// its patterns, innermost last.
+    closure_bindings: Vec<IndexSet<&'ast str>>,
     /// Each transposition in the function being walked, with its index locals
     /// and its container root.
     candidates: Vec<(AstId, Vec<&'ast str>, &'ast str)>,
@@ -175,35 +206,43 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
             Expr::Ident(ident) => {
                 if ident.segments.is_empty()
                     && self
-                        .closure_params
+                        .closure_bindings
                         .last()
-                        .is_some_and(|params| !params.contains(ident.name.as_str()))
+                        .is_some_and(|bound| !bound.contains(ident.name.as_str()))
                 {
                     self.referenced.insert(&ident.name);
                 }
             }
             Expr::Closure(closure) => {
-                self.closure_params
+                self.closure_bindings
                     .push(closure.params.iter().map(|p| p.name.as_str()).collect());
                 walk_expr(self, expr);
-                self.closure_params.pop();
+                self.closure_bindings.pop();
                 return;
             }
             Expr::Assign(assign) => {
                 if matches!(assign.target, AssignTarget::Destructuring { .. })
                     && let Some(transposition) = Transposition::of(assign)
                 {
-                    let mut index_locals = Vec::new();
-                    for index in [transposition.i, transposition.j] {
-                        collect_idents(index, &mut index_locals);
-                    }
-                    self.candidates
-                        .push((assign.id, index_locals, transposition.container_root()));
+                    self.candidates.push((
+                        assign.id,
+                        transposition.index_locals(),
+                        transposition.container_root(),
+                    ));
                 }
             }
             _ => {}
         }
         walk_expr(self, expr);
+    }
+
+    fn visit_pattern(&mut self, pat: &'ast Pattern) {
+        if let Some(bound) = self.closure_bindings.last_mut()
+            && let Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } = pat
+        {
+            bound.insert(name);
+        }
+        walk_pattern(self, pat);
     }
 }
 
@@ -255,9 +294,10 @@ fn is_container_path(expr: &Expr) -> bool {
     }
 }
 
-/// A literal, a name, or arithmetic over them.
+/// A literal, a name, a field path from a local, or arithmetic over them.
 fn is_index_operand(expr: &Expr) -> bool {
     match expr {
+        Expr::FieldAccess(_) => root_local(expr).is_some(),
         Expr::Literal(literal) => matches!(
             literal.value,
             Literal::Number(_)
@@ -293,6 +333,7 @@ fn is_index_operand(expr: &Expr) -> bool {
 fn collect_idents<'a>(expr: &'a Expr, out: &mut Vec<&'a str>) {
     match expr {
         Expr::Ident(ident) if ident.segments.is_empty() => out.push(&ident.name),
+        Expr::FieldAccess(_) => out.extend(root_local(expr)),
         Expr::Binary(binary) => {
             collect_idents(&binary.left, out);
             collect_idents(&binary.right, out);

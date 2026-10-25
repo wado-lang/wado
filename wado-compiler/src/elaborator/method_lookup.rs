@@ -2838,17 +2838,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Find an `IndexSwap` impl for a type, at `expected_index_type` where
+    /// given.
     pub(super) fn find_index_swap_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             CompilerItem::IndexSwap,
             "index_swap",
-            None,
+            expected_index_type,
         )
     }
 

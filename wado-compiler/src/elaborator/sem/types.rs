@@ -442,10 +442,13 @@ pub(crate) enum DestructuringFallback {
     ReferenceReadable,
     NotOwned,
     OtherContainer,
+    UnplainIndex,
     ContainerNotLocal,
     Rebindable,
     NoIndexSwap {
         container: String,
+        /// The key a read of the subscript selects, where one does.
+        key: Option<String>,
     },
 }
 
@@ -462,13 +465,20 @@ impl DestructuringFallback {
             Self::OtherContainer => "the two subscripts name different containers, or one \
                  the compiler cannot show to be the same"
                 .into(),
+            Self::UnplainIndex => "an index is not a literal, a constant, a local, a field \
+                 path from one, or arithmetic over them, or it reads the container"
+                .into(),
             Self::ContainerNotLocal => "the container is not reached from a local".into(),
             Self::Rebindable => "an index reads a mutable global, or an index local or a \
                  `mut` reference local the container is reached through is referenced or captured"
                 .into(),
-            Self::NoIndexSwap { container } => {
+            Self::NoIndexSwap { container, key: None } => {
                 format!("`{container}` does not implement `IndexSwap`")
             }
+            Self::NoIndexSwap {
+                container,
+                key: Some(key),
+            } => format!("`{container}` does not implement `IndexSwap<{key}>`"),
         }
     }
 }

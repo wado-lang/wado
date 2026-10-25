@@ -385,25 +385,15 @@ impl Semantics {
         by_module
     }
 
-    /// The destructuring assignments that keep their desugaring, by the module
-    /// that writes them, keyed by the assignment's span. Gathered from every
-    /// walk, as [`Self::inexact_float_patterns`] are, so one that falls back in
-    /// any walk of a default body is here.
-    pub(crate) fn destructuring_fallbacks(
-        &self,
-    ) -> IndexMap<ModuleSource, IndexMap<Span, FallbackSite>> {
-        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, FallbackSite>> =
-            IndexMap::default();
-        for types in self.walks() {
-            for (site, fallback) in &types.destructuring_fallbacks {
-                let module = self.space_modules[&site.space].clone();
-                by_module
-                    .entry(module)
-                    .or_default()
-                    .insert(*site, fallback.clone());
-            }
-        }
-        by_module
+    /// The destructuring assignments that keep their desugaring, keyed by the
+    /// assignment's span, which names its module. Gathered from every walk, as
+    /// [`Self::inexact_float_patterns`] are, so one that falls back in any walk
+    /// of a default body is here, whichever module walked it.
+    pub(crate) fn destructuring_fallbacks(&self) -> IndexMap<Span, FallbackSite> {
+        self.walks()
+            .flat_map(|types| &types.destructuring_fallbacks)
+            .map(|(site, fallback)| (*site, fallback.clone()))
+            .collect()
     }
 
     /// The facts of every body walk: each module's own, and each trait default

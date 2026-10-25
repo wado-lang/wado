@@ -1162,12 +1162,12 @@ A destructuring assignment `[c[i], c[j]] = [c[j], c[i]]` is the call
   the other order.
 - `c` is one path written twice: a local, a field path from a local, or a
   dereference of one. A local a closure captures qualifies; a global does not.
-- Each index is a literal, a constant, a local, or arithmetic over them. An
-  index read out of `c` (`c[c[0]]`), or one reading a mutable global, does not
-  qualify.
+- Each index is a literal, a constant, a local, a field path from a local, or
+  arithmetic over them. An index read out of `c` (`c[c[0]]`, `c[c.k]`), or one
+  reading a mutable global, does not qualify.
 - No index local, and no `mut` reference local that `c` dereferences, is
   referenced or captured anywhere in the body.
-- `c`'s type implements `IndexSwap` at the index type.
+- `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects.
 
 The call evaluates `c`, `j` and `i` once each, in that order. Otherwise the
 statement keeps its desugaring, which copies each element it reads.

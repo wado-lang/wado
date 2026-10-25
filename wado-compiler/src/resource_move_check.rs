@@ -215,7 +215,7 @@ impl From<ResourceMoveError> for Diagnostic {
 #[must_use]
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let drops = Drops::of(sem);
-    let mut fallbacks = sem.destructuring_fallbacks();
+    let fallbacks = sem.destructuring_fallbacks();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         let mut checker = Checker {
@@ -223,7 +223,7 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
             module: src,
             drops: &drops,
             out: &mut out,
-            fallbacks: fallbacks.swap_remove(src).unwrap_or_default(),
+            fallbacks: &fallbacks,
             in_fallback: None,
         };
         for item in &module.items {
@@ -275,8 +275,8 @@ struct Checker<'a> {
     module: &'a ModuleSource,
     drops: &'a Drops,
     out: &'a mut Vec<ResourceMoveError>,
-    /// This module's [`Semantics::destructuring_fallbacks`].
-    fallbacks: IndexMap<Span, FallbackSite>,
+    /// [`Semantics::destructuring_fallbacks`].
+    fallbacks: &'a IndexMap<Span, FallbackSite>,
     /// The falling-back destructuring assignment whose right side is being
     /// walked, where it has a cause to note.
     in_fallback: Option<NotedFallback>,
