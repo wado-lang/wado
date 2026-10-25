@@ -25,7 +25,7 @@ use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
-use { ensure_jar, parse_request, run_request, Jar } from "./antlr4_oracle.wado";
+use { jar_or_exit, parse_request, run_request, Jar, PINNED_VERSION } from "./antlr4_oracle.wado";
 use sqlite from "../tests/grammars/SQLite.g4"
     with {
         generator: {
@@ -207,20 +207,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
         }
     }
     if chosen.is_empty() {
-        eprintln(`regen-oracle: unknown grammar key '${wanted}'`);
+        eprintln(`regen_oracle: unknown grammar key '${wanted}'`);
         exit(1);
     }
-    let pinned = match env("ANTLR4_VERSION") {
-        Some(v) => v,
-        None => "4.13.2",
-    };
-    let jar = match ensure_jar(Some(pinned)) {
-        Ok(jar) => jar,
-        Err(message) => {
-            eprintln(`oracle: ${message}`);
-            exit(1);
-        },
-    };
+    let jar = jar_or_exit(Some(env("ANTLR4_VERSION").unwrap_or(PINNED_VERSION)));
     for let target of &chosen {
         if let Err(message) = regen(&jar, target) {
             eprint(message);

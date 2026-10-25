@@ -117,11 +117,7 @@ internal fn find_jdk() -> Result<(), JdkProblem> with Process {
 }
 
 /// The jar `pinned` names, else the latest release, downloaded on first use.
-/// Requires a JDK.
 internal fn ensure_jar(pinned: Option<String>) -> Result<Jar, String> with (Process, Preopens, SystemClock, Stderr) {
-    if let Err(e) = find_jdk() {
-        return Err(`${e}`);
-    }
     if let Err(e) = fs::create_dir_all(CACHE_DIR) {
         return Err(`${e}`);
     }
@@ -153,6 +149,25 @@ internal fn ensure_jar(pinned: Option<String>) -> Result<Jar, String> with (Proc
         }
     }
     return Ok(Jar { version, path });
+}
+
+/// The version the committed oracle trees were taken from, which a run that
+/// reproduces them pins unless `ANTLR4_VERSION` says otherwise.
+internal global PINNED_VERSION: String = "4.13.2";
+
+/// A JDK and `ensure_jar`'s jar, or a report of what is missing and exit 1.
+internal fn jar_or_exit(pinned: Option<String>) -> Jar with (Process, Preopens, SystemClock, Stderr, Exit) {
+    if let Err(e) = find_jdk() {
+        eprintln(`oracle: ${e}`);
+        exit(1);
+    }
+    return match ensure_jar(pinned) {
+        Ok(jar) => jar,
+        Err(message) => {
+            eprintln(`oracle: ${message}`);
+            exit(1);
+        },
+    };
 }
 
 struct MavenSearch {
@@ -265,21 +280,17 @@ fn first_field_lowercase(text: String) -> String {
 
 // ===== Reading a grammar =====
 
-fn is_space(b: u8) -> bool {
-    return b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' || b == 0x0B || b == 0x0C;
-}
-
 fn is_ident_start(b: u8) -> bool {
-    return b == b'_' || b >= b'a' && b <= b'z' || b >= b'A' && b <= b'Z';
+    return b == b'_' || b.is_ascii_alphabetic();
 }
 
 fn is_ident_byte(b: u8) -> bool {
-    return is_ident_start(b) || b >= b'0' && b <= b'9';
+    return b == b'_' || b.is_ascii_alphanumeric();
 }
 
 fn skip_spaces(s: &String, from: i32) -> i32 {
     let mut i = from;
-    while i < s.len() && is_space(s.byte_at(i)) {
+    while i < s.len() && s.byte_at(i).is_ascii_whitespace() {
         i += 1;
     }
     return i;
@@ -300,7 +311,7 @@ fn ident_at(s: &String, from: i32) -> String {
 /// Where `word` ends when it starts at `from` and at least one space follows.
 fn word_then_space(s: &String, from: i32, word: String) -> Option<i32> {
     let end = from + word.len();
-    if end < s.len() && s.substr_bytes(from, end) == word && is_space(s.byte_at(end)) {
+    if end < s.len() && s.substr_bytes(from, end) == word && s.byte_at(end).is_ascii_whitespace() {
         return Some(end);
     }
     return null;
@@ -508,17 +519,13 @@ internal fn parse_request(arguments: List<String>) -> Result<Request, String> wi
     let mut lexer: Option<Grammar> = null;
     if let Some(path) = lexer_path {
         let lex = read_grammar(path, "lexer grammar")?;
-        let Some(shared) = grammar.name.strip_suffix("Parser") else {
-            return Err(
-                `oracle: a split pair must be named <N>Parser and <N>Lexer; got ${grammar.name} and ${lex.name}\n`,
-            );
-        };
-        testrig_name = shared.to_string();
-        if lex.name != `${testrig_name}Lexer` {
+        let shared = grammar.name.strip_suffix("Parser");
+        if !shared matches { Some(n) && lex.name == `${n}Lexer` } {
             return Err(
                 `oracle: a split pair must be named <N>Parser and <N>Lexer; got ${grammar.name} and ${lex.name}\n`,
             );
         }
+        testrig_name = shared.unwrap().to_string();
         if let Some(super_class) = lex.super_class && supers.is_empty() {
             return Err(refuse_unsupplied_super(lex.name, super_class));
         }
@@ -710,7 +717,7 @@ fn has_recognizer_error(stderr: &String) -> bool {
 
 fn digits_end(s: &String, from: i32) -> i32 {
     let mut i = from;
-    while i < s.len() && s.byte_at(i) >= b'0' && s.byte_at(i) <= b'9' {
+    while i < s.len() && s.byte_at(i).is_ascii_digit() {
         i += 1;
     }
     return i;
@@ -788,32 +795,30 @@ fn sorted_unique(items: List<String>) -> List<String> {
     return out;
 }
 
-/// Every `this.<name>(` in `text`, as written.
-fn member_refs(text: &String) -> List<String> {
-    let mut out: List<String> = [];
+/// Where each `this.<name>(` in `text` starts, and where its `(` is.
+fn member_call_sites(text: &String) -> List<[i32, i32]> {
+    let mut out: List<[i32, i32]> = [];
     let mut from = 0;
     while let Some(at) = find_from(text, "this.", from) {
         from = at + 1;
         let name = ident_at(text, at + 5);
         let open = at + 5 + name.len();
         if !name.is_empty() && open < text.len() && text.byte_at(open) == b'(' {
-            out.push(`this.${name}(`);
+            out.push([at, open]);
         }
     }
     return out;
 }
 
+/// Every `this.<name>(` in `text`, as written.
+fn member_refs(text: &String) -> List<String> {
+    return member_call_sites(text).into_iter().map(|site| text.substr_bytes(site.0, site.1 + 1)).collect();
+}
+
 /// Every `this.<name>(<args>)` whose argument list holds no parenthesis.
 fn member_calls(text: &String) -> List<String> {
     let mut out: List<String> = [];
-    let mut from = 0;
-    while let Some(at) = find_from(text, "this.", from) {
-        from = at + 1;
-        let name = ident_at(text, at + 5);
-        let open = at + 5 + name.len();
-        if name.is_empty() || open >= text.len() || text.byte_at(open) != b'(' {
-            continue;
-        }
+    for let [at, open] of member_call_sites(text) {
         let mut close = open + 1;
         while close < text.len() && text.byte_at(close) != b'(' && text.byte_at(close) != b')' {
             close += 1;
@@ -869,7 +874,7 @@ fn literal_type(arg: String) -> String {
         Some(rest) => rest.to_string(),
         None => arg,
     };
-    if !digits.is_empty() && digits.byte_at(0) >= b'0' && digits.byte_at(0) <= b'9' {
+    if !digits.is_empty() && digits.byte_at(0).is_ascii_digit() {
         return "int";
     }
     return "Object";
@@ -969,13 +974,7 @@ export fn run() with (Stdout, Stderr, Stdin, Environment, Preopens, Exit, Proces
             exit(1);
         },
     };
-    let jar = match ensure_jar(env("ANTLR4_VERSION")) {
-        Ok(jar) => jar,
-        Err(message) => {
-            eprintln(`oracle: ${message}`);
-            exit(1);
-        },
-    };
+    let jar = jar_or_exit(env("ANTLR4_VERSION"));
     let ran = run_request(&jar, &request, &read_stdin(), env("ORACLE_KEEP") == Some("1"));
     eprint(ran.stderr);
     print_bytes(ran.stdout as List<u8>);

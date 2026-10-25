@@ -14,7 +14,7 @@ use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
-use { ensure_jar, parse_request, run_request, Jar, Ran } from "./antlr4_oracle.wado";
+use { jar_or_exit, parse_request, run_request, Jar, Ran, PINNED_VERSION } from "./antlr4_oracle.wado";
 
 global GRAMMARS: String = "package-gale/tests/grammars";
 global FIXTURES: String = "package-gale/build/oracle-selftest";
@@ -286,17 +286,7 @@ ID : [a-z]+ {this.f(getText());} ;
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, SystemClock, Random) {
-    let pinned = match env("ANTLR4_VERSION") {
-        Some(v) => v,
-        None => "4.13.2",
-    };
-    let jar = match ensure_jar(Some(pinned)) {
-        Ok(jar) => jar,
-        Err(message) => {
-            eprintln(`oracle: ${message}`);
-            exit(1);
-        },
-    };
+    let jar = jar_or_exit(Some(env("ANTLR4_VERSION").unwrap_or(PINNED_VERSION)));
     if let Err(message) = write_fixtures() {
         eprintln(`selftest: ${message}`);
         exit(1);

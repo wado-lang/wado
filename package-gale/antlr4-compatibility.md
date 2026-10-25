@@ -1300,20 +1300,20 @@ the vendor extract.
 All compat-related artefacts (extracted grammars, generated tests,
 triage state) live under `package-gale/tests/antlr4-compat/`:
 
-| Path                                       | Role                                                                                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                         |
-| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                           |
-| `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                     |
-| `tests/antlr4-compat/stage_a/`             | Stage A claims (b/c/d) drivers (committed), grouped `<Category>_<k>_test.wado` — up to `DESCRIPTORS_PER_FILE` descriptors per entry module. |
-| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                            |
-| `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                         |
-| `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                               |
-| `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                 |
-| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                            |
-| `scripts/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.    |
-| `scripts/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.  |
-| `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                             |
+| Path                                       | Role                                                                                                                                          |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                           |
+| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                             |
+| `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                       |
+| `tests/antlr4-compat/stage_a/`             | Stage A claims (b/c/d) drivers (committed), grouped `<Category>_<k>_test.wado` — up to `DESCRIPTORS_PER_FILE` descriptors per entry module.   |
+| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                              |
+| `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                           |
+| `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                                 |
+| `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                   |
+| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                              |
+| `scripts/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
+| `scripts/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
+| `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                               |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4_oracle.wado --super`. |
 
 ### Triage states (`status.toml`)

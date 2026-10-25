@@ -18,7 +18,7 @@ use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
-use { ensure_jar, parse_request, run_request } from "../scripts/antlr4_oracle.wado";
+use { jar_or_exit, parse_request, run_request } from "../scripts/antlr4_oracle.wado";
 use { gale_tree } from "./typescript_tree.wado";
 use { parse_tree, report_divergences } from "./tree_diff.wado";
 
@@ -57,13 +57,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             exit(1);
         },
     };
-    let jar = match ensure_jar(env("ANTLR4_VERSION")) {
-        Ok(jar) => jar,
-        Err(message) => {
-            eprintln(`oracle: ${message}`);
-            exit(1);
-        },
-    };
+    let jar = jar_or_exit(env("ANTLR4_VERSION"));
     let ran = run_request(&jar, &request, &source, false);
     eprint(ran.stderr);
     if ran.code != 0 {
