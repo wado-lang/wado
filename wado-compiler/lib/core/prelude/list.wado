@@ -177,9 +177,7 @@ impl<affine T> List<T> {
     pub fn swap(&mut self, a: i32, b: i32)
         contract 0 <= a < self.len() && 0 <= b < self.len()
     {
-        let tmp = builtin::array_take(&mut self.repr, a);
-        self.repr[a] = builtin::array_take(&mut self.repr, b);
-        self.repr[b] = tmp;
+        [self.repr[a], self.repr[b]] = [self.repr[b], self.repr[a]];
     }
 
     /// Shortens the list to `len` elements; a longer `len` changes nothing.
@@ -224,9 +222,7 @@ impl<affine T> List<T> {
         let mut lo = 0;
         let mut hi = self.used - 1;
         while lo < hi {
-            let tmp = builtin::array_take(&mut self.repr, lo);
-            self.repr[lo] = builtin::array_take(&mut self.repr, hi);
-            self.repr[hi] = tmp;
+            [self.repr[lo], self.repr[hi]] = [self.repr[hi], self.repr[lo]];
             lo += 1;
             hi -= 1;
         }

@@ -944,6 +944,17 @@ test "index_swap exchanges affine elements" {
     assert toks[0].id == 2;
 }
 
+test "reverse and swap move affine elements" {
+    let mut toks: List<SwapTok> = [];
+    toks.push(SwapTok { id: 1 });
+    toks.push(SwapTok { id: 2 });
+    toks.push(SwapTok { id: 3 });
+    toks.reverse();
+    assert toks[0].id == 3 && toks[1].id == 2 && toks[2].id == 1;
+    toks.swap(0, 2);
+    assert toks[0].id == 1 && toks[2].id == 3;
+}
+
 #[expect_trap]
 test "index_swap traps on an index past the length" {
     let mut xs: List<i32> = [1, 2];
