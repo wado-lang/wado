@@ -131,6 +131,18 @@ enum Stdio {
     },
 }
 
+/// What a [`WasiState`]'s `wasi:random/insecure` and `insecure-seed` answer.
+pub enum InsecureRandom {
+    /// The host's randomness. `insecure-seed` seeds a hash map's protection
+    /// against denial of service, so a guest serving untrusted input needs it
+    /// unpredictable.
+    Host,
+    /// The same on every run, so a metered test's fuel is a function of the
+    /// program: `HashMap::new` hashes under `insecure-seed`, and a seed changes
+    /// how far its probes go.
+    Fixed,
+}
+
 impl WasiState {
     /// Create a new WASI state with preopened directories and program arguments.
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
@@ -152,7 +164,14 @@ impl WasiState {
         process: ProcessGrant,
     ) -> Result<Self> {
         let preopens = Preopens::open(preopened_dirs, process)?;
-        Ok(Self::build(&preopens, args, true, Stdio::Inherit, None))
+        Ok(Self::build(
+            &preopens,
+            args,
+            true,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        ))
     }
 
     /// Like [`Self::new`], but captures the guest's stdout/stderr into
@@ -177,6 +196,7 @@ impl WasiState {
         args: &[String],
         eval: EvalSession,
         process: ProcessGrant,
+        insecure_random: InsecureRandom,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
@@ -189,6 +209,7 @@ impl WasiState {
                 stderr: stderr.clone(),
             },
             Some(eval),
+            insecure_random,
         );
         Ok((state, stdout, stderr))
     }
@@ -204,7 +225,14 @@ impl WasiState {
     /// services: an HTTP server's env typically holds secrets (DB
     /// credentials, API tokens) that must not leak into handler components.
     pub fn new_no_inherit_env_with_preopens(preopens: &Preopens, args: &[String]) -> Self {
-        Self::build(preopens, args, false, Stdio::Inherit, None)
+        Self::build(
+            preopens,
+            args,
+            false,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        )
     }
 
     /// The one place that decides what a guest reaches.
@@ -214,8 +242,15 @@ impl WasiState {
         inherit_env: bool,
         stdio: Stdio,
         eval: Option<EvalSession>,
+        insecure_random: InsecureRandom,
     ) -> Self {
         let mut builder = WasiCtx::builder();
+        match insecure_random {
+            InsecureRandom::Host => {}
+            InsecureRandom::Fixed => {
+                random::fixed_seed(&mut builder);
+            }
+        }
         let guest_stdio = match stdio {
             Stdio::Inherit => {
                 builder.inherit_stdio();
@@ -544,20 +579,14 @@ pub fn create_serve_engine(
 }
 
 /// A store over `state`. On a metering engine it holds fuel it can never
-/// exhaust, so `--report-fuel` observes the guest without stopping it. There
-/// `wasi:random/insecure` and `insecure-seed` answer the same on every run, so
-/// the fuel is a function of the program: `HashMap::new` hashes under
-/// `insecure-seed`, and a seed changes how far its probes go.
+/// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]
-pub fn new_store(engine: &Engine, mut state: WasiState) -> Store<WasiState> {
-    if !engine.get_consume_fuel() {
-        return Store::new(engine, state);
-    }
-    let mut fixed = random::fixed_seed(&mut WasiCtx::builder()).build();
-    *state.ctx.random() = std::mem::take(fixed.random());
-    state.fuel_start = Some(u64::MAX);
+pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
     let mut store = Store::new(engine, state);
-    store.set_fuel(u64::MAX).expect("the engine meters fuel");
+    if engine.get_consume_fuel() {
+        store.set_fuel(u64::MAX).expect("the engine meters fuel");
+        store.data_mut().fuel_start = Some(u64::MAX);
+    }
     store
 }
 
@@ -591,7 +620,9 @@ pub fn create_store(
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
 /// in-memory pipes instead of inherited — used by `wado test` so a
 /// test's own prints can be attributed to its result instead of racing
-/// directly onto the host's real stdout/stderr.
+/// directly onto the host's real stdout/stderr. A metered test's insecure
+/// randomness is [`InsecureRandom::Fixed`]; only a test, which serves no
+/// untrusted input, may give up its unpredictability.
 ///
 /// # Errors
 ///
@@ -603,8 +634,18 @@ pub fn create_test_store(
     eval: EvalSession,
     process: ProcessGrant,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let (state, stdout, stderr) =
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval, process)?;
+    let insecure_random = if engine.get_consume_fuel() {
+        InsecureRandom::Fixed
+    } else {
+        InsecureRandom::Host
+    };
+    let (state, stdout, stderr) = WasiState::new_capturing_stdio(
+        preopened_dirs,
+        &[program.to_owned()],
+        eval,
+        process,
+        insecure_random,
+    )?;
     Ok((new_store(engine, state), stdout, stderr))
 }
 

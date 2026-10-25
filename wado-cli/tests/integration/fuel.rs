@@ -89,6 +89,31 @@ fn regions_are_reported_in_order_and_reproduce() {
     assert_eq!(report(tmp.path()), first);
 }
 
+/// `spent` answers `None` in every unmetered run, so `core:fuel` decides
+/// nothing a cache key does not.
+#[test]
+fn an_unmetered_measure_is_cached() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("count_test.wado"),
+        r#"use { measure } from "core:fuel";
+
+test "count" {
+    assert measure("count", || builtin::black_box(45)) == 45;
+}
+"#,
+    )
+    .unwrap();
+    let run = || {
+        wado_in(tmp.path())
+            .args(["test", "count_test.wado"])
+            .assert()
+            .success()
+    };
+    run().stdout(predicate::str::contains("cached:").not());
+    run().stdout(predicate::str::contains("cached:  1 files"));
+}
+
 #[test]
 fn an_unmetered_run_just_runs_the_closure() {
     let tmp = tempfile::tempdir().unwrap();

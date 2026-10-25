@@ -42,12 +42,15 @@ reaches `core:fuel` does not compile, as with `core:eval`
 
 ### A metered run fixes the insecure randomness
 
-Under `--report-fuel`, `wasi:random/insecure` and `insecure-seed` answer the
-same on every run, as Kiln generators and `core:eval` programs already get.
-`HashMap::new` hashes under `insecure-seed`, and the seed changes how far its
-probes go, so without this a program using one spent different fuel on each
-run. `insecure-seed` promises no unpredictability, so this changes no program's
-meaning. `wasi:random/random` stays unpredictable.
+Under `wado test --report-fuel`, `wasi:random/insecure` and `insecure-seed`
+answer the same on every run, as Kiln generators and `core:eval` programs
+already get. `HashMap::new` hashes under `insecure-seed`, and the seed changes
+how far its probes go, so without this a program using one spent different fuel
+on each run. `wasi:random/random` stays unpredictable.
+
+Only a test gets this. `insecure-seed` exists to seed a hash map's DoS
+protection, so `wado run` and `wado serve` keep the host's seed under
+`--report-fuel`, and their fuel can vary with it.
 
 ### The benchmarks keep both measures
 
