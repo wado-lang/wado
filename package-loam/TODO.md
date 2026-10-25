@@ -100,7 +100,8 @@ leaves this file, and `design.md` states what it built.
 14. [ ] Qwen 3.5 0.8B, a decoder whose layers are mostly recurrent. Finished
     when `example/qwen3.5-0.8b/` continues a prompt with the tokens onnxruntime
     picks, under `wado run-webgpu` from onnx-community's `q4` export of the
-    text model, with no line that names a layer, and its tokenizer gives the ids Hugging Face's gives.
+    text model, with no line that names a layer, and its tokenizer gives the
+    ids Hugging Face's gives.
 15. [ ] A table stays where it is stored. A weight that only a `Gather` reads,
     as an embedding is, is prepared as a table whose storage the backend
     chooses, and a pass reads only the rows it gathers. Finished when Gemma 4
@@ -141,9 +142,8 @@ leaves this file, and `design.md` states what it built.
 21. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
     continues a prompt with the tokens onnxruntime picks from onnx-community's
     `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no line
-    that names a layer, and `design.md` records how
-    often a routed expert was already held, with the eviction order it chose and
-    why.
+    that names a layer, and `design.md` records how often a routed expert was
+    already held, with the eviction order it chose and why.
 22. [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
     next `QMoE`'s `router_probs` from its `input` are applied to this layer's
     `input`, and the experts they pick load before a token routes to them. A

@@ -620,7 +620,11 @@ fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
                 scope.axes.read(&e.axes[j]),
             ];
             let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
-            axes.push(if a.name == b.name { Axis { ..a, extent } } else { scope.axes.mint(`${output}[${j}]`, extent) });
+            axes.push(if a.name == b.name {
+                Axis { ..a, extent };
+            } else {
+                new_axis(&output, j, extent, &mut scope.axes);
+            });
         }
         scope.shapes[output] = held(&output, Shape { axes })?;
         if let Some(p) = pt {
@@ -1139,7 +1143,7 @@ fn split(
     classes: &mut Axes,
 ) -> Result<List<Shape>, InferError> {
     let x = operand_at(node, shapes, 0);
-    let parts = split_parts(node, known, &x, owed, classes)?;
+    let parts = split_parts(node, known, &x, owed)?;
     let axis = split_axis(node, x.rank())?;
     let whole = x.axes[axis].extent.poly();
     let mut produced: List<Shape> = [];
@@ -1206,7 +1210,6 @@ pub fn split_parts(
     known: &HashMap<String, Known>,
     x: &Shape,
     owed: &mut List<Condition>,
-    classes: &Axes,
 ) -> Result<List<Poly>, InferError> {
     let axis = split_axis(node, x.rank())?;
     let whole = x.axes[axis].extent.poly();

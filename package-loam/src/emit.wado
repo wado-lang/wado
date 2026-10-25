@@ -1785,7 +1785,7 @@ fn split_calls(
     let shapes = &checked.shapes;
     let x = shapes.get(node.inputs[0]).unwrap();
     // Stage 0 owed these already.
-    let parts = settled(split_parts(node, &checked.known, &x, &mut [], &Axes {}));
+    let parts = settled(split_parts(node, &checked.known, &x, &mut []));
     let axis = settled(split_axis(node, x.rank()));
     let element = checked.primitives.get(node.inputs[0]).unwrap();
     let operand = exprs.reference(&node.inputs[0]);
