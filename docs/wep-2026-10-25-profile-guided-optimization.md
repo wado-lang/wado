@@ -68,8 +68,8 @@ keyword to the reserved vocabulary, and it would not run under `wado test`.
 `wado test --pgo` compiles the package's workloads with probes and runs only
 them. Recording belongs to the test runner, as coverage does, since a workload
 is a test. The flag is not named `--profile`, which already means the sampling
-profiler of `wado run --profile` and `wado test --profile`. A probe
-counts every run of its region. It measures the package's modules, its
+profiler of `wado run --profile` and `wado test --profile`. A probe counts
+every run of its region. It measures the package's modules, its
 dependencies' and the `core:` modules, since a workload's hot path runs through
 all three.
 
@@ -101,9 +101,9 @@ call, the length load, the bounds check and the load on every run.
 
 ### The profile is committed
 
-The profile is a text file, so the repository holds no binary for it. A file under `build/`
-would not reach CI or a release build, so their output would differ from the
-author's.
+The profile is a text file, so the repository holds no binary for it. A file
+under `build/` would not reach CI or a release build, so their output would
+differ from the author's.
 
 A package keeps one profile, `pgo/default.pgo` under its root, merged from all
 of its workloads. A single-file program without a manifest keeps
@@ -152,8 +152,8 @@ A compile reads a function's counts only when the hash of its current region
 plan equals the recorded one. The plan is each region's kind and its span
 relative to the function's start. It changes with the function's text, and also
 with what outside the text decides its regions: a callee becoming `!`-typed
-starts or ends a region, and so does `#[coverage(off)]` on the enclosing `impl`
-or module.
+starts or ends a region, and `#[coverage(off)]` on the enclosing `impl` or
+module removes them all.
 
 A function whose hash differs is compiled as if no profile existed. A stale
 profile therefore costs only the gain on what changed, and it never marks the
