@@ -1,4 +1,4 @@
-use { Case, program, read_after_program, expected } from "./generator.wado";
+use { Case, program, read_after_program, in_closure_program, expected } from "./generator.wado";
 use { EvalError } from "core:eval";
 use { eval } from "core:eval";
 
@@ -49,6 +49,29 @@ test "a read after a move is rejected, and only there" {
                 panic(`${case.label()}: expected a rejection, got ${result:?}`);
             };
             assert failure.rendered.contains("affine value `t` used after it was moved"), `${case.label()}: ${failure.rendered}`;
+        }
+    }
+}
+
+// A closure captures by reference, so a consumer that moves is rejected inside
+// one, in whatever context, and one that borrows is not.
+test "a move inside a closure is rejected, and only there" {
+    for let case of Case::all() {
+        if !(case.producer matches { Literal }
+            && case.companion matches { None }
+            && case.value matches { Tok }
+            && case.flag) {
+            continue;
+        }
+        let result = eval(in_closure_program(&case));
+        if !case.consumer.moves() {
+            assert result matches { Ok(_) }, `${case.label()}: ${result:?}`;
+        } else {
+            let Err(EvalError::CompileFailed(failure)) = result else {
+                panic(`${case.label()}: expected a rejection, got ${result:?}`);
+            };
+            assert failure.rendered.contains("a closure captures `t` by reference, so its body cannot move it"), `${case.label(
+            )}: ${failure.rendered}`;
         }
     }
 }
