@@ -1,0 +1,13 @@
+// A static called through a namespace holds its type arguments to the
+// method's bounds as the bare spelling does, so a bound-driven `Default` is
+// derived for the namespace's own `Q`.
+use { println, Stdout } from "core:cli";
+use dep from "./sub/static_type_arg_bound_namespaced_dep.wado";
+
+export fn run() with Stdout {
+    let q = dep::Q::make::<dep::Q>();
+    println(`${q:?}`);
+}
+
+__DATA__
+{"stdout": "Q { x: 0 }\n"}

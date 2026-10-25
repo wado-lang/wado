@@ -183,7 +183,7 @@ struct Candidate {
 
 pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let dirty = gate.dirty_funcs(GatedPass::SroaVariantReturn, project.functions.len());
-    let candidates = collect_and_validate(project, &dirty);
+    let candidates = collect_and_validate(project, &dirty, gate.exec());
     let mut changed = !candidates.is_empty();
     for &key in candidates.keys() {
         compiler_trace!(
@@ -209,7 +209,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, gate.exec(), &mut touched);
-    touched.extend(project.rename_reshaped(candidates.keys().copied()));
+    touched.extend(project.rename_reshaped(candidates.keys().copied(), gate.exec()));
     scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
@@ -1123,7 +1123,11 @@ fn is_eligible(func: &NirFunction) -> bool {
     !func.is_dead && func.body.is_some() && func.only_reached_by_direct_call()
 }
 
-fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<FuncId, Candidate> {
+fn collect_and_validate(
+    project: &NirPackage,
+    dirty: &[FuncId],
+    exec: &Executor,
+) -> IndexMap<FuncId, Candidate> {
     let mut candidates: IndexMap<FuncId, Candidate> = IndexMap::default();
     let mut layout_cache: IndexMap<TypeKey, Option<Layout>> = IndexMap::default();
 
@@ -1222,29 +1226,28 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
     // A call site refutes only the candidate it calls, and the candidates only
     // shrink below, so a body calling none of them now never refutes one. The
     // arena holds every expression the body reaches, and some it no longer does.
-    let callers: Vec<_> = project
-        .functions
-        .iter()
-        .filter(|f| {
-            f.borrow().body.as_ref().is_some_and(|body| {
-                body.exprs.values().any(|node| {
-                    matches!(&node.kind, ExprKind::Call { func_id, .. } if candidates.contains_key(func_id))
-                })
+    let functions = &project.functions;
+    let callers = exec.indices_where(functions.len(), |i| {
+        functions[i].borrow().body.as_ref().is_some_and(|body| {
+            body.exprs.values().any(|node| {
+                matches!(&node.kind, ExprKind::Call { func_id, .. } if candidates.contains_key(func_id))
             })
         })
-        .collect();
+    });
 
     // The tail-call rule couples caller and callee candidacy in both
     // directions, so refute to a fix-point: optimistic (assume-then-refute), so
-    // a mutually tail-recursive group survives.
+    // a mutually tail-recursive group survives. Each round's refutations merge
+    // in the order one walk would make them, which orders the removals.
+    let type_table = &*project.type_table.borrow();
     while !candidates.is_empty() {
         let mut tail_ok = already.clone();
         for (&key, cand) in &candidates {
             tail_ok.insert(key, cand.variant_type);
         }
-        let mut invalid: IndexSet<FuncId> = IndexSet::default();
-        for (&key, cand) in &candidates {
-            let func = project.functions[key.index()].borrow();
+        let entries: Vec<(&FuncId, &Candidate)> = candidates.iter().collect();
+        let unreturnable = exec.filter_map(&entries, |&(&key, cand)| {
+            let func = functions[key.index()].borrow();
             let body = func
                 .body
                 .as_ref()
@@ -1253,23 +1256,22 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
                 body,
                 cand,
                 tail_ok: &tail_ok,
-                type_table: &project.type_table.borrow(),
+                type_table,
             };
             // Every `Return` `rewrite_returns` reaches must turn into the result tuple.
-            if !arena_query::every_return(body, NodeRef::Block(body.root()), |value| {
+            (!arena_query::every_return(body, NodeRef::Block(body.root()), |value| {
                 value.is_some_and(|v| returns.value_scalarizable(v))
-            }) {
-                invalid.insert(key);
-            }
-        }
-        for func_rc in &callers {
-            let func = func_rc.borrow();
+            }))
+            .then_some(key)
+        });
+        let refuted_by_callers = exec.map(&callers, |&caller| {
+            let func = functions[caller].borrow();
+            let mut invalid: IndexSet<FuncId> = IndexSet::default();
             if let Some(body) = &func.body {
                 let caller_ok = func
                     .id
                     .is_some_and(|id| candidates.contains_key(&id) || already.contains_key(&id));
-                let type_table = project.type_table.borrow();
-                let rebind = Rebind::new(&func, &type_table);
+                let rebind = Rebind::new(&func, type_table);
                 invalidate_bad_call_sites(
                     body,
                     &func,
@@ -1279,7 +1281,12 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
                     &mut invalid,
                 );
             }
-        }
+            invalid
+        });
+        let invalid: IndexSet<FuncId> = unreturnable
+            .into_iter()
+            .chain(refuted_by_callers.into_iter().flatten())
+            .collect();
         if invalid.is_empty() {
             break;
         }
@@ -2326,7 +2333,7 @@ fn retain_rewritable_locals(
                         sanctioned.extend(expr.as_expr());
                         let guard_writes =
                             arms.iter().filter_map(|a| a.guard?.as_expr()).any(|g| {
-                                body.find_in_live_node_under(NodeRef::Expr(g), |n| {
+                                body.find_in_nodes_under(NodeRef::Expr(g), |n| {
                                     (arena_query::local_written_by(body, n) == Some(local))
                                         .then_some(())
                                 })

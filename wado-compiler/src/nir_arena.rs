@@ -20,7 +20,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1445,88 +1445,11 @@ impl Body {
     }
 
     /// Invoke `f` on `root` and every node beneath it, parents before children.
-    /// A subtree walk: the whole body is [`Body::for_each_reachable_node`].
-    pub fn for_each_node_under(&self, root: NodeRef, f: impl FnMut(NodeRef)) {
-        debug_assert!(
-            self.blocks.is_empty() || root != NodeRef::Block(*self.root),
-            "[NIR] a whole-body walk is `for_each_reachable_node`, which also covers what a \
-             promoted operand names as its extraction source"
-        );
-        self.for_each_skeleton_node(root, f);
-    }
-
-    /// [`Body::for_each_node_under`] without its whole-body check, for the walks
-    /// [`Body::for_each_live_node_under`] is itself made of.
-    fn for_each_skeleton_node(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+    /// A promoted operand names no node, so the skeleton is all a walk reaches.
+    pub fn for_each_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
         self.walk_nodes_under::<()>(root, |node| {
             f(node);
             ControlFlow::Continue(true)
-        });
-    }
-
-    /// [`Body::for_each_node_under`] plus the nodes a promoted operand names as
-    /// its extraction source. Those produce the operand's code, so a walk
-    /// without them calls a live node an orphan.
-    pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
-        if !self.values.has_expr_source() {
-            self.for_each_skeleton_node(root, f);
-            return;
-        }
-        let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
-        let mut sourced: Vec<ExprId> = Vec::new();
-        self.walk_sourcing(root, &mut f, &mut pool_seen, &mut sourced, None);
-        // Only the assertion reads this, and only a body that named a source can
-        // fail it, so nothing else pays the scan or the per-node insert.
-        let mut covered: IndexSet<ExprId> = IndexSet::default();
-        let checking = cfg!(debug_assertions) && !sourced.is_empty();
-        if checking {
-            self.for_each_skeleton_node(root, |node| {
-                if let NodeRef::Expr(e) = node {
-                    covered.insert(e);
-                }
-            });
-        }
-        // A sourced node's own subtree is live too, and may name further
-        // sources; the pool-side visited set bounds the second walk.
-        while let Some(e) = sourced.pop() {
-            debug_assert!(
-                !covered.contains(&e),
-                "[NIR] {e:?} is an extraction source this walk already covered, so \
-                 `reachable_operand_values` counts its slots twice"
-            );
-            self.walk_sourcing(
-                NodeRef::Expr(e),
-                &mut f,
-                &mut pool_seen,
-                &mut sourced,
-                checking.then_some(&mut covered),
-            );
-        }
-    }
-
-    /// Walk `root`'s skeleton subtree into `f`, pushing the extraction sources
-    /// its operands name onto `sourced`. `covered` records what `f` was handed.
-    fn walk_sourcing(
-        &self,
-        root: NodeRef,
-        f: &mut impl FnMut(NodeRef),
-        pool_seen: &mut IndexSet<ValueId>,
-        sourced: &mut Vec<ExprId>,
-        mut covered: Option<&mut IndexSet<ExprId>>,
-    ) {
-        self.for_each_skeleton_node(root, |node| {
-            f(node);
-            if let Some(covered) = covered.as_deref_mut()
-                && let NodeRef::Expr(e) = node
-            {
-                covered.insert(e);
-            }
-            self.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    self.values
-                        .for_each_opaque_expr(v, pool_seen, |e| sourced.push(e));
-                }
-            });
         });
     }
 
@@ -1541,22 +1464,6 @@ impl Body {
             Some(found) => ControlFlow::Break(found),
             None => ControlFlow::Continue(true),
         })
-    }
-
-    /// The first value `f` gives for `root` or a live node beneath it.
-    /// [`Body::find_in_nodes_under`] stops at the first hit; this one walks on.
-    pub fn find_in_live_node_under<T>(
-        &self,
-        root: NodeRef,
-        mut f: impl FnMut(NodeRef) -> Option<T>,
-    ) -> Option<T> {
-        let mut found = None;
-        self.for_each_live_node_under(root, |node| {
-            if found.is_none() {
-                found = f(node);
-            }
-        });
-        found
     }
 
     /// Walk `root` and the nodes beneath it, parents before children. `f`
@@ -1635,7 +1542,7 @@ impl Body {
             }
             return;
         }
-        self.for_each_live_node_under(NodeRef::Block(*self.root), f);
+        self.for_each_node_under(NodeRef::Block(*self.root), f);
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many
@@ -2058,10 +1965,7 @@ impl Body {
                 _ => None,
             },
             Operand::Value(v) => match self.values.kind(v) {
-                ValueKind::Opaque(oid) => match self.values.opaque_source(*oid)? {
-                    OpaqueSource::Local(index) => Some(index),
-                    OpaqueSource::Expr(e) => self.argument_local(Operand::Expr(e)),
-                },
+                ValueKind::Opaque(oid) => Some(self.values.promoted_opaque_local(*oid)),
                 _ => None,
             },
         }

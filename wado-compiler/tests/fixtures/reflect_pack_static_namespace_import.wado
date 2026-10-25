@@ -1,0 +1,20 @@
+// A static method whose pack is bound only through another parameter's
+// associated type projects it through a namespace import as it does through a
+// named one, whether spelled as a call or as a tag (WEP 2026-01-10).
+
+use lib from "./sub/reflect_pack_static_namespace_import_lib.wado";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+test "a namespaced static method resolves" {
+    assert lib::Rec::count(&Pair { a: 1, b: 2 }) == 2;
+}
+
+test "a namespaced static method answers a tag" {
+    let a = 1;
+    let b = "x";
+    assert lib::Rec::holes`a=${a} b=${b}` == 2;
+}

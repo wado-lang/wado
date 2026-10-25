@@ -27,6 +27,7 @@ pub mod format;
 pub mod git;
 pub mod http_hooks;
 pub mod init;
+mod input_cache;
 pub mod kiln_provider;
 pub mod kiln_wit;
 pub mod knobs;
@@ -49,6 +50,7 @@ pub mod test;
 mod test_cache;
 mod test_report;
 pub mod update;
+mod user_config;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;

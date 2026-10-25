@@ -2445,16 +2445,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 return trait_info.output_type;
             }
+
+            if self.report_unmet_trait_impl_bound(
+                base_type_id,
+                &[
+                    CompilerItem::IndexValue,
+                    CompilerItem::IndexRef,
+                    CompilerItem::IndexRefMut,
+                ],
+                Some(index_type),
+                index.span,
+            ) {
+                return TypeTable::ERROR;
+            }
         }
 
-        // Fallback: report error for unsupported indexing
         let type_name = self.tysys.type_table.borrow().type_name(expr_type);
         let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
-            trait_name: "Index or IndexValue".to_string(),
+            trait_name: "IndexValue or IndexRef".to_string(),
             span: index.span,
         });
-        TypeTable::UNKNOWN
+        TypeTable::ERROR
     }
 
     /// The key type of the `Index` / `IndexAssign` impl dispatching

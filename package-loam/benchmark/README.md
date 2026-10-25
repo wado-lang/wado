@@ -84,7 +84,7 @@ Every arm generated "[Your Name] and I am a", the tokens the example's
 
 | Implementation                   |      Throughput |     ms/iter | vs best |
 | -------------------------------- | --------------: | ----------: | ------- |
-| llama.cpp Vulkan                 | 269.10 tokens/s |   29.729 ms | 1.00x   |
-| **Loam** `WebGpuBackend`         | 164.13 tokens/s |   48.743 ms | 1.64x   |
-| onnxruntime, its own thread pool |  35.85 tokens/s |  223.173 ms | 7.51x   |
-| **Loam** `Cpu`                   |   4.89 tokens/s | 1636.169 ms | 55.04x  |
+| llama.cpp Vulkan                 | 269.12 tokens/s |   29.726 ms | 1.00x   |
+| **Loam** `WebGpuBackend`         | 246.02 tokens/s |   32.517 ms | 1.09x   |
+| onnxruntime, its own thread pool |  35.88 tokens/s |  222.946 ms | 7.50x   |
+| **Loam** `Cpu`                   |   6.80 tokens/s | 1177.114 ms | 39.58x  |

@@ -1,0 +1,20 @@
+# A gated layer: an RMS normalization, two products of it, a gate and a value,
+# met elementwise, then a product down, as a decoder's MLP computes.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+gated (float[N, S, 2] X) => (float[N, S, 2] Y)
+<float[2] W = {1.5, -0.5}, float[2, 3] G = {0.5, -1.0, 0.25, 1.5, 0.75, -0.5}, float[2, 3] U = {1.0, 0.5, -0.25, -1.5, 2.0, 0.125}, float[3, 2] D = {1.0, -0.5, 0.25, 2.0, -1.0, 0.5}>
+{
+    Q = Mul(X, X)
+    M = ReduceMean <axes = [-1], keepdims = 1> (Q)
+    Eps = Constant <value = float {0.000001}> ()
+    V = Add(M, Eps)
+    R = Sqrt(V)
+    O = Div(X, R)
+    H = Mul(O, W)
+    A = MatMul(H, G)
+    B = MatMul(H, U)
+    C = Sigmoid(A)
+    E = Mul(A, C)
+    F = Mul(E, B)
+    Y = MatMul(F, D)
+}

@@ -85,7 +85,7 @@ fn fold_pass(
     let maps = build_fold_maps(project, type_table, exec, frozen);
     let globals = build_global_view(project, type_table, &maps, exec);
     let functions = &project.functions;
-    drive(&|buffers, fid| {
+    let changed = drive(&|buffers, fid| {
         let func = &functions[fid.index()];
         let mut visitor = new_visitor(type_table, &maps, &globals);
         let changed = fold_function(func, &mut visitor, buffers, type_table);
@@ -93,7 +93,9 @@ fn fold_pass(
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
         changed
-    })
+    });
+    exec.drop_all(maps.callees);
+    changed
 }
 
 /// Flow-sensitive constant folding, gated: skips functions unchanged since this
@@ -395,7 +397,7 @@ fn build_global_view(
     exec: &Executor,
 ) -> GlobalView {
     let mut view = GlobalView {
-        materializing: materializing_globals(project),
+        materializing: materializing_globals(project, exec),
         values: maps.declared_globals.clone(),
         fields: GlobalFieldEnv::default(),
     };
@@ -978,7 +980,7 @@ impl ConstFoldVisitor<'_> {
             // drop the stale entry for every local the pattern binds; otherwise a
             // reused index keeps the earlier `let`'s constant.
             StmtKind::LetDestructure { pattern, .. } => {
-                body.for_each_live_node_under(NodeRef::Pat(*pattern), |node| {
+                body.for_each_node_under(NodeRef::Pat(*pattern), |node| {
                     if let NodeRef::Pat(p) = node
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {

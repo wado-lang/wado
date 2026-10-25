@@ -1,0 +1,72 @@
+// An interpolation and a for-of whose only `Display` / `IntoIterator` impl has
+// a bound the argument does not meet report that bound, not an absent trait,
+// an impl for a reference as one for the type.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Tag> Display for Wrap<T> {
+    fn fmt(&self, f: &mut Formatter) {}
+}
+
+struct Empty {}
+
+impl Iterator for Empty {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        return null;
+    }
+}
+
+struct Bag<T> {
+    v: T,
+}
+
+impl<T: Tag> IntoIterator for Bag<T> {
+    type Item = i32;
+    type Iter = Empty;
+
+    fn into_iter(&self) -> Empty {
+        return Empty {};
+    }
+}
+
+struct Shelf<T> {
+    v: T,
+}
+
+impl<T: Tag> IntoIterator for &Shelf<T> {
+    type Item = i32;
+    type Iter = Empty;
+
+    fn into_iter(&self) -> Empty {
+        return Empty {};
+    }
+}
+
+test {
+    let w = Wrap { v: "s" };
+    let s = `${w}`;
+    let bag = Bag { v: "s" };
+    for let x of bag {}
+    let shelf = Shelf { v: "s" };
+    for let y of &shelf {}
+}
+
+__DATA__
+{
+    "compile_error": ":61:16: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 63:5: type 'String' does not implement trait 'Tag' required by bound on 'T'; 65:5: type 'String' does not implement trait 'Tag' required by bound on 'T'",
+    "compile_errors_not_contains": ["Display", "IntoIterator"]
+}

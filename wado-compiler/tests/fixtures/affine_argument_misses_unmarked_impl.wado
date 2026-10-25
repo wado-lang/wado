@@ -1,5 +1,6 @@
 // An `impl` whose type parameter is not declared `affine` does not apply to an
-// affine argument, so its methods are not found (WEP: Affine Types).
+// affine argument, and a call of its method reports the kind the argument
+// misses rather than an absent method (WEP: Affine Types).
 
 affine struct Fields {
     n: i32,
@@ -26,6 +27,6 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": ":24:16: analysis error: no method 'twice' found on type 'Cell<Fields>'",
-    "compile_error_codes": ["METHOD_NOT_FOUND"]
+    "compile_error": ":25:16: analysis error: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it",
+    "compile_error_codes": ["AFFINE_ARGUMENT"]
 }

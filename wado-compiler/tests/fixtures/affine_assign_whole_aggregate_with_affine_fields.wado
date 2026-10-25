@@ -1,0 +1,51 @@
+// Assigning a whole affine aggregate whose fields are affine drops the old
+// fields and moves the new objects in, whether or not a field had moved out
+// first (WEP: Affine Types).
+
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+affine struct Pair {
+    x: Tok,
+    y: Tok,
+}
+
+fn eat(t: Tok) -> i32 {
+    let id = t.id;
+    builtin::drop(t);
+    return id;
+}
+
+test "a whole assignment drops the old fields" {
+    let mut p = Pair { x: Tok { id: 1 }, y: Tok { id: 2 } };
+    p = Pair { x: Tok { id: 30 }, y: Tok { id: 400 } };
+    assert DROPS == 3;
+    assert p.x.id == 30 && p.y.id == 400;
+}
+
+test "a whole assignment after a field moved out" {
+    let mut p = Pair { x: Tok { id: 1 }, y: Tok { id: 2 } };
+    eat(p.x);
+    p = Pair { x: Tok { id: 30 }, y: Tok { id: 400 } };
+    assert DROPS == 3;
+    assert p.x.id == 30 && p.y.id == 400;
+}
+
+test "a reference to the whole reads the new value" {
+    let mut p = Pair { x: Tok { id: 1 }, y: Tok { id: 2 } };
+    let r = &p;
+    p = Pair { x: Tok { id: 30 }, y: Tok { id: 400 } };
+    assert r.x.id == 30 && r.y.id == 400;
+}
+
+__DATA__
+{"test": {}}

@@ -51,9 +51,11 @@ const PROFILE_BASE: &str = r#"(version 1)
 (allow signal (target same-sandbox))
 (allow sysctl-read)
 ; dyld lists `/` and stats the `/var` link while it finds its shared cache, and
-; aborts when it cannot.
+; aborts when it cannot. `/etc`, `/tmp` and `/var` link into `/private`, where a
+; grant is matched, and a path is resolved through the link only where the link
+; itself can be read.
 (allow file-read-data (literal "/"))
-(allow file-read-metadata (literal "/var"))
+(allow file-read-metadata (literal "/etc") (literal "/tmp") (literal "/var"))
 (allow mach-lookup
     (global-name "com.apple.system.opendirectoryd.libinfo")
     (global-name "com.apple.system.notification_center")

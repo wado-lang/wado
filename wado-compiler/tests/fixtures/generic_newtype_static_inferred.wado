@@ -1,0 +1,73 @@
+// A static a generic newtype inherits answers with the newtype at the
+// arguments its call settles, as one called on the base answers with the base.
+// An argument or the expected type settles them, whether the newtype is
+// spelled bare, through a namespace, or with a turbofish of `_`, and a sibling
+// branch settles the first two. `Pair` re-shapes its argument, so the
+// newtype's `T` is read off the base's instance, not taken from it.
+
+use nt from "./sub/generic_newtype_static.wado";
+
+struct Cell<T> {
+    v: Option<T>,
+}
+
+impl<T> Cell<T> {
+    fn empty() -> Cell<T> {
+        return Cell { v: null };
+    }
+
+    fn make(v: T) -> Cell<T> {
+        return Cell { v: Option::Some(v) };
+    }
+}
+
+type C<T> = Cell<T>;
+type Bag<T> = List<T>;
+type Pair<T> = List<[T, i32]>;
+
+fn takes(c: C<i64>) -> i64 {
+    return c.v.unwrap_or(0);
+}
+
+test "an argument settles the newtype's parameter" {
+    assert takes(C::make(7 as i64)) == 7;
+    assert takes(C::<_>::make(8 as i64)) == 8;
+    let bag: Bag<String> = Bag::filled(2, "x");
+    assert bag.len() == 2;
+    let pair = Pair::filled(1, [3 as u8, 4]);
+    let kept: Pair<u8> = pair;
+    assert kept[0].0 == 3;
+}
+
+test "the expected type settles it" {
+    let e: C<i64> = C::empty();
+    assert takes(e) == 0;
+    let f: C<i64> = C::<_>::empty();
+    assert takes(f) == 0;
+    let w: Bag<i32> = Bag::with_capacity(4);
+    assert w.len() == 0;
+    let p: Pair<i64> = Pair::with_capacity(4);
+    assert p.len() == 0;
+}
+
+test "a sibling branch settles it" {
+    let c = builtin::black_box(true);
+    let x = if c { C::empty() } else { C::make(1 as i64) };
+    assert takes(x) == 0;
+}
+
+fn takes_nt(c: nt::C<i64>) -> i64 {
+    return c.v.unwrap_or(0);
+}
+
+test "a namespaced newtype is settled the same ways" {
+    assert takes_nt(nt::C::make(7 as i64)) == 7;
+    let e: nt::C<i64> = nt::C::empty();
+    assert takes_nt(e) == 0;
+    let c = builtin::black_box(true);
+    let x = if c { nt::C::empty() } else { nt::C::make(1 as i64) };
+    assert takes_nt(x) == 0;
+}
+
+__DATA__
+{"test": {}}

@@ -1,4 +1,5 @@
-// Test bounded impl block violation - method not available when bounds unsatisfied
+// A method of a bounded impl block, called where the bound does not hold,
+// reports the bound.
 
 struct Wrapper<T> {
     value: T,
@@ -27,4 +28,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "no method 'max_with' found"}
+{"compile_error": ":27:13: analysis error: type 'Foo' does not implement trait 'Ord' required by bound on 'T'"}

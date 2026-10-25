@@ -19,6 +19,8 @@ use gemma from "./gemma3.onnxtext"
             ],
             options: {
                 dims: { batch_size: 1 },
+                // Only the last position ranks the next token.
+                last: { logits: 1 },
                 layout: [
                     {
                         pattern: "input_ids",
@@ -241,16 +243,9 @@ impl<affine Bk: Backend> Model<Bk> {
             &c[35],
             &self.weights,
         );
-        // Only the last position ranks the next token, and the backend ranks
-        // it, so one index is read back rather than the vocabulary's logits.
-        let last = self.backend.slice_axis::<f32, [gemma::Batch], gemma::Seq, Last, [gemma::Vocab]>(
-            &passed.logits,
-            1,
-            (fresh.len() - 1) as i64,
-            1,
-            1,
-        );
-        let best = self.backend.download(&self.backend.arg_max(&last, 2)).data[0] as i32;
+        // The backend ranks the last position, so one index is read back
+        // rather than the vocabulary's logits.
+        let best = self.backend.download(&self.backend.arg_max(&passed.logits, 2)).data[0] as i32;
         let p = passed;
         let presents = [
             p.present_0_key, p.present_0_value, p.present_1_key, p.present_1_value, p.present_2_key, p.present_2_value,
@@ -285,8 +280,4 @@ impl<affine Bk: Backend> Model<Bk> {
         }
         return true;
     }
-}
-
-/// The one position of the logits [`Model::next_token`] reads back.
-struct Last {
 }
