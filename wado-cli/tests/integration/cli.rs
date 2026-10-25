@@ -1502,7 +1502,9 @@ fn test_run_compiles_a_file_under_a_directory_whose_name_is_not_utf8() {
     use std::os::unix::ffi::OsStrExt;
 
     let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join(std::ffi::OsStr::from_bytes(b"not-utf8-\xff"));
+    let dir = tmp
+        .path()
+        .join(std::ffi::OsStr::from_bytes(b"not-utf8-\xff"));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.wado"),
