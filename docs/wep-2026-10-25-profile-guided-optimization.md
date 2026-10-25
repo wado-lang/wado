@@ -77,8 +77,8 @@ test. The flag is not named `--profile`, which already means the sampling
 profiler of `wado run --profile` and `wado test --profile`.
 
 The recording compile does not read an existing profile. A profile is then a
-function of the source and the workloads alone, and recording twice gives the
-same file.
+function of the source and the workloads alone, and recording a deterministic
+workload twice gives the same file.
 
 A workload that traps, or fails an assertion, fails the recording. Its counts
 would stop at the trap, and a profile from a broken workload would mislead.
@@ -142,25 +142,26 @@ Under each module the profile lists each function that holds a measured region,
 with:
 
 - its name and its line, for a reader;
-- the hash of its region plan;
+- the hash of its source text and its region plan;
 - the count of each of its regions, numbered from zero within the function.
 
 Coverage numbers regions across the whole program, so editing one function
 would move every later function's numbers. Numbering within the function keeps
 an edit to one from reaching the counts of another.
 
-### A function whose plan changed has no profile
+### A function whose source or plan changed has no profile
 
-A compile reads a function's counts only when the hash of its current region
-plan equals the recorded one. The plan is each region's kind and its span
-relative to the function's start. It changes with the function's text, and also
-with what outside the text decides its regions: a callee becoming `!`-typed
-starts or ends a region, and `#[coverage(off)]` on the enclosing `impl` or
-module removes them all.
+A compile reads a function's counts only when the hash of its current source
+text and region plan equals the recorded one. The text catches an edit that
+keeps every region where it was but changes which one runs, such as `x == 0`
+becoming `x <= 0`. The plan, each region's kind and its span relative to the
+function's start, catches what outside the text decides its regions: a callee
+becoming `!`-typed starts or ends a region, and `#[coverage(off)]` on the
+enclosing `impl` or module removes them all.
 
 A function whose hash differs is compiled as if no profile existed. A stale
-profile therefore costs only the gain on what changed, and it never marks the
-wrong region.
+profile therefore costs only the gain on what changed, and it never marks a
+region from counts that no longer describe it.
 
 A compile that discards a function's counts says so at `--log-level info`, so
 an author learns when to record again.

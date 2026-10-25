@@ -299,9 +299,10 @@ operand of `&&` and `||`, the early return of `?`, and the statements after one
 that can leave its block with `return`, `break`, `continue` or `?`. A region
 counts as run once any test runs its start.
 
-Each region also counts how often it ran, and LCOV carries the counts. A test
-that traps adds one run for each region it reached, since its count stops at
-the trap.
+Each region also counts how often it ran, and LCOV carries the counts: a
+function's is its body region's, a branch's the region it starts, and a line's
+its innermost region's. A test hands its counts over when it returns, so a test
+that traps loses them and adds one run for each region it reached.
 
 > Not yet implemented: a region reports only whether it ran, and LCOV gives
 > every region that ran a count of one.
