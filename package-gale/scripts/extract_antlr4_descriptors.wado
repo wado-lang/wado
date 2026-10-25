@@ -1986,8 +1986,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             exit(1);
         },
     };
-    // Finalize reads a missing `.expected` as stale, so an oracle that did not
-    // run must stop here rather than sweep the committed tests.
+    // Finalize reads a missing `.expected` as stale, so an entry the oracle never
+    // saw must stop the run here rather than sweep its committed test.
     if let Err(message) = invoke_stage_b_oracle(&jar) {
         eprintln(`extract: ${message}`);
         exit(1);
@@ -1999,7 +1999,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 /// Run the oracle on every `oracle-pending/<C>/<N>.input` against its
 /// action-body-stripped grammar, writing the tree to `<N>.expected`. A case
 /// the oracle cannot pin gets no `.expected`, which finalize reads as stale.
-/// `Err` when the oracle could not run at all.
+/// `Err` when an entry could not be read or the oracle could not run at all.
 fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, Environment, Preopens, Process, Random) {
     let pending_root = fs::join(compat_root_dir(), "oracle-pending");
     let grammars_root = fs::join(compat_root_dir(), grammars_subdir());
@@ -2013,7 +2013,7 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
     let mut pending = 0;
     let mut ok = 0;
     let mut oracle_err = 0;
-    let mut missing_g4 = 0;
+    let mut unreadable = 0;
     for let category of categories {
         let category_dir = fs::join(&pending_root, &category.name);
         let files = fs::read_dir(&category_dir).map_err(|e| `${e}`)?;
@@ -2030,7 +2030,8 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
             let start = match fs::read_to_string(`${base}.start`) {
                 Ok(start) => start,
                 Err(e) => {
-                    eprintln(`  ${label}: ${e} — skipping`);
+                    eprintln(`  ${label}: ${e}`);
+                    unreadable += 1;
                     continue;
                 },
             };
@@ -2039,7 +2040,7 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
                 Ok(grammar) => grammar,
                 Err(e) => {
                     eprintln(`  ${label}: ${e}`);
-                    missing_g4 += 1;
+                    unreadable += 1;
                     continue;
                 },
             };
@@ -2071,7 +2072,10 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
     println(`extract: oracle invoked on ${pending} pending entries:`);
     println(`extract:           ${ok} ok`);
     println(`extract:           ${oracle_err} oracle failures (descriptor needs [stage_b_oracle_skip])`);
-    println(`extract:           ${missing_g4} missing .g4 files`);
+    println(`extract:           ${unreadable} unreadable .start or .g4 files`);
+    if unreadable > 0 {
+        return Err(`${unreadable} pending entries could not be read; leaving committed stage_b_oracle/ tests intact`);
+    }
     if pending > 0 && ok == 0 {
         return Err("the oracle pinned no pending entry; leaving committed stage_b_oracle/ tests intact");
     }
