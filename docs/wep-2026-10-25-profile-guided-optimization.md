@@ -180,9 +180,6 @@ hot path harder than the rest, is left to a later proposal.
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
 applied, so a profiled compile seeds from the snapshot as a plain one does.
-Only a run that compiles several entries, each with a profile of its own, would
-need one snapshot per profile. `wado test` is that run, and the test world
-reads no profile unless asked (below).
 
 ### The source wins over the profile, and says so
 
