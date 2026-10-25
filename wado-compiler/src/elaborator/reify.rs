@@ -5624,7 +5624,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         {
             ctx.address_taken_locals.insert(*index);
         }
-        adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span, &self.tysys.type_table)
+        adjust_receiver_for_self_kind(
+            receiver,
+            self_kind,
+            is_ref_impl,
+            span,
+            &self.tysys.type_table,
+        )
     }
 
     /// `[c[i], c[j]] = [c[j], c[i]]` as `{ let $da_N = j; c.index_swap(i, $da_N) }`,
