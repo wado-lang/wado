@@ -74,7 +74,7 @@ test {
 - Tests are independent, so they may run in any order, and concurrently
 - A test passes or fails as the [Test Outcome Model](#test-outcome-model) states
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
-- [`core:eval`](./stdlib-core-eval.md) belongs to the `test` world too. A program for any other world that reaches it does not compile
+- [`core:eval`](./stdlib-core-eval.md) and [`core:fuel`](./stdlib-core-fuel.md) belong to the `test` world too. A program for any other world that reaches either does not compile
 - Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
 
 ### `#[expect_trap]` Attribute

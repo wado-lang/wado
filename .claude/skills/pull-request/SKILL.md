@@ -43,10 +43,12 @@ touches neither the worktree nor the index.
 
 If conflicting, resolve with the `git-upstream-sync` skill.
 
-If the branch touches the compiler (`wado-compiler/src/`) or the stdlib
-(`wado-compiler/lib/`), run `mise run update-stdlib-coverage-baseline` and
-commit the update. CI fails on any difference from the baseline, a region a
-test now reaches included. `wado-compiler/AGENTS.md` says what it may change.
+If the branch touches what the stdlib tests or the benchmarks compile or run
+on, run `mise run update-baselines` and commit the update: the compiler, the
+stdlib, `benchmark/`, a `package-*` a benchmark imports (Gale), or wasmtime in
+`Cargo.lock`. CI fails on any difference from either baseline: the stdlib
+coverage, a region a test now reaches included, and the fuel benchmarks.
+`wado-compiler/AGENTS.md` says what the coverage baseline may change.
 
 ## Title
 

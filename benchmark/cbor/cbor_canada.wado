@@ -20,6 +20,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     let fc = json_from_bytes::<FeatureCollection, _>(
@@ -28,6 +29,14 @@ test "smoke" {
     let cbor = cbor_to_bytes::<FeatureCollection>(&fc).unwrap();
     let back = cbor_from_bytes::<FeatureCollection, _>(cbor).unwrap();
     assert count_points(&back) == 2;
+}
+
+test "fuel" {
+    let fc = json_from_bytes::<FeatureCollection, _>(#include_bytes("../json_canada/canada.json")).unwrap();
+    let cbor = cbor_to_bytes::<FeatureCollection>(&fc).unwrap();
+    measure("canada/ser", || cbor_to_bytes::<FeatureCollection>(&fc).unwrap().len());
+    let total_points = measure("canada/de", || count_points(&cbor_from_bytes::<FeatureCollection, _>(cbor).unwrap()));
+    assert total_points == 55563;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

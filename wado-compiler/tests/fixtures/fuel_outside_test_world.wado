@@ -1,0 +1,10 @@
+// `core:fuel` is linked only by the `wado test` host, so a command that
+// reaches it is rejected at compile time rather than failing to instantiate.
+use { measure } from "core:fuel";
+
+export fn run() {
+    let _ = measure("one", || 1);
+}
+
+__DATA__
+{"compile_error": "`core:fuel` runs only under `wado test`", "compile_error_codes": ["TEST_WORLD_ONLY_IMPORT"]}

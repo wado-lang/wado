@@ -43,6 +43,7 @@ mise run doc-stdlib
 mise run update-docs-index
 mise run update-rust-paths-baseline
 mise run update-wadopoet-vocabulary
+mise run update-baselines
 mise run format
 mise run test
 mise run test-wado
@@ -255,7 +256,7 @@ run = """
 set -xe -o pipefail
 # package-gale and the stdlib are excluded: `test-gale-o2` and `test-stdlib`
 # cover them, and the full run reaches the stdlib through
-# `update-stdlib-coverage-baseline` already. benchmark/* test blocks need
+# `update-baselines` already. benchmark/* test blocks need
 # no `--dir`: their file reads sit in `export fn run()`, which the test world
 # never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
 # explains the purge and what holding the pages costs in RSS.
@@ -302,13 +303,16 @@ mise run test-stdlib "${1:-O2}" \
     --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json
 """
 
-[tasks.update-stdlib-coverage-baseline]
-description = "Rewrite scripts/stdlib-coverage.json from what the stdlib tests leave unrun"
+# Both baselines move with the compiler and the stdlib, so one task rewrites
+# them, and a branch reaching either commits both.
+[tasks.update-baselines]
+description = "Rewrite the baselines CI holds a pull request to: scripts/stdlib-coverage.json (what the stdlib tests leave unrun) and benchmark/fuel.json (the fuel benchmarks)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run test-stdlib O2 --coverage=lcov,baseline --coverage-include=stdlib
 cp build/coverage/baseline.json scripts/stdlib-coverage.json
+./scripts/exclusive.sh test-fuel node benchmark/fuel.ts write
 """
 
 [tasks.test-log-levels]
@@ -493,7 +497,7 @@ set -xe -o pipefail
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
-  core:icu core:eval core:process"
+  core:icu core:eval core:fuel core:process"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 scripts/dev-bin.sh wado doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -686,13 +690,13 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:process; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:fuel, core:process; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
 # `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
-for package in kiln eval coverage process; do
+for package in kiln eval coverage fuel process; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \
@@ -748,6 +752,10 @@ grep -lE '^#!?\\[TODO\\]' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 [tasks.benchmark-all]
 description = "Run all benchmarks"
 run = "mise run -C benchmark all"
+
+[tasks.test-fuel]
+description = "Measure the `test \"fuel\"` regions of benchmark/ at -O1, -O2 and -O3, and fail on any difference from benchmark/fuel.json"
+run = "./scripts/exclusive.sh test-fuel node benchmark/fuel.ts check"
 
 # The arm an A/B compares against: `origin/main`'s compiler, kept as the one
 # binary, since the worktree and target dir it was built from are gigabytes and

@@ -11,6 +11,7 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
     let mut x = 0.0;
@@ -64,6 +65,10 @@ test "smoke" {
     // tiny grid; verify the work runs and produces a sane non-zero count.
     let total = mandelbrot_total(32, 24, 32);
     assert total > 0;
+}
+
+test "fuel" {
+    measure("render", || mandelbrot_total(1024, 768, 256));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

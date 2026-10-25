@@ -18,6 +18,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     // Empty statuses keeps the input small while still exercising the round-trip.
@@ -27,6 +28,14 @@ test "smoke" {
     let back = from_bytes::<TwitterResponse, _>(bytes).unwrap();
     assert back.statuses.len() == 0;
     assert back.search_metadata.count == 0;
+}
+
+test "fuel" {
+    let json_data = #include_bytes("./twitter.json");
+    let resp = from_bytes::<TwitterResponse, _>(json_data).unwrap();
+    measure("ser", || to_bytes::<TwitterResponse>(&resp).unwrap().len());
+    let count = measure("de", || from_bytes::<TwitterResponse, _>(json_data).unwrap().statuses.len());
+    assert count == 100;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
