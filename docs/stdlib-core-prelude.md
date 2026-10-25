@@ -1554,6 +1554,10 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f32`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f32`
 
 ##### `pub fn default() -> f32`
@@ -1915,6 +1919,10 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f64`
 
 ##### `pub fn default() -> f64`
@@ -2046,6 +2054,10 @@ IEEE 754's `>=`, on the values widened to f32.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f16`
 
 ##### `pub fn default() -> f16`
@@ -2172,6 +2184,10 @@ IEEE 754's `>=`, on the values widened to f32.
 #### `impl Ord for bf16`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for bf16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for bf16`
 

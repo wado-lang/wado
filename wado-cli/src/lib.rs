@@ -24,6 +24,7 @@ pub mod external;
 pub mod fetch;
 mod fingerprint;
 pub mod format;
+pub mod fuel_host;
 pub mod git;
 pub mod http_hooks;
 pub mod init;

@@ -23,6 +23,7 @@ use wasmtime_wasi_tls::{
 use crate::args::CliExit;
 use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker};
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
+use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
 use crate::process_host::{
@@ -30,6 +31,7 @@ use crate::process_host::{
     add_to_linker as add_process_to_linker,
 };
 use wado_host::engine::default_config;
+use wado_host::random;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
@@ -107,6 +109,8 @@ pub struct WasiState {
     coverage: CoverageHits,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
+    /// `wado test` only: the regions this store measured through `core:fuel`.
+    fuel_regions: Vec<FuelRegion>,
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -125,6 +129,18 @@ enum Stdio {
         stdout: MemoryOutputPipe,
         stderr: MemoryOutputPipe,
     },
+}
+
+/// What a [`WasiState`]'s `wasi:random/insecure` and `insecure-seed` answer.
+pub enum InsecureRandom {
+    /// The host's randomness. `insecure-seed` seeds a hash map's protection
+    /// against denial of service, so a guest serving untrusted input needs it
+    /// unpredictable.
+    Host,
+    /// The same on every run, so a metered test's fuel is a function of the
+    /// program: `HashMap::new` hashes under `insecure-seed`, and a seed changes
+    /// how far its probes go.
+    Fixed,
 }
 
 impl WasiState {
@@ -148,7 +164,14 @@ impl WasiState {
         process: ProcessGrant,
     ) -> Result<Self> {
         let preopens = Preopens::open(preopened_dirs, process)?;
-        Ok(Self::build(&preopens, args, true, Stdio::Inherit, None))
+        Ok(Self::build(
+            &preopens,
+            args,
+            true,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        ))
     }
 
     /// Like [`Self::new`], but captures the guest's stdout/stderr into
@@ -173,6 +196,7 @@ impl WasiState {
         args: &[String],
         eval: EvalSession,
         process: ProcessGrant,
+        insecure_random: InsecureRandom,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
@@ -185,6 +209,7 @@ impl WasiState {
                 stderr: stderr.clone(),
             },
             Some(eval),
+            insecure_random,
         );
         Ok((state, stdout, stderr))
     }
@@ -200,7 +225,14 @@ impl WasiState {
     /// services: an HTTP server's env typically holds secrets (DB
     /// credentials, API tokens) that must not leak into handler components.
     pub fn new_no_inherit_env_with_preopens(preopens: &Preopens, args: &[String]) -> Self {
-        Self::build(preopens, args, false, Stdio::Inherit, None)
+        Self::build(
+            preopens,
+            args,
+            false,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        )
     }
 
     /// The one place that decides what a guest reaches.
@@ -210,8 +242,15 @@ impl WasiState {
         inherit_env: bool,
         stdio: Stdio,
         eval: Option<EvalSession>,
+        insecure_random: InsecureRandom,
     ) -> Self {
         let mut builder = WasiCtx::builder();
+        match insecure_random {
+            InsecureRandom::Host => {}
+            InsecureRandom::Fixed => {
+                random::fixed_seed(&mut builder);
+            }
+        }
         let guest_stdio = match stdio {
             Stdio::Inherit => {
                 builder.inherit_stdio();
@@ -240,12 +279,18 @@ impl WasiState {
             eval,
             coverage: CoverageHits::default(),
             fuel_start: None,
+            fuel_regions: Vec::new(),
         }
     }
 
     /// The coverage regions this store reported.
     pub fn coverage_hits(&mut self) -> &mut CoverageHits {
         &mut self.coverage
+    }
+
+    /// The regions this store measured through `core:fuel`.
+    pub fn fuel_regions(&mut self) -> &mut Vec<FuelRegion> {
+        &mut self.fuel_regions
     }
 
     /// The store's handle on `core:process`.
@@ -575,7 +620,9 @@ pub fn create_store(
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
 /// in-memory pipes instead of inherited — used by `wado test` so a
 /// test's own prints can be attributed to its result instead of racing
-/// directly onto the host's real stdout/stderr.
+/// directly onto the host's real stdout/stderr. A metered test's insecure
+/// randomness is [`InsecureRandom::Fixed`]; only a test, which serves no
+/// untrusted input, may give up its unpredictability.
 ///
 /// # Errors
 ///
@@ -587,8 +634,18 @@ pub fn create_test_store(
     eval: EvalSession,
     process: ProcessGrant,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let (state, stdout, stderr) =
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval, process)?;
+    let insecure_random = if engine.get_consume_fuel() {
+        InsecureRandom::Fixed
+    } else {
+        InsecureRandom::Host
+    };
+    let (state, stdout, stderr) = WasiState::new_capturing_stdio(
+        preopened_dirs,
+        &[program.to_owned()],
+        eval,
+        process,
+        insecure_random,
+    )?;
     Ok((new_store(engine, state), stdout, stderr))
 }
 
@@ -605,8 +662,8 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// Like [`create_linker`], plus `core:eval` and `core:coverage`, which only a
-/// test may reach.
+/// Like [`create_linker`], plus `core:eval`, `core:coverage` and `core:fuel`,
+/// which only a test may reach.
 ///
 /// # Errors
 ///
@@ -616,6 +673,7 @@ pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker = host_linker(component)?;
     add_eval_to_linker(&mut linker, WasiState::eval_session)?;
     add_coverage_to_linker(&mut linker, WasiState::coverage_hits)?;
+    add_fuel_to_linker(&mut linker)?;
     linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }

@@ -1,30 +1,29 @@
 name: Benchmark
 
+# Records two deterministic measures on gh-pages for every push to main: fuel
+# (the Wasm instructions a region of a `test "fuel"` block ran, at -O1, -O2 and
+# -O3) and wasm size. Nothing here gates a pull request: CI's `test-fuel` job
+# holds fuel to `benchmark/fuel.json` exactly. Wall-clock comparison against
+# other implementations stays local (`mise run benchmark-all`), since a shared
+# runner cannot time it reliably.
 on:
   push:
     branches: [main]
     paths-ignore:
       - '**/*.md'
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
 
-# Only push events write to gh-pages, and two concurrent writers race on the
-# branch tip, so push runs share one group and are never cancelled: one killed
-# mid-write loses its data. Pull-request runs only read gh-pages, so they group
-# per ref and a new push cancels the run it supersedes.
+# Two concurrent writers race on the gh-pages tip, so runs share one group and
+# are never cancelled: one killed mid-write loses its data.
 concurrency:
-  group: benchmark-gh-pages-${{ github.event_name == 'push' && 'main' || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: benchmark-gh-pages
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
 permissions:
-  contents: write      # push benchmark data to gh-pages
-  pull-requests: write # post regression comments on PRs
+  contents: write # push benchmark data to gh-pages
 
 jobs:
   benchmark:
@@ -34,17 +33,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7.0.0
+      - uses: ./.github/actions/setup
         with:
-          node-version: 'lts/*'
-
-      - uses: Swatinem/rust-cache@v2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wado
-        run: cargo build --release --bin wado
+        run: cargo build --locked --bin wado
 
-      - name: Run runtime benchmarks
-        run: node .github/scripts/run_wado_benchmarks.ts > runtime-benchmark.json
+      # What main measures, even where it drifted from the baseline (two pull
+      # requests each updating it).
+      - name: Run fuel benchmarks
+        run: node benchmark/fuel.ts series > fuel-benchmark.json
 
       - name: Run wasm-size benchmarks
         run: node .github/scripts/run_wado_wasm_size.ts > wasm-size-benchmark.json
@@ -52,25 +51,21 @@ jobs:
       - name: Force-fetch gh-pages branch
         run: git fetch origin gh-pages:gh-pages --force
 
-      # ── main branch: record data only, no alerts ──────────────────────────
-
-      - name: Store runtime benchmark data
-        if: github.event_name == 'push'
+      - name: Store fuel benchmark data
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: customBiggerIsBetter
-          output-file-path: runtime-benchmark.json
+          tool: customSmallerIsBetter
+          output-file-path: fuel-benchmark.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: false
           fail-on-alert: false
           summary-always: true
           gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/runtime-throughput
+          benchmark-data-dir-path: benchmarks/fuel
           skip-fetch-gh-pages: true
 
       - name: Store wasm-size benchmark data
-        if: github.event_name == 'push'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: customSmallerIsBetter
@@ -85,70 +80,19 @@ jobs:
           skip-fetch-gh-pages: true
 
       - name: Deploy combined benchmark pages
-        if: github.event_name == 'push'
         run: |
           git worktree add /tmp/gh-pages gh-pages
-          mkdir -p /tmp/gh-pages/benchmarks/runtime-throughput
+          mkdir -p /tmp/gh-pages/benchmarks/fuel
           mkdir -p /tmp/gh-pages/benchmarks/wasm-size
-          cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime-throughput/index.html
+          cp .github/pages/fuel-index.html /tmp/gh-pages/benchmarks/fuel/index.html
           cp .github/pages/wasm-size-index.html /tmp/gh-pages/benchmarks/wasm-size/index.html
           cd /tmp/gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add benchmarks/runtime-throughput/index.html benchmarks/wasm-size/index.html
+          git add benchmarks/fuel/index.html benchmarks/wasm-size/index.html
           git diff --cached --quiet || {
             git commit -m "Deploy combined benchmark graphs"
             git push origin gh-pages
           }
           cd -
           git worktree remove /tmp/gh-pages
-
-      # ── PRs: compare against baseline, comment + fail on regression ───────
-
-      # Only `-O2` is compared — the level a program ships at. Every level is
-      # recorded above, so `-O1` and `-O3` keep their history on the pages.
-      #
-      # A runtime ratio below 2x is CI runner noise, so the comparison warns at
-      # 2x and fails at 4x.
-      - name: Select the compared benchmarks
-        if: github.event_name == 'pull_request'
-        run: |
-          jq '[.[] | select(.name | endswith("(-O2)"))]' runtime-benchmark.json > runtime-o2.json
-
-      - name: Compare runtime benchmarks
-        if: github.event_name == 'pull_request'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: customBiggerIsBetter
-          output-file-path: runtime-o2.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          save-data-file: false
-          comment-on-alert: true
-          fail-on-alert: true
-          alert-threshold: '200%'
-          fail-threshold: '400%'
-          alert-comment-cc-users: ''
-          summary-always: true
-          gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/runtime-throughput
-          skip-fetch-gh-pages: true
-
-      - name: Compare wasm-size benchmarks
-        if: github.event_name == 'pull_request'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: customSmallerIsBetter
-          output-file-path: wasm-size-benchmark.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          save-data-file: false
-          comment-on-alert: true
-          fail-on-alert: true
-          alert-threshold: '110%'
-          fail-threshold: '130%'
-          alert-comment-cc-users: ''
-          summary-always: true
-          gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/wasm-size
-          skip-fetch-gh-pages: true

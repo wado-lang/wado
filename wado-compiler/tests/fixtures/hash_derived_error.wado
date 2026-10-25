@@ -1,6 +1,5 @@
 // A derived `Hash` needs every field and payload to hash: a `fn` field blocks
-// it, as it blocks `Eq`, and so does an `f64` field, which compares but does
-// not hash.
+// it, as it blocks `Eq`.
 
 use { HashMap } from "core:collections";
 
@@ -14,18 +13,12 @@ variant Event {
     Idle,
 }
 
-struct Reading {
-    id: i32,
-    value: f64,
-}
-
 export fn run() {
     let m = HashMap::<Callback, i32>::new();
     let n = HashMap::<Event, i32>::new();
-    let r = HashMap::<Reading, i32>::new();
 }
 
 __DATA__
 {
-    "compile_error": ":23:13: analysis error: type 'Callback' does not implement trait 'Hash' required by bound on 'K'\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`; 24:13: type 'Event' does not implement trait 'Hash' required by bound on 'K'\n  note: `Event` does not implement `Hash` because variant `Fire` of type `Callback` does not implement `Hash`\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`; 25:13: type 'Reading' does not implement trait 'Hash' required by bound on 'K'\n  note: `Reading` does not implement `Hash` because field `value` of type `f64` does not implement `Hash`"
+    "compile_error": ":17:13: analysis error: type 'Callback' does not implement trait 'Hash' required by bound on 'K'\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`; 18:13: type 'Event' does not implement trait 'Hash' required by bound on 'K'\n  note: `Event` does not implement `Hash` because variant `Fire` of type `Callback` does not implement `Hash`\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`"
 }

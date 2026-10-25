@@ -916,8 +916,8 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
-/// The FQ prefix of every `core:eval` interface.
-const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
+/// The packages only `wado test` supplies.
+const TEST_WORLD_ONLY_PACKAGES: &[&str] = &["core:eval", "core:fuel"];
 
 #[derive(Default)]
 struct LibSurface {
@@ -2260,19 +2260,21 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // Only `wado test` supplies `core:eval`, so a component of any other world
-    // reaching it would build and then fail to instantiate wherever it runs.
+    // A component of any other world reaching a test-world-only package would
+    // build and then fail to instantiate wherever it runs.
     if !nir.is_test_world()
-        && let Some(entry) = wir_package
-            .import_plan
-            .iter()
-            .find(|entry| entry.fq.starts_with(EVAL_PACKAGE_PREFIX))
+        && let Some((entry, package)) = wir_package.import_plan.iter().find_map(|entry| {
+            let (package, _) = entry.fq.split_once('/')?;
+            TEST_WORLD_ONLY_PACKAGES
+                .contains(&package)
+                .then_some((entry, package))
+        })
     {
         report_without_span(
             logger,
-            compiler_host::Code::EvalOutsideTestWorld,
+            compiler_host::Code::TestWorldOnlyImport,
             format!(
-                "this program imports `{}`, but `core:eval` runs only under `wado test`; \
+                "this program imports `{}`, but `{package}` runs only under `wado test`; \
                  a program for the `{}` world cannot reach it",
                 entry.fq, nir.target_world,
             ),

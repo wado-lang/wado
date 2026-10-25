@@ -16,6 +16,7 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 // Sieve over a caller-owned buffer. Resets `is_prime` to all-true, then marks
 // composites and counts primes. The buffer is reused across iterations so no
@@ -57,6 +58,12 @@ test "smoke" {
     // π(100) = 25
     let mut is_prime = List::<bool>::filled(101, true);
     assert sieve_count(&mut is_prime, 100) == 25;
+}
+
+test "fuel" {
+    let limit = 2000000;
+    let mut is_prime = List::<bool>::filled(limit + 1, true);
+    measure("count", || sieve_count(&mut is_prime, limit));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

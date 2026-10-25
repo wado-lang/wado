@@ -18,6 +18,7 @@ mod eval_dependency;
 // Installs `wado-<name>` shell scripts on a temporary `PATH`.
 #[cfg(unix)]
 mod external_subcommand;
+mod fuel;
 mod gale_cli;
 mod git_dependency;
 mod kiln_build_dep;

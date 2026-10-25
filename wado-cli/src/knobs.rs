@@ -329,7 +329,7 @@ impl RuntimeKnobOpt {
                 long: Some("report-fuel"),
                 short: None,
                 value: None,
-                desc: "Meter the guest in wasmtime fuel (about one unit per Wasm\ninstruction) and report what it spent: per program (run), per\ntest (test), per request (serve, one request at a time).\nPure computation spends the same fuel on every machine; a guest\nwaiting on I/O can loop more or less, as the host answers",
+                desc: "Meter the guest in wasmtime fuel (about one unit per Wasm\ninstruction) and report what it spent: per program (run), per\ntest (test), per request (serve, one request at a time).\nA test's wasi:random/insecure and insecure-seed answer the same on\nevery run, and its core:fuel regions are reported too.\nPure computation spends the same fuel on every machine; a guest\nwaiting on I/O can loop more or less, as the host answers",
             },
             Self::DenyProcess => OptSpec {
                 long: Some("deny-process"),

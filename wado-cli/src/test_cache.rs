@@ -13,15 +13,17 @@ use crate::fingerprint::Input;
 use crate::input_cache::InputCache;
 use crate::knobs::RuntimeKnobs;
 
-/// The interfaces that hand a test nothing: output, its types, and exit.
-/// Every other import is an effect whose answer can change between runs (a
-/// clock, randomness, a file, the network, `core:eval`), so it decides the
-/// outcome as much as the compile's inputs do.
-const OUTPUT_ONLY_IMPORTS: &[&str] = &[
+/// The interfaces that hand a cached run nothing its key does not decide:
+/// output, its types, exit, and `core:fuel`, whose `spent` answers `None`
+/// since a metered run is never cached. Every other import is an effect whose
+/// answer can change between runs (a clock, randomness, a file, the network,
+/// `core:eval`), so it decides the outcome as much as the compile's inputs do.
+const OUTCOME_NEUTRAL_IMPORTS: &[&str] = &[
     "wasi:cli/types",
     "wasi:cli/stdout",
     "wasi:cli/stderr",
     "wasi:cli/exit",
+    "core:fuel/fuel-host",
 ];
 
 /// Whether a component importing `imports` can be cached: its tests depend on
@@ -31,7 +33,7 @@ pub(crate) fn cacheable<'a>(mut imports: impl Iterator<Item = &'a str>) -> bool 
         let unversioned = name
             .split_once('@')
             .map_or(name, |(interface, _)| interface);
-        OUTPUT_ONLY_IMPORTS.contains(&unversioned)
+        OUTCOME_NEUTRAL_IMPORTS.contains(&unversioned)
     })
 }
 

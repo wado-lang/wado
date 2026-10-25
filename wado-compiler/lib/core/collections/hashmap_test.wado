@@ -429,3 +429,22 @@ test "enum and flags keys hash by their case and bits" {
     assert access[Access::Write | Access::Read] == 3;
     assert access.get(Access::Read) == null;
 }
+
+test "float keys hash as they compare" {
+    let wide = [0.0, -0.0, f64::NAN, -f64::NAN, 1.5] as HashSet<f64>;
+    assert wide.len() == 3;
+    let narrow = [0.0, -0.0, f32::NAN, 2.5] as HashSet<f32>;
+    assert narrow.len() == 3;
+    let half = [
+        f16::from_bits(0x8000),
+        f16::from_bits(0),
+        f16::NAN,
+    ] as HashSet<f16>;
+    assert half.len() == 2;
+    let brain = [
+        bf16::from_bits(0x8000),
+        bf16::from_bits(0),
+        bf16::NAN,
+    ] as HashSet<bf16>;
+    assert brain.len() == 2;
+}
