@@ -209,7 +209,6 @@ impl LoopSnapshot {
             frame.env.swap_remove(index);
             frame.place_aliases.swap_remove(index);
             frame.ref_roots.swap_remove(index);
-            frame.ref_global_aliases.swap_remove(index);
         }
         frame
             .place_fields

@@ -4746,10 +4746,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.reify_string_format(pieces, template.span, ctx)
     }
 
-    /// `` String::format`…` `` over `pieces`, resolved here rather than by
-    /// name, so it reaches the prelude's `String` wherever an import or
-    /// `#![no_prelude]` takes the name. A template with no hole is its text,
-    /// and one that is a lone `String` hole is that value.
     /// `value` derefed down to its pointee where that pointee awaits
     /// substitution: in generic code `&T` is a reference to a `T`, so the
     /// hole renders through `T`'s impl rather than the `&`-prefixing one a
@@ -4773,6 +4769,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         value
     }
 
+    /// `` String::format`…` `` over `pieces`, resolved here rather than by
+    /// name, so it reaches the prelude's `String` wherever an import or
+    /// `#![no_prelude]` takes the name. A template with no hole is its text,
+    /// and one that is a lone `String` hole is that value.
     fn reify_string_format(
         &mut self,
         pieces: TemplatePieces,

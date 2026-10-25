@@ -1,8 +1,10 @@
-//! `[..i32]` is a tuple whose length a call settles, so a `let` cannot name it.
+//! `[..i32]` is a tuple whose length a call settles, so a `let` cannot name
+//! one, even in a function whose signature spells the same `[..i32]`.
 
-export fn run() {
+fn sum(values: [..i32]) -> i32 {
     let t: [..i32] = [1, 2, 3];
+    return 0;
 }
 
 __DATA__
-{"compile_error": ":4:15: analysis error: `[..i32]` has a length only a call settles, so it may appear only in a function's parameter or return type"}
+{"compile_error": ":5:15: parse error: `[..i32]` has a length only a call settles, so it may appear only in a function's parameter or return type"}

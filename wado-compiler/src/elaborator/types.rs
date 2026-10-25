@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility};
+use crate::ast::{self, AstId, Expr, Visibility, repeat_outside_signature};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -1692,9 +1692,7 @@ impl TypeError {
             ),
             TypeError::RepeatOutsideSignature { element, span } => (
                 Code::UnknownType,
-                format!(
-                    "`[..{element}]` has a length only a call settles, so it may appear only in a function's parameter or return type"
-                ),
+                repeat_outside_signature(element),
                 *span,
             ),
             TypeError::UnknownEffect { name, span } => (

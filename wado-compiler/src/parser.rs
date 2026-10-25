@@ -21,6 +21,7 @@ use crate::ast::{
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    repeat_outside_signature,
 };
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -98,11 +99,15 @@ pub struct Parser {
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
     bodies: Bodies,
-    /// Each skipped body's block, and the position of its `{`.
-    skipped: Vec<(AstId, usize)>,
+    /// Each skipped body's block, the position of its `{`, and its
+    /// [`Self::body_packs`].
+    skipped: Vec<(AstId, usize, Option<Vec<String>>)>,
     /// The packs the `impl` or `trait` whose members are being read declares.
     /// A member's `..X` naming none of them, nor one of its own, repeats `X`.
     enclosing_packs: Vec<String>,
+    /// The packs in scope while a function's body is read. A `..X` there names
+    /// one of them: only a signature mints a repeat, which a call settles.
+    body_packs: Option<Vec<String>>,
 }
 
 /// Whether the parser reads function bodies.
@@ -311,6 +316,7 @@ impl Parser {
             bodies: Bodies::Read,
             skipped: Vec::new(),
             enclosing_packs: Vec::new(),
+            body_packs: None,
         }
     }
 
@@ -342,8 +348,9 @@ impl Parser {
         );
         self.bodies = Bodies::Read;
         let mut read = hashmap::IndexMap::<AstId, Vec<Stmt>>::default();
-        for (block, pos) in std::mem::take(&mut self.skipped) {
+        for (block, pos, packs) in std::mem::take(&mut self.skipped) {
             self.pos = pos;
+            self.body_packs = packs;
             match self.parse_block() {
                 Ok(body) => {
                     read.insert(block, body.stmts);
@@ -351,6 +358,7 @@ impl Parser {
                 Err(e) => self.errors.push(e),
             }
         }
+        self.body_packs = None;
         let functions = module.items.iter_mut().flat_map(|item| match item {
             Item::Function(func) => std::slice::from_mut(func),
             Item::Impl(decl) => &mut decl.methods[..],
@@ -497,7 +505,7 @@ impl Parser {
         self.contextual_keywords
             .truncate(cp.contextual_keywords_len);
         let rolled_back = AstId::new(self.ast_id_space, cp.next_ast_id);
-        self.skipped.retain(|(block, _)| *block < rolled_back);
+        self.skipped.retain(|(block, ..)| *block < rolled_back);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -1425,8 +1433,11 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
-        self.enclosing_packs.clear();
-        match self.peek_kind() {
+        // A local item in a function body is read as a module item is, and
+        // what follows it in the body and the impl still sees the packs.
+        let outer_packs = std::mem::take(&mut self.enclosing_packs);
+        let outer_body_packs = self.body_packs.take();
+        let item = match self.peek_kind() {
             TokenKind::Use => self
                 .parse_use_decl(visibility, has_export, attrs)
                 .map(Item::Use),
@@ -1469,7 +1480,10 @@ impl Parser {
                 message: format!("expected item, found {}", self.peek_kind()),
                 span: self.peek().span,
             }),
-        }
+        };
+        self.enclosing_packs = outer_packs;
+        self.body_packs = outer_body_packs;
+        item
     }
 
     /// Parse test declaration: `[#[attr]] test "name" { ... }` or `[#[attr]] test { ... }`
@@ -2246,27 +2260,16 @@ impl Parser {
             type_params.push(hole);
         }
 
-        let contracts = self.parse_contract_clauses()?;
-
-        // Check for bodyless function declaration (compiler built-in /
-        // trait-method signature) e.g., `pub fn stream_new() -> i64;`
-        let mut decl_end_span = None;
-        let body = if self.check(&TokenKind::Semicolon) {
-            self.advance();
-            // Span must cover through the terminating `;`, not just the `fn`
-            // keyword line. The formatter's blank-line accounting keys off
-            // `span.end_line()`; a single-line span would drift once the
-            // signature is reflowed across multiple lines, manufacturing
-            // blank lines between members on the next pass (idempotency
-            // break). A function with a body already covers the full extent
-            // via the block span below.
-            decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
-            None
-        } else if self.bodies == Bodies::Skipped {
-            Some(self.skip_block()?)
-        } else {
-            Some(self.parse_block()?)
-        };
+        let packs = self
+            .enclosing_packs
+            .iter()
+            .cloned()
+            .chain(pack_names(&type_params))
+            .collect();
+        let outer_body_packs = self.body_packs.replace(packs);
+        let contracts_and_body = self.parse_contracts_and_body();
+        self.body_packs = outer_body_packs;
+        let (contracts, body, decl_end_span) = contracts_and_body?;
 
         let span = match (&body, decl_end_span) {
             (Some(b), _) => start_span.merge(&b.span),
@@ -2298,6 +2301,35 @@ impl Parser {
             span,
         };
         Ok((func, contracts))
+    }
+
+    /// A function's `contract` clauses and its body, `None` for a bodyless
+    /// declaration, which also hands back where its `;` ends it.
+    fn parse_contracts_and_body(
+        &mut self,
+    ) -> ParseResult<(Vec<Stmt>, Option<Block>, Option<Span>)> {
+        let contracts = self.parse_contract_clauses()?;
+
+        // Check for bodyless function declaration (compiler built-in /
+        // trait-method signature) e.g., `pub fn stream_new() -> i64;`
+        let mut decl_end_span = None;
+        let body = if self.check(&TokenKind::Semicolon) {
+            self.advance();
+            // Span must cover through the terminating `;`, not just the `fn`
+            // keyword line. The formatter's blank-line accounting keys off
+            // `span.end_line()`; a single-line span would drift once the
+            // signature is reflowed across multiple lines, manufacturing
+            // blank lines between members on the next pass (idempotency
+            // break). A function with a body already covers the full extent
+            // via the block span below.
+            decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
+            None
+        } else if self.bodies == Bodies::Skipped {
+            Some(self.skip_block()?)
+        } else {
+            Some(self.parse_block()?)
+        };
+        Ok((contracts, body, decl_end_span))
     }
 
     /// The hidden default method holding the `contract` clauses of the trait
@@ -2809,7 +2841,7 @@ impl Parser {
     /// braces in `tokens` balance in any well-formed body.
     fn skip_block(&mut self) -> ParseResult<Block> {
         let id = self.alloc_ast_id();
-        self.skipped.push((id, self.pos));
+        self.skipped.push((id, self.pos, self.body_packs.clone()));
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
         let mut depth = 1;
@@ -5593,6 +5625,15 @@ impl Parser {
             self.consume_dot_dot()?;
             // The span starts at the name, not the `..`, as on every type node.
             let (name, span) = self.consume_ident_with_span()?;
+            if let Some(packs) = &self.body_packs
+                && !packs.contains(&name)
+            {
+                self.errors.push(ParseError {
+                    message: repeat_outside_signature(&name),
+                    span,
+                });
+                return Ok(Type::Error(span));
+            }
             return Ok(Type::TypePackSpread(name, span));
         }
         self.parse_type()
