@@ -58,9 +58,12 @@ profile churns.
 An attribute was chosen over a new `workload` block. A block would add a
 keyword to the reserved vocabulary, and it would not run under `wado test`.
 
-### `wado pgo` records the profile
+### `wado test --pgo` records the profile
 
-`wado pgo` compiles the package's workloads with probes and runs them. A probe
+`wado test --pgo` compiles the package's workloads with probes and runs only
+them. Recording belongs to the test runner, as coverage does, since a workload
+is a test. The flag is not named `--profile`, which already means the sampling
+profiler of `wado run --profile` and `wado test --profile`. A probe
 counts every run of its region. It measures the package's modules, its
 dependencies' and the `core:` modules, since a workload's hot path runs through
 all three.
@@ -80,8 +83,8 @@ its hits. A test that returns hands its counts to the runner when it ends. A
 test that traps contributes only its hits, which count as one run each. LCOV's
 `DA` and `BRDA` lines carry the counts.
 
-A count is an `i64`. One probe and one counter serve both coverage and
-`wado pgo`.
+A count is an `i64`. One probe and one counter serve both `--coverage` and
+`--pgo`.
 
 [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md) rejected counting for
 two reasons. A count read at the end is lost when a test traps, and a host call
@@ -98,9 +101,20 @@ format would break the rule against committing binaries. A file under `build/`
 would not reach CI or a release build, so their output would differ from the
 author's.
 
-A package keeps one profile at its root, beside `wado.toml`, merged from all of
-its workloads. A single-file program without a manifest keeps one beside the
-file. `benchmark/` is mostly such programs.
+A package keeps one profile, `pgo/default.pgo` under its root, merged from all
+of its workloads. A single-file program without a manifest keeps
+`pgo/<stem>.pgo` in its directory, since one directory may hold several such
+programs. `benchmark/` is mostly such programs. The name follows Go, whose
+`default.pgo` is likewise committed with the main package and read without a
+flag. A directory keeps the profiles out of the source listing, and the
+extension is not `.json`, so no formatter rewrites what `--pgo` writes.
+
+Only the entry's profile is read. A dependency's own `pgo/` is ignored, as Go
+ignores a non-main package's `default.pgo`: the entry's workloads already
+measure the dependency's code as the entry uses it.
+
+Every count moves when the code does, so `.gitattributes` marks a profile
+`linguist-generated -diff`, as it marks the repository's other generated files.
 
 The profile lists each measured module by the path coverage uses, a file
 relative to the package root or a `core:` module by its import path. Under each
@@ -172,8 +186,8 @@ level.
    shows what counting costs.
 2. [ ] `#[workload]`. The attribute is parsed and run as a test, and spec
    fixtures state it.
-3. [ ] `wado pgo`. It records the workloads into the committed profile, with
-   the per-function hash.
+3. [ ] `wado test --pgo`. It records the workloads into `pgo/`, with the
+   per-function hash.
 4. [ ] Applying the profile. Reify marks the regions that never ran, a function
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
@@ -187,7 +201,7 @@ level.
 
 ## Known gaps
 
-- [ ] `wado pgo` and the profile's file name are working names.
+- [ ] `--pgo` and the `pgo/` directory are working names.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker.
 - [ ] A region is measured once for all of a generic function's
