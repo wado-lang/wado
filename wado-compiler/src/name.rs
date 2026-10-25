@@ -374,12 +374,6 @@ pub fn template_segment_helper_name(mangled_shape: &str) -> String {
     format!("$template_segment${mangled_shape}")
 }
 
-/// Name of the global holding a module's `serial`-th distinct template segment
-/// text (WEP 2026-01-10).
-pub fn template_segment_global_name(serial: usize) -> String {
-    format!("$template_text${serial}")
-}
-
 /// Name of the synthesized hole-render helper for a template shape. Lowering
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {

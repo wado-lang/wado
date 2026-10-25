@@ -39,9 +39,8 @@ Three things the language has grown since decide the shape:
 
 Together they let the static part of a template live where a tag body reads
 it as a constant. Its specifiers, its arity and the type at each hole live in
-a _type_. Its literal segments live in the value, as references to globals
-holding each text once. That is what makes a tagged template cost what the
-untagged one costs.
+a _type_. Its literal segments live in the value, as string literals. That is
+what makes a tagged template cost what the untagged one costs.
 
 ## Decision
 
@@ -82,10 +81,9 @@ reached only through the bound the tag declares.
 
 The value holds one field per hole, then the literal text: each segment twice,
 with escapes processed and as written. The text is per site, so it lives in the
-value, and the type stays one per shape. A segment field is a `&String` to an
-immutable global, one per distinct text in the module, so building the value
-allocates nothing for its text, and a tag reads a segment as a `StrSlice` over
-it.
+value, and the type stays one per shape. A segment field is a `String` built
+from the literal, which constant object globalization hoists as it hoists any
+constant literal, and a tag reads a segment as a `StrSlice` over it.
 
 The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
 is its holes, each spelled as its type and specifier, cut to 50 characters with
@@ -188,23 +186,19 @@ sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`
 lowers to
 
 ```wado
-global $template_text$0: String = "SELECT * FROM users WHERE id = ";
-global $template_text$1: String = " AND name = ";
-global $template_text$2: String = "";
-
 $tagged: {
     sql($Tmpl_a3f1 {
         h0: id, h1: &user.name,
-        s0: &$template_text$0, r0: &$template_text$0,
-        s1: &$template_text$1, r1: &$template_text$1,
-        s2: &$template_text$2, r2: &$template_text$2,
+        s0: "SELECT * FROM users WHERE id = ", r0: "SELECT * FROM users WHERE id = ",
+        s1: " AND name = ", r1: " AND name = ",
+        s2: "", r2: "",
     })
 }
 ```
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
 its hole holds the handle. `s{k}` is segment `k` with escapes processed, `r{k}`
-as written; the two share a global where they spell one text. A hole that names
+as written. A hole that names
 storage is read or referenced
 where it stands: a local, a global, or a field or element path rooted at one. Any
 other hole expression is evaluated once into a local of the block, which the
@@ -330,8 +324,8 @@ What the tag body compiles to, once monomorphized, inlined and folded:
   every `index()` / `has_spec()` is a field projected out of that global,
   which `niri` folds to the literal.
 - `lit(t)` / `raw(t)` views a segment field of the template, at an index
-  `members()` makes constant. The field is a reference to an immutable global,
-  so the call site pays one `global.get` per segment and allocates nothing. A
+  `members()` makes constant. The field is a string literal, which
+  specialization folds into the tag's clone and globalization hoists. A
   segment field the tag never reads is passed nowhere.
 - `get()` is a projection of the template struct's field at a constant index,
   folded to a direct field read after inlining, as `StructField::get` is. Its

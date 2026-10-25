@@ -1324,7 +1324,9 @@ pub(super) fn generate_hole_bridge_helpers(
             value_type: hole_type,
         })
         .collect();
-    let segment_type = type_table.borrow_mut().template_segment_type();
+    let string_type = type_table
+        .borrow_mut()
+        .make_compiler_struct(CompilerItem::String);
     let segments: Vec<ReadBridgeMember> = shape
         .segment_keys()
         .map(|key| {
@@ -1333,8 +1335,8 @@ pub(super) fn generate_hole_bridge_helpers(
                 name,
                 key,
                 index,
-                field_type: segment_type,
-                value_type: segment_type,
+                field_type: string_type,
+                value_type: string_type,
             }
         })
         .collect();
@@ -1352,7 +1354,7 @@ pub(super) fn generate_hole_bridge_helpers(
         &segments,
         (
             |subject, _| template_segment_helper_name(subject),
-            Read::Value,
+            Read::Ref,
         ),
         struct_type,
         ref_struct_type,
@@ -1600,8 +1602,10 @@ fn generate_template_reflect_impls(
     );
     let tail_view = {
         let mut tt = module.type_table.borrow_mut();
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
         TailView {
-            segment_type: tt.template_segment_type(),
+            string_type,
+            string_ref_type: tt.make_ref(string_type),
             view_type: tt.make_compiler_struct(CompilerItem::StrSlice),
             view: method_ref(&tt, CompilerItem::StringView),
         }
@@ -1712,7 +1716,8 @@ fn generate_template_reflect_impls(
 
 /// What a synthesized `tail` reads a segment as, and calls to view it.
 struct TailView {
-    segment_type: TypeId,
+    string_type: TypeId,
+    string_ref_type: TypeId,
     view_type: TypeId,
     view: FunctionRef,
 }
@@ -1733,11 +1738,12 @@ fn generate_template_tail_fn(
         ref_struct_type,
         *field_index,
         field_name,
-        tail_view.segment_type,
+        tail_view.string_type,
         span,
     );
+    let receiver = ref_expr(segment, tail_view.string_ref_type, span);
     let read = TirExpr::new(
-        TirExprKind::method_call(Box::new(segment), tail_view.view.clone(), vec![], vec![]),
+        TirExprKind::method_call(Box::new(receiver), tail_view.view.clone(), vec![], vec![]),
         tail_view.view_type,
         span,
     );
