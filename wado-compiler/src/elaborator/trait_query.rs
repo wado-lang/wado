@@ -967,20 +967,22 @@ impl TypeSystem {
         )
     }
 
-    /// Whether `type_id` answers every one of `bounds`, each at the arguments it
-    /// writes. One naming only variables a pending call is still to answer may
-    /// become a type that does, and is checked once it is answered.
-    fn bounds_hold(
+    /// The first of `bounds` that `type_id` does not answer, each at the
+    /// arguments it writes. One naming only variables a pending call is still to
+    /// answer may become a type that does, and is checked once it is answered.
+    fn unmet_bound<'b>(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        bounds: &[FqTraitName],
-    ) -> bool {
-        ctx.awaits_pending_call(&self.type_table.borrow(), type_id)
-            || bounds
-                .iter()
-                .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
+        bounds: &'b [FqTraitName],
+    ) -> Option<&'b FqTraitName> {
+        if ctx.awaits_pending_call(&self.type_table.borrow(), type_id) {
+            return None;
+        }
+        bounds
+            .iter()
+            .find(|trait_| !self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
     /// `answer` under the recursion guard. A question already open does not
@@ -2312,6 +2314,21 @@ impl TypeSystem {
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
+        self.unmet_impl_bound(ctx, scope, def, receiver, type_args)
+            .is_none()
+    }
+
+    /// The first bound or kind of an `impl` block's parameters that what the
+    /// receiver substitutes for them misses, which is why the block does not
+    /// apply to it.
+    pub(super) fn unmet_impl_bound(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        def: DefId,
+        receiver: Option<TypeId>,
+        type_args: Option<&[TypeId]>,
+    ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
         let type_params = &header.type_params;
@@ -2319,7 +2336,7 @@ impl TypeSystem {
             .iter()
             .all(|p| p.bounds.is_empty() && p.is_affine)
         {
-            return true;
+            return None;
         }
 
         // The bound's own site says which trait it names and what it writes for
@@ -2341,9 +2358,18 @@ impl TypeSystem {
             })
             .collect();
         let affine_params = ctx.trait_ctx.affine_params();
-        let holds = |(is_affine, bounds): &(bool, Vec<FqTraitName>), type_arg: TypeId| {
-            (*is_affine || !self.is_affine(type_arg, &affine_params))
-                && self.bounds_hold(ctx, scope, type_arg, bounds)
+        let unmet = |param: &str, type_arg: TypeId| {
+            let (is_affine, bounds) = bounds_map.get(param)?;
+            let missing = if !*is_affine && self.is_affine(type_arg, &affine_params) {
+                UnmetKind::Affine
+            } else {
+                UnmetKind::Trait(self.unmet_bound(ctx, scope, type_arg, bounds)?.clone())
+            };
+            Some(UnmetImplBound {
+                param: param.to_string(),
+                type_arg,
+                missing,
+            })
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2351,48 +2377,52 @@ impl TypeSystem {
         if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &header.ty
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
-            let Some(param) = bounds_map.get(inner.name.as_str()) else {
-                return true;
-            };
-            let Some(pointee) = receiver.and_then(|id| self.pointee_of(id)) else {
-                return true;
-            };
-            return holds(param, pointee);
+            let pointee = receiver.and_then(|id| self.pointee_of(id))?;
+            return unmet(inner.name.as_str(), pointee);
         }
-        let Some(type_args) = type_args else {
-            // An existence or bounds check that threaded no positions has
-            // nothing to compare against.
-            return true;
-        };
+        // An existence or bounds check that threaded no positions has nothing
+        // to compare against.
+        let type_args = type_args?;
 
         // `&Container<T>` reads the pointee's arguments, as its positions do.
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
             let names = ImplParamSlots::of(&header.ty, type_params);
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
-            return slots.iter().all(|(&slot, &type_arg)| {
-                names
-                    .name_of(slot)
-                    .and_then(|name| bounds_map.get(name))
-                    .is_none_or(|param| holds(param, type_arg))
-            });
+            return slots
+                .iter()
+                .find_map(|(&slot, &type_arg)| unmet(names.name_of(slot)?, type_arg));
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
         // `type_args` instantiates the same variadic parameter, so each is
         // checked against its bounds.
         if let ast::Type::Tuple(elements) = impl_ty {
-            return elements.iter().all(|elem| {
+            return elements.iter().find_map(|elem| {
                 let ast::Type::TypePackSpread(name, _) = elem else {
-                    return true;
+                    return None;
                 };
-                bounds_map
-                    .get(name.as_str())
-                    .is_none_or(|param| type_args.iter().all(|&type_arg| holds(param, type_arg)))
+                type_args
+                    .iter()
+                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
             });
         }
-        true
+        None
     }
+}
+
+/// A bound or kind an `impl` block places on one of its parameters that the
+/// receiver's argument there misses.
+pub(super) struct UnmetImplBound {
+    pub(super) param: String,
+    pub(super) type_arg: TypeId,
+    pub(super) missing: UnmetKind,
+}
+
+pub(super) enum UnmetKind {
+    Trait(FqTraitName),
+    /// The parameter is not declared `affine`, and the argument is.
+    Affine,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

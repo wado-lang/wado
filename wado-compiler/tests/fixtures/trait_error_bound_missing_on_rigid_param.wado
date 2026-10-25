@@ -1,6 +1,6 @@
 // The other side of `trait_bound_on_rigid_param_is_checked.wado`: `B` carries
 // no `Tag`, so the variadic impl's bound does not hold of `[A, B]` and the call
-// finds no method. Adding `B: Tag` is what makes it resolve.
+// reports it. Adding `B: Tag` is what makes it resolve.
 
 trait Tag with () {
     fn tag(&self) -> String;
@@ -32,4 +32,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "no method 'tag' found"}
+{"compile_error": ":27:12: analysis error: type 'B' does not implement trait 'Tag' required by bound on 'T'"}

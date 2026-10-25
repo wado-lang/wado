@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding};
+use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -990,6 +990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
+<<<<<<< HEAD
     /// Check the bounds impl `def` places on `receiver`'s arguments still
     /// awaiting their report against what answers them, as
     /// [`Self::inherent_impl_applies`] let them meet every bound.
@@ -1013,6 +1014,187 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(binding) = binding {
             self.defer_open_impl_bounds(def, &binding.slots, span);
         }
+||||||| e22eab94d30
+=======
+    /// Whether impl block `def` offers `method_name` to a call: an inherent
+    /// block declaring it, or a trait block whose trait declares it and is in
+    /// scope, as the lookup order has it. A trait-qualified call is offered
+    /// only blocks of `required`'s trait.
+    pub(super) fn impl_offers_method(
+        &self,
+        def: DefId,
+        method_name: &str,
+        required: Option<&RequiredTrait>,
+    ) -> bool {
+        let header = impl_header(&self.tysys.trait_env, &ImplBlockRef(def));
+        let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
+        let Some(trait_) = header.trait_def() else {
+            return required.is_none() && declares(&header.methods);
+        };
+        if required.is_some_and(|r| r.decl != Resolution::Def(trait_)) {
+            return false;
+        }
+        (declares(&header.methods)
+            || self
+                .tysys
+                .trait_env
+                .decl_header_of(&trait_)
+                .is_some_and(|decl| declares(&decl.methods)))
+            && self
+                .tysys
+                .resolutions
+                .decl_in_scope(self.frame_module(), trait_)
+    }
+
+    /// Report the bound that keeps the impls `offers` picks from answering
+    /// `receiver`: the first that reaches it but whose bound its arguments
+    /// miss. Whether one was reported; the caller says the impl is absent
+    /// where none was.
+    ///
+    /// Each link of the receiver's newtype chain is searched in turn, behind
+    /// any reference, at the arguments that link spells, as dispatch reaches
+    /// a newtype's base and a reference's pointee. Behind a reference only the
+    /// blocks for that reference's kind are searched: dispatch reaches no
+    /// `&X` block from a `&mut X`.
+    pub(super) fn report_unmet_impl_bound(
+        &mut self,
+        receiver: TypeId,
+        span: Span,
+        offers: impl Fn(&Self, DefId) -> bool,
+    ) -> bool {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let (ref_kind, mut link) = {
+            let table = self.tysys.type_table.borrow();
+            (
+                RefKind::from_resolved(table.get(receiver)),
+                table.peel_refs(receiver),
+            )
+        };
+        loop {
+            if let Some(head) = self.tysys.struct_name_for_type(link) {
+                let target = self.impl_target_of(link, &DeclName::new(&head));
+                let (args, decl) = {
+                    let table = self.tysys.type_table.borrow();
+                    (
+                        table.nominal_type_args(link).unwrap_or_default(),
+                        table.nominal_def(link),
+                    )
+                };
+                let on_ref = ref_kind.into_iter().flat_map(|kind| {
+                    trait_env
+                        .all_impl_keys(&ImplTargetKey::Ref(kind))
+                        .into_iter()
+                        .filter(|&def| self.tysys.type_table.borrow().impl_target_decl(def) == decl)
+                });
+                let unmet = trait_env
+                    .all_impl_keys(&target)
+                    .into_iter()
+                    .chain(on_ref)
+                    .find_map(|def| {
+                        if !offers(self, def) || !self.tysys.impl_reaches(def, Some(&args)) {
+                            return None;
+                        }
+                        self.tysys.unmet_impl_bound(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            def,
+                            Some(receiver),
+                            Some(&args),
+                        )
+                    });
+                if let Some(unmet) = unmet {
+                    return self.report_unmet(unmet, span);
+                }
+            }
+            let ResolvedType::Newtype { base_type, .. } =
+                self.tysys.type_table.borrow().get_unerased(link).clone()
+            else {
+                return false;
+            };
+            link = base_type;
+        }
+    }
+
+    /// Enforce the bounds of the impl block a static call selected at the
+    /// receiver arguments it names, which no lookup filtered the block by.
+    pub(super) fn enforce_static_block_bounds(
+        &mut self,
+        block: Option<DefId>,
+        receiver_args: &[TypeId],
+        span: Span,
+    ) {
+        if let Some(block) = block
+            && let Some(unmet) = self.tysys.unmet_impl_bound(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                block,
+                None,
+                Some(receiver_args),
+            )
+        {
+            self.report_unmet(unmet, span);
+        }
+    }
+
+    /// Report `unmet` through the bound enforcement. Whether it reported one.
+    fn report_unmet(&mut self, unmet: UnmetImplBound, span: Span) -> bool {
+        let UnmetImplBound {
+            param,
+            type_arg,
+            missing,
+        } = unmet;
+        match missing {
+            UnmetKind::Trait(trait_) => !self.enforce_single_bound_args(
+                type_arg,
+                trait_.base_name(),
+                Some(&trait_),
+                &param,
+                span,
+            ),
+            UnmetKind::Affine => {
+                let type_name = self.tysys.type_id_to_string(type_arg);
+                let _ = self.emit(TypeError::AffineArgument {
+                    type_name,
+                    param_name: param,
+                    span,
+                });
+                true
+            }
+        }
+    }
+
+    /// [`Self::report_unmet_impl_bound`] over `ty`'s impls of the prelude
+    /// traits `items`, those taking `trait_arg` where one is given: an
+    /// operator's right operand, a subscript's key.
+    pub(super) fn report_unmet_trait_impl_bound(
+        &mut self,
+        ty: TypeId,
+        items: &[CompilerItem],
+        trait_arg: Option<TypeId>,
+        span: Span,
+    ) -> bool {
+        let traits: Vec<DefId> = items
+            .iter()
+            .filter_map(|&item| self.tysys.compiler_trait_def(item))
+            .collect();
+        self.report_unmet_impl_bound(ty, span, |s, def| {
+            s.tysys
+                .signatures
+                .impl_trait(def)
+                .is_some_and(|t| traits.contains(&t))
+                && trait_arg.is_none_or(|arg| {
+                    // An unwritten argument is the trait's default, `Self`.
+                    let defaulted = s.tysys.signatures.impl_sig(def).trait_type_args.is_empty();
+                    let tt = s.tysys.type_table.borrow();
+                    if defaulted {
+                        tt.type_key(arg) == tt.type_key(ty)
+                    } else {
+                        drop(tt);
+                        s.impl_takes_key(def, arg)
+                    }
+                })
+        })
+>>>>>>> origin/main
     }
 
     /// Whether a call of `method_name` on `receiver` may wait for the
@@ -1115,25 +1297,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (key, type_args.clone())
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
-        // As the order has it: a trait's methods are candidates only where the
-        // trait is in scope.
-        let in_scope = |trait_: DefId| {
-            self.tysys
-                .resolutions
-                .decl_in_scope(self.frame_module(), trait_)
-        };
         let mut candidates = Vec::new();
         for def in trait_env.all_impl_keys(&key) {
             let header = impl_header(&trait_env, &ImplBlockRef(def));
             let declared = match (kind, header.trait_def()) {
-                (ImplKind::Inherent, None) => declares(&header.methods),
-                (ImplKind::Trait, Some(trait_)) => {
-                    (declares(&header.methods)
-                        || trait_env
-                            .decl_header_of(&trait_)
-                            .is_some_and(|decl| declares(&decl.methods)))
-                        && in_scope(trait_)
+                (ImplKind::Inherent, None) | (ImplKind::Trait, Some(_)) => {
+                    self.impl_offers_method(def, method_name, None)
                 }
                 (ImplKind::Inherent, Some(_)) | (ImplKind::Trait, None) => false,
             };
@@ -2980,11 +3149,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
     ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(StaticQuery::of(struct_name, method_name))
-            .found()
-            .map(|callee| callee.own_params.clone())
-            .unwrap_or_default()
+        self.resolve_static_callee(StaticQuery {
+            receiver_key,
+            ..StaticQuery::of(struct_name, method_name)
+        })
+        .found()
+        .map(|callee| callee.own_params.clone())
+        .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.
