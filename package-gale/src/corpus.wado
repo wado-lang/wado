@@ -5,6 +5,7 @@
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
+use { cmd, Process } from "core:process";
 use { HashMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
@@ -40,6 +41,22 @@ pub fn collect_paths<S: AsStrSlice>(
             paths.push(argv[i]);
         } else if !flags.contains_str(&argv[i]) {
             panic(`unknown argument: ${argv[i]}`);
+        }
+    }
+    return paths;
+}
+
+/// The files git tracks under `pathspec`, for a run that names none.
+pub fn tracked_files<S: AsStrSlice>(pathspec: S) -> List<String> with Process {
+    let spec = pathspec.to_string();
+    let listed = match cmd`git ls-files -z -- ${spec}`.read() {
+        Ok(bytes) => bytes,
+        Err(e) => panic(`git ls-files ${spec}: ${e}`),
+    };
+    let mut paths: List<String> = [];
+    for let path of String::from_utf8_lossy(&listed).split("\0") {
+        if !path.is_empty() {
+            paths.push(path.to_string());
         }
     }
     return paths;

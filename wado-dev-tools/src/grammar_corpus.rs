@@ -1,10 +1,10 @@
 //! `grammar-corpus`: hold `package-gale-highlight-wado/grammar/Wado.g4` to the
 //! compiler's own parser over the stdlib + fixture corpus.
 //!
-//! Three modes, driven by `scripts/check-grammar.sh`: `--emit-corpus <file>`
-//! writes the corpus paths the Gale-side tool reads, `--compare <gale.tsv>
-//! [--report <file>]` joins both sides' verdicts and checks the invariants
-//! below, and anything else prints one verdict per path for triage.
+//! With no argument it checks the invariants below: the compiler's parser runs
+//! in-process, and the Gale-generated one, which is Wasm, under the `wado`
+//! built beside this binary. Paths, or `--paths-from <file>`, print the
+//! compiler's verdict for each instead, for triage.
 //!
 //! Verdicts come from [`wado_lsp::Engine::parse_diagnostics`], so a fixture
 //! whose imports are deliberately broken still reports its syntax truthfully.
@@ -20,7 +20,9 @@
 
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::data_section::should_skip_file;
 use lexopt::Arg::{Long, Value};
@@ -44,14 +46,8 @@ struct Verdict {
 
 pub fn run(mut parser: lexopt::Parser) {
     let mut paths: Vec<String> = Vec::new();
-    let mut emit_corpus: Option<String> = None;
-    let mut compare: Option<String> = None;
-    let mut report: Option<String> = None;
     while let Some(arg) = parser.next().expect("failed to parse args") {
         match arg {
-            Long("emit-corpus") => emit_corpus = Some(value(&mut parser)),
-            Long("compare") => compare = Some(value(&mut parser)),
-            Long("report") => report = Some(value(&mut parser)),
             // The corpus runs to thousands of files, past a comfortable argv.
             Long("paths-from") => {
                 let file = value(&mut parser);
@@ -64,20 +60,18 @@ pub fn run(mut parser: lexopt::Parser) {
         }
     }
 
-    if let Some(out) = emit_corpus {
-        emit_corpus_to(&out);
+    if paths.is_empty() {
+        let dir = Path::new("package-gale-highlight-wado/build/check-grammar");
+        let corpus = collect_corpus();
+        let gale_tsv = run_gale_side(
+            dir,
+            &corpus,
+            "package-gale-highlight-wado/tools/corpus_check.wado",
+        );
+        compare_with_gale(&corpus, &gale_tsv, &dir.join("divergences.tsv"));
         return;
     }
 
-    if let Some(gale_tsv) = compare {
-        compare_with_gale(&gale_tsv, report.as_deref());
-        return;
-    }
-
-    assert!(
-        !paths.is_empty(),
-        "no inputs: pass paths as arguments, --paths-from <file>, --emit-corpus <file>, or --compare <gale.tsv>"
-    );
     let mut bad = 0usize;
     for verdict in verdicts_for(&paths) {
         if verdict.ok {
@@ -97,11 +91,37 @@ fn value(parser: &mut lexopt::Parser) -> String {
     parser.value().unwrap().to_string_lossy().into_owned()
 }
 
-/// Write the corpus paths for the Wado-side tool to read back, one per line.
-pub fn emit_corpus_to(out: &str) {
-    let corpus = collect_corpus();
-    fs::write(out, corpus.join("\n") + "\n").unwrap_or_else(|e| panic!("writing '{out}': {e}"));
-    eprintln!("corpus: {} files", corpus.len());
+/// Run the Gale side, `tool` under the `wado` built beside this binary, over
+/// `corpus`, and return the file holding what it printed. Its files live in
+/// `dir`, inside the repository: `wado run` reaches only the current directory.
+pub fn run_gale_side(dir: &Path, corpus: &[String], tool: &str) -> PathBuf {
+    match fs::remove_dir_all(dir) {
+        Err(e) if e.kind() != ErrorKind::NotFound => {
+            panic!("removing '{}': {e}", dir.display())
+        }
+        _ => {}
+    }
+    fs::create_dir_all(dir).unwrap_or_else(|e| panic!("creating '{}': {e}", dir.display()));
+    let list = dir.join("corpus.txt");
+    fs::write(&list, corpus.join("\n") + "\n")
+        .unwrap_or_else(|e| panic!("writing '{}': {e}", list.display()));
+    let gale_tsv = dir.join("gale.tsv");
+    let stdout = fs::File::create(&gale_tsv)
+        .unwrap_or_else(|e| panic!("creating '{}': {e}", gale_tsv.display()));
+    let wado = std::env::current_exe()
+        .expect("the running binary has a path")
+        .with_file_name(format!("wado{}", std::env::consts::EXE_SUFFIX));
+    let status = Command::new(&wado)
+        .args(["run", tool, "--", "--paths-from"])
+        .arg(&list)
+        .stdout(stdout)
+        .status()
+        .unwrap_or_else(|e| panic!("running '{}': {e}", wado.display()));
+    if !status.success() {
+        // The tool has said why on stderr.
+        std::process::exit(status.code().unwrap_or(1));
+    }
+    gale_tsv
 }
 
 /// Every `.wado` file under [`CORPUS_ROOTS`] that git does not ignore, sorted,
@@ -185,8 +205,9 @@ fn verdicts_for(paths: &[String]) -> Vec<Verdict> {
 
 /// Read the Gale side's `ok` / `ng <path> <count> <line> <message> <snippet>`
 /// lines into a path → verdict lookup.
-fn read_gale_verdicts(path: &str) -> Vec<Verdict> {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
+fn read_gale_verdicts(path: &Path) -> Vec<Verdict> {
+    let text =
+        fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{}': {e}", path.display()));
     text.lines()
         .filter_map(|line| {
             let mut fields = line.split('\t');
@@ -224,9 +245,8 @@ fn declares_compile_error(path: &str) -> bool {
     should_skip_file(&source)
 }
 
-fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
-    let corpus = collect_corpus();
-    let compiler = verdicts_for(&corpus);
+fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
+    let compiler = verdicts_for(corpus);
     let gale = read_gale_verdicts(gale_tsv);
 
     let gale_by_path: wado_compiler::hashmap::IndexMap<&str, &Verdict> =
@@ -257,10 +277,8 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         .filter(|own| !declares_compile_error(&own.path))
         .collect();
 
-    if let Some(path) = report_path {
-        fs::write(path, render_report(&rejects, &accepts))
-            .unwrap_or_else(|e| panic!("writing '{path}': {e}"));
-    }
+    fs::write(report_path, render_report(&rejects, &accepts))
+        .unwrap_or_else(|e| panic!("writing '{}': {e}", report_path.display()));
     println!(
         "corpus: {} files | grammar gaps: {} | parser-only rules: {}",
         corpus.len(),
