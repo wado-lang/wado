@@ -22,7 +22,22 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Backend, Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use {
+    Backend,
+    BinaryOp,
+    Columns,
+    Concat,
+    Cpu,
+    Epilogue,
+    Expr,
+    Prologue,
+    Tensor,
+    UnaryOp,
+    WebGpuBackend,
+    constant,
+    element_count,
+    operand,
+} from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 use { Pick, Picked, Weights, forward } from "./webgpu.onnxtext"
     with {
@@ -218,7 +233,207 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     }
     arg_maxes();
     narrow_products();
+    narrow_column_counts();
     half_weights();
+    paired_products();
+    bound_paired_products();
+    prologue_products();
+    concatenated_products();
+}
+
+/// Paired products of a few rows under a binding that holds their weight and
+/// one of each pair of columns but not both, in one dispatch each, with a
+/// prologue and without.
+fn bound_paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    // A word for each pair of the 8 by 2 * 64 weights: more than the 6 by 64
+    // written, fewer than the 6 by 2 * 64 computed.
+    gpu.limit_binding(512);
+    let a = tensor::<[Row, Inner, Long]>([1, 6, 8], 48);
+    let b = halved(tensor::<[Long, Col]>([8, 64], 49));
+    let c = halved(tensor::<[Long, Col]>([8, 64], 50));
+    let op = gated();
+    let mut cpu = Cpu {};
+    let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue { operands: [], op });
+    let bc = gpu.keep_rhs_paired(&b, &c);
+    let uploaded = gpu.upload(&a);
+    let mut dispatched = gpu.dispatches();
+    let plain = gpu.matmul_rhs_paired(&uploaded, &bc, Epilogue { operands: [], op });
+    assert gpu.dispatches() == dispatched + 1;
+    dispatched = gpu.dispatches();
+    let staged = gpu.matmul_rhs_paired_from(Prologue {
+        operands: [gpu.read(&uploaded)],
+        op: operand(0),
+    }, &bc, Epilogue {
+        operands: [],
+        op,
+    });
+    assert gpu.dispatches() == dispatched + 1;
+    println(`bound paired ${deviation(&gpu.download(&plain).data, &on_cpu.data)}`);
+    println(`bound paired prologue ${deviation(&gpu.download(&staged).data, &on_cpu.data)}`);
+}
+
+/// A row of 640 over its root mean square, scaled by `operand(1)`, as a
+/// decoder normalizes a layer's input.
+fn rms_norm() -> Expr {
+    let x = operand(0);
+    let rms = x.binary(BinaryOp::Mul, &x).row_sum(Option::Some(640.0)).binary(BinaryOp::Add, &constant(0.000001)).unary(
+        UnaryOp::Sqrt,
+    );
+    return x.binary(BinaryOp::Div, &rms).binary(BinaryOp::Mul, &operand(1));
+}
+
+/// `silu(operand(0)) * operand(1)`, as a gated layer joins its two products.
+fn gated() -> Expr {
+    return operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid)).binary(BinaryOp::Mul, &operand(1));
+}
+
+/// Two products of an RMS normalization by weights of 256 and 128 columns,
+/// concatenated, for a step's one row, a few rows of a batch and a tile of
+/// rows, each part read as a view by a row kernel normalizing it.
+fn concatenated_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let norm = rms_norm();
+    let x = operand(0);
+    let scaled = x.binary(BinaryOp::Div, &x.binary(BinaryOp::Mul, &x).row_sum(null).unary(UnaryOp::Sqrt));
+    let scale = tensor::<[Long]>([640], 48);
+    let b = halved(tensor::<[Long, Col]>([640, 256], 49));
+    let c = halved(tensor::<[Long, Inner]>([640, 128], 50));
+    let bc = Columns::of(&b).then(&c).joined();
+    for let [name, a] of [
+        ["step", tensor::<[Row, Inner, Long]>([1, 1, 640], 51)],
+        ["few", tensor::<[Row, Inner, Long]>([2, 3, 640], 52)],
+        ["tile", tensor::<[Row, Inner, Long]>([1, 20, 640], 53)],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>]> {
+        let mut cpu = Cpu {};
+        let cpu_a = Prologue {
+            operands: [
+                cpu.read(&a),
+                cpu.read_suffix::<[Row, Inner], [Long]>(&scale),
+            ],
+            op: norm,
+        };
+        let cpu_whole = cpu.matmul_rhs_from(cpu_a, &cpu.keep_rhs(&bc), null);
+        let cpu_first = cpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Col, []>(&cpu_whole, 2, 0, 256, 1);
+        let cpu_second = cpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Inner, []>(&cpu_whole, 2, 256, 128, 1);
+        let first_cpu = cpu.rows::<[Row, Inner, Col], [Row, Inner, Col]>([cpu.read(&cpu_first)], &scaled, 1, false);
+        let second_cpu = cpu.rows::<[Row, Inner, Inner], [Row, Inner, Inner]>(
+            [cpu.read(&cpu_second)],
+            &scaled,
+            1,
+            false,
+        );
+        let uploaded = gpu.upload(&a);
+        let kept = gpu.keep(&scale);
+        let gpu_a = Prologue {
+            operands: [
+                gpu.read(&uploaded),
+                gpu.read_suffix::<[Row, Inner], [Long]>(&kept),
+            ],
+            op: norm,
+        };
+        let whole = gpu.matmul_rhs_from(gpu_a, &gpu.keep_rhs(&bc), null);
+        let first = gpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Col, []>(&whole, 2, 0, 256, 1);
+        let second = gpu.slice_axis::<f32, [Row, Inner], Concat<Col, Inner>, Inner, []>(&whole, 2, 256, 128, 1);
+        let first_gpu = gpu.rows::<[Row, Inner, Col], [Row, Inner, Col]>([gpu.read(&first)], &scaled, 1, false);
+        let second_gpu = gpu.rows::<[Row, Inner, Inner], [Row, Inner, Inner]>([gpu.read(&second)], &scaled, 1, false);
+        println(`concatenated first ${name} ${deviation(&gpu.download(&first_gpu).data, &first_cpu.data)}`);
+        println(`concatenated second ${name} ${deviation(&gpu.download(&second_gpu).data, &second_cpu.data)}`);
+    }
+}
+
+/// Products of an RMS normalization each workgroup computes itself, as a
+/// step's one row and a few rows of a batch make them, paired and alone, and
+/// for a tile of rows, which the device normalizes in a kernel of its own.
+fn prologue_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let norm = rms_norm();
+    let scale = tensor::<[Long]>([640], 42);
+    let b = halved(tensor::<[Long, Col]>([640, 256], 43));
+    let c = halved(tensor::<[Long, Col]>([640, 256], 44));
+    let op = gated();
+    let cases = [
+        ["step", tensor::<[Row, Inner, Long]>([1, 1, 640], 45)],
+        ["few", tensor::<[Row, Inner, Long]>([2, 3, 640], 46)],
+        ["tile", tensor::<[Row, Inner, Long]>([1, 20, 640], 47)],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>]>;
+    for let [name, a] of cases {
+        let mut cpu = Cpu {};
+        let cpu_a = Prologue {
+            operands: [
+                cpu.read(&a),
+                cpu.read_suffix::<[Row, Inner], [Long]>(&scale),
+            ],
+            op: norm,
+        };
+        let on_cpu = cpu.matmul_rhs_paired_from(cpu_a, &cpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [],
+            op,
+        });
+        let alone_cpu = cpu.matmul_rhs_from(cpu_a, &cpu.keep_rhs(&b), null);
+        let uploaded = gpu.upload(&a);
+        let kept = gpu.keep(&scale);
+        let gpu_a = Prologue {
+            operands: [
+                gpu.read(&uploaded),
+                gpu.read_suffix::<[Row, Inner], [Long]>(&kept),
+            ],
+            op: norm,
+        };
+        let on_gpu = gpu.matmul_rhs_paired_from(gpu_a, &gpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [],
+            op,
+        });
+        println(`prologue paired ${name} ${deviation(&gpu.download(&on_gpu).data, &on_cpu.data)}`);
+        let alone_gpu = gpu.matmul_rhs_from(gpu_a, &gpu.keep_rhs(&b), null);
+        println(`prologue ${name} ${deviation(&gpu.download(&alone_gpu).data, &alone_cpu.data)}`);
+    }
+}
+
+/// A gated layer's two products of one input, joined with a third operand, as
+/// a step's one row and a prompt's tile of rows make them: in one dispatch
+/// where the right matrices are bf16 or f32, and in two kernels for the tile.
+fn paired_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let one = tensor::<[Row, Inner, Long]>([1, 1, 640], 35);
+    let tile = tensor::<[Row, Inner, Long]>([1, 20, 640], 36);
+    let op = gated().binary(BinaryOp::Add, &operand(2));
+    let exact = [
+        halved(tensor::<[Long, Col]>([640, 256], 37)),
+        halved(tensor::<[Long, Col]>([640, 256], 38)),
+    ];
+    let inexact = [
+        tensor::<[Long, Col]>([640, 256], 39),
+        tensor::<[Long, Col]>([640, 256], 40),
+    ];
+    let cases = [
+        ["step", one, exact],
+        ["f32", one, inexact],
+        ["tile", tile, exact],
+    ] as List<[String, Tensor<f32, [Row, Inner, Long]>, [Tensor<f32, [Long, Col]>, Tensor<f32, [Long, Col]>]]>;
+    for let [name, a, [b, c]] of cases {
+        let rows = a.extents[1];
+        let bias = tensor::<[Row, Inner, Col]>([1, rows, 256], 41);
+        let mut cpu = Cpu {};
+        let on_cpu = cpu.matmul_rhs_paired(&a, &cpu.keep_rhs_paired(&b, &c), Epilogue {
+            operands: [cpu.read(&bias)],
+            op,
+        });
+        let bc = gpu.keep_rhs_paired(&b, &c);
+        let on_gpu = gpu.matmul_rhs_paired(&gpu.upload(&a), &bc, Epilogue {
+            operands: [gpu.read(&gpu.upload(&bias))],
+            op,
+        });
+        println(`paired ${name} ${deviation(&gpu.download(&on_gpu).data, &on_cpu.data)}`);
+    }
 }
 
 /// `t` with each element's low 16 bits cleared, so bf16 holds it exactly.
@@ -232,11 +447,13 @@ fn halved<Axes>(t: Tensor<f32, Axes>) -> Tensor<f32, Axes> {
 
 /// Products and a gather by a weight kept for products alone, which the device
 /// holds in bf16 where that loses nothing, and one it must keep in f32: read
-/// along either axis, by a few rows and by a tile's, whole and in chunks.
+/// along either axis, by a few rows, a prompt's and a tile's, whole and in
+/// chunks.
 fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let exact = halved(tensor::<[Long, Col]>([700, 300], 26));
     let inexact = tensor::<[Long, Col]>([700, 300], 27);
     let few = tensor::<[Row, Inner, Long]>([2, 3, 700], 28);
+    let prompt = tensor::<[Row, Inner, Long]>([2, 6, 700], 32);
     let tile = tensor::<[Row, Inner, Long]>([1, 20, 700], 29);
     let one = tensor::<[Row, Inner, Col]>([2, 1, 300], 30);
     let ix: Tensor<i64, [Pick]> = {
@@ -246,6 +463,7 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
     let mut cpu = Cpu {};
     let expected = [
         cpu.matmul_shared(&few, &exact, null).data,
+        cpu.matmul_shared(&prompt, &exact, null).data,
         cpu.matmul_shared(&tile, &exact, null).data,
         cpu.matmul_by_transposed(&one, &exact, null).data,
         cpu.gather_rows::<f32, Long, [Col], [Pick]>(&exact, &ix).data,
@@ -266,6 +484,7 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
         // `inexact`'s.
         assert gpu.kept_bytes() == (105_000 + 210_000) * 4;
         let few_by_b = gpu.matmul_rhs(&gpu.upload(&few), &b, null);
+        let prompt_by_b = gpu.matmul_rhs(&gpu.upload(&prompt), &b, null);
         let tile_by_b = gpu.matmul_rhs(&gpu.upload(&tile), &b, null);
         let across = gpu.matmul_by_rhs_transposed(&gpu.upload(&one), &b, null);
         let gathered = gpu.gather_rhs_rows(&b, &gpu.upload(&ix));
@@ -275,12 +494,13 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
         assert gpu.read_backs() == if limit matches { Some(_) } { 2 } else { 0 };
         let got = [
             gpu.download(&few_by_b).data,
+            gpu.download(&prompt_by_b).data,
             gpu.download(&tile_by_b).data,
             gpu.download(&across).data,
             gpu.download(&gathered).data,
             gpu.download(&few_by_f).data,
         ] as List<List<f32>>;
-        let names = ["few", "tile", "across", "gather", "f32"] as List<String>;
+        let names = ["few", "prompt", "tile", "across", "gather", "f32"] as List<String>;
         for let i of 0..<got.len() {
             println(`${pass}half ${names[i]} ${deviation(&got[i], &expected[i])}`);
         }
@@ -292,15 +512,35 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
 /// chunks, its product across them on the CPU, and its gather in parts.
 global HALF_SPLIT: i32 = 40_000;
 
-/// Products of a few rows, as a model's step over one token makes, by a
-/// matrix read along either axis, whole and in chunks of its inner axis.
+/// Products of one row across a transposed weight of few columns and of many,
+/// whose workgroups each take a different count of them, in bf16 as a model's
+/// weights are.
+fn narrow_column_counts() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        return;
+    };
+    let one = tensor::<[Row, Inner, Col]>([1, 1, 640], 33);
+    for let columns of [256, 2048] as List<i32> {
+        let stored = halved(tensor::<[Long, Col]>([columns, 640], 34));
+        let on_cpu = Cpu {}.matmul_by_transposed(&one, &stored, null);
+        let across = gpu.matmul_by_rhs_transposed(&gpu.upload(&one), &gpu.keep_rhs(&stored), null);
+        println(`narrow columns ${columns} ${deviation(&gpu.download(&across).data, &on_cpu.data)}`);
+    }
+}
+
+/// Products of a few rows, as a model's step over one token makes, and of a
+/// short prompt's, in more than one block of rows, by a matrix read along
+/// either axis, whole and in chunks of its inner axis.
 fn narrow_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let one = tensor::<[Row, Inner, Col]>([2, 1, 300], 22);
     let three = tensor::<[Row, Inner, Col]>([2, 3, 300], 23);
+    let prompt = tensor::<[Row, Inner, Col]>([2, 6, 300], 31);
     let stored = tensor::<[Long, Col]>([700, 300], 24);
     let on_cpu = Cpu {}.matmul_by_transposed(&one, &stored, null);
+    let prompt_on_cpu = Cpu {}.matmul_by_transposed(&prompt, &stored, null);
     let wide = tensor::<[Col, Long]>([300, 700], 25);
     let shared_on_cpu = Cpu {}.matmul_shared(&three, &wide, null);
+    let prompt_shared_on_cpu = Cpu {}.matmul_shared(&prompt, &wide, null);
     for let limit of [null, Option::Some(NARROW_SPLIT)] as List<Option<i32>> {
         let Some(mut gpu) = WebGpuBackend::new() else {
             return;
@@ -311,14 +551,31 @@ fn narrow_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue,
             pass = "split ";
         }
         let b = gpu.keep(&stored);
+        let w = gpu.keep(&wide);
         let across = gpu.matmul_by_transposed(&gpu.upload(&one), &b, null);
-        let along = gpu.matmul_shared(&gpu.upload(&three), &gpu.keep(&wide), null);
-        let [across, along] = [
+        let along = gpu.matmul_shared(&gpu.upload(&three), &w, null);
+        let prompt_across = gpu.matmul_by_transposed(&gpu.upload(&prompt), &b, null);
+        let prompt_along = gpu.matmul_shared(&gpu.upload(&prompt), &w, null);
+        let [across, along, prompt_across, prompt_along] = [
             gpu.download(&across),
             gpu.download(&along),
+            gpu.download(&prompt_across),
+            gpu.download(&prompt_along),
         ];
         println(`${pass}narrow across ${across.extents:?} ${deviation(&across.data, &on_cpu.data)}`);
         println(`${pass}narrow along ${along.extents:?} ${deviation(&along.data, &shared_on_cpu.data)}`);
+        println(
+            `${pass}narrow prompt across ${prompt_across.extents:?} ${deviation(
+                &prompt_across.data,
+                &prompt_on_cpu.data,
+            )}`,
+        );
+        println(
+            `${pass}narrow prompt along ${prompt_along.extents:?} ${deviation(
+                &prompt_along.data,
+                &prompt_shared_on_cpu.data,
+            )}`,
+        );
     }
 }
 

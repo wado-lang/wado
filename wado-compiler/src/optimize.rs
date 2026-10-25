@@ -60,6 +60,8 @@ mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
 
+#[cfg(debug_assertions)]
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 // The NIR audits are the only readers, and they are debug-only.
@@ -67,6 +69,8 @@ use std::sync::Arc;
 use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
 use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
+#[cfg(debug_assertions)]
+use crate::nir_value_graph::ValueKind;
 #[cfg(debug_assertions)]
 use crate::trace::filter;
 #[cfg(debug_assertions)]
@@ -529,8 +533,39 @@ fn run_pass(
 
 #[cfg(debug_assertions)]
 fn audit_nir(project: &NirPackage, pass: &str) {
+    audit_promoted_opaques(project, pass);
     audit_promoted_reads(project, pass);
     audit_assign_types(project, pass);
+}
+
+/// Every opaque leaf of a promoted operand reads a local. Extraction re-emits
+/// nothing else, and every node walk assumes a promoted operand names no
+/// skeleton node.
+#[cfg(debug_assertions)]
+fn audit_promoted_opaques(project: &NirPackage, pass: &str) {
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let mut seen = IndexSet::default();
+        body.for_each_reachable_node(|node| {
+            body.for_each_operand(node, |op| {
+                let Some(v) = op.as_value() else { return };
+                body.values.walk_values::<()>(v, &mut seen, |leaf, kind| {
+                    if let ValueKind::Opaque(oid) = kind {
+                        assert!(
+                            body.values.opaque_local(*oid).is_some(),
+                            "[NIR] {pass}: a promoted operand of `{}` must read a local at \
+                             each opaque leaf, but {leaf:?} reads none",
+                            func.name
+                        );
+                    }
+                    ControlFlow::Continue(true)
+                });
+            });
+        });
+    }
 }
 
 /// Every assignment is typed `()`. Codegen reads an expression's value from its

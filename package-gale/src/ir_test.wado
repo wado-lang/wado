@@ -119,8 +119,7 @@ test "merge_grammars unions the halves' imports and keeps every source path" {
 }
 
 test "merge_grammars carries a mode command onto the merged mode table" {
-    let lexer = parse("lexer grammar FooLexer;\nA : 'a' -> mode(M) ;\nmode M;\nB : 'b' -> mode(DEFAULT_MODE) ;").unwrap(
-    );
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' -> mode(M) ;\nmode M;\nB : 'b' -> mode(DEFAULT_MODE) ;").unwrap();
     let parser = parse("parser grammar FooParser;\nr : A B ;").unwrap();
     let merged = merge_grammars([parser, lexer]);
     for let r of &merged.lexer_rules {

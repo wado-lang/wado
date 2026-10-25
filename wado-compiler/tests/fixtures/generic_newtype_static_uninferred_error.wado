@@ -1,0 +1,29 @@
+// A static a generic newtype inherits, called where nothing settles the
+// newtype's parameter, reports it as one called on the base does, rather than
+// reaching codegen with the parameter unbound. Through a namespace too.
+
+use nt from "./sub/generic_newtype_static.wado";
+
+struct Cell<T> {
+    v: Option<T>,
+}
+
+impl<T> Cell<T> {
+    fn empty() -> Cell<T> {
+        return Cell { v: null };
+    }
+}
+
+type C<T> = Cell<T>;
+
+test {
+    let x = C::empty();
+    assert x.v matches { None };
+    let y = nt::C::empty();
+    assert y.v matches { None };
+}
+
+__DATA__
+{
+    "compile_error": "20:13: analysis error: cannot infer type parameter `T` of `C::empty`; add a turbofish (`C::<...>::empty()`) or a type annotation; 22:13: cannot infer type parameter `T` of `C::empty`"
+}

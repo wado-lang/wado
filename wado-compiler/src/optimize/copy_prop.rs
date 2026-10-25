@@ -260,7 +260,7 @@ impl AnalysisCtx<'_> {
         };
         let mut between: IndexSet<NodeRef> = IndexSet::default();
         for &s in stmts {
-            body.for_each_live_node_under(NodeRef::Stmt(s), |n| {
+            body.for_each_node_under(NodeRef::Stmt(s), |n| {
                 between.insert(n);
             });
         }

@@ -1,14 +1,26 @@
 //! What a cached outcome is known by: the compiler that produced it, and the
-//! files it read. Shared by the `core:eval` outcome cache and the `wado test`
-//! result cache.
+//! files it read. Shared by the `core:eval` outcome cache and the
+//! [`InputCache`](crate::input_cache) entries `wado test`, `run` and `serve`
+//! keep.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use wado_host::atomic_write::write_atomic;
 use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::kiln_provider::hex32;
+
+/// Writes a cache entry to `path`. Losing one is never an error, since the next
+/// run computes it again, and an entry naming a path that is not UTF-8 is lost
+/// that way: JSON cannot hold the path.
+pub(crate) fn write_entry(path: &Path, entry: &impl Serialize) {
+    if let Ok(bytes) = serde_json::to_vec(entry) {
+        let _ = write_atomic(path, &bytes);
+    }
+}
 
 /// What every outcome depends on beyond its own inputs: the running `wado`
 /// binary, which links the compiler and wasmtime, and the stdlib it compiles
@@ -78,16 +90,36 @@ pub(crate) fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
     hasher.update(bytes);
 }
 
-/// A file a compile looked up, known by its contents, or by its absence.
+/// Something a compile looked up, by what it found.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub(crate) struct Input {
-    pub(crate) path: PathBuf,
+#[serde(untagged)]
+pub(crate) enum Input {
+    File(FileInput),
+    /// An environment variable, as a `#[param(from_env = ...)]` reads one.
+    /// `None` where it was unset.
+    Env {
+        env: String,
+        value: Option<String>,
+    },
+}
+
+/// A file, known by its contents, or by its absence.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FileInput {
+    path: PathBuf,
     /// How many leading bytes the compile depended on, as a Kiln input cut to
     /// its probe's extent; `None` is the whole file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) prefix: Option<u64>,
+    prefix: Option<u64>,
     /// `None` where the file was absent.
     sha256: Option<String>,
+}
+
+/// What an [`Input`] is of, whatever it held.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum InputKey {
+    File(PathBuf, Option<u64>),
+    Env(String),
 }
 
 impl Input {
@@ -97,19 +129,37 @@ impl Input {
 
     /// An input whose bytes the caller has already hashed.
     pub(crate) fn hashed(path: PathBuf, prefix: Option<u64>, sha256: Option<[u8; 32]>) -> Self {
-        Self {
+        Self::File(FileInput {
             path,
             prefix,
             sha256: sha256.map(|hash| hex32(&hash)),
+        })
+    }
+
+    pub(crate) fn key(&self) -> InputKey {
+        match self {
+            Self::File(file) => InputKey::File(file.path.clone(), file.prefix),
+            Self::Env { env, .. } => InputKey::Env(env.clone()),
         }
     }
 
     pub(crate) fn unchanged(&self) -> bool {
-        Self::on_disk(self.path.clone(), self.prefix).as_ref() == Some(self)
+        Self::now(&self.key()).as_ref() == Some(self)
     }
 
-    /// What `path` holds now, its first `prefix` bytes where that is given;
-    /// `None` where it cannot be read, which matches no recorded input.
+    /// What `key` names holds now; `None` where it cannot be read, which
+    /// matches no recorded input.
+    pub(crate) fn now(key: &InputKey) -> Option<Self> {
+        match key {
+            InputKey::File(path, prefix) => Self::on_disk(path.clone(), *prefix),
+            InputKey::Env(name) => Some(Self::Env {
+                env: name.clone(),
+                value: std::env::var(name).ok(),
+            }),
+        }
+    }
+
+    /// What `path` holds now, its first `prefix` bytes where that is given.
     pub(crate) fn on_disk(path: PathBuf, prefix: Option<u64>) -> Option<Self> {
         match read_prefix(&path, prefix) {
             Ok(bytes) => Some(Self::hashed(

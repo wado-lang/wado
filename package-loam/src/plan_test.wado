@@ -60,6 +60,7 @@ test "a contraction and the elementwise chain after it fuse into the last kernel
     let p = plan_of(MLP, mlp_layout());
     assert p.of(&"H") == fused("A");
     assert p.of(&"HB") == fused("A");
+    // A kernel that takes a product in is no prologue of the product reading it.
     assert p.of(&"A") == written(Reason::Reader(Kind::Contraction));
     assert p.of(&"T") == fused("Y");
     assert p.of(&"Y") == written(Reason::Returned);
@@ -501,18 +502,71 @@ g (float[N, 4] X, float[4] B) => (float[N, 4] Y)
     assert p.of(&"R") == written(Reason::Stretched);
 }
 
-test "a kernel takes in one contraction, and the second is written" {
+/// Two products of one left operand, by initializers where `weights` and by
+/// inputs otherwise, and their sum.
+fn two_products_plan(weights: bool) -> Plan {
+    let [inputs, initializers] = if weights {
+        ["", "<float[4, 3] W, float[4, 3] V>"];
+    } else {
+        [", float[4, 3] W, float[4, 3] V", ""];
+    };
     let source = `
-g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
+g (float[N, 4] X${inputs}) => (float[N, 3] Y)
+${initializers}
 {
     P = MatMul(X, W)
     Q = MatMul(X, V)
     Y = Add(P, Q)
 }
 `;
+    return plan_of(source, [
+        [
+            "X",
+            ["Batch", "In"],
+        ],
+        [
+            "W",
+            ["In", "Out"],
+        ],
+        [
+            "V",
+            ["In", "Out"],
+        ],
+    ]);
+}
+
+test "two products of one left operand pair in one kernel" {
+    let p = two_products_plan(true);
+    assert p.of(&"Q") == fused("Y");
+    assert p.of(&"P") == fused("Y");
+    assert p.pairs == [
+        ["P", "Q"],
+    ];
+}
+
+test "two products by weights no backend holds together do not pair" {
+    let p = two_products_plan(false);
+    assert p.of(&"Q") == fused("Y");
+    assert p.of(&"P") == written(Reason::SecondContraction);
+    assert p.pairs.is_empty();
+}
+
+test "a kernel takes in one contraction, and the second is written" {
+    let source = `
+g (float[N, 4] X, float[N, 4] Z, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
+{
+    P = MatMul(X, W)
+    Q = MatMul(Z, V)
+    Y = Add(P, Q)
+}
+`;
     let p = plan_of(source, [
         [
             "X",
+            ["Batch", "In"],
+        ],
+        [
+            "Z",
             ["Batch", "In"],
         ],
         [
@@ -527,6 +581,181 @@ g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
     // The nodes are read last to first, so the later product is the one taken in.
     assert p.of(&"Q") == fused("Y");
     assert p.of(&"P") == written(Reason::SecondContraction);
+}
+
+/// An RMS normalization that two products read, by initializers where
+/// `weights` and by inputs otherwise.
+fn normalized_plan(weights: bool) -> Plan {
+    let [inputs, initializers] = if weights {
+        ["", ", float[4, 3] W, float[4, 3] V"];
+    } else {
+        [", float[4, 3] W, float[4, 3] V", ""];
+    };
+    let source = `
+g (float[N, 4] X${inputs}) => (float[N, 3] Y)
+<float[4] G, int64[1] Axes = {1}${initializers}>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    Eps = Constant <value = float {0.000001}> ()
+    A = Add(M, Eps)
+    D = Sqrt(A)
+    Q = Div(X, D)
+    H = Mul(Q, G)
+    P = MatMul(H, W)
+    R = MatMul(H, V)
+    Y = Add(P, R)
+}
+`;
+    let mut layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "V",
+            ["Feat", "Out"],
+        ],
+        [
+            "G",
+            ["Feat"],
+        ],
+    ];
+    for let t of ["P", "R", "Y"] {
+        layout.push([
+            t,
+            ["Batch", "Out"],
+        ]);
+    }
+    for let t of ["M", "A", "D"] {
+        layout.push([
+            t,
+            ["Batch", "One"],
+        ]);
+    }
+    layout.push([
+        "*",
+        ["Batch", "Feat"],
+    ]);
+    return plan_of(source, layout);
+}
+
+test "a row kernel only products by weights read is their kernel's prologue" {
+    let p = normalized_plan(true);
+    assert p.of(&"H") == Decision::Prologue("Y");
+    for let tensor of ["S", "M", "A", "D", "Q"] {
+        assert p.of(&tensor) == fused("H");
+    }
+    assert p.rows_of(&"H") matches { Some(_) };
+    assert p.pairs == [
+        ["P", "R"],
+    ];
+}
+
+test "a row kernel products by inputs read is written" {
+    let p = normalized_plan(false);
+    assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
+}
+
+test "a row kernel writing one value per row is no prologue" {
+    let source = `
+g (float[N, 4] X) => (float[N, 3] Y)
+<int64[1] Axes = {1}, float[1, 3] W>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    Y = MatMul(M, W)
+}
+`;
+    let layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "Y",
+            ["Batch", "Out"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ];
+    let p = plan_of(source, layout);
+    assert p.of(&"S") == fused("M");
+    assert p.of(&"M") == written(Reason::Reader(Kind::Contraction));
+}
+
+/// The plan of three products of one normalized input by weights of 3, 2 and
+/// 3 columns, each returned, the first read through `first`.
+fn concatenated_plan(first: String) -> Plan {
+    let source = `
+g (float[N, 4] X) => (float[N, 3] Y, float[N, 2] R, float[N, 3] T)
+<int64[1] Axes = {1}, float[4, 3] W, float[4, 2] V, float[4, 3] U>
+{
+    S = Mul(X, X)
+    M = ReduceMean <keepdims = 1> (S, Axes)
+    D = Sqrt(M)
+    H = Div(X, D)
+    P = MatMul(H, W)
+    R = MatMul(H, V)
+    T = MatMul(H, U)
+    Y = ${first}(P)
+}
+`;
+    let mut layout: List<[String, List<String>]> = [
+        [
+            "W",
+            ["Feat", "Out"],
+        ],
+        [
+            "U",
+            ["Feat", "Out"],
+        ],
+        [
+            "V",
+            ["Feat", "Two"],
+        ],
+        [
+            "R",
+            ["Batch", "Two"],
+        ],
+    ];
+    for let t of ["P", "T", "Y"] {
+        layout.push([
+            t,
+            ["Batch", "Out"],
+        ]);
+    }
+    layout.push([
+        "M",
+        ["Batch", "One"],
+    ]);
+    layout.push([
+        "D",
+        ["Batch", "One"],
+    ]);
+    layout.push([
+        "*",
+        ["Batch", "Feat"],
+    ]);
+    return plan_of(source, layout);
+}
+
+test "products of one input by weights, each a kernel alone, are one product" {
+    let p = concatenated_plan("Identity");
+    assert p.concats.len() == 1;
+    assert p.concats.get("P") == Option::Some(["P", "R", "T"]);
+    assert p.of(&"R") == Decision::Concatenated("P");
+    assert p.of(&"T") == Decision::Concatenated("P");
+    assert p.of(&"H") == Decision::Prologue("P");
+}
+
+test "a product with an operator after it is not concatenated" {
+    let p = concatenated_plan("Relu");
+    assert p.concats.get("R") == Option::Some(["R", "T"]);
+    assert p.of(&"P") == fused("Y");
+    assert p.of(&"H") == written(Reason::Reader(Kind::Contraction));
 }
 
 test "a window takes in no operator after it" {

@@ -1,0 +1,33 @@
+// Two interfaces of one component each declare a record `ended` and an enum
+// `unit`, so each is named through its interface (issue #2421).
+use { "a:x/trip" as Trip, "b:y/trip" as YTrip } from "./sub/wasm_import_cm_two_trips_ended.wat" with { type: "wat" };
+
+fn reason(e: YTrip::Ended) -> u32 {
+    return e.reason;
+}
+
+test "a record" {
+    let a: Trip::Ended = Trip::f();
+    assert a.reason == 1;
+    assert reason(YTrip::g()) == 2;
+    let made = Trip::Ended { reason: 3 };
+    let Trip::Ended { reason: r } = made;
+    assert r == 3;
+}
+
+test "an enum" {
+    assert Trip::unit_code(Trip::Unit::Imperial) == 11;
+    let metric: YTrip::Unit = Metric;
+    assert YTrip::unit_code(metric) == 10;
+}
+
+test "a variant" {
+    let shape = Trip::Shape::Circle(7);
+    assert Trip::shape_size(shape) == 7;
+    assert Trip::shape_size(Trip::Shape::Dot) == 0;
+    let radius = match shape {
+        Trip::Shape::Circle(r) => r,
+        Trip::Shape::Dot => 0,
+    };
+    assert radius == 7;
+}

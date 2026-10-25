@@ -10,7 +10,7 @@ Assignment, parameter passing, and return all perform a deep copy of the value. 
 
 The copy stops at a reference. A `&T` or `&mut T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views.
 
-A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-types.md#affine-types), an affine resource or anything holding one, is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)). A reference to an affine value names the value itself, not a copy, so it sees every write to it. It is read only while the value is in place: a read after a move or a drop of it is a compile error (see [References into Affine Values](./spec-types.md#references-into-affine-values)).
+A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-affine.md) is moved, never copied, and a reference to one names the value itself.
 
 <!-- {"fixture":"spec_memory_copy.wado"} -->
 
@@ -249,7 +249,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
+A method receiver is `&self`, `&mut self` or `self`. Bare `self` (by value) is allowed only on an [affine type](./spec-affine.md), or on a generic type, since its type arguments may be affine (`Option<T>::unwrap(self)`):
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -267,7 +267,7 @@ test {
 }
 ```
 
-`Point` holds no resource, so `self` by value on it is an error:
+`Point` is not affine, so `self` by value on it is an error:
 
 <!-- {"fixture":"spec_memory_self_by_value.wado"} -->
 
@@ -277,7 +277,7 @@ impl Point {
 }
 ```
 
-A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable.
+A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable.
 
 A trait's method counts as generic, since its `Self` is a type parameter, so it may take `self` by value (`Iterator::map(self, f)`). Every impl of it takes the receiver the trait declares.
 

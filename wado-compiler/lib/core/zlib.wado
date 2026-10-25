@@ -1193,8 +1193,7 @@ pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
     // Verify the ADLER32 trailer over the uncompressed data (RFC 1950 section
     // 2.2, ADLER32; the checksum stores s2 in the high 16 bits, big-endian).
     let computed = adler32(adler32_init(), &result, 0, result.len());
-    let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len(
-    ) - 1] as u32;
+    let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
     if computed != stored {
         builtin::cold_path();
         return Result::Err(ZlibError::Adler32Mismatch);

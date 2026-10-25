@@ -131,6 +131,25 @@ pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
     }
 }
 
+/// How many times `graph`'s nodes read each tensor, a node reading one twice
+/// counted twice.
+pub fn read_counts(graph: &Graph) -> HashMap<String, i32> {
+    let mut reads = HashMap::<String, i32>::new();
+    for let node of &graph.nodes {
+        for let t of node.reads() {
+            reads[t] = reads.get(t).unwrap_or(0) + 1;
+        }
+    }
+    return reads;
+}
+
+/// Records that the node at `at` reads `tensor`.
+pub fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
+    let mut by = readers.get(*tensor).unwrap_or([]);
+    by.push(at);
+    readers[*tensor] = by;
+}
+
 /// The extents' product is how many elements the tensor says it has, and a
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
@@ -756,7 +775,7 @@ pub fn parameters(
     }
     let mut kept: List<ValueInfo> = [];
     for let vi of inputs {
-        if !named.contains_str(vi.name.as_str_slice()) && !constants.contains_key(vi.name) {
+        if !named.contains_str(&vi.name) && !constants.contains_key(vi.name) {
             kept.push(vi);
         }
     }

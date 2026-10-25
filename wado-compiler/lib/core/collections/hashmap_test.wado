@@ -371,6 +371,7 @@ test "tuple keys" {
     assert map.get([1, "y"]) == null;
 }
 
+<<<<<<< HEAD
 test "index_swap exchanges the values of two keys" {
     let mut m = HashMap::<String, List<i32>>::new();
     m["a"] = [1];
@@ -387,4 +388,46 @@ test "index_swap panics on a missing key" {
     let mut m = HashMap::<String, i32>::new();
     m["a"] = 1;
     m.index_swap("a", "z");
+||||||| 5ae89b2ce
+=======
+struct Spot {
+    x: i32,
+    label: String,
+}
+
+variant Mark {
+    At(Spot),
+    Nowhere,
+}
+
+test "struct, variant and unit keys hash by their members" {
+    let mut map = HashMap::<Mark, i32>::new();
+    map[Mark::At(Spot { x: 1, label: "a" })] = 1;
+    map[Mark::Nowhere] = 2;
+    assert map[Mark::At(Spot { x: 1, label: "a" })] == 1;
+    assert map[Mark::Nowhere] == 2;
+    assert map.get(Mark::At(Spot { x: 1, label: "b" })) == null;
+    let set = [(), ()] as HashSet<()>;
+    assert set.len() == 1;
+}
+
+enum Tone {
+    Low,
+    High,
+}
+
+flags Access {
+    Read,
+    Write,
+}
+
+test "enum and flags keys hash by their case and bits" {
+    let tones = [Tone::Low, Tone::Low] as HashSet<Tone>;
+    assert tones.len() == 1;
+    assert !tones.contains(Tone::High);
+    let mut access = HashMap::<Access, i32>::new();
+    access[Access::Read | Access::Write] = 3;
+    assert access[Access::Write | Access::Read] == 3;
+    assert access.get(Access::Read) == null;
+>>>>>>> origin/main
 }

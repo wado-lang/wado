@@ -63,6 +63,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1: ref "core:prelude/types.wado//Result<(),()>" = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
+
 fn "exit_helper_error.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
     return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
@@ -92,7 +94,7 @@ fn "exit_helper_error.wado/$cm_export__run"() {
 }
 
 fn "core:cli/exit_error"() with Exit {
-    "exit_helper_error.wado/$cm_binding__wasi:cli/exit@0.3.0#exit"(struct.new "core:prelude/types.wado//Result<(),()>" { 1, nop });
+    "exit_helper_error.wado/$cm_binding__wasi:cli/exit@0.3.0#exit"(global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1);
 }
 
 fn "core:rt/unreachable"() {

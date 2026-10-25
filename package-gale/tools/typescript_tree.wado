@@ -1,6 +1,7 @@
 //! Prints the parse tree Gale's TypeScript parser builds for each file named,
-//! in the `toStringTree` form `scripts/antlr4-oracle.sh` prints the jar's.
-//! `tools/tree_diff.wado` compares the two. Each diagnostic goes to stderr,
+//! in the `toStringTree` form `scripts/antlr4_oracle.wado` prints the jar's.
+//! `tools/tree_diff.wado` compares the two, and `tools/oracle_typescript.wado`
+//! runs all three. Each diagnostic goes to stderr,
 //! with the rules it was raised inside.
 //!
 //! ```sh
@@ -22,11 +23,15 @@ use { parse_typescript } from "./typescript_recognizer.wado";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
     for let path of args() {
-        let source = fs::read_to_string(&path).unwrap();
-        let result = parse_typescript(&source);
-        for let d of &result.diagnostics {
-            eprintln(`${path}:${d.line}:${d.col}: ${d.message} [${d.rule_path()}]`);
-        }
-        println(ts::to_string_tree(&result));
+        println(gale_tree(&path, &fs::read_to_string(&path).unwrap()));
     }
+}
+
+/// Gale's tree for `source`, each diagnostic reported on stderr under `path`.
+internal fn gale_tree(path: &String, source: &String) -> String with Stderr {
+    let result = parse_typescript(source);
+    for let d of &result.diagnostics {
+        eprintln(`${*path}:${d.line}:${d.col}: ${d.message} [${d.rule_path()}]`);
+    }
+    return ts::to_string_tree(&result);
 }

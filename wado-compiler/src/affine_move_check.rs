@@ -23,7 +23,7 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
 #[derive(Debug, Clone)]
-pub struct ResourceMoveError {
+pub struct AffineMoveError {
     kind: MoveError,
     span: Span,
     module: String,
@@ -83,8 +83,8 @@ enum MoveError {
     GlobalHoldsReference { global: String, owner: String },
 }
 
-impl From<ResourceMoveError> for Diagnostic {
-    fn from(e: ResourceMoveError) -> Self {
+impl From<AffineMoveError> for Diagnostic {
+    fn from(e: AffineMoveError) -> Self {
         let (code, message) = match e.kind {
             MoveError::UseAfterMove { name, moved_at } => (
                 Code::TypeMismatch,
@@ -213,7 +213,7 @@ impl From<ResourceMoveError> for Diagnostic {
 }
 
 #[must_use]
-pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
+pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
     let drops = Drops::of(sem);
     let fallbacks = sem.destructuring_fallbacks();
     let mut out = Vec::new();
@@ -274,6 +274,7 @@ struct Checker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     drops: &'a Drops,
+<<<<<<< HEAD:wado-compiler/src/resource_move_check.rs
     out: &'a mut Vec<ResourceMoveError>,
     /// [`Semantics::destructuring_fallbacks`].
     fallbacks: &'a IndexMap<Span, &'a FallbackSite>,
@@ -288,10 +289,16 @@ struct NotedFallback {
     /// [`FallbackSite::target_reads`].
     target_reads: Vec<Span>,
     note: String,
+||||||| 5ae89b2ce:wado-compiler/src/resource_move_check.rs
+    out: &'a mut Vec<ResourceMoveError>,
+=======
+    out: &'a mut Vec<AffineMoveError>,
+>>>>>>> origin/main:wado-compiler/src/affine_move_check.rs
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
+<<<<<<< HEAD:wado-compiler/src/resource_move_check.rs
         // A copy the fallback makes is a read of a target: a move out of a
         // reference, or a second read of one the right side moved already,
         // between the assignment's first token and this read.
@@ -306,6 +313,11 @@ impl<'a> Checker<'a> {
             })
             .map(|f| f.note.clone());
         self.out.push(ResourceMoveError {
+||||||| 5ae89b2ce:wado-compiler/src/resource_move_check.rs
+        self.out.push(ResourceMoveError {
+=======
+        self.out.push(AffineMoveError {
+>>>>>>> origin/main:wado-compiler/src/affine_move_check.rs
             kind,
             span,
             module: self.module.source_path(),

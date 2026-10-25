@@ -1467,15 +1467,18 @@ impl FunctionTranslator<'_, '_> {
         };
 
         let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-        if let Some(payload_expr) = payload {
-            let payload = self.translate_operand(payload_expr);
-            fields.push(if carries_payload {
-                let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
-                self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr))
-            } else {
-                payload
-            });
+        let Some(payload_expr) = payload else {
+            return self.struct_new(struct_type_id, fields);
+        };
+        if !carries_payload {
+            let (prelude, values) = self.translate_args_erasing_unit(&[payload_expr], true);
+            fields.extend(values);
+            let construct = self.struct_new(struct_type_id, fields);
+            return self.wrap_call_with_prelude(prelude, construct, result_type, false);
         }
+        let payload = self.translate_operand(payload_expr);
+        let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
+        fields.push(self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr)));
         self.struct_new(struct_type_id, fields)
     }
 

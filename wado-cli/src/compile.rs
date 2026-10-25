@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_manifest::{DependencySource, MANIFEST_FILENAME, registry_url};
+use wado_manifest::{DependencySource, MANIFEST_FILENAME, MetadataSection, registry_url};
 
 use lexopt::Arg::Value;
 use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
@@ -17,6 +17,7 @@ use crate::dep_component::{
     Acquisition, Resolution, fetch_component_dependencies, resolve_inline_component_dependencies,
     resolve_inline_git_dependencies,
 };
+use crate::fingerprint::Input;
 use crate::git::materialize;
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
@@ -435,6 +436,19 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
         .await
         .map(|result| result.wasm)
         .map_err(|_| CliExit::silent_failure(1))
+}
+
+/// Compile `filename`, and say what the compile read where none of it is
+/// untracked.
+pub(crate) async fn compile_recording_reads(
+    filename: &str,
+    flags: &CompileFlags,
+) -> Result<(wado_compiler::CompileResult, Option<Vec<Input>>), CliExit> {
+    let scope = RunCache::new().scoped();
+    let result = try_compile_with_run_cache(filename, flags, Some(Arc::clone(&scope)))
+        .await
+        .map_err(|_| CliExit::silent_failure(1))?;
+    Ok((result, scope.reads()))
 }
 
 /// Seed `host` with the `[dependencies]` index derived from `manifest_pair`
@@ -1302,14 +1316,28 @@ fn embed_package_metadata(
     project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
 ) -> Vec<u8> {
-    if !opts.manifest_driven || opts.embed.metadata.resolve(opts.knobs.opt_level).is_none() {
-        return wasm;
+    match project.filter(|_| opts.manifest_driven) {
+        Some(project) => {
+            embed_metadata_sections(wasm, &package_metadata(project, opts.embed, &opts.knobs))
+        }
+        None => wasm,
     }
-    let Some(project) = project else {
-        return wasm;
-    };
+}
+
+/// The `[package]` metadata a build of `project` embeds: none without a
+/// `[package]`, or where `embed` turns it off at this `-O` level. It reads the
+/// git tree and the `license-file`, which no compile records, so a cached
+/// component is compared against it.
+pub(crate) fn package_metadata(
+    project: &manifest::ProjectManifest,
+    embed: EmbedOptions,
+    knobs: &CompileKnobs,
+) -> Vec<MetadataSection> {
+    if embed.metadata.resolve(knobs.opt_level).is_none() {
+        return Vec::new();
+    }
     let Some(pkg) = project.manifest.package.as_ref() else {
-        return wasm;
+        return Vec::new();
     };
     let revision = clean_git_revision(&project.root);
     let license_text = match read_license_text(project, pkg) {
@@ -1319,9 +1347,7 @@ fn embed_package_metadata(
             None
         }
     };
-    let sections =
-        wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref());
-    embed_metadata_sections(wasm, &sections)
+    wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref())
 }
 
 /// Read the `license-file` text to embed, resolving the path against the
@@ -1347,6 +1373,8 @@ fn read_license_text(
 pub struct Artifact {
     pub bytes: Vec<u8>,
     pub output_path: Option<PathBuf>,
+    /// What the compile read, where none of it is untracked.
+    pub(crate) reads: Option<Vec<Input>>,
 }
 
 /// Report a written file. A command that exists to produce one says so; a
@@ -1398,9 +1426,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         ));
     }
     // Boxed so the manifest held across it keeps every caller's future small.
-    let result = Box::pin(try_compile(&opts.input, &flags))
-        .await
-        .map_err(|_| CliExit::silent_failure(1))?;
+    let (result, reads) = Box::pin(compile_recording_reads(&opts.input, &flags)).await?;
     let wasm = result.wasm;
 
     if opts.wat_to_stdout {
@@ -1409,6 +1435,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         return Ok(Artifact {
             bytes: Vec::new(),
             output_path: None,
+            reads: None,
         });
     }
 
@@ -1446,6 +1473,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
     Ok(Artifact {
         bytes,
         output_path: Some(output_path),
+        reads,
     })
 }
 
