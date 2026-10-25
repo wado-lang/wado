@@ -67,8 +67,8 @@ Outside, a path through the interface is its only name, as `Geo::Point`, in a
 type, a literal, a pattern and a call alike.
 
 A type in an interface takes no visibility modifier: it reaches as far as its
-interface. In an interface that carries `#[cm]`, every field is `pub`, since a
-WIT record has no private field. A type an exported interface's signature names
+interface. In an interface that carries `#[cm]`, every field must be `pub`,
+since a WIT record has no private field. A type an exported interface's signature names
 belongs to that interface, or to another one, and naming a type no interface
 declares is an error.
 
