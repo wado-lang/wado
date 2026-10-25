@@ -1892,32 +1892,14 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<reflect
     let keys: ref "Array<reflect_blanket_pack_bound_recursive.wado/Node>";
     let values: ref Array<()>;
     let alive: ref Array<bool>;
-    let $av_23: i32;
+    let $av_13: i32;
     keys = builtin::array_new<ref "reflect_blanket_pack_bound_recursive.wado//Node">(cap);
-    $av_23 = self.count;
-    let $builtin_arg_3: ref "Array<reflect_blanket_pack_bound_recursive.wado/Node>";
-    $builtin_arg_3 = self.keys;
-    builtin::array_copy<ref "reflect_blanket_pack_bound_recursive.wado//Node">(keys, 0, $builtin_arg_3, 0, $av_23);
-    let $array_clone_i_6: i32;
-    $array_clone_i_6 = 0;
-    let $array_clone_elem_7: ref null "reflect_blanket_pack_bound_recursive.wado//Node";
-    $array_copy_deep: block {
-        l119: loop {
-            break_if $array_copy_deep $array_clone_i_6 >= (0 + $av_23);
-            $array_clone_elem_7 = builtin::array_get_value<ref "reflect_blanket_pack_bound_recursive.wado//Node">(keys, $array_clone_i_6);
-            builtin::array_set<ref "reflect_blanket_pack_bound_recursive.wado//Node">(keys, $array_clone_i_6, (if ref.is_null($array_clone_elem_7) -> ref null "reflect_blanket_pack_bound_recursive.wado//Node" {
-                $array_clone_elem_7;
-            } else {
-                "reflect_blanket_pack_bound_recursive.wado/$value_copy$reflect_blanket_pack_bound_recursive.wado/Node"(ref.as_non_null($array_clone_elem_7));
-            }));
-            $array_clone_i_6 = $array_clone_i_6 + 1;
-            continue l119;
-        };
-    };
+    $av_13 = self.count;
+    builtin::array_copy<ref "reflect_blanket_pack_bound_recursive.wado//Node">(keys, 0, self.keys, 0, $av_13);
     self.keys = keys;
-    builtin::array_copy<()>(local.tee values(builtin::array_new<()>(cap)), 0, self.values, 0, $av_23);
+    builtin::array_copy<()>(local.tee values(builtin::array_new<()>(cap)), 0, self.values, 0, $av_13);
     self.values = values;
-    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_23);
+    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_13);
     self.alive = alive;
 }
 
@@ -1940,22 +1922,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_
     $sroa_v_end_36 = $load_0.count;
     $sroa_$iter_1_start_37 = 0;
     $licm_arith_40 = self.shift;
-    b121: block {
-        l122: loop {
-            break_if b121 $sroa_$iter_1_start_37 >= $sroa_v_end_36;
+    b119: block {
+        l120: loop {
+            break_if b119 $sroa_$iter_1_start_37 >= $sroa_v_end_36;
             $sroa_$iter_1_start_37 = local.tee current($sroa_$iter_1_start_37) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(a, current) >>u $licm_arith_40;
-                b124: block {
-                    l125: loop {
-                        break_if b124 builtin::array_get_value<i32>(table, s) == -1;
+                b122: block {
+                    l123: loop {
+                        break_if b122 builtin::array_get_value<i32>(table, s) == -1;
                         s = (s + 1) & slots;
-                        continue l125;
+                        continue l123;
                     };
                 };
                 builtin::array_set<i32>(table, s, current);
             }
-            continue l122;
+            continue l120;
         };
     };
 }
@@ -1971,12 +1953,12 @@ fn "core:prelude/traits.wado/reflect_blanket_pack_bound_recursive.wado/Node^core
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b126: block {
-        l127: loop {
-            break_if b126 i >= n;
+    b124: block {
+        l125: loop {
+            break_if b124 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l127;
+            continue l125;
         };
     };
 }

@@ -1168,32 +1168,14 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
     let keys: ref "Array<core:prelude/string.wado/String>";
     let values: ref Array<i32>;
     let alive: ref Array<bool>;
-    let $av_23: i32;
+    let $av_13: i32;
     keys = builtin::array_new<ref "core:prelude/string.wado//String">(cap);
-    $av_23 = self.count;
-    let $builtin_arg_3: ref "Array<core:prelude/string.wado/String>";
-    $builtin_arg_3 = self.keys;
-    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, $builtin_arg_3, 0, $av_23);
-    let $array_clone_i_6: i32;
-    $array_clone_i_6 = 0;
-    let $array_clone_elem_7: ref null "core:prelude/string.wado//String";
-    $array_copy_deep: block {
-        l126: loop {
-            break_if $array_copy_deep $array_clone_i_6 >= (0 + $av_23);
-            $array_clone_elem_7 = builtin::array_get_value<ref "core:prelude/string.wado//String">(keys, $array_clone_i_6);
-            builtin::array_set<ref "core:prelude/string.wado//String">(keys, $array_clone_i_6, (if ref.is_null($array_clone_elem_7) -> ref null "core:prelude/string.wado//String" {
-                $array_clone_elem_7;
-            } else {
-                "struct_literal_implicit_generic.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_7));
-            }));
-            $array_clone_i_6 = $array_clone_i_6 + 1;
-            continue l126;
-        };
-    };
+    $av_13 = self.count;
+    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, self.keys, 0, $av_13);
     self.keys = keys;
-    builtin::array_copy<i32>(local.tee values(builtin::array_new<i32>(cap)), 0, self.values, 0, $av_23);
+    builtin::array_copy<i32>(local.tee values(builtin::array_new<i32>(cap)), 0, self.values, 0, $av_13);
     self.values = values;
-    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_23);
+    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_13);
     self.alive = alive;
 }
 
@@ -1217,7 +1199,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     $array_clone_i_6 = 0;
     let $array_clone_elem_7: ref null "core:prelude/string.wado//String";
     $array_copy_deep: block {
-        l128: loop {
+        l126: loop {
             break_if $array_copy_deep $array_clone_i_6 >= (0 + $av_31);
             $array_clone_elem_7 = builtin::array_get_value<ref "core:prelude/string.wado//String">(nkeys, $array_clone_i_6);
             builtin::array_set<ref "core:prelude/string.wado//String">(nkeys, $array_clone_i_6, (if ref.is_null($array_clone_elem_7) -> ref null "core:prelude/string.wado//String" {
@@ -1226,7 +1208,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                 "struct_literal_implicit_generic.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_7));
             }));
             $array_clone_i_6 = $array_clone_i_6 + 1;
-            continue l128;
+            continue l126;
         };
     };
     self.nkeys = nkeys;
@@ -1350,12 +1332,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_41 = self.buf;
         $load_2 = 0;
-        b145: block {
-            l146: loop {
-                break_if b145 $load_2 >= sign_len;
+        b143: block {
+            l144: loop {
+                break_if b143 $load_2 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self_41, 48);
                 $load_2 = $load_2 + 1;
-                continue l146;
+                continue l144;
             };
         };
         if @unlikely(local.tee $load_2(self_41.used + digit_count) > builtin::array_len(self_41.repr)) {
@@ -1394,12 +1376,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_41 = self.buf;
         $load_2 = self.fill;
         i_220 = 0;
-        b154: block {
-            l155: loop {
-                break_if b154 i_220 >= sign_len;
+        b152: block {
+            l153: loop {
+                break_if b152 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_41, $load_2);
                 i_220 = i_220 + 1;
-                continue l155;
+                continue l153;
             };
         };
         return new_used_46;
@@ -1409,12 +1391,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_41 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b157: block {
-            l158: loop {
-                break_if b157 $load_2 >= start_47;
+        b155: block {
+            l156: loop {
+                break_if b155 $load_2 >= start_47;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_41, i_220);
                 $load_2 = $load_2 + 1;
-                continue l158;
+                continue l156;
             };
         };
         if $mv$alt_prefix$used {
@@ -1444,12 +1426,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_41 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b164: block {
-            l165: loop {
-                break_if b164 $load_2 >= new_used_46;
+        b162: block {
+            l163: loop {
+                break_if b162 $load_2 >= new_used_46;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_41, i_220);
                 $load_2 = $load_2 + 1;
-                continue l165;
+                continue l163;
             };
         };
         return start_47;
@@ -1457,12 +1439,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_41 = self.buf;
         start_47 = self.fill;
         i_220 = 0;
-        b166: block {
-            l167: loop {
-                break_if b166 i_220 >= sign_len;
+        b164: block {
+            l165: loop {
+                break_if b164 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_41, start_47);
                 i_220 = i_220 + 1;
-                continue l167;
+                continue l165;
             };
         };
         if $mv$alt_prefix$used {

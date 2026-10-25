@@ -184,7 +184,7 @@ struct Scan<'ast> {
     found: IndexMap<AstId, Clean>,
 }
 
-impl<'ast> Scan<'ast> {
+impl Scan<'_> {
     /// Move the candidates the walk so far leaves clean into `found`.
     fn settle(&mut self) {
         for (id, index_locals, root) in std::mem::take(&mut self.candidates) {
