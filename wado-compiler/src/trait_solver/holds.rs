@@ -522,8 +522,7 @@ impl Query<'_> {
         bindings: &[Option<Binding>],
     ) -> bool {
         deferred.iter().any(|(projection, met)| {
-            self.at_bindings(projection, bindings)
-                .is_some_and(|expected| expected != self.normalized(met))
+            self.projection_holds(projection, met, bindings) == Some(false)
         })
     }
 
@@ -534,10 +533,21 @@ impl Query<'_> {
         deferred: &[(SolverType, SolverType)],
         bindings: &[Option<Binding>],
     ) -> bool {
-        deferred.iter().all(|(projection, met)| {
-            self.at_bindings(projection, bindings)
-                .is_some_and(|expected| expected == self.normalized(met))
-        })
+        deferred
+            .iter()
+            .all(|(projection, met)| self.projection_holds(projection, met, bindings) == Some(true))
+    }
+
+    /// Whether `projection` read at `bindings` is `met`; `None` where it names
+    /// a parameter still unbound.
+    fn projection_holds(
+        &mut self,
+        projection: &SolverType,
+        met: &SolverType,
+        bindings: &[Option<Binding>],
+    ) -> Option<bool> {
+        let expected = self.at_bindings(projection, bindings)?;
+        Some(expected == self.normalized(met))
     }
 
     /// `ty`, written in an impl's parameter space, at what the match bound
