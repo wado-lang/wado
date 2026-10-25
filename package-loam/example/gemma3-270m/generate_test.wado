@@ -1,7 +1,8 @@
 //! Gemma 3 (270M) through Loam picks the tokens onnxruntime picks greedily
 //! after each prompt `generate.json` records. It reads what `fetch.sh` writes,
 //! so `wado test` leaves it out. Name the file to run it, under
-//! `--collector drc` as `README.md` says the model runs.
+//! `--collector drc` as `README.md` says the model runs, and at `-O2`, since a
+//! test compiles at `-O0` by default.
 
 use fs from "core:fs";
 use { from_string } from "core:json";
@@ -19,7 +20,7 @@ struct Oracle {
     generate: List<Generated>,
 }
 
-#[timeout_ms(3600000)]
+#[timeout_ms(600000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
     let checkpoint = fs::read("gemma3-270m/build/gemma3.safetensors").unwrap();
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
