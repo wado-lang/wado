@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792925536162,
+  "lastUpdate": 1792926949221,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70721,6 +70721,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a9c588394406e87a8b933285b56f88a78356f294"
         },
         "date": 1792925535408,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6853639b04bf2d3f2feeb01615da3e04731c6405",
+          "message": "Merge pull request #2456 from wado-lang/claude/upbeat-knuth-rwam10\n\ndocs(wep): set the core:process roadmap apart from what stays a gap",
+          "timestamp": "2026-10-25T19:53:10+09:00",
+          "tree_id": "f9a84b4f2523c87b9f87d15916ad9c608943f4f1",
+          "url": "https://github.com/wado-lang/wado/commit/6853639b04bf2d3f2feeb01615da3e04731c6405"
+        },
+        "date": 1792926948437,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
