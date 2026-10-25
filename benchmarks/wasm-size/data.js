@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792919946233,
+  "lastUpdate": 1792925536162,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70677,6 +70677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/70c033cc63372fa34467d71ca0b550f2571ccd8c"
         },
         "date": 1792919945484,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a9c588394406e87a8b933285b56f88a78356f294",
+          "message": "Merge pull request #2451 from wado-lang/ccr-a8831b13-amp4il\n\nfeat: derive Hash for structs and variants",
+          "timestamp": "2026-10-25T19:26:25+09:00",
+          "tree_id": "bf0ded555b71fa0dd38b1be83d2d8cb1625dbaf0",
+          "url": "https://github.com/wado-lang/wado/commit/a9c588394406e87a8b933285b56f88a78356f294"
+        },
+        "date": 1792925535408,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
