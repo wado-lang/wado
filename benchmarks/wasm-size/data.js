@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792927976314,
+  "lastUpdate": 1792938033446,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70809,6 +70809,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7b5b76d048eb1a85c05341f7f91888112c2996df"
         },
         "date": 1792927975537,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d8612dfb87a2b816c054d9a24b4f1b3f077f79d",
+          "message": "Merge pull request #2455 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): drop each value on the right side of a `with` restore, on every path out",
+          "timestamp": "2026-10-25T23:01:06+09:00",
+          "tree_id": "cf9781ccb6ae71af6673bfee1db7176b5816065b",
+          "url": "https://github.com/wado-lang/wado/commit/4d8612dfb87a2b816c054d9a24b4f1b3f077f79d"
+        },
+        "date": 1792938032559,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
