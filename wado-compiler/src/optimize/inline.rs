@@ -20,7 +20,7 @@
 use std::cell::{Cell, RefCell};
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::inline_block_label;
+use crate::name::{inline_block_label, minted_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -37,7 +37,7 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{self, cold_exprs, cold_path_id, unreached_through};
 use super::body_memo::BodyMemo;
-use super::dce::callee_descriptor;
+use super::dce::{ReachabilityCache, callee_descriptor, reachable_function_positions};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
@@ -1037,6 +1037,7 @@ pub(super) struct InlineScans {
     bodies: BodyMemo<BodyScan>,
     /// Indexed by store position.
     read: Vec<SweepRead>,
+    reachability: ReachabilityCache,
 }
 
 /// What a sweep reads about a function that its own body does not decide:
@@ -1845,9 +1846,9 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
-fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
+fn call_site_counts(scans: &[BodyScan], live: &IndexSet<usize>) -> Vec<usize> {
     let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
+    for (callee, _) in live.iter().flat_map(|&caller| &scans[caller].calls) {
         counts[callee.index()] += 1;
     }
     counts
@@ -2117,13 +2118,22 @@ pub fn inline_functions(
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
+    let InlineScans {
+        bodies,
+        read,
+        reachability,
+    } = scans;
+    // Only a live caller's sites count: no pass inside the fixed-point loop
+    // deletes a function, so a clone that took over every site of its original
+    // keeps that original calling its callees, and a callee whose one live site
+    // shrinks it would read as having two.
+    let live = reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
     let descriptors = descriptor_cache.descriptors(project);
     let cold_path = cold_path_id(descriptors);
-    let InlineScans { bodies, read } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
-    let call_sites = call_site_counts(scans);
+    let call_sites = call_site_counts(scans, &live);
     let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
@@ -2917,6 +2927,69 @@ pub(super) struct InlineRevalInfo {
 /// binds each prepared parameter value and executes the spliced callee body
 /// with locals remapped into the caller's frame and `return`s converted to
 /// `break label`.
+/// For an argument `&mut <temporary>`, the `let mut` binding the temporary
+/// to local `index`, which the argument then references instead. A reference
+/// to a local is one `ref_elim` folds away and a compile-time frame can write
+/// through; one to an rvalue is neither, so a `Formatter` built for one call
+/// would stay an object whose fields no pass can read.
+fn bind_mut_ref_temporary(
+    caller: &mut Body,
+    value: Operand,
+    index: u32,
+    span: Span,
+) -> Option<(StmtId, NirLocal)> {
+    let reference = value.as_expr()?;
+    let ExprKind::Unary {
+        op: NirUnaryOp::MutRef,
+        expr: Operand::Expr(temporary),
+    } = caller.exprs[reference].kind
+    else {
+        return None;
+    };
+    if !matches!(
+        caller.exprs[temporary].kind,
+        ExprKind::Call { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::VariantConstruct { .. }
+    ) {
+        return None;
+    }
+    let type_id = caller.exprs[temporary].type_id;
+    let name = minted_name("temp", index);
+    let read = caller.exprs.push(ExprNode {
+        kind: ExprKind::Local {
+            index,
+            name: name.clone(),
+        },
+        type_id,
+        span,
+    });
+    caller.exprs[reference].kind = ExprKind::Unary {
+        op: NirUnaryOp::MutRef,
+        expr: Operand::Expr(read),
+    };
+    let let_id = caller.stmts.push(StmtNode {
+        kind: StmtKind::Let {
+            name: name.clone(),
+            local_index: index,
+            is_mut: true,
+            type_id,
+            value: Operand::Expr(temporary),
+            skip_value_copy: false,
+        },
+        span,
+    });
+    Some((
+        let_id,
+        NirLocal {
+            name,
+            type_id,
+            is_mut: true,
+        },
+    ))
+}
+
 fn build_inlined_labeled_block(
     caller: &mut Body,
     candidate: &NirFunction,
@@ -2938,9 +3011,18 @@ fn build_inlined_labeled_block(
 
     let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
+    let temp_base = local_offset + callee_param_count.max(callee_local_count);
+    let mut temps: Vec<NirLocal> = Vec::new();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
+        let temp_index = temp_base + temps.len() as u32;
+        if let Some((let_id, temp)) =
+            bind_mut_ref_temporary(caller, binding.value, temp_index, call_span)
+        {
+            block_stmts.push(let_id);
+            temps.push(temp);
+        }
         param_to_local.insert(binding.callee_local_index, new_local_index);
         frame.locals.push(NirLocal {
             name: binding.name.clone(),
@@ -2969,6 +3051,12 @@ fn build_inlined_labeled_block(
         }
     }
     frame.local_count += new_locals_needed;
+    debug_assert_eq!(frame.local_count, temp_base);
+    for temp in temps {
+        frame.address_taken.insert(frame.local_count);
+        frame.locals.push(temp);
+        frame.local_count += 1;
+    }
 
     // An annotation names a local and the splice renumbers locals. Dropping one
     // lets a read of a boxed local forward past a write through the alias.
