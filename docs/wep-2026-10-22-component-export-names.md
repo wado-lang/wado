@@ -121,29 +121,121 @@ a `Point`. Since each WIT scope is one Wado scope, a Wado `interface` declares
 types as WIT's does:
 
 ```wado
-interface Geo {
-    struct Point { x: f64, y: f64 }
-    fn distance(a: Point, b: Point) -> f64;
+#[cm("a:x/geo@0.1.0")]
+pub interface Geo {
+    struct Point { pub x: f64, pub y: f64 }
+    enum Unit { Metric, Imperial }
+    variant Shape { Circle(f64), Poly(List<Point>) }
+    flags Axis { X, Y }
+    type Meters = f64;
+    resource Canvas {
+        fn draw(&self, shape: Shape);
+    }
+
+    fn distance(a: Point, b: Point, unit: Unit) -> Meters;
 }
 ```
 
-Outside the interface, `Geo::Point` is the type's only name. No form names it
-`Point`: not a `use`
-of the interface's types, not a re-export, and not a type alias. Each of those
-was weighed, as `pub use { Geo::{Point} };`, `pub Point = Geo::Point;` and
+An interface body holds operations and the type declarations WIT has: `struct`,
+`enum`, `variant`, `flags`, `resource`, and `type Name = T;`. It holds nothing
+else, so no `impl`, `trait` or `global`. An interface has no associated types,
+since an operation declares only a name, parameters and a return type, so
+`type Name = T;` in one declares a newtype. A type in an interface needs no
+`#[cm]`: its CM name is the interface's name with the type's name in kebab case.
+
+Several alternatives were weighed. Keeping every type at module level and
+making a shared name an error would let a component break its consumers by
+adding an interface. One module per interface, reached by a specifier such as
+`"./geo.wasm#a:x/geo"`, contradicts reading a component file as one module.
+Giving only a component's interfaces a type scope, with no way to write one in
+source, would leave a WIT interface that Wado source cannot declare.
+
+#### Inside and outside the interface
+
+Inside the interface, its own types are named bare, in the signatures and the
+default bodies of its operations alike. A name there is looked up in the
+interface first, then in the module.
+
+Outside, a path is the type's only name, in every position:
+
+```wado
+let p: Geo::Point = Geo::Point { x: 1.0, y: 2.0 };
+let canvas = Geo::Canvas::new();
+let r = match shape {
+    Geo::Shape::Circle(r) => r,
+    Geo::Shape::Poly(_) => 0.0,
+};
+let u: Geo::Unit = Metric;      // a case is bare where the expected type gives it
+```
+
+A namespace import adds its prefix, as `geo::Geo::Point`. A handler writes the
+path too, since `Self` in it is the handler's own type:
+
+```wado
+impl Geo for Flat {
+    fn distance(&self, a: Geo::Point, b: Geo::Point, unit: Geo::Unit) -> Geo::Meters { ... }
+}
+```
+
+An `impl` of a type declared in an interface, such as `impl Display for Geo::Point`, follows the rules for a type declared in another module. A type
+name and an operation name never coincide, since one is `PascalCase` and the
+other `snake_case`, and WIT keeps a type and a function of one interface apart
+too.
+
+No form names the type `Point` outside the interface: not a `use` of the
+interface's types, not a re-export, and not a type alias. Each of those was
+weighed, as `pub use { Geo::{Point} };`, `pub Point = Geo::Point;` and
 `pub Geo::Point as Point;`, and each adds language surface that a path already
 covers. Source and component then read alike, since neither offers the short
-name.
+name. The cost is the prefix every use outside the interface writes.
 
-The default interface is the exception, because it is its module
-([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)).
-A Wado library declares its exported types at module level, so the default
-interface's types are items of the component's module, as its functions are.
+#### Visibility
+
+A type in an interface takes no visibility modifier, and writing one is an
+error. It reaches as far as its interface does. Its fields carry their own
+visibility, as any struct's do. In an interface that carries `#[cm]`, every field
+is `pub`, since a WIT record has no private field, and a field that is not `pub`
+there is an error.
+
+#### An exported interface declares its own types
+
+A type an exported interface's signature names belongs to an interface: its
+own, or one it reaches, such as the `Instant` of `wasi:clocks/system-clock`. A
+signature that names a type no interface declares is an error, since nothing
+says which WIT interface the type would belong to:
+
+```wado
+pub struct Point { x: f64, y: f64 }
+
+#[cm("acme:geo/metrics@0.1.0")]
+pub interface Metrics {
+    fn distance(a: Point, b: Point) -> f64;   // error: `Point` is not declared in `Metrics`
+}
+```
+
+Emitting such a type into the default interface, and reaching it from
+`metrics` through a WIT `use`, was weighed. It would publish a type the author
+never exported.
+
+#### Where a WIT scope comes from
+
+A component's bindings declare each non-default interface's types inside that
+interface. A WIT `use` between two interfaces becomes a path, `Other::Point`,
+that the resolver answers. A module generated from WIT keeps its shape: each
+`wasi:*` file holds one interface, so the file is that interface's scope, and
+its types stay module items.
 
 A module that declares types in an interface makes that module their declaring
 module, as
 [§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
 requires of every module declaring a `#[cm]` type.
+
+#### The default interface
+
+The default interface is the exception, because it is its module
+([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)).
+A Wado library declares its exported types at module level, so the default
+interface's types are items of the component's module, as its functions are.
 
 ### The version may be left out
 
@@ -187,9 +279,14 @@ disagreement is an error naming both files.
 - [x] Each interface of a component is a scope of its own, and an operation is
   bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib.wado` passes.
-- [ ] A Wado `interface` declares types, named only through it.
+- [ ] A Wado `interface` declares the WIT type kinds, named bare inside it and
+  only through it outside. A visibility modifier on one, and a field that is not
+  `pub` in a `#[cm]` interface, are errors.
 - [ ] A component's interface types are named only through their interface,
-  except the default interface's, which are items of the module.
+  except the default interface's, which are items of the module. Two interfaces
+  of one component that each declare a `pt` both import.
+- [ ] An exported interface whose signature names a type no interface declares
+  is an error.
 - [ ] A component's imported interface is named as an export is, and two
   components importing one interface name one declaration, whose shapes must
   agree.
@@ -216,20 +313,6 @@ uses, so one may import `emit` alone and another `emit` and `flush`. Nor is it
 decided whether `x:y/log@1.0.0` and `x:y/log@1.1.0` are one interface name or
 two. What it admits is an ordinary pair of components the compiler may reject,
 or accept as one interface when they are two.
-
-## Known gap: the visibility of an interface's types
-
-Whether a type declared in an interface carries a visibility of its own, and
-whether its fields must be `pub` as a WIT record's are, is not decided. What it
-admits is a Wado interface whose types another module may or may not reach or
-construct, with no rule saying which.
-
-## Known gap: a newtype in an interface
-
-An interface writes its members as a trait does, so `type Meters = f64;` inside
-one reads as an associated type. A WIT type alias in a component's interface
-is synthesized as a newtype named through it, but no Wado spelling declares
-one. What it admits is a WIT interface that Wado source cannot write.
 
 ## Known gap: a component's world name is not observed
 
