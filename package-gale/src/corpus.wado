@@ -1,19 +1,18 @@
-//! What a corpus tool needs either side of its parser: the paths to process
-//! (named, or what git tracks), where in a file a byte offset falls, and the baseline its count ratchets
+//! What a corpus tool needs either side of its parser: the paths to process,
+//! where in a file a byte offset falls, and the baseline its count ratchets
 //! against.
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { cmd, Process } from "core:process";
 use { HashMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
 /// The paths to process: every `--paths-from <file>` list, one path per line,
 /// plus any bare argument ending in `extension`. `flags` are the arguments the
-/// caller reads itself. Any other argument stops the run, and a list that
-/// cannot be read yields its own path so the run reports it: neither may leave
-/// a run that checked nothing looking clean.
+/// caller reads itself. Any other argument stops the run, as does naming no
+/// path, and a list that cannot be read yields its own path so the run reports
+/// it: none may leave a run that checked nothing looking clean.
 pub fn collect_paths<S: AsStrSlice>(
     argv: &List<String>,
     extension: S,
@@ -43,22 +42,7 @@ pub fn collect_paths<S: AsStrSlice>(
             panic(`unknown argument: ${argv[i]}`);
         }
     }
-    return paths;
-}
-
-/// The files git tracks under `pathspec`, for a run that names none.
-pub fn tracked_files<S: AsStrSlice>(pathspec: S) -> List<String> with Process {
-    let spec = pathspec.to_string();
-    let listed = match cmd`git ls-files -z -- ${spec}`.read() {
-        Ok(bytes) => bytes,
-        Err(e) => panic(`git ls-files ${spec}: ${e}`),
-    };
-    let mut paths: List<String> = [];
-    for let path of String::from_utf8_lossy(&listed).split("\0") {
-        if !path.is_empty() {
-            paths.push(path.to_string());
-        }
-    }
+    assert !paths.is_empty(), "a run must name the paths it processes";
     return paths;
 }
 

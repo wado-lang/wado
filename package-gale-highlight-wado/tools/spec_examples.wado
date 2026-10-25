@@ -15,11 +15,10 @@ use wado from "../grammar/Wado.g4"
         },
     };
 use { fenced_code_blocks, FencedCode } from "../../package-marl/src/lib.wado";
-use { collect_paths, tracked_files } from "lib:gale";
+use { collect_paths } from "lib:gale";
 use { args, eprintln, exit, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Process } from "core:process";
 use { TreeMap, TreeSet } from "core:collections";
 use { from_string } from "core:json";
 use { Value } from "core:value";
@@ -361,13 +360,8 @@ fn report(paths: &List<String>) -> i32 with (Stderr, Preopens) {
     return failed;
 }
 
-/// Naming files checks those files; naming none checks every spec file.
-export fn run() with (Stderr, Environment, Preopens, Exit, Process) {
-    let mut paths = collect_paths(&args(), ".md", []);
-    if paths.is_empty() {
-        paths = tracked_files("docs/spec-*.md");
-    }
-    if report(&paths) > 0 {
+export fn run() with (Stderr, Environment, Preopens, Exit) {
+    if report(&collect_paths(&args(), ".md", [])) > 0 {
         exit(1);
     }
 }

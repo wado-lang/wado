@@ -2,9 +2,9 @@
 //! compiler's own parser over the stdlib + fixture corpus.
 //!
 //! With no argument it checks the invariants below: the compiler's parser runs
-//! in-process, and the Gale-generated one, which is Wasm, under the `wado`
-//! built beside this binary. Paths, or `--paths-from <file>`, print the
-//! compiler's verdict for each instead, for triage.
+//! in-process, and the Gale-generated one, which is Wasm, under `wado run`.
+//! Paths, or `--paths-from <file>`, print the compiler's verdict for each
+//! instead, for triage.
 //!
 //! Verdicts come from [`wado_lsp::Engine::parse_diagnostics`], so a fixture
 //! whose imports are deliberately broken still reports its syntax truthfully.
@@ -46,7 +46,9 @@ struct Verdict {
 
 pub fn run(mut parser: lexopt::Parser) {
     let mut paths: Vec<String> = Vec::new();
+    let mut named = false;
     while let Some(arg) = parser.next().expect("failed to parse args") {
+        named = true;
         match arg {
             // The corpus runs to thousands of files, past a comfortable argv.
             Long("paths-from") => {
@@ -60,7 +62,7 @@ pub fn run(mut parser: lexopt::Parser) {
         }
     }
 
-    if paths.is_empty() {
+    if !named {
         let dir = Path::new("package-gale-highlight-wado/build/check-grammar");
         let corpus = collect_corpus();
         let gale_tsv = run_gale_side(
@@ -72,6 +74,7 @@ pub fn run(mut parser: lexopt::Parser) {
         return;
     }
 
+    assert!(!paths.is_empty(), "the named lists must hold a path");
     let mut bad = 0usize;
     for verdict in verdicts_for(&paths) {
         if verdict.ok {
@@ -91,9 +94,9 @@ fn value(parser: &mut lexopt::Parser) -> String {
     parser.value().unwrap().to_string_lossy().into_owned()
 }
 
-/// Run the Gale side, `tool` under the `wado` built beside this binary, over
-/// `corpus`, and return the file holding what it printed. Its files live in
-/// `dir`, inside the repository: `wado run` reaches only the current directory.
+/// Run the Gale side, `tool` under the dev `wado`, over `corpus`, and return
+/// the file holding what it printed. Its files live in `dir`, inside the
+/// repository: `wado run` reaches only the current directory.
 pub fn run_gale_side(dir: &Path, corpus: &[String], tool: &str) -> PathBuf {
     if let Err(e) = fs::remove_dir_all(dir)
         && e.kind() != ErrorKind::NotFound
@@ -107,19 +110,15 @@ pub fn run_gale_side(dir: &Path, corpus: &[String], tool: &str) -> PathBuf {
     let gale_tsv = dir.join("gale.tsv");
     let stdout = fs::File::create(&gale_tsv)
         .unwrap_or_else(|e| panic!("creating '{}': {e}", gale_tsv.display()));
-    let wado = std::env::current_exe()
-        .expect("the running binary has a path")
-        .with_file_name(format!("wado{}", std::env::consts::EXE_SUFFIX));
-    let status = Command::new(&wado)
-        .args(["run", tool, "--", "--paths-from"])
+    // dev-bin.sh builds `wado` first, so the Gale side never runs a compiler
+    // older than the parser this binary links.
+    let status = Command::new("scripts/dev-bin.sh")
+        .args(["wado", "run", tool, "--", "--paths-from"])
         .arg(&list)
         .stdout(stdout)
         .status()
-        .unwrap_or_else(|e| panic!("running '{}': {e}", wado.display()));
-    if !status.success() {
-        // The tool has said why on stderr.
-        std::process::exit(status.code().unwrap_or(1));
-    }
+        .unwrap_or_else(|e| panic!("running 'scripts/dev-bin.sh wado': {e}"));
+    assert!(status.success(), "the Gale side, {tool}, failed: {status}");
     gale_tsv
 }
 

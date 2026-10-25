@@ -11,11 +11,10 @@ use rust from "../tests/grammars/RustLexer.g4"
         },
     };
 use { parse_rust } from "./rust_corpus.wado";
-use { collect_paths, ratchet, tracked_files } from "../src/corpus.wado";
+use { collect_paths, ratchet } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Process } from "core:process";
 use { HashMap } from "core:collections";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
@@ -185,14 +184,9 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
     );
 }
 
-/// Naming files asks about those files; naming none asks about every tracked
-/// Rust file.
-export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process) {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
-    let mut paths = collect_paths(&argv, ".rs", ["--update", "--check"]);
-    if paths.is_empty() {
-        paths = tracked_files("*.rs");
-    }
+    let paths = collect_paths(&argv, ".rs", ["--update", "--check"]);
     let update = argv.into_iter().any(|a| a == "--update");
     let check = argv.into_iter().any(|a| a == "--check");
     let status = if update || check { ratchet_mode(&paths, update) } else { list_mode(&paths) };
