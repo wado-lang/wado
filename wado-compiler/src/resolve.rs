@@ -15,7 +15,9 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias};
+use crate::name::{
+    DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias, split_namespace_member,
+};
 use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
@@ -609,8 +611,9 @@ fn namespace_import_names(module: &Module) -> impl Iterator<Item = &str> {
         })
 }
 
-/// `ns::member` written in `module`, through a namespace import, which
-/// registers each member under its `ns$member` alias.
+/// `ns::member` written in `module`: through a namespace import, which
+/// registers each member under its `ns$member` alias, or through an interface,
+/// which names its types.
 fn namespace_member(
     symbols: &SymbolTable,
     defs: &DefTable,
@@ -620,6 +623,7 @@ fn namespace_member(
 ) -> Option<DefId> {
     symbols
         .imported(module, &namespace_member_alias(namespace, member))
+        .or_else(|| symbols.interface_type(module, namespace, member))
         .map(|sym| defs.def_at(sym.defined_at))
 }
 
@@ -774,7 +778,16 @@ impl Resolver<'_> {
         }
         self.scopes
             .resolve(self.module, name)
+            .or_else(|| self.interface_type(name))
             .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
+    /// The type a path spelled `Interface$Type` names: one an interface
+    /// declares, named through it.
+    fn interface_type(&self, key: &str) -> Option<DefId> {
+        let (owner, member) = split_namespace_member(key)?;
+        let symbol = self.symbols.interface_type(self.module, owner, member)?;
+        Some(self.defs.def_at(symbol.defined_at))
     }
 
     /// Record what `site`, which named `key` in its scope, refers to.
@@ -811,6 +824,11 @@ impl Resolver<'_> {
     fn note_import(&mut self, key: &str, def: DefId) {
         if self.scopes.imported(self.module, key) == Some(def) {
             self.used_imports.insert(key.to_string());
+        } else if self.interface_type(key) == Some(def)
+            && let Some((owner, _)) = split_namespace_member(key)
+            && self.scopes.imported(self.module, owner).is_some()
+        {
+            self.used_imports.insert(owner.to_string());
         }
     }
 

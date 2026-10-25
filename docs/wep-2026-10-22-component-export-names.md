@@ -302,6 +302,10 @@ this way, since each component's export is its own declaration.
   imported under a name tagged with the component, and composition wires each to
   its component's export.
   `cm_component_import_same_interface_two_components.wado` passes.
+- [x] A component's interface types are named only through their interface,
+  except the default interface's, which are items of the module. The bindings
+  declare each as `Interface::Type`, a member of its interface.
+  `cm_component_import_same_type_two_interfaces.wado` passes.
 - [ ] A Wado `interface` declares the WIT type kinds, named bare inside it and
   only through it outside. A visibility modifier on one, and a field that is not
   `pub` in a `#[cm]` interface, are errors.
@@ -309,9 +313,6 @@ this way, since each component's export is its own declaration.
   it there, the facades re-export only interfaces, and the standard library, the
   packages and the fixtures name each WASI type by its path. A module-level type
   carrying `#[cm("…#name")]` is then an error.
-- [ ] A component's interface types are named only through their interface,
-  except the default interface's, which are items of the module. Two interfaces
-  of one component that each declare a `pt` both import.
 - [ ] An exported interface whose signature names a type no interface declares
   is an error.
 - [ ] A component's imported interface is named as an export is, and two

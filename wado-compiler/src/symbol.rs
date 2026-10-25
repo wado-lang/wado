@@ -636,6 +636,37 @@ impl SymbolTable {
         })
     }
 
+    /// The type `owner::member` written in `module` names, where `owner` is an
+    /// interface the module reaches: a type an interface declares is named
+    /// through it.
+    pub fn interface_type(
+        &self,
+        module: &ModuleSource,
+        owner: &str,
+        member: &str,
+    ) -> Option<&Symbol> {
+        let owner = self
+            .imported(module, owner)
+            .or_else(|| self.lookup_in_module(module, owner))?;
+        if !matches!(owner.kind, SymbolKind::Effect(_)) {
+            return None;
+        }
+        let symbol = self.lookup_in_module(
+            owner.module_source(),
+            &mangle_local_method(&owner.name, member),
+        )?;
+        matches!(
+            symbol.kind,
+            SymbolKind::Struct(_)
+                | SymbolKind::Enum(_)
+                | SymbolKind::Variant(_)
+                | SymbolKind::Flags(_)
+                | SymbolKind::Newtype(_)
+                | SymbolKind::Resource(_)
+        )
+        .then_some(symbol)
+    }
+
     /// Whether `name` names a type every module reads without importing it:
     /// what `core:prelude` declares or `pub use`s, plus the builtin types.
     pub fn is_prelude_type(&self, name: &str) -> bool {

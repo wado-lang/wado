@@ -491,9 +491,9 @@ or side-car `.wit` is involved.
   A `stream<T>` or `future<T>` value is the readable end; the writable end stays
   with whoever created the pair.
 
-> Not yet implemented: an interface offered at two versions, types named
-> through their interface, a `wasi:*` type declared inside its interface, and
-> one declaration per imported interface name
+> Not yet implemented: an interface offered at two versions, a `wasi:*` type
+> declared inside its interface, and one declaration per imported interface
+> name
 > ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 The dependency is statically composed into the output, so the result is one
