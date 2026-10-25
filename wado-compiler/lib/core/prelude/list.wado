@@ -15,6 +15,7 @@ use {
     IndexRefMut,
     IndexValue,
     IndexAssign,
+    IndexSwap,
     IntoIterator,
     ForOf,
     FromIterator,
@@ -389,6 +390,14 @@ impl<affine T> IndexAssign<i32> for List<T> {
     fn index_assign(&mut self, index: i32, value: Self::Output) {
         assert 0 <= index < self.used;
         self.repr[index] = value;
+    }
+}
+
+impl<affine T> IndexSwap<i32> for List<T> {
+    fn index_swap(&mut self, a: i32, b: i32)
+        contract 0 <= b < self.len() && 0 <= a < self.len()
+    {
+        self.repr.index_swap(a, b);
     }
 }
 
