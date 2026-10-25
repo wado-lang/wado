@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792891347511,
+  "lastUpdate": 1792901593353,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70457,6 +70457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e22eab94d30898e6159ee20a887d35482cc01ed0"
         },
         "date": 1792891346725,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8657d67ec642fef1741819c162f19eabd176868",
+          "message": "Merge pull request #2443 from wado-lang/ccr-a8831b13-amp4il\n\nfix(elaborator): report the impl bound a receiver misses, not an absent impl",
+          "timestamp": "2026-10-25T12:53:16+09:00",
+          "tree_id": "853841e17682410cdbcdf81176623c868aedc09f",
+          "url": "https://github.com/wado-lang/wado/commit/c8657d67ec642fef1741819c162f19eabd176868"
+        },
+        "date": 1792901592623,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
