@@ -697,8 +697,8 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
             scope.primitives[output] = p;
         }
     }
-    for let branch of [&then_scope, &else_scope] {
-        hoist_constants(scope, branch, local)?;
+    for let [graph, branch] of [[&then_graph, &then_scope], [&else_graph, &else_scope]] {
+        hoist_constants(scope, branch, &schema.within(&graph.name), local)?;
     }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
@@ -706,17 +706,17 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
 
 /// Give `scope` a shape for each of its constants `branch` read, so the
 /// constant is spelled once around the branches and each branch relabels it to
-/// the axes it read it under: the one `scope`'s layout gives it, else the first
-/// branch's.
-fn hoist_constants(scope: &mut Checked, branch: &Checked, local: &Schema) -> Result<(), InferError> {
+/// the axes it read it under. Where `local`, `scope`'s layout, names it as
+/// `own`, the branch's, does, the branch's shape is `scope`'s too.
+fn hoist_constants(scope: &mut Checked, branch: &Checked, own: &Schema, local: &Schema) -> Result<(), InferError> {
     for let [name, shape] of branch.shapes.entries() {
         if !scope.known.contains_key(*name) || scope.shapes.contains_key(*name) {
             continue;
         }
-        if local.axes_for(name) matches { Some(_) } {
-            materialize(name, &scope.known, &mut scope.shapes, local, &mut scope.axes)?;
-        } else {
+        if local.axes_for(name) == own.axes_for(name) {
             scope.shapes[*name] = *shape;
+        } else {
+            materialize(name, &scope.known, &mut scope.shapes, local, &mut scope.axes)?;
         }
     }
     return Result::Ok(());
@@ -1681,33 +1681,15 @@ fn attention(
         if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {
             return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
         }
-        for let index of [ROTARY_COS, ROTARY_SIN] {
-            let cache = ranked(index, 2)?;
-            stated(&cache.axes[1], dim as i64 / 2, owed, classes)?;
-            let Some(slack) = cache.axes[0].extent.poly().try_sub(&total) else {
-                return Result::Err(refusal(node, "the rotary cache must reach every position"));
-            };
-            owe(node, owed, slack, "the rotary cache must reach every position")?;
-        }
-    }
-    if node.has_operand(ATTENTION_BIAS) {
-        let bias = ranked(ATTENTION_BIAS, 4)?;
-        owe_equal(node, owed, &bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence")?;
-        owe_equal(node, owed, &bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence")?;
-        for let [i, along] of [
-            [0, q.axes[0].extent.poly()],
-            [1, Poly::constant(options.heads as i64)],
-        ] as List<[i32, Poly]> {
-            let extent = bias.axes[i].extent.poly();
-            if extent.as_constant() != Option::Some(1) {
-                owe_equal(
-                    node,
-                    owed,
-                    &extent,
-                    &along,
-                    "the bias's first two extents must be 1 or the batch's and heads'",
-                )?;
-            }
+        let [cos, sin] = [ranked(ROTARY_COS, 2)?, ranked(ROTARY_SIN, 2)?];
+        stated(&cos.axes[1], dim as i64 / 2, owed, classes)?;
+        let Some(slack) = cos.axes[0].extent.poly().try_sub(&total) else {
+            return Result::Err(refusal(node, "the rotary cache must reach every position"));
+        };
+        owe(node, owed, slack, "the rotary cache must reach every position")?;
+        // The two caches are read position by position together.
+        for let i of 0..<2 {
+            agree_at(node, &cos.axes[i], &sin.axes[i], owed, classes)?;
         }
     }
     let Some(total_extent) = Extent::of(total) else {
@@ -1718,6 +1700,26 @@ fn attention(
         // Nothing reads the caches, so nothing names their positions.
         None => classes.mint(`${node.name()}[2]`, total_extent),
     };
+    if node.has_operand(ATTENTION_BIAS) {
+        let bias = ranked(ATTENTION_BIAS, 4)?;
+        agree_at(node, &bias.axes[2], &q.axes[1], owed, classes)?;
+        agree_at(node, &bias.axes[3], &positions, owed, classes)?;
+        // The batch stretches as a broadcast does, and no axis stands for the
+        // heads.
+        let [batch, heads] = [bias.axes[0], bias.axes[1]];
+        if !batch.extent.is_one() || q.axes[0].extent.is_one() {
+            agree_at(node, &batch, &q.axes[0], owed, classes)?;
+        }
+        if !heads.extent.is_one() {
+            owe_equal(
+                node,
+                owed,
+                &heads.extent.poly(),
+                &Poly::constant(options.heads as i64),
+                "the bias's second extent must be 1 or the heads'",
+            )?;
+        }
+    }
     let cache = Shape {
         axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]],
     };

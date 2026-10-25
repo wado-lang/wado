@@ -30,7 +30,7 @@ impl Schema {
     }
 
     /// The axis names for a tensor, from the first rule whose pattern reaches
-    /// it. `None` is a build error at the caller; there is no positional fallback.
+    /// it, or `None` where none does.
     pub fn axes_for<S: AsStrSlice>(&self, tensor: S) -> Option<List<String>> {
         let name: List<char> = tensor.as_str_slice().chars().collect();
         for let rule of &self.layout {

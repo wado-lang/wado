@@ -38,9 +38,9 @@ const binary = (op, a, b, layout) => ({ inputs: pair(a, b), nodes: [node(op, ['A
 add('AddSame', binary('Add', [2, 3], [2, 3], { A: ['Row', 'Col'], B: ['Row', 'Col'] }));
 add('AddSuffix', binary('Add', [2, 3], [3], { A: ['Row', 'Col'], B: ['Col'] }));
 add('AddPrefix', binary('Add', [3], [2, 3], { A: ['Col'], B: ['Row', 'Col'] }));
-add('MulStretchRight', binary('Mul', [2, 3], [2, 1], { A: ['Row', 'Col'], B: ['Row', 'Col'] }));
-add('SubStretchLeft', binary('Sub', [1, 3], [2, 3], { A: ['Row', 'Col'], B: ['Row', 'Col'] }));
-add('AddStretchBoth', binary('Add', [2, 1], [1, 3], { A: ['Row', 'Col'], B: ['Row', 'Col'], Y: ['Row', 'Col'] }));
+add('MulStretchRight', binary('Mul', [2, 3], [2, 1], { A: ['Row', 'Col'], B: ['Row', 'One'] }));
+add('SubStretchLeft', binary('Sub', [1, 3], [2, 3], { A: ['One', 'Col'], B: ['Row', 'Col'] }));
+add('AddStretchBoth', binary('Add', [2, 1], [1, 3], { A: ['Row', 'One'], B: ['Unit', 'Col'] }));
 // An axis of 1 the layout names apart from the axis it stretches over.
 add('MulStretchRenamed', binary('Mul', [2, 1], [2, 3], { A: ['Row', 'One'], B: ['Row', 'Col'], Y: ['Row', 'Col'] }));
 add('SubStretchRenamedRanks', binary('Sub', [3, 1, 4], [2, 4], { A: ['Depth', 'One', 'Col'], B: ['Row', 'Col'], Y: ['Depth', 'Row', 'Col'] }));
@@ -73,7 +73,7 @@ add('MatMulBatched', binary('MatMul', [2, 2, 3], [2, 3, 4], { A: ['Batch', 'Row'
 add('MatMulShared', binary('MatMul', [2, 2, 3], [3, 4], { A: ['Batch', 'Row', 'K'], B: ['K', 'Col'] }));
 add('MatMulRowVector', binary('MatMul', [3], [3, 4], { A: ['K'], B: ['K', 'Col'] }));
 add('MatMulColumnVector', binary('MatMul', [2, 3], [3], { A: ['Row', 'K'], B: ['K'] }));
-add('MatMulBroadcastBatch', binary('MatMul', [1, 2, 3], [2, 3, 4], { A: ['Batch', 'Row', 'K'], B: ['Batch', 'K', 'Col'] }));
+add('MatMulBroadcastBatch', binary('MatMul', [1, 2, 3], [2, 3, 4], { A: ['One', 'Row', 'K'], B: ['Batch', 'K', 'Col'] }));
 // A language model's head: the product by a weight's transpose, which Loam
 // reads as the weight is stored, with an operator after it to join.
 add('MatMulTransposedWeight', {
@@ -91,7 +91,7 @@ add('Gemm', {
 add('GemmTransposedScaled', {
   inputs: { A: float([3, 2]), B: float([4, 3]), C: float([1, 4]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y', { alpha: f32(0.5), beta: f32(2), transA: 1, transB: 1 })],
-  layout: { A: ['K', 'Row'], B: ['Col', 'K'], C: ['Row', 'Col'] },
+  layout: { A: ['K', 'Row'], B: ['Col', 'K'], C: ['One', 'Col'] },
 });
 add('GemmScalarBias', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([]) },
@@ -139,7 +139,7 @@ add('SqueezeLast', {
 add('SplitEqual', {
   inputs: { A: float([2, 6]) },
   nodes: [node('Split', ['A'], ['Y', 'P', 'Q'], { axis: 1 })],
-  layout: { A: ['Row', 'Wide'], Y: ['Row', 'Part'], P: ['Row', 'Part'], Q: ['Row', 'Part'] },
+  layout: { A: ['Row', 'Wide'], Y: ['Row', 'First'], P: ['Row', 'Second'], Q: ['Row', 'Third'] },
 });
 add('SplitSizes', {
   inputs: { A: float([2, 7]) },
@@ -323,7 +323,7 @@ add('ConstantOfShape', {
     node('Shape', ['A'], 'S'),
     node('ConstantOfShape', ['S'], 'Y', { value: { tensor: tensorProto('v', FLOAT, [1], new Float32Array([2.5]).buffer) } }),
   ],
-  layout: { A: ['Row', 'Col'], Y: ['Row', 'Col'] },
+  layout: { A: ['Row', 'Col'], Y: ['Height', 'Width'] },
 });
 // A half constant by its bit patterns: 1.5, -2, the half nearest 0.1, and the
 // smallest subnormal.
