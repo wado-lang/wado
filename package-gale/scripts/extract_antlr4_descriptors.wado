@@ -372,6 +372,19 @@ struct TriageMaps {
 ///   "Category/Name" = "reason text"
 ///   [stage_b_oracle_todo]
 ///   "Category/Name" = "reason text"
+/// The triage file, `null` where there is none. One that cannot be read exits:
+/// with no triage, every skip it records would be regenerated away.
+fn read_status_file(root: &Descriptor) -> Option<String> with (Stderr, Exit) {
+    return match read_file_to_string(root, &status_file_path()) {
+        Ok(text) => Some(text),
+        Err(e) && e matches { NoEntry } => null,
+        Err(e) => {
+            eprintln(`extract: cannot read ${status_file_path()}: ${e:?}`);
+            exit(1);
+        },
+    };
+}
+
 fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut category = TriageMap::new();
     let mut stage_a = TriageMap::new();
@@ -1433,11 +1446,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
         },
     };
 
-    let status_text = match read_file_to_string(&root, &status_file_path()) {
-        Ok(s) => Option::Some(s),
-        Err(_) => null,
-    };
-    let triage_maps = load_triage_maps(&status_text);
+    let triage_maps = load_triage_maps(&read_status_file(&root));
     let triage_map = triage_maps.category;
     let stage_a_triage_map = triage_maps.stage_a;
     let stage_b_triage_map = triage_maps.stage_b;
@@ -1513,43 +1522,43 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
         let cat_src_dir = match open_dir(&src_root, category, false) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: missing category '${*category}', skipping`);
-                continue;
+                eprintln(`extract: missing category '${*category}'`);
+                exit(1);
             },
         };
         let cat_out_dir = match ensure_dir(&grammars_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create category dir '${*category}', skipping`);
-                continue;
+                eprintln(`extract: cannot create category dir '${*category}'`);
+                exit(1);
             },
         };
         let stage_b_cat_dir = match ensure_dir(&stage_b_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_b/${*category}/, skipping`);
-                continue;
+                eprintln(`extract: cannot create stage_b/${*category}/`);
+                exit(1);
             },
         };
         let stage_a_cat_dir = match ensure_dir(&stage_a_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_a/${*category}/, skipping`);
-                continue;
+                eprintln(`extract: cannot create stage_a/${*category}/`);
+                exit(1);
             },
         };
         let stage_c_cat_dir = match ensure_dir(&stage_c_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_c/${*category}/, skipping`);
-                continue;
+                eprintln(`extract: cannot create stage_c/${*category}/`);
+                exit(1);
             },
         };
         let oracle_pending_cat_dir = match ensure_dir(&oracle_pending_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create oracle-pending/${*category}/, skipping`);
-                continue;
+                eprintln(`extract: cannot create oracle-pending/${*category}/`);
+                exit(1);
             },
         };
 
@@ -2150,11 +2159,7 @@ fn finalize_stage_b_oracle(root: &Descriptor, oracle_version: &String) with (Std
             exit(1);
         },
     };
-    let status_text = match read_file_to_string(root, &status_file_path()) {
-        Ok(s) => Option::Some(s),
-        Err(_) => null,
-    };
-    let oracle_triage_map = load_triage_maps(&status_text).stage_b_oracle;
+    let oracle_triage_map = load_triage_maps(&read_status_file(root)).stage_b_oracle;
     let mut emitted = 0;
     let mut emitted_todo = 0;
     let mut files = 0;
@@ -2165,14 +2170,14 @@ fn finalize_stage_b_oracle(root: &Descriptor, oracle_version: &String) with (Std
             Ok(d) => d,
             Err(_) => {
                 eprintln(`finalize: cannot open oracle-pending/${category}/`);
-                continue;
+                exit(1);
             },
         };
         let oracle_cat = match ensure_dir(&oracle_out_root, &category) {
             Ok(d) => d,
             Err(_) => {
                 eprintln(`finalize: cannot create stage_b_oracle/${category}/`);
-                continue;
+                exit(1);
             },
         };
         let input_files = list_files_with_suffix(&pending_cat, ".input");
