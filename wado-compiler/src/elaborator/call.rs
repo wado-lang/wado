@@ -1936,11 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // The receiver's own type, off the declaration the namespace
                     // named. A trait-frame signature is read at it, and the
                     // importing module cannot name `Type` to re-resolve one.
-                    let ns_receiver_type =
-                        self.namespace_member(prefix, type_name).and_then(|def| {
-                            let ast_id = self.tysys.resolutions.defs().ast_id(def);
-                            self.tysys.type_table.borrow().type_of_symbol(&ast_id)
-                        });
+                    let ns_receiver_type = self.type_declared_by(ns_key.as_ref());
                     // The receiver's own type arguments, and the method's, as
                     // the two-segment spelling infers them. Reading only a
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
@@ -4095,9 +4091,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        if type_args.method_args.is_empty() {
-            return;
-        }
         let self_binding = receiver.map(|receiver| SelfBinding {
             type_id: self.tysys.get_base_type(receiver),
             declaring_trait: None,
