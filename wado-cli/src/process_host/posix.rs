@@ -157,7 +157,7 @@ fn start(
             Descriptor::Dir(dir) => Some(Arc::clone(&dir.dir)),
             Descriptor::File(_) => return Ok(Err(ErrorCode::Io)),
         },
-        None => grants.first().map(|grant| Arc::clone(&grant.dir)),
+        None => grants.dirs.first().map(|grant| Arc::clone(&grant.dir)),
     };
     let host_stdio = matches!(view.ctx.stdio, GuestStdio::Host);
     let stdin = match stdin {
@@ -187,8 +187,11 @@ fn start(
         };
         let program = resolve(program, &cwd)?;
         let mut policy = Policy::new(Network::Granted);
-        for grant in grants {
+        for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
+        }
+        for path in &grants.read {
+            policy.grant_path(path.clone(), Reach::ReadExecute);
         }
         policy.grant_path(scratch.0.path(), Reach::ReadWrite);
         if inherits {

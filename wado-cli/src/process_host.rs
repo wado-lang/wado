@@ -47,11 +47,18 @@ use self::core::process::types::{self, Availability, Command, ErrorCode, Spawned
 pub struct Spawning(Arc<Answer>);
 
 enum Answer {
-    /// The guest's directories in preopen order: the first is where a child
-    /// starts unless the guest names another.
-    Available(Vec<Grant>),
+    Available(Grants),
     Denied(String),
     Unsupported(String),
+}
+
+/// What a child may reach beyond the baseline.
+struct Grants {
+    /// The guest's directories in preopen order: the first is where a child
+    /// starts unless the guest names another.
+    dirs: Vec<Grant>,
+    /// Read and execute only, from `--process-read`.
+    read: Vec<PathBuf>,
 }
 
 struct Grant {
@@ -59,10 +66,11 @@ struct Grant {
     dir: Arc<File>,
 }
 
-/// Whether `--deny-process` turned spawning off.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Whether `--deny-process` turned spawning off, and the paths
+/// `--process-read` opens to every child.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProcessGrant {
-    Offered,
+    Offered { read: Vec<PathBuf> },
     Denied,
 }
 
@@ -79,15 +87,15 @@ impl Spawning {
 }
 
 fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<Answer> {
-    if grant == ProcessGrant::Denied {
+    let ProcessGrant::Offered { read } = grant else {
         return Ok(Answer::Denied(
             "spawning is turned off by --deny-process".to_owned(),
         ));
-    }
+    };
     if let Some(reason) = unsupported_reason() {
         return Ok(Answer::Unsupported(reason));
     }
-    let mut grants = Vec::with_capacity(preopened_dirs.len());
+    let mut dirs = Vec::with_capacity(preopened_dirs.len());
     for (index, (host, guest)) in preopened_dirs.iter().enumerate() {
         let path = std::path::absolute(host)?;
         // The child starts in the first grant, so there `.` names it on both
@@ -99,9 +107,9 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
             )));
         }
         let dir = Arc::new(File::open(&path)?);
-        grants.push(Grant { path, dir });
+        dirs.push(Grant { path, dir });
     }
-    Ok(Answer::Available(grants))
+    Ok(Answer::Available(Grants { dirs, read }))
 }
 
 #[cfg(unix)]
@@ -146,7 +154,7 @@ impl ProcessCtx {
 
     /// The grants a child receives. Traps where spawning is not offered: the
     /// interface requires the guest to ask `get-availability` first.
-    fn grants(&self) -> wasmtime::Result<&[Grant]> {
+    fn grants(&self) -> wasmtime::Result<&Grants> {
         match &*self.spawning.0 {
             Answer::Available(grants) => Ok(grants),
             Answer::Denied(reason) | Answer::Unsupported(reason) => Err(wasmtime::format_err!(

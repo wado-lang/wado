@@ -984,7 +984,7 @@ fn load_module(
         &artifact.wasm,
         opt_level,
         profile,
-        runtime_knobs,
+        runtime_knobs.clone(),
         profiler_slot,
     );
     let load_duration = load_start.elapsed();
@@ -1233,6 +1233,7 @@ async fn run_load_stage(
             let slot_for_load = profiler_slot.clone();
             let coverage_for_load = coverage_run.clone();
             let testing = artifact.path.clone();
+            let runtime_knobs = runtime_knobs.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             let task = tokio::spawn(async move {
@@ -1687,7 +1688,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             cpu_permit,
             Arc::clone(&clock),
         ),
-        module.process,
+        module.process.clone(),
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
@@ -2448,7 +2449,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let measures = coverage_run.is_some()
         || !matches!(profile, ProfileMode::None)
         || runtime_knobs.report_fuel;
-    let test_cache = (!no_run && !measures).then(|| TestCache::new(&flags, runtime_knobs));
+    let test_cache = (!no_run && !measures).then(|| TestCache::new(&flags, runtime_knobs.clone()));
     // Settled before anything is sized by the work, which the hits are not.
     let cached: Vec<Vec<(String, Tally)>> = package_runs
         .iter_mut()
@@ -2491,7 +2492,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             profile.clone(),
-            runtime_knobs,
+            runtime_knobs.clone(),
             profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),

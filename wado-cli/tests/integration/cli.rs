@@ -1715,6 +1715,71 @@ fn test_test_times_out_a_guest_blocked_on_the_host() {
         .stdout(predicate::str::contains("test timed out after 300ms"));
 }
 
+/// `--process-read` lets a child read a path outside the guest's grants, and
+/// that path alone.
+#[cfg(unix)]
+#[test]
+fn test_run_process_read_opens_a_path_to_the_child() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let tool = tempfile::tempdir().unwrap();
+    std::fs::write(tool.path().join("data.txt"), "from the tool").unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { args, print, Stdout, Environment } from \"core:cli\";\nuse { cmd, Process } from \"core:process\";\n\nexport fn run() with (Stdout, Environment, Process) {\n    let path = args()[0];\n    print(String::from_utf8_lossy(&cmd`cat ${path}`.read().unwrap()));\n}\n",
+    )
+    .unwrap();
+    let data = tool.path().join("data.txt");
+    let run = |extra: &[&std::ffi::OsStr]| {
+        wado_in(work.path())
+            .arg("run")
+            .args(extra)
+            .arg("main.wado")
+            .arg(&data)
+            .assert()
+    };
+
+    run(&[]).failure();
+    run(&["--process-read".as_ref(), tool.path().as_os_str()])
+        .success()
+        .stdout("from the tool");
+}
+
+#[test]
+fn test_run_process_read_takes_an_existing_path_and_a_spawning_guest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let missing = tmp.path().join("missing");
+    wado()
+        .args(["run", "--process-read"])
+        .arg(&missing)
+        .arg("example/hello.wado")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "--process-read {}: ",
+            missing.display()
+        )));
+    for flags in [
+        ["--deny-process", "--process-read"],
+        ["--process-read", "--deny-process"],
+    ] {
+        let mut cmd = wado();
+        cmd.arg("run");
+        for flag in flags {
+            cmd.arg(flag);
+            if flag == "--process-read" {
+                cmd.arg(tmp.path());
+            }
+        }
+        cmd.arg("example/hello.wado")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("which --deny-process forbids"));
+    }
+}
+
 #[test]
 fn test_test_runs_a_file_named_twice_once() {
     let tmp = tempfile::tempdir().unwrap();

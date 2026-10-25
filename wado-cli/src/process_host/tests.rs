@@ -5,7 +5,7 @@ fn grants(dirs: &[(&std::path::Path, &str)]) -> Answer {
         .iter()
         .map(|(host, guest)| (host.display().to_string(), (*guest).to_owned()))
         .collect();
-    answer(&dirs, ProcessGrant::Offered).unwrap()
+    answer(&dirs, ProcessGrant::Offered { read: Vec::new() }).unwrap()
 }
 
 #[test]

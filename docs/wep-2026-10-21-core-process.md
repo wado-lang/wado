@@ -228,8 +228,13 @@ child may read more than the guest. It is defined, not open-ended:
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
-  outside the grants runs only from a path the user adds to the baseline, such
-  as `~/.cargo/bin`.
+  outside the grants runs only from a path the user adds with
+  `--process-read <path>` (`run`, `serve`, `test`), such as `~/.cargo`. It is
+  read and execute only, opened to every child and never to the guest, and
+  resolved through its symlinks when `wado` starts, so a path that names no
+  file fails there. It is a command-line flag alone: a manifest is the
+  project's content, and a grant the project could widen would reach past
+  what its own code is given.
 - The real `HOME` is never in the baseline. A child sees it only through an
   explicit grant, so `~/.ssh` stays out of reach by default.
 - No UNIX socket named by a path is open, except mDNSResponder's on macOS, where
@@ -459,9 +464,8 @@ cannot be taken back.
 
 ## Known gaps
 
-- The CLI surface is not named: a flag that adds read paths to the baseline (a
-  toolchain under `~/.cargo`, say), a flag that grants the real `HOME`, and the
-  option that sets the grace period, which stays at 3 seconds until it is.
+- The CLI surface is not named for a flag that grants the real `HOME`, or for
+  the option that sets the grace period, which stays at 3 seconds until it is.
 - The compiler's e2e harness does not link `core:process`, so a fixture cannot
   spawn; the stdlib's own tests cover it under `wado test`.
 - A component that spawns imports `core:process`, which no WASI world defines,
