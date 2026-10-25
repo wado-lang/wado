@@ -195,29 +195,38 @@ pub fn display_function_name(name: &str) -> String {
 }
 
 /// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
-/// function an author wrote, and the span already carries the module path.
+/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`, and
+/// `Formatter::pad<String>` for one whose type arguments carry module paths too.
+/// A clone's suffix names no function an author wrote, and the span already
+/// carries the module path.
 ///
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
 ///
 /// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker.
+/// character rather than a suffix marker; so may a type argument.
 #[must_use]
-pub fn diagnostic_function_name(name: &str) -> &str {
+pub fn diagnostic_function_name(name: &str) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
-        return name;
+        return name.to_string();
     }
-    let unqualified = name.rsplit('/').next().unwrap_or(name);
-    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
-        INTERNAL_PREFIX.len()
-    } else {
-        0
-    };
-    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
-        Some(suffix) => &unqualified[..prefix_len + suffix],
-        None => unqualified,
+    let mut out = String::with_capacity(name.len());
+    let mut depth = 0u32;
+    for c in name.chars() {
+        match c {
+            '/' => {
+                let path_start = out.rfind(['<', ',']).map_or(0, |i| i + 1);
+                out.truncate(path_start);
+                continue;
+            }
+            '<' => depth += 1,
+            '>' => depth -= 1,
+            '$' if depth == 0 && !out.is_empty() && !out.ends_with("::") => break,
+            _ => {}
+        }
+        out.push(c);
     }
+    out
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -2786,6 +2795,19 @@ mod tests {
         assert_eq!(
             diagnostic_function_name("$value_copy$Point$shallow"),
             "$value_copy"
+        );
+        // A type argument carries a module path of its own.
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
+            ),
+            "Formatter::pad<String>"
+        );
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/traits.wado/TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
+            ),
+            "TemplateHole<$tmpl$59e1,String>::lit"
         );
     }
 

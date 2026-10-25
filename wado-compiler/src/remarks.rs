@@ -1,6 +1,7 @@
 //! Optimizer remarks (WEP 2026-06-03): the costs that survive optimization and
 //! would otherwise be invisible while coding — a value-semantic copy, a branch a
-//! build-time parameter still decides, a block computing a constant at run time.
+//! build-time parameter still decides, a block or call computing a constant at
+//! run time.
 //!
 //! NIR is the last IR carrying per-expression spans and `wir_build` lowers these
 //! one-to-one, so walking optimized NIR yields exact source locations. Detection
@@ -9,17 +10,19 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::call_args::CallArgs;
 use crate::hashmap;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::diagnostic_function_name;
-use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
+use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
     materializing_globals, region_queries,
 };
+use crate::optimize::is_constant_arg;
 use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -419,9 +422,10 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
     }
 }
 
-/// Report each block that computes a constant at run time: a compile-time region
-/// the fold did not reach. Read off the final IR, never off a refusal a pass
-/// recorded, so it retires itself as the fold reaches each shape.
+/// Report each block and each call that computes a constant at run time: a
+/// compile-time region, or a runnable callee given constants, the fold did not
+/// reach. Read off the final IR, never off a refusal a pass recorded, so it
+/// retires itself as the fold reaches each shape.
 pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
     let callees = build_callee_map(package, &Executor::default(), |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
@@ -445,18 +449,9 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
             if region.reads_outer || region.writes_outer {
                 continue;
             }
-            let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
-            let cause = match (region.refusal, surviving.is_empty()) {
-                (Some(refusal), _) => refusal.describe().to_string(),
-                (None, false) => format!(
-                    "{} still runs here",
-                    surviving
-                        .iter()
-                        .map(|n| format!("`{n}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                (None, true) => "no call on its path explains it".to_string(),
+            let cause = match region.refusal {
+                Some(refusal) => refusal.describe().to_string(),
+                None => surviving_cause(body, NodeRef::Expr(region.expr), &names, &ctfe_builtins),
             };
             remarks.push(Remark {
                 message: format!("this block computes a constant at run time: {cause}"),
@@ -464,37 +459,101 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                 span: body.exprs[region.expr].span,
             });
         }
+        for (call, func_id) in constant_calls(body, &names, &ctfe_builtins, type_table) {
+            let callee = package.functions[func_id.index()].borrow();
+            let callee_body = callee
+                .body
+                .as_ref()
+                .expect("a ctfe-runnable callee has a body");
+            let cause = surviving_cause(
+                callee_body,
+                NodeRef::Block(callee_body.root()),
+                &names,
+                &ctfe_builtins,
+            );
+            remarks.push(Remark {
+                message: format!("this call computes a constant at run time: {cause}"),
+                module: func.module_source.clone(),
+                span: body.exprs[call].span,
+            });
+        }
     }
     remarks
 }
 
-/// The functions on `region`'s own path the engine was free to run and did not,
-/// under the names their authors wrote. A call under a `cold_path` marker is in
-/// the block but not on the path, and naming it buries the callee that is.
-///
-/// Empty is an answer: the fold waits on a value the engine cannot represent
-/// rather than a body it cannot run, which `WADO_TRACE=ctfe_stmt` locates.
-fn surviving_calls(
+/// The value-producing calls on `body`'s own path that the engine was free to
+/// run, every argument a constant, and did not fold.
+fn constant_calls(
     body: &Body,
-    region: ExprId,
     names: &[Option<String>],
     ctfe_builtins: &CtfeBuiltinMap,
-) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut stack = vec![(NodeRef::Expr(region), false)];
+    type_table: &TypeTable,
+) -> Vec<(ExprId, FuncId)> {
+    let mut out = Vec::new();
+    walk_hot_calls(
+        body,
+        NodeRef::Block(body.root()),
+        ctfe_builtins,
+        |e, func_id, args| {
+            if names[func_id.index()].is_some()
+                && !type_table.is_stackless(body.exprs[e].type_id)
+                && args
+                    .iter()
+                    .all(|a| is_constant_arg(body, a.expr, &IndexSet::default()))
+            {
+                out.push((e, func_id));
+            }
+        },
+    );
+    out
+}
+
+/// What the remark blames for the constant `root` computes at run time: the
+/// functions on its path the engine was free to run and did not, under the
+/// names their authors wrote.
+///
+/// None is an answer: the fold waits on a value the engine cannot represent
+/// rather than a body it cannot run, which `WADO_TRACE=ctfe_stmt` locates.
+fn surviving_cause(
+    body: &Body,
+    root: NodeRef,
+    names: &[Option<String>],
+    ctfe_builtins: &CtfeBuiltinMap,
+) -> String {
+    let mut surviving: Vec<&str> = Vec::new();
+    walk_hot_calls(body, root, ctfe_builtins, |_, func_id, _| {
+        if let Some(name) = &names[func_id.index()]
+            && !surviving.contains(&name.as_str())
+        {
+            surviving.push(name);
+        }
+    });
+    if surviving.is_empty() {
+        return "no call on its path explains it".to_string();
+    }
+    let listed: Vec<String> = surviving.iter().map(|n| format!("`{n}`")).collect();
+    format!("{} still runs here", listed.join(", "))
+}
+
+/// Each call under `root` on its own path. A call under a `cold_path` marker is
+/// in the code but not on the path, and naming it buries the callee that is.
+fn walk_hot_calls(
+    body: &Body,
+    root: NodeRef,
+    ctfe_builtins: &CtfeBuiltinMap,
+    mut visit: impl FnMut(ExprId, FuncId, &CallArgs<ArenaCallArg>),
+) {
+    let mut stack = vec![(root, false)];
     while let Some((node, in_cold)) = stack.pop() {
         let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
         if !in_cold
             && let NodeRef::Expr(e) = node
-            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-            && let Some(Some(name)) = names.get(func_id.index())
-            && !out.contains(name)
+            && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
         {
-            out.push(name.clone());
+            visit(e, *func_id, args);
         }
         body.for_each_child(node, |c| stack.push((c, in_cold)));
     }
-    out
 }
 
 /// Whether `node` is a block the program itself marks unlikely, which the
@@ -523,7 +582,7 @@ fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name).to_string())
+            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name))
         })
         .collect()
 }

@@ -531,12 +531,13 @@ export fn run() with Stdout {
 
 #[test]
 fn a_surviving_region_is_not_blamed_for_a_materializing_store() {
-    // The store globalization leaves is exempt for the fold, so a region that
+    // The store globalization leaves is exempt for the fold, so a constant that
     // carries one and survives anyway must be blamed for whatever actually
     // stopped it. Reporting the store instead sends the reader after a write the
-    // engine was never refusing, and files the region under the wrong cause.
+    // engine was never refusing, and files the remark under the wrong cause.
     //
-    // Three interpolations is what it takes to survive: one folds.
+    // The float formatter stores its `"NaN"` that way, and keeps the template
+    // from folding.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
@@ -544,7 +545,7 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     let w = 1024;
     let h = 768;
-    println(`mandelbrot ${w}x${h}, max_iter=${256}`);
+    println(`mandelbrot ${w}x${h}, scale=${3.5}`);
 }
 "#,
     );

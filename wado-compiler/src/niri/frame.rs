@@ -993,10 +993,7 @@ impl Interpreter<'_> {
                 .callees
                 .and_then(|m| m.get(key))
                 .map(|c| c.func.borrow())
-                .map_or_else(
-                    || format!("{key:?}"),
-                    |f| diagnostic_function_name(&f.name).to_string(),
-                )
+                .map_or_else(|| format!("{key:?}"), |f| diagnostic_function_name(&f.name))
         );
     }
 

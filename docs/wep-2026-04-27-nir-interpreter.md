@@ -196,9 +196,11 @@ There are three instruments, and the roadmap is ordered by what they count rathe
 than by what looks important.
 
 - A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
-  infrastructure, names a block that computes a constant at run time and what
-  stopped it: the calls that survived inside it, or the fact that refused it as a
-  frame. It fires from the final IR, never from a refusal a pass recorded, so it
+  infrastructure, names a block or a call that computes a constant at run time,
+  and what stopped it. A block reports the calls that survived inside it, or the
+  fact that refused it as a frame. A call is one into a body the engine can run,
+  every argument a constant, and it reports the calls that survived in that
+  body. It fires from the final IR, never from a refusal a pass recorded, so it
   retires itself as the fold reaches each shape.
 - `WADO_TRACE=ctfe_call` names what each declined call wanted that the frame
   could not give, `ctfe_stmt` the statement a frame abandoned at, and
