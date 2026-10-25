@@ -236,7 +236,10 @@ export fn run() with Stdout {
 
     for (line, note) in [
         (11, "the right side is not a permutation of the targets"),
-        (20, "a reference to a target is readable after the statement"),
+        (
+            20,
+            "a reference to a target is readable after the statement",
+        ),
         (
             25,
             "a target is not owned, and the statement is not a transposition within one container",
@@ -247,7 +250,7 @@ export fn run() with Stdout {
         ),
         (
             40,
-            "an index local, or the local the container is reached through, is referenced or captured",
+            "an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured",
         ),
         (58, "`Shelf` does not implement `IndexSwap`"),
     ] {

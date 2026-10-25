@@ -21,7 +21,7 @@ use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{
-    CoercionKind, DesugarKind, DestructuringFallback, MethodDispatch, TypeAnnotations,
+    CoercionKind, DestructuringFallback, DesugarKind, MethodDispatch, TypeAnnotations,
 };
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};

@@ -914,7 +914,11 @@ test "AsSlice::iter_ref reaches a list through the bound" {
 }
 
 test "index_swap exchanges two elements" {
-    let mut xs: List<List<i32>> = [[1], [2, 2], [3, 3, 3]];
+    let mut xs: List<List<i32>> = [
+        [1],
+        [2, 2],
+        [3, 3, 3],
+    ];
     xs.index_swap(0, 2);
     assert xs[0].len() == 3 && xs[1].len() == 2 && xs[2].len() == 1;
     xs.index_swap(1, 1);
@@ -926,7 +930,8 @@ affine struct SwapTok {
 }
 
 impl Drop for SwapTok {
-    fn drop(self) {}
+    fn drop(self) {
+    }
 }
 
 test "index_swap exchanges affine elements" {

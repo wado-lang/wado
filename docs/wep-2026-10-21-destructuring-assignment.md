@@ -206,8 +206,8 @@ functions. It anchors to the statement and adds a note that names the cause:
   container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
-- an index local, or a reference local the container is reached through, is
-  referenced or captured;
+- an index reads a mutable global, or an index local or a reference local the
+  container is reached through is referenced or captured;
 - the container's type does not implement `IndexSwap`.
 
 A scalar has no value copy, so a scalar target is never reported.

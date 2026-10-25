@@ -174,7 +174,9 @@ fn same_subscript(a: &IndexExpr, b: &IndexExpr) -> bool {
 /// a field, a dereference or a subscript of them. Anything else spells none.
 fn same(a: &Expr, b: &Expr) -> bool {
     match (a, b) {
-        (Expr::Ident(a), Expr::Ident(b)) => a.name == b.name && a.type_args.is_empty() && b.type_args.is_empty(),
+        (Expr::Ident(a), Expr::Ident(b)) => {
+            a.name == b.name && a.type_args.is_empty() && b.type_args.is_empty()
+        }
         (Expr::Literal(a), Expr::Literal(b)) => same_literal(&a.value, &b.value),
         (Expr::Binary(a), Expr::Binary(b)) => {
             a.op == b.op && same(&a.left, &b.left) && same(&a.right, &b.right)

@@ -23,15 +23,15 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
+use super::transposition::{Reading, Transposition};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
-use super::transposition::{Reading, Transposition};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{
-    AssignPlace, DesugarKind, DestructuringFallback, OperatorDispatch,
+    AssignPlace, DestructuringFallback, DesugarKind, OperatorDispatch,
 };
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
@@ -1205,8 +1205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let base_type_id = self.tysys.through_ref(container_type);
         let found = self.index_dispatch_head(base_type_id).and_then(|head| {
-            let (lookup_name, lookup_type_id) =
-                self.tysys.newtype_base_lookup(&head, base_type_id);
+            let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
             self.index_lookup_or_newtype_base(
                 &head,
                 base_type_id,
@@ -1231,7 +1230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .any(|index| self.reads_mutable_global(index))
         {
-            return Err(Some(DestructuringFallback::NotOwned));
+            return Err(Some(DestructuringFallback::Rebindable));
         }
         if let Some(index_type) = index_type {
             self.typecheck(j_type, index_type, transposition.j.span());

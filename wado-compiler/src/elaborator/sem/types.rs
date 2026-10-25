@@ -435,7 +435,9 @@ pub(crate) enum DestructuringFallback {
     NotOwned,
     OtherContainer,
     Rebindable,
-    NoIndexSwap { container: String },
+    NoIndexSwap {
+        container: String,
+    },
 }
 
 impl DestructuringFallback {
@@ -451,8 +453,8 @@ impl DestructuringFallback {
             Self::OtherContainer => "the two subscripts name different containers, or one \
                  the compiler cannot show to be the same"
                 .into(),
-            Self::Rebindable => "an index local, or the local the container is reached \
-                 through, is referenced or captured"
+            Self::Rebindable => "an index reads a mutable global, or an index local or the \
+                 local the container is reached through is referenced or captured"
                 .into(),
             Self::NoIndexSwap { container } => {
                 format!("`{container}` does not implement `IndexSwap`")
