@@ -1,0 +1,14 @@
+//! Every `[..X]` over one `X` in a signature has one length, which the call
+//! settles: `doubled` returns as many elements as it takes.
+
+fn doubled(values: [..i32]) -> [..i32] {
+    return [for let v of values { v * 2 }];
+}
+
+test {
+    let [a, b, c] = doubled([1, 2, 3]);
+    assert a + b + c == 12;
+}
+
+__DATA__
+{"test": {}}

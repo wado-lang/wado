@@ -1,0 +1,13 @@
+//! Two `[..i32]` parameters share one length, so tuples of two lengths are a
+//! mismatch at the call.
+
+fn total(a: [..i32], b: [..i32]) -> i32 {
+    return 0;
+}
+
+test {
+    assert total([1], [1, 2]) == 0;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[i32]', found '[i32, i32]'"}

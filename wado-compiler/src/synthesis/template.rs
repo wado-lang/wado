@@ -542,21 +542,6 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // In generic code `&T` and `&X::Item` refer to a value of the pointee, so
-        // they format as it. A reference over any other type keeps the ref
-        // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
-            if tt.borrow().receiver_head_awaits_substitution(inner) =>
-        {
-            let local_name = method_name_for_type(inner, trait_name, method_name, ctx.tt);
-            let impl_module = trait_impl_module(&local_name, inner, ctx);
-            MethodCallInfo {
-                local_name,
-                monomorph_info: None,
-                impl_module,
-                template: None,
-            }
-        }
         // An impl written on the reference answers before the blanket does.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
             if !ref_impl_written(

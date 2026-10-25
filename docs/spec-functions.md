@@ -1424,6 +1424,28 @@ It is reported as `expected '[i32, i32]', found '[i32, String]'`.
 Every length the program passes is its own instantiation, as with a declared
 pack.
 
+Every `[..X]` over one `X` in a signature has that one length. A return type
+spelling it returns as many elements as the parameter took:
+
+<!-- {"fixture":"variadic_homogeneous_pack_shared_length.wado"} -->
+
+```wado
+fn doubled(values: [..i32]) -> [..i32] {
+    return [for let v of values { v * 2 }];
+}
+```
+
+Two parameters spelling it take tuples of one length, so `total([1], [1, 2])`
+is a mismatch:
+
+<!-- {"fixture":"variadic_homogeneous_pack_shared_length_error.wado"} -->
+
+```wado
+fn total(a: [..i32], b: [..i32]) -> i32 {
+    return 0;
+}
+```
+
 Only a call settles that length, so `[..X]` appears only in a function's
 parameter or return type. A `let` annotation cannot name one:
 

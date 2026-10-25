@@ -4746,29 +4746,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.reify_string_format(pieces, template.span, ctx)
     }
 
-    /// `value` derefed down to its pointee where that pointee awaits
-    /// substitution: in generic code `&T` is a reference to a `T`, so the
-    /// hole renders through `T`'s impl rather than the `&`-prefixing one a
-    /// substituted `&P` would reach.
-    fn deref_to_generic_pointee(&self, mut value: TirExpr) -> TirExpr {
-        let tt = self.tysys.type_table.borrow();
-        if !tt.receiver_head_awaits_substitution(tt.peel_refs(value.type_id)) {
-            return value;
-        }
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *tt.get(value.type_id) {
-            let span = value.span;
-            value = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(value),
-                },
-                inner,
-                span,
-            );
-        }
-        value
-    }
-
     /// `` String::format`…` `` over `pieces`, resolved here rather than by
     /// name, so it reaches the prelude's `String` wherever an import or
     /// `#![no_prelude]` takes the name. A template with no hole is its text,
@@ -4809,7 +4786,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (values, holes): (Vec<TirExpr>, Vec<TemplateHole>) = holes
             .into_iter()
             .map(|(value, spec)| {
-                let value = self.deref_to_generic_pointee(value);
                 let ty = value.type_id;
                 (value, TemplateHole { ty, spec })
             })
