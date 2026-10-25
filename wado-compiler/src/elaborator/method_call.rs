@@ -3492,14 +3492,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
-        if let Some(key) = &newtype_key {
-            self.retype_static_to_newtype(
-                key,
-                self.tysys.block_of(&method_ref),
-                impl_type_args,
-                std::slice::from_mut(&mut return_type),
-            );
-        }
+        self.retype_static_to_newtype(
+            &self.impl_target(struct_name),
+            self.tysys.block_of(&method_ref),
+            impl_type_args,
+            std::slice::from_mut(&mut return_type),
+        );
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
