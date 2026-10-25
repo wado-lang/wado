@@ -208,6 +208,3 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
-- [ ] Code the profile marks cold costs the compile as much as hot code: every
-  pass still runs on a cold function. The share of compile time that cold code
-  takes is not measured.

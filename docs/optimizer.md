@@ -236,6 +236,26 @@ on its own, with its passes named `wir/<module>:<pass>`.
 wasmtime lays out the cold side of a hinted branch out of line.
 `-f no-branch-hinting` disables hints for benchmarking.
 
+## Profile-Guided Optimization
+
+Not implemented yet; see
+[WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
+
+A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
+from its `#[workload]` tests. A compile marks each region the workloads never
+ran with `cold_path()`, so `cold_outline`, `inline` and the branch hints treat
+it as they treat a marker the author wrote. `-f no-pgo` ignores the profile, and
+`-f no-cold-paths` ignores every marker, so three builds of one program can be
+compared.
+
+Two questions stay open while profiles spread, and each optimizer change that
+touches cold paths answers them again:
+
+- What a profile gains: `benchmark/` compared across the three builds.
+- What cold code costs the compile: every pass still runs on a cold function,
+  so part of the compile goes to code that rarely runs. The span trace in the
+  `profiling-wado-compiler` skill measures the share.
+
 ## Differential Testing (EMI)
 
 `wado-compiler/tests/emi.rs` injects code behind a guard that is always false at
