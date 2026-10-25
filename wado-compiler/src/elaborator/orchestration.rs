@@ -1730,6 +1730,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // waits for the bodies to resolve.
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(
+                snapshot.and_then(|s| s.coverage.as_ref()),
                 modules.iter().filter(|(source, _)| scope.measures(source)),
                 &rt_unreachable_calls(state, symbols),
             )

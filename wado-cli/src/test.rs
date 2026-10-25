@@ -2333,9 +2333,10 @@ fn store_passes(
     }
 }
 
-/// Build the thread-local stdlib snapshot on `parallelism` distinct blocking
-/// threads at once, rather than ~120 ms on each worker's first compile.
-async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
+/// Build the thread-local stdlib snapshot for compiles measuring `coverage` on
+/// `parallelism` distinct blocking threads at once, rather than ~120 ms on each
+/// worker's first compile.
+async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize, coverage: Option<CoverageScope>) {
     assert!(parallelism > 0, "prewarm_workers answers at least one");
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));
     let handles: Vec<_> = (0..parallelism)
@@ -2347,7 +2348,7 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
                 // Waiting first means a task that panics in the build cannot
                 // leave the rest short of the party count.
                 barrier.wait();
-                wado_compiler::prewarm_stdlib_snapshot();
+                wado_compiler::prewarm_stdlib_snapshot(coverage);
             })
         })
         .collect();
@@ -2481,7 +2482,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
     let cached_files: usize = cached.iter().map(Vec::len).sum();
 
-    prewarm_stdlib_snapshot_on_workers(prewarm_workers(compile_jobs, total_files)).await;
+    prewarm_stdlib_snapshot_on_workers(prewarm_workers(compile_jobs, total_files), flags.coverage)
+        .await;
 
     let reporter: Arc<dyn TestReporter> = match format {
         TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),

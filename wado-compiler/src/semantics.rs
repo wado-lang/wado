@@ -1468,9 +1468,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        // A measured stdlib takes probes the plain snapshot lacks.
-        get_or_init_snapshot()
-            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
+        get_or_init_snapshot(coverage)
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1790,7 +1788,7 @@ mod tests {
     /// place rather than a copy made per compile.
     #[test]
     fn a_compile_shares_the_snapshot_facts() {
-        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
         let snap_state = snap
             .state
             .as_ref()
@@ -1808,6 +1806,64 @@ mod tests {
             &state.module_semantics[prelude],
             &snap_state.module_semantics[prelude],
         ));
+    }
+
+    /// What `wado test --coverage --coverage-include=stdlib` analyzes `source` to.
+    fn measuring_stdlib(source: &str) -> Semantics {
+        let host = InMemoryCompilerHost::new();
+        let loaded = block_on(load(
+            parse(source),
+            Some("entry.wado"),
+            &host,
+            InvocationIndex::new(),
+            LogLevel::default(),
+        ))
+        .expect("the entry loads");
+        semantics_with_logger(
+            loaded,
+            &Logger::new(&host, LogLevel::default()),
+            true,
+            Some(STDLIB),
+            &LivenessScope::Compilation,
+        )
+    }
+
+    const STDLIB: CoverageScope = CoverageScope {
+        include_deps: false,
+        stdlib: true,
+    };
+
+    /// A compile measuring the stdlib seeds from a snapshot whose stdlib took
+    /// its probes when built, and numbers its regions as the snapshot did,
+    /// whatever else it loads.
+    #[test]
+    fn a_stdlib_measuring_compile_seeds_from_the_probed_snapshot() {
+        let snap = get_or_init_snapshot(Some(STDLIB)).expect("not re-entering the builder");
+        let seed = snap.coverage.as_ref().expect("the snapshot measures the stdlib");
+        let sem = measuring_stdlib(
+            "use { to_string } from \"core:json\";\nfn main() { let _ = to_string(&1); }",
+        );
+        let state = sem.state.as_ref().expect("annotate state");
+        let prelude = state
+            .module_semantics
+            .keys()
+            .find(|source| source.to_string() == "core:prelude")
+            .expect("every compile loads the prelude");
+        assert!(std::rc::Rc::ptr_eq(
+            &state.module_semantics[prelude],
+            &snap.state.as_ref().expect("complete").module_semantics[prelude],
+        ));
+
+        let base_of = |map: &CoverageMap, path: &str| {
+            map.modules
+                .iter()
+                .zip(&map.bases)
+                .find_map(|(plan, &base)| (plan.path == path).then_some(base))
+        };
+        let map = sem.coverage.as_ref().expect("the compile measures");
+        assert_eq!(base_of(map, "core:prelude"), base_of(seed, "core:prelude"));
+        assert!(base_of(map, "core:json") >= Some(seed.end()));
+        assert!(base_of(map, "entry.wado") >= Some(seed.end()));
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

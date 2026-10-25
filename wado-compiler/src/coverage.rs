@@ -205,6 +205,8 @@ pub enum ProbeSite {
 pub struct CoverageMap {
     pub modules: Vec<ModulePlan>,
     pub bases: Vec<u32>,
+    /// The module each of `modules` plans.
+    sources: Vec<ModuleSource>,
     probes: IndexMap<(ProbeSite, AstId), u32>,
     /// The function holding each probed region, by global id.
     probe_function: IndexMap<u32, usize>,
@@ -215,15 +217,29 @@ pub struct CoverageMap {
 }
 
 impl CoverageMap {
-    /// Plan `modules` in the order given, which fixes the global ids.
+    /// Plan `modules` in the order given, which fixes the global ids. A module
+    /// `seed` planned keeps its plan and ids instead: it comes from the stdlib
+    /// snapshot with its probes already in place. The rest number past the
+    /// seed's last id.
     pub fn build<'a>(
+        seed: Option<&CoverageMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = Self::default();
+        let mut next = seed.map_or(0, CoverageMap::end);
         for (source, module) in modules {
+            if let Some(seed) = seed
+                && let Some(seeded) = seed.sources.iter().position(|s| s == source)
+            {
+                map.modules.push(seed.modules[seeded].clone());
+                map.bases.push(seed.bases[seeded]);
+                map.sources.push(source.clone());
+                continue;
+            }
             let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
-            let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
+            let base = next;
+            next += plan.regions.len() as u32;
             let first_function = map.function_probes.len();
             map.function_probes
                 .resize(first_function + plan.functions.len(), Vec::new());
@@ -240,8 +256,19 @@ impl CoverageMap {
             }
             map.modules.push(plan);
             map.bases.push(base);
+            map.sources.push(source.clone());
         }
         map
+    }
+
+    /// One past the last id any module takes.
+    pub(crate) fn end(&self) -> u32 {
+        self.modules
+            .iter()
+            .zip(&self.bases)
+            .map(|(plan, base)| base + plan.regions.len() as u32)
+            .max()
+            .unwrap_or(0)
     }
 
     /// The probe id reify puts at `site` on node `id`, if one goes there.
