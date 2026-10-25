@@ -53,6 +53,10 @@ pub enum Consumer {
     Take,
     /// `for let x of xs {}` over a fresh `List<Tok>`, consuming it.
     ForOf,
+    /// `with Ask => t do { … }`, which owns its handler until it ends.
+    Handle,
+    /// `SinkTok::put(t)` under a handler, whose parameter drops as it resumes.
+    Forward,
 }
 
 /// Where the consuming statement sits in the case's body.
@@ -172,7 +176,7 @@ impl Producer {
 
 impl Consumer {
     pub fn all() -> List<Consumer> {
-        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf];
+        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf, Handle, Forward];
     }
 
     fn statement(&self, value: Value) -> String {
@@ -191,13 +195,15 @@ impl Consumer {
             Push => `let mut xs: List<${ty}> = []; xs.push(t);`,
             Take => "let mut o = Option::Some(t); let u = o.take();",
             ForOf => `let xs: List<${ty}> = [t]; for let x of xs {}`,
+            Handle => "with Ask => t do { let _ = Ask::ask(); }",
+            Forward => `let mut s = Sink { n: 0 }; with Sink${ty} => &mut s do { let _ = Sink${ty}::put(t); }`,
         };
     }
 
     /// Whether the value is gone once the statement ends, rather than held by
     /// a local of the block the statement runs in.
     fn drops_in_statement(&self) -> bool {
-        return self matches { Call | Drop | GenericCall | ForOf };
+        return self matches { Call | Drop | GenericCall | ForOf | Handle | Forward };
     }
 
     pub fn moves(&self) -> bool {
@@ -442,9 +448,33 @@ fn emit_program(cases: &List<Case>, probe: Probe) -> String {
     w.begin("fn pass<affine T>(x: T) -> T");
     w.line("return x;");
     w.end();
+    w.blank();
+    w.begin("interface Ask");
+    w.line("fn ask() -> i32;");
+    w.end();
+    w.blank();
+    w.begin("struct Sink");
+    w.line("n: i32,");
+    w.end();
     for let value of Value::all() {
         let ty = value.name();
         let helper = value.helper();
+        w.blank();
+        w.begin(`impl Ask for ${ty}`);
+        w.begin("fn ask(&mut self) -> i32");
+        w.line("resume 0");
+        w.end();
+        w.end();
+        w.blank();
+        w.begin(`interface Sink${ty}`);
+        w.line(`fn put(t: ${ty}) -> i32;`);
+        w.end();
+        w.blank();
+        w.begin(`impl Sink${ty} for Sink`);
+        w.begin(`fn put(&mut self, t: ${ty}) -> i32`);
+        w.line("resume self.n");
+        w.end();
+        w.end();
         w.blank();
         w.line(`type Renamed${ty} = ${ty};`);
         w.blank();
