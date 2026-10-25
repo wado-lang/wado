@@ -25,9 +25,8 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    COLD_PATH_INTRINSIC, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName,
-    KNOWN_COLD_PATH_INTRINSIC, Receiver, contract_owner_name, global_init_function, global_name,
-    unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
+    global_init_function, global_name, unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -94,7 +93,9 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
-use crate::synthesis::common::{builtin_call, cold_path_stmt, known_cold_path_stmt};
+use crate::synthesis::common::{
+    builtin_call, cold_path_stmt, is_cold_marker_stmt, known_cold_path_stmt,
+};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -2367,11 +2368,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !stmts.iter().any(diverges) {
             return stmts;
         }
-        let is_marker = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e)
-                if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if matches!(func.intrinsic(), Some(name) if name == COLD_PATH_INTRINSIC || name == KNOWN_COLD_PATH_INTRINSIC)))
-        };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes the rest of its block cold, which is where `block_cut`
         // stops pricing and where `cold_outline`'s region starts, so the first
@@ -2379,7 +2375,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // that placed its own ahead of the statements it built keeps it.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_marker(&s);
+            marked = marked || is_cold_marker_stmt(&s);
             if diverges(&s) && !marked {
                 out.push(known_cold_path_stmt(s.span));
                 marked = true;

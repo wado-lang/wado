@@ -4,8 +4,8 @@
 //! either.
 
 use crate::flat_package::FlatPackage;
-use crate::name::{COLD_PATH_INTRINSIC, KNOWN_COLD_PATH_INTRINSIC};
-use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind};
+use crate::synthesis::common::is_cold_marker_stmt;
+use crate::tir::TirBlock;
 use crate::tir_visitor::TirMutVisitor;
 
 pub fn drop_markers(flat: &FlatPackage) {
@@ -16,14 +16,7 @@ struct MarkerDrop;
 
 impl TirMutVisitor for MarkerDrop {
     fn visit_block(&mut self, block: &mut TirBlock) {
-        block.stmts.retain(|stmt| !is_marker(stmt));
+        block.stmts.retain(|stmt| !is_cold_marker_stmt(stmt));
         self.walk_block(block);
     }
-}
-
-fn is_marker(stmt: &TirStmt) -> bool {
-    matches!(&stmt.kind, TirStmtKind::Expr(expr)
-        if matches!(&expr.kind, TirExprKind::Call { func, .. }
-            if func.is_builtin_named(COLD_PATH_INTRINSIC)
-                || func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC)))
 }

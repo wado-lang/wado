@@ -374,37 +374,29 @@ fn build_switch(
         // The default of an exhaustive match is the unreachable arm. Mark it
         // `cold_path()` so the inliner skips it and codegen hints it unlikely,
         // matching the other compiler-synthesized cold branches.
-        let mut stmts: Vec<_> = cold_path_id
-            .map(|func_id| {
-                let cold_call = engine.alloc_expr(
-                    ExprKind::Call {
-                        func_id,
-                        args: CallArgs::free(vec![]),
-                        type_args: vec![],
-                    },
-                    TypeTable::UNIT,
-                    span,
-                );
-                engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span)
-            })
-            .into_iter()
-            .collect();
+        let mut call_stmt = |func_id, type_id| {
+            let call = engine.alloc_expr(
+                ExprKind::Call {
+                    func_id,
+                    args: CallArgs::free(vec![]),
+                    type_args: vec![],
+                },
+                type_id,
+                span,
+            );
+            engine.alloc_stmt(StmtKind::Expr(call.into()), span)
+        };
+        let mut stmts = Vec::new();
+        if let Some(cold_path_id) = cold_path_id {
+            stmts.push(call_stmt(cold_path_id, TypeTable::UNIT));
+        }
         // Call `builtin::unreachable` rather than
         // `core:rt/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
         // and is never DCE'd, so this pass can run after the
         // optimizer's pre-loop DCE without worrying about the
         // synthesised callee being removed.
-        let call = engine.alloc_expr(
-            ExprKind::Call {
-                func_id: unreachable_id,
-                args: CallArgs::free(vec![]),
-                type_args: vec![],
-            },
-            TypeTable::NEVER,
-            span,
-        );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
+        stmts.push(call_stmt(unreachable_id, TypeTable::NEVER));
         engine.alloc_block(stmts, span)
     };
 

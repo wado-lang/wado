@@ -70,6 +70,14 @@ fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
     )
 }
 
+/// Whether `stmt` is a cold marker, whoever placed it.
+pub fn is_cold_marker_stmt(stmt: &TirStmt) -> bool {
+    matches!(&stmt.kind, TirStmtKind::Expr(expr)
+        if matches!(&expr.kind, TirExprKind::Call { func, .. }
+            if func.is_builtin_named(COLD_PATH_INTRINSIC)
+                || func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC)))
+}
+
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).
 pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     TirExpr::new(
