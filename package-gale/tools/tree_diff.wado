@@ -1,5 +1,5 @@
 //! Lists where two `toStringTree` parse trees disagree: the jar's
-//! (`scripts/antlr4-oracle.sh`) and Gale's. A line diff of the printed trees
+//! (`scripts/antlr4_oracle.wado`) and Gale's. A line diff of the printed trees
 //! counts one misplaced subtree as many hunks, so this compares the trees as
 //! sets of (rule, first token, end token) spans. A divergence is a run of
 //! overlapping spans one side has and the other lacks, reported once with the
@@ -21,7 +21,7 @@ struct Span {
     end: i32,
 }
 
-struct Tree {
+internal struct Tree {
     leaves: List<String>,
     spans: List<Span>,
 }
@@ -66,7 +66,7 @@ fn rule_name_end(text: &String, i: i32) -> Option<i32> {
 /// does not), so it is dropped. A terminal's own spaces split it into several
 /// leaves, the same way on both sides. Spans are listed in the order their
 /// nodes open, so a node comes before every node inside it.
-fn parse_tree(text: &String) -> Tree {
+internal fn parse_tree(text: &String) -> Tree {
     let mut leaves: List<String> = [];
     let mut spans: List<Span> = [];
     let mut open: List<i32> = [];
@@ -229,19 +229,24 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         eprintln("usage: tree_diff <jar.tree> <gale.tree>");
         exit(1);
     }
-    let jar = read_tree(&paths[0]);
-    let gale = read_tree(&paths[1]);
+    if !report_divergences(&read_tree(&paths[0]), &read_tree(&paths[1])) {
+        exit(1);
+    }
+}
+
+/// Print where `gale` departs from `jar`; true where the trees agree.
+internal fn report_divergences(jar: &Tree, gale: &Tree) -> bool with (Stdout, Stderr) {
     // Spans name leaves by position, so past a mismatch they compare nothing.
-    if let Some(at) = first_leaf_mismatch(&jar, &gale) {
+    if let Some(at) = first_leaf_mismatch(jar, gale) {
         eprintln(
-            `tree_diff: the trees cover different tokens from leaf ${at}: jar ${leaf_or_end(&jar, at)}, gale ${leaf_or_end(
-                &gale,
+            `tree_diff: the trees cover different tokens from leaf ${at}: jar ${leaf_or_end(jar, at)}, gale ${leaf_or_end(
+                gale,
                 at,
             )}`,
         );
-        exit(1);
+        return false;
     }
-    let found = divergences(&jar, &gale);
+    let found = divergences(jar, gale);
     for let d of &found {
         let mut text = "";
         for let k of d.start..<d.end {
@@ -254,9 +259,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         println(`[${d.start}] jar:${d.jar_rule.unwrap_or("-")} gale:${d.gale_rule.unwrap_or("-")} | ${shown}`);
     }
     println(`${found.len()} divergence(s)`);
-    if !found.is_empty() {
-        exit(1);
-    }
+    return found.is_empty();
 }
 
 test "a tree splits into leaves and rule spans" {

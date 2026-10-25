@@ -5,18 +5,23 @@
 //! prunes the owning clone's admin entries. The canonical clones (shared object
 //! stores) and fetched registry components stay unless `--all` is given, so a
 //! re-materialize needs no network.
+//!
+//! `--global` instead removes the user cache directory, where every file in no
+//! package keeps what `run`, `test` and `core:eval` derived from it.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::args::{self, CliExit};
-use crate::cache::root;
+use crate::cache::{root, user_cache_dir};
 use crate::git::prune_worktrees;
 
 #[derive(Debug, Default)]
 pub struct CleanOptions {
     /// Also remove canonical clones and fetched registry components.
     all: bool,
+    /// Remove the user cache directory instead.
+    global: bool,
 }
 
 fn format_usage() -> String {
@@ -32,10 +37,15 @@ fn format_usage() -> String {
     writeln!(buf, "Options:").unwrap();
     writeln!(
         buf,
-        "      --all   Also remove canonical clones and registry components"
+        "      --all     Also remove canonical clones and registry components"
     )
     .unwrap();
-    writeln!(buf, "  -h, --help  Show this help message").unwrap();
+    writeln!(
+        buf,
+        "      --global  Remove instead what run, test and eval cached for files in no package"
+    )
+    .unwrap();
+    writeln!(buf, "  -h, --help    Show this help message").unwrap();
     buf
 }
 
@@ -48,13 +58,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CleanOptions, CliExit> {
                 return Err(CliExit::help(usage));
             }
             lexopt::Arg::Long("all") => opts.all = true,
+            lexopt::Arg::Long("global") => opts.global = true,
             other => return Err(args::unexpected_arg(other, &usage)),
         }
+    }
+    if opts.all && opts.global {
+        return Err(CliExit::error_with_usage(
+            "--all and --global clean different directories; pass one",
+            &usage,
+        ));
     }
     Ok(opts)
 }
 
 pub fn run(opts: CleanOptions) -> Result<(), CliExit> {
+    if opts.global {
+        return clean_user_cache();
+    }
     let root = root().map_err(CliExit::error)?;
     if !root.is_dir() {
         eprintln!("Nothing to clean ({} does not exist)", root.display());
@@ -81,6 +101,19 @@ pub fn run(opts: CleanOptions) -> Result<(), CliExit> {
         removed += 1;
     }
     eprintln!("Removed {removed} worktree cache director(ies)");
+    Ok(())
+}
+
+fn clean_user_cache() -> Result<(), CliExit> {
+    let dir = user_cache_dir()
+        .ok_or_else(|| CliExit::error("cannot locate the home directory; set XDG_CACHE_HOME"))?;
+    if !dir.is_dir() {
+        eprintln!("Nothing to clean ({} does not exist)", dir.display());
+        return Ok(());
+    }
+    std::fs::remove_dir_all(&dir)
+        .map_err(|e| CliExit::error(format!("removing {}: {e}", dir.display())))?;
+    eprintln!("Removed the user cache {}", dir.display());
     Ok(())
 }
 
