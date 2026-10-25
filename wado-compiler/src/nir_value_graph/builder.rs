@@ -1008,7 +1008,7 @@ impl<'a> Builder<'a> {
             if self.seeded_aggregates.contains(&l) {
                 continue;
             }
-            self.invalidate_local_with(l, ValuePool::fresh_opaque_local);
+            self.invalidate_local_with(l, |pool| pool.fresh_opaque_local(l));
         }
     }
 
@@ -1771,15 +1771,15 @@ impl<'a> Builder<'a> {
         self.current_value.insert(idx, v);
     }
 
-    fn invalidate_local_with(&mut self, idx: u32, mint: fn(&mut ValuePool, u32) -> ValueId) {
+    fn invalidate_local_with(&mut self, idx: u32, mint: impl FnOnce(&mut ValuePool) -> ValueId) {
         if self.current_value.contains_key(&idx) && self.fresh_invalidations.insert(idx) {
-            let opaque = mint(&mut self.pool, idx);
+            let opaque = mint(&mut self.pool);
             self.current_value.insert(idx, opaque);
         }
     }
 
     fn invalidate_local(&mut self, idx: u32) {
-        self.invalidate_local_with(idx, |pool, _| pool.fresh_opaque());
+        self.invalidate_local_with(idx, ValuePool::fresh_opaque);
     }
 
     /// Join an if-style two-arm endpoint over all three flow components at

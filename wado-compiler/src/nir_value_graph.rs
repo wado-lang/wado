@@ -890,8 +890,9 @@ impl ValuePool {
     /// Remap every `Opaque`'s local through `remap` (old → new), which a pass
     /// renumbering a body's locals must call so a promoted `Opaque` still names
     /// the right slot. A `None` entry marks a dropped local, whose entry is
-    /// cleared rather than remapped: any use then hits the "reads no local"
-    /// panic instead of silently reading the wrong slot.
+    /// cleared rather than remapped: a promoted operand still holding it then
+    /// fails the NIR audit and extraction, instead of silently reading the
+    /// wrong slot.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
         self.canonical_locals = self
             .canonical_locals

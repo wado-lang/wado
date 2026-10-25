@@ -1148,9 +1148,7 @@ impl HeapFrame {
                     return OperandNode::None;
                 }
                 let mut leaves = Vec::new();
-                for_each_leaf_local(body, v, &mut |local| {
-                    leaves.push(local.map_or(ELSEWHERE, |l| self.local_node(l)));
-                });
+                for_each_leaf_local(body, v, &mut |l| leaves.push(self.local_node(l)));
                 let Some((&first, rest)) = leaves.split_first() else {
                     return OperandNode::None;
                 };
@@ -1631,17 +1629,11 @@ impl HeapFrame {
                 }
                 let mut roots = IndexSet::default();
                 let mut unknown = false;
-                for_each_leaf_local(body, v, &mut |local| {
-                    let root = match local {
-                        Some(l) => self.local_root(l),
-                        None => Some(self.classes.root(ELSEWHERE)),
-                    };
-                    match root {
-                        Some(r) => {
-                            roots.insert(r);
-                        }
-                        None => unknown = true,
+                for_each_leaf_local(body, v, &mut |l| match self.local_root(l) {
+                    Some(r) => {
+                        roots.insert(r);
                     }
+                    None => unknown = true,
                 });
                 if unknown || roots.len() > 1 {
                     return OperandNode::Unknown;
@@ -1884,9 +1876,8 @@ fn builtin_touches(
     )
 }
 
-/// Visit the local each opaque leaf of the promoted value `v` reads; `None` is
-/// a leaf reading none.
-fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(Option<u32>)) {
+/// Visit the local each opaque leaf of the promoted value `v` reads.
+fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
     let mut stack = vec![v];
     let mut seen = IndexSet::default();
     while let Some(v) = stack.pop() {
@@ -1894,7 +1885,10 @@ fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(Option<u32>))
             continue;
         }
         match body.values.kind(v) {
-            ValueKind::Opaque(oid) => f(body.values.opaque_local(*oid)),
+            ValueKind::Opaque(oid) => f(body
+                .values
+                .opaque_local(*oid)
+                .expect("a promoted Opaque must read a local")),
             ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 stack.push(*operand);

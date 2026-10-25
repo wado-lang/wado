@@ -3482,12 +3482,11 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
             heap_ver,
         },
         ValueKind::Opaque(oid) => {
-            // Mint a fresh caller opaque, remapping its source local into the
-            // caller frame.
-            let new = match callee.values.opaque_local(oid) {
-                Some(idx) => caller.values.fresh_opaque_local(ctx.local(idx)),
-                None => caller.values.fresh_opaque(),
-            };
+            let idx = callee
+                .values
+                .opaque_local(oid)
+                .expect("a promoted Opaque must read a local");
+            let new = caller.values.fresh_opaque_local(ctx.local(idx));
             if let Some(t) = recorded_ty {
                 caller.values.set_type(new, t);
             }

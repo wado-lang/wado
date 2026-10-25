@@ -2745,13 +2745,11 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for a leaf the graph cannot reconstruct; a
-            // promoted one reads a local.
             ValueKind::Opaque(id) => self.local_get(
                 self.body
                     .values
                     .opaque_local(id)
-                    .expect("promoted Opaque reads no local"),
+                    .expect("a promoted Opaque must read a local"),
             ),
             // A `Select` (control-merge of pure values) extracts as a
             // value-producing `if`. Sound because the arms are pure values
