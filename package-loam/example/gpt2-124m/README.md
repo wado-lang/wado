@@ -50,4 +50,7 @@ them, and rewrites the graph from it. Git ignores the model and the checkpoint.
 header. The build reads the header and none of the weights behind it, but the
 file must be there, so the files naming the model compile only once `fetch.sh`
 has run, and `wado test` leaves them out. `tokenizer_test.wado` needs no
-download and runs.
+download and runs. `generate_test.wado` checks Loam's tokens against
+`generate.json`, once `fetch.sh` has run:
+
+    wado test generate_test.wado

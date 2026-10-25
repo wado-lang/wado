@@ -51,4 +51,7 @@ has.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
   greedily after each prompt, and its time per token on the CPU. `generate.mjs`
   writes it, running `build/model.onnx` with `onnxruntime-node` and feeding each
-  step the attention cache, as `model.wado` does.
+  step the attention cache, as `model.wado` does. `generate_test.wado` checks
+  Loam's tokens against it:
+
+      wado test --collector drc generate_test.wado
