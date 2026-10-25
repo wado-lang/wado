@@ -176,11 +176,11 @@ otherwise outline each branch of a function that never ran into a function of
 its own, and both sides of its `if`s would carry a marker. A region that ran
 any number of times gets no marker.
 
-Each worker seeds its compiles from a snapshot of the reified standard library,
-so markers in `core:` cannot come from it. A compile that applies `core:`
-counts elaborates the standard library afresh, as a coverage build that
-measures it does. Only a package that committed a profile pays this, and
-`-f no-pgo` restores the snapshot for an iteration loop that wants it back. Using the counts beyond zero, to optimize a
+Each worker thread seeds its compiles from a snapshot of the reified standard
+library, built once. The thread builds it with the `core:` counts already
+applied, so a profiled compile seeds from the snapshot as a plain one does. A
+run whose entries carry different `core:` counts builds one snapshot per set of
+counts. Using the counts beyond zero, to optimize a
 hot path harder than the rest, is left to a later proposal.
 
 ### The source wins over the profile, and says so
