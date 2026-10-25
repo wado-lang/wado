@@ -457,6 +457,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `[..X]` repeating the non-pack `X` outside a signature, where no call
+    /// settles its length.
+    RepeatOutsideSignature {
+        element: String,
+        span: Span,
+    },
+
     /// A `with` clause names what is not an effect in scope.
     UnknownEffect {
         name: String,
@@ -1681,6 +1688,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => (
                 Code::UnknownType,
                 format!("unknown type '{}'", unalias_namespace_member(name)),
+                *span,
+            ),
+            TypeError::RepeatOutsideSignature { element, span } => (
+                Code::UnknownType,
+                format!(
+                    "`[..{element}]` has a length only a call settles, so it may appear only in a function's parameter or return type"
+                ),
                 *span,
             ),
             TypeError::UnknownEffect { name, span } => (

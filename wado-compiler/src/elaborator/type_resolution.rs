@@ -19,9 +19,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{
-    FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name, type_pack_name,
-};
+use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -94,6 +92,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A pack a space has bound to its arguments' tuple splices
                     // them here, as `[..X]` at `X = [i32, bool]` is `[i32, bool]`.
                     match element {
+                        // A spread that resolved to nothing leaves no arity.
+                        Type::TypePackSpread(..) if resolved == TypeTable::ERROR => {
+                            return TypeTable::ERROR;
+                        }
                         Type::TypePackSpread(..) => elem_types
                             .extend(self.tysys.type_table.borrow().elem_types_or_self(resolved)),
                         _ => elem_types.push(resolved),
@@ -137,10 +139,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_pack(name.clone(), index)
                 } else {
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: type_pack_name(name),
-                        span: *span,
-                    });
+                    // An unknown element is the name check's to report.
+                    let element = self.resolve_unsited_type_name(name, *span);
+                    if element != TypeTable::UNKNOWN {
+                        let _ = self.emit(TypeError::RepeatOutsideSignature {
+                            element: name.clone(),
+                            span: *span,
+                        });
+                    }
                     TypeTable::ERROR
                 }
             }

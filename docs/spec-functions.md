@@ -1423,3 +1423,12 @@ It is reported as `expected '[i32, i32]', found '[i32, String]'`.
 
 Every length the program passes is its own instantiation, as with a declared
 pack.
+
+Only a call settles that length, so `[..X]` appears only in a function's
+parameter or return type. A `let` annotation cannot name one:
+
+<!-- {"fixture":"variadic_homogeneous_pack_outside_signature_error.wado"} -->
+
+```wado
+let t: [..i32] = [1, 2, 3];
+```
