@@ -411,8 +411,11 @@ pub fn is_type_bridge(name: &str) -> bool {
 fn short_digest(digest: &[u8]) -> String {
     digest[..8]
         .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .fold(String::with_capacity(16), |mut hex, byte| {
+            fmt::Write::write_fmt(&mut hex, format_args!("{byte:02x}"))
+                .expect("writing to a String cannot fail");
+            hex
+        })
 }
 
 /// The mangled name of the template shape whose hash is `digest`.

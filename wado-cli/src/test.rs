@@ -23,7 +23,6 @@ use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
-use crate::input_cache::wado_env;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
@@ -580,7 +579,7 @@ struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
     is_todo_module: bool,
-    /// What the compile read, where it read nothing but files.
+    /// What the compile read, where none of it is untracked.
     reads: Option<Vec<Input>>,
 }
 
@@ -2449,15 +2448,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let measures = coverage_run.is_some()
         || !matches!(profile, ProfileMode::None)
         || runtime_knobs.report_fuel;
-    let test_cache = (!no_run && !measures).then(|| {
-        let mut keyed = (*flags).clone();
-        // `--no-cache` only skips reading, so it is no part of the key.
-        keyed.knobs.no_cache = false;
-        TestCache::new(
-            &format!("{keyed:?} {runtime_knobs:?} {:?}", wado_env()),
-            !flags.knobs.no_cache,
-        )
-    });
+    let test_cache = (!no_run && !measures).then(|| TestCache::new(&flags, runtime_knobs));
     // Settled before anything is sized by the work, which the hits are not.
     let cached: Vec<Vec<(String, Tally)>> = package_runs
         .iter_mut()

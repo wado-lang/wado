@@ -438,16 +438,17 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
         .map_err(|_| CliExit::silent_failure(1))
 }
 
-/// [`compile`], and what it read where it read nothing but files.
-pub(crate) async fn compile_with_reads(
+/// Compile `filename`, and say what the compile read where none of it is
+/// untracked.
+pub(crate) async fn compile_recording_reads(
     filename: &str,
     flags: &CompileFlags,
-) -> Result<(Vec<u8>, Option<Vec<Input>>), CliExit> {
+) -> Result<(wado_compiler::CompileResult, Option<Vec<Input>>), CliExit> {
     let scope = RunCache::new().scoped();
     let result = try_compile_with_run_cache(filename, flags, Some(Arc::clone(&scope)))
         .await
         .map_err(|_| CliExit::silent_failure(1))?;
-    Ok((result.wasm, scope.reads()))
+    Ok((result, scope.reads()))
 }
 
 /// Seed `host` with the `[dependencies]` index derived from `manifest_pair`
@@ -1360,7 +1361,7 @@ fn read_license_text(
 pub struct Artifact {
     pub bytes: Vec<u8>,
     pub output_path: Option<PathBuf>,
-    /// What the compile read, where it read nothing but files.
+    /// What the compile read, where none of it is untracked.
     pub(crate) reads: Option<Vec<Input>>,
 }
 
@@ -1412,15 +1413,8 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
             Some(&default_interface_name(&opts.input, nearest.as_ref())),
         ));
     }
-    let scope = RunCache::new().scoped();
     // Boxed so the manifest held across it keeps every caller's future small.
-    let result = Box::pin(try_compile_with_run_cache(
-        &opts.input,
-        &flags,
-        Some(Arc::clone(&scope)),
-    ))
-    .await
-    .map_err(|_| CliExit::silent_failure(1))?;
+    let (result, reads) = Box::pin(compile_recording_reads(&opts.input, &flags)).await?;
     let wasm = result.wasm;
 
     if opts.wat_to_stdout {
@@ -1467,7 +1461,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
     Ok(Artifact {
         bytes,
         output_path: Some(output_path),
-        reads: scope.reads(),
+        reads,
     })
 }
 

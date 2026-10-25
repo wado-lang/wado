@@ -20,7 +20,7 @@ use tokio::task::JoinSet;
 use crate::args::{self, CliExit};
 use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
 use crate::fingerprint::Input;
-use crate::input_cache::{InputCache, wado_env};
+use crate::input_cache::InputCache;
 use crate::kiln_provider::hex32;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{self, openable_dir};
@@ -359,20 +359,21 @@ pub async fn build_for_driver(
     if let Some(wasm) = cache.lookup(entry_path) {
         return Ok(wasm);
     }
-    let (wasm, reads) = match compile::load_nearest_manifest(entry_path).map_err(CliExit::error)? {
-        Some(project) => {
-            let segment = compile::world_path_segment(target_world);
-            let target = BuildTarget {
-                entry: PathBuf::from(entry),
-                output: compile::build_output_path(&project.root, &segment),
-                lib_world: None,
-                target_world: Some(target_world.to_string()),
-            };
-            let artifact =
-                build_world_component(&target, &flags.knobs, EmbedOptions::default()).await?;
-            (artifact.bytes, artifact.reads)
-        }
-        None => compile::compile_with_reads(entry, flags).await?,
+    let project = compile::load_nearest_manifest(entry_path).map_err(CliExit::error)?;
+    let (wasm, reads) = if let Some(project) = project {
+        let segment = compile::world_path_segment(target_world);
+        let target = BuildTarget {
+            entry: PathBuf::from(entry),
+            output: compile::build_output_path(&project.root, &segment),
+            lib_world: None,
+            target_world: Some(target_world.to_string()),
+        };
+        let artifact =
+            build_world_component(&target, &flags.knobs, EmbedOptions::default()).await?;
+        (artifact.bytes, artifact.reads)
+    } else {
+        let (result, reads) = compile::compile_recording_reads(entry, flags).await?;
+        (result.wasm, reads)
     };
     if let Some(reads) = reads {
         cache.store(entry_path, reads, &wasm);
@@ -386,14 +387,7 @@ struct DriverCache(InputCache);
 
 impl DriverCache {
     fn new(target_world: &str, flags: &CompileFlags) -> Self {
-        let mut keyed = flags.clone();
-        // `--no-cache` only skips reading, so it is no part of the key.
-        keyed.knobs.no_cache = false;
-        Self(InputCache::new(
-            "run",
-            &format!("{target_world} {keyed:?} {:?}", wado_env()),
-            !flags.knobs.no_cache,
-        ))
+        Self(InputCache::new("run", flags, target_world))
     }
 
     fn lookup(&self, entry: &Path) -> Option<Vec<u8>> {

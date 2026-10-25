@@ -8,8 +8,10 @@
 
 use std::path::Path;
 
+use crate::compile::CompileFlags;
 use crate::fingerprint::Input;
 use crate::input_cache::InputCache;
+use crate::knobs::RuntimeKnobs;
 
 /// The interfaces that hand a test nothing: output, its types, and exit.
 /// Every other import is an effect whose answer can change between runs (a
@@ -56,9 +58,8 @@ impl Tally {
 pub(crate) struct TestCache(InputCache);
 
 impl TestCache {
-    /// `options` renders everything about the run that can change an outcome.
-    pub(crate) fn new(options: &str, read: bool) -> Self {
-        Self(InputCache::new("test", options, read))
+    pub(crate) fn new(flags: &CompileFlags, runtime_knobs: RuntimeKnobs) -> Self {
+        Self(InputCache::new("test", flags, runtime_knobs))
     }
 
     /// Take out of `files` each one whose tests passed when it last ran and
