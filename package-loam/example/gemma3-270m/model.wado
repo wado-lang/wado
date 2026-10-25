@@ -21,105 +21,6 @@ use gemma from "./gemma3.onnxtext"
                 dims: { batch_size: 1 },
                 // Only the last position ranks the next token.
                 last: { logits: 1 },
-                layout: [
-                    {
-                        pattern: "input_ids",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "attention_mask",
-                        axes: ["Batch", "Total"],
-                    },
-                    {
-                        pattern: "past_key_values.*",
-                        axes: ["Batch", "KvHead", "Past", "Dim"],
-                    },
-                    {
-                        pattern: "present.*",
-                        axes: ["Batch", "KvHead", "Total", "Dim"],
-                    },
-                    {
-                        pattern: "model.embed_tokens.weight",
-                        axes: ["Vocab", "Embed"],
-                    },
-                    // Before `*layernorm.weight`: the first pattern that
-                    // matches a name lays it out.
-                    {
-                        pattern: "*attn.q_norm.layernorm.weight",
-                        axes: ["Dim"],
-                    },
-                    {
-                        pattern: "*attn.k_norm.layernorm.weight",
-                        axes: ["Dim"],
-                    },
-                    {
-                        pattern: "*layernorm.weight",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*q_proj.MatMul.weight",
-                        axes: ["Embed", "Hidden"],
-                    },
-                    {
-                        pattern: "*k_proj.MatMul.weight",
-                        axes: ["Embed", "Dim"],
-                    },
-                    {
-                        pattern: "*v_proj.MatMul.weight",
-                        axes: ["Embed", "Dim"],
-                    },
-                    {
-                        pattern: "*o_proj.MatMul.weight",
-                        axes: ["Hidden", "Embed"],
-                    },
-                    {
-                        pattern: "*gate_proj.MatMul.weight",
-                        axes: ["Embed", "Inner"],
-                    },
-                    {
-                        pattern: "*up_proj.MatMul.weight",
-                        axes: ["Embed", "Inner"],
-                    },
-                    {
-                        pattern: "*down_proj.MatMul.weight",
-                        axes: ["Inner", "Embed"],
-                    },
-                    {
-                        pattern: "cos_cache_*",
-                        axes: ["Pos", "Half"],
-                    },
-                    {
-                        pattern: "sin_cache_*",
-                        axes: ["Pos", "Half"],
-                    },
-                    // Each head's query and key normalized apart, then joined.
-                    {
-                        pattern: "*/q_norm/Reshape_1/output_0",
-                        axes: ["Batch", "SeqHead", "Dim"],
-                    },
-                    {
-                        pattern: "*/q_norm/Reshape_2/output_0",
-                        axes: ["Batch", "Seq", "Hidden"],
-                    },
-                    {
-                        pattern: "*/k_norm/Reshape_1/output_0",
-                        axes: ["Batch", "Seq", "Dim"],
-                    },
-                    {
-                        pattern: "*/k_norm/Reshape_2/output_0",
-                        axes: ["Batch", "Seq", "Dim"],
-                    },
-                    // The attention bias, built from the mask and stretched
-                    // over the heads and the new positions.
-                    {
-                        pattern: "/model/gqa_attention_bias/Unsqueeze/output_0",
-                        axes: ["Batch", "BiasHead", "BiasSeq", "Total"],
-                    },
-                    {
-                        pattern: "/model/gqa_attention_bias/Expand/output_0",
-                        axes: ["Batch", "BiasHead", "Seq", "Total"],
-                    },
-                ],
             },
         },
     };
@@ -134,9 +35,13 @@ pub struct Model<affine Bk: Backend> {
     /// The ids the caches hold the keys and values of.
     seen: List<i32>,
     /// Each layer's key cache, then its value cache, as the last pass wrote
-    /// and retained them; none before the first.
-    caches: List<Bk::Tensor<f32, [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>>,
+    /// and retained them; none before the first. Each layer's heads and head
+    /// width are axes of its own, so every cache is held under layer 0's.
+    caches: List<Bk::Tensor<f32, Stored>>,
 }
+
+/// The axes every cache is held under.
+type Stored = [gemma::BatchSize, gemma::PastKeyValues0Key1, gemma::PastSequenceLength, gemma::PastKeyValues0Key3];
 
 impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from a safetensors checkpoint laid out
@@ -156,7 +61,7 @@ impl<affine Bk: Backend> Model<Bk> {
 
     /// How many positions the model reads: one per row of the rotary caches.
     pub fn positions(&self) -> i32 {
-        return gemma::Pos::EXTENT;
+        return i32::min(gemma::CosCacheLocal0::EXTENT, gemma::CosCacheGlobal0::EXTENT);
     }
 
     /// Empties the caches, so the next call reads its ids from the start.
@@ -170,7 +75,7 @@ impl<affine Bk: Backend> Model<Bk> {
     /// and values of the rest.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
-        let vocab = gemma::Vocab::EXTENT;
+        let vocab = gemma::Logits2::EXTENT;
         for let id of ids {
             assert 0 <= *id < vocab, "every token id is in the vocabulary";
         }
@@ -186,86 +91,118 @@ impl<affine Bk: Backend> Model<Bk> {
         }
         self.backend.begin();
         if self.caches.is_empty() {
-            let extents: List<i32> = [gemma::Batch::EXTENT, gemma::KvHead::EXTENT, 0, gemma::Dim::EXTENT];
-            let empty = self.backend.upload(
-                &Tensor::<f32, [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]> { data: [], extents },
-            );
+            let extents: List<i32> = [
+                gemma::BatchSize::EXTENT, gemma::PastKeyValues0Key1::EXTENT, 0, gemma::PastKeyValues0Key3::EXTENT,
+            ];
+            let empty = self.backend.upload(&Tensor::<f32, Stored> { data: [], extents });
             self.caches = List::filled(LAYERS * 2, empty);
         }
-        let input_ids = self.backend.upload(&Tensor::<i64, [gemma::Batch, gemma::Seq]> {
+        let input_ids = self.backend.upload(&Tensor::<i64, [gemma::BatchSize, gemma::SequenceLength]> {
             data: fresh,
-            extents: [gemma::Batch::EXTENT, fresh.len()],
+            extents: [gemma::BatchSize::EXTENT, fresh.len()],
         });
-        let mask = self.backend.upload(&Tensor::<i64, [gemma::Batch, gemma::Total]> {
+        let mask = self.backend.upload(&Tensor::<i64, [gemma::BatchSize, gemma::TotalSequenceLength]> {
             data: List::<i64>::filled(total, 1),
-            extents: [gemma::Batch::EXTENT, total],
+            extents: [gemma::BatchSize::EXTENT, total],
         });
-        let c = &self.caches;
         let passed = gemma::pass(
             &mut self.backend,
             &input_ids,
             &mask,
-            &c[0],
-            &c[1],
-            &c[2],
-            &c[3],
-            &c[4],
-            &c[5],
-            &c[6],
-            &c[7],
-            &c[8],
-            &c[9],
-            &c[10],
-            &c[11],
-            &c[12],
-            &c[13],
-            &c[14],
-            &c[15],
-            &c[16],
-            &c[17],
-            &c[18],
-            &c[19],
-            &c[20],
-            &c[21],
-            &c[22],
-            &c[23],
-            &c[24],
-            &c[25],
-            &c[26],
-            &c[27],
-            &c[28],
-            &c[29],
-            &c[30],
-            &c[31],
-            &c[32],
-            &c[33],
-            &c[34],
-            &c[35],
+            &self.past(0),
+            &self.past(1),
+            &self.past(2),
+            &self.past(3),
+            &self.past(4),
+            &self.past(5),
+            &self.past(6),
+            &self.past(7),
+            &self.past(8),
+            &self.past(9),
+            &self.past(10),
+            &self.past(11),
+            &self.past(12),
+            &self.past(13),
+            &self.past(14),
+            &self.past(15),
+            &self.past(16),
+            &self.past(17),
+            &self.past(18),
+            &self.past(19),
+            &self.past(20),
+            &self.past(21),
+            &self.past(22),
+            &self.past(23),
+            &self.past(24),
+            &self.past(25),
+            &self.past(26),
+            &self.past(27),
+            &self.past(28),
+            &self.past(29),
+            &self.past(30),
+            &self.past(31),
+            &self.past(32),
+            &self.past(33),
+            &self.past(34),
+            &self.past(35),
             &self.weights,
         );
         // The backend ranks the last position, so one index is read back
         // rather than the vocabulary's logits.
         let best = self.backend.download(&self.backend.arg_max(&passed.logits, 2)).data[0] as i32;
-        let p = passed;
-        let presents = [
-            p.present_0_key, p.present_0_value, p.present_1_key, p.present_1_value, p.present_2_key, p.present_2_value,
-            p.present_3_key, p.present_3_value, p.present_4_key, p.present_4_value, p.present_5_key, p.present_5_value,
-            p.present_6_key, p.present_6_value, p.present_7_key, p.present_7_value, p.present_8_key, p.present_8_value,
-            p.present_9_key, p.present_9_value, p.present_10_key, p.present_10_value, p.present_11_key,
-            p.present_11_value, p.present_12_key, p.present_12_value, p.present_13_key, p.present_13_value,
-            p.present_14_key, p.present_14_value, p.present_15_key, p.present_15_value, p.present_16_key,
-            p.present_16_value, p.present_17_key, p.present_17_value,
-        ] as List<Bk::Tensor<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim]>>;
         // Each present becomes the next call's past where the backend holds it.
-        for let i of 0..<presents.len() {
-            let extents = self.backend.extents_of(&presents[i]);
-            self.caches[i] = self.backend.reshape::<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim], [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>(
-                &presents[i],
-                extents,
-            );
-        }
+        let p = passed;
+        self.caches = [
+            self.relabel(&p.present_0_key),
+            self.relabel(&p.present_0_value),
+            self.relabel(&p.present_1_key),
+            self.relabel(&p.present_1_value),
+            self.relabel(&p.present_2_key),
+            self.relabel(&p.present_2_value),
+            self.relabel(&p.present_3_key),
+            self.relabel(&p.present_3_value),
+            self.relabel(&p.present_4_key),
+            self.relabel(&p.present_4_value),
+            self.relabel(&p.present_5_key),
+            self.relabel(&p.present_5_value),
+            self.relabel(&p.present_6_key),
+            self.relabel(&p.present_6_value),
+            self.relabel(&p.present_7_key),
+            self.relabel(&p.present_7_value),
+            self.relabel(&p.present_8_key),
+            self.relabel(&p.present_8_value),
+            self.relabel(&p.present_9_key),
+            self.relabel(&p.present_9_value),
+            self.relabel(&p.present_10_key),
+            self.relabel(&p.present_10_value),
+            self.relabel(&p.present_11_key),
+            self.relabel(&p.present_11_value),
+            self.relabel(&p.present_12_key),
+            self.relabel(&p.present_12_value),
+            self.relabel(&p.present_13_key),
+            self.relabel(&p.present_13_value),
+            self.relabel(&p.present_14_key),
+            self.relabel(&p.present_14_value),
+            self.relabel(&p.present_15_key),
+            self.relabel(&p.present_15_value),
+            self.relabel(&p.present_16_key),
+            self.relabel(&p.present_16_value),
+            self.relabel(&p.present_17_key),
+            self.relabel(&p.present_17_value),
+        ];
         self.seen = *ids;
         return best;
+    }
+
+    /// Cache `i`, under the axes of the input it is passed as.
+    fn past<A>(&mut self, i: i32) -> Bk::Tensor<f32, A> with _ {
+        return self.relabel(&self.caches[i]);
+    }
+
+    /// `t` under the axes `B`, with its extents.
+    fn relabel<A, B>(&mut self, t: &Bk::Tensor<f32, A>) -> Bk::Tensor<f32, B> with _ {
+        let extents = self.backend.extents_of(t);
+        return self.backend.reshape::<f32, A, B>(t, extents);
     }
 
     /// Whether `ids` starts with the ids the caches hold, and adds some.
