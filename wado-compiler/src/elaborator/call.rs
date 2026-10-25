@@ -4248,7 +4248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A method-level slot the arguments do not pin takes the default its
         // declaration wrote (WEP 2026-04-11), as the instance spelling does.
-        let receiver = self.resolve_unsited_type_name(struct_name, span);
+        let receiver = self.static_receiver_type(struct_name, receiver_key, span);
         let defaulted = self.fill_static_default_type_args(&sig, receiver, &mut inferred[split..]);
         if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);

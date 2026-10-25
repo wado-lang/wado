@@ -338,7 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = match self.select_candidate(candidates, arg_types) {
             Selection::One(candidate) => self.callee_of_candidate(
-                receiver_name,
+                (receiver_name, &key),
                 method_name,
                 &candidate,
                 receiver_type,
@@ -616,7 +616,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// otherwise.
     fn callee_of_candidate(
         &mut self,
-        receiver_name: &str,
+        (receiver_name, receiver_key): (&str, &ImplTargetKey),
         method_name: &str,
         candidate: &Candidate,
         receiver_type: Option<TypeId>,
@@ -647,13 +647,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let method_ref = method_ref.supplied_by(supply.impl_def);
                 // Resolved here rather than asked of every caller: the name
                 // costs a scope to resolve, and this is the one rung that needs
-                // it.
-                let receiver_type = receiver_type.or_else(|| {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
-                    drop(scope);
-                    Some(resolved)
-                });
+                // it. The key's declaration answers first, as the name may not
+                // reach it from the caller's frame.
+                let receiver_type = receiver_type
+                    .or_else(|| self.type_declared_by(Some(receiver_key)))
+                    .or_else(|| {
+                        let mut scope = self.enter_inherited_type_param_scope();
+                        let resolved =
+                            scope.resolve_unsited_type_name(receiver_name, Span::default());
+                        drop(scope);
+                        Some(resolved)
+                    });
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);
                 self.callee_of_trait_declaration(
                     trait_decl,

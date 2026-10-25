@@ -635,13 +635,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        if let Some(alias) = self.lookup_newtype_of_decl(*def) {
-            return Some(self.tysys.peeled_base(alias));
+        let newtype = self.newtype_self_type(*def)?;
+        Some(self.tysys.peeled_base(newtype))
+    }
+
+    /// The type the newtype or alias `def` declares, a generic one applied to
+    /// its own parameters.
+    pub(super) fn newtype_self_type(&mut self, def: DefId) -> Option<tir::TypeId> {
+        if let Some(alias) = self.lookup_newtype_of_decl(def) {
+            return Some(alias);
         }
-        // A generic newtype declares no one type. Its instance over its own
-        // parameters reaches the base's head, which is all a key reads.
         let names: Vec<String> = self
-            .lookup_generic_newtype_of_decl(*def)?
+            .lookup_generic_newtype_of_decl(def)?
             .type_params
             .iter()
             .map(|p| p.name.clone())
@@ -656,8 +661,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .make_type_param(name, index)
             })
             .collect();
-        let instance = self.generic_newtype_instance(*def, params);
-        Some(self.tysys.peeled_base(instance))
+        Some(self.generic_newtype_instance(def, params))
     }
 
     /// The base the newtype `key` declares wraps: the key its impls answer at,

@@ -1,0 +1,19 @@
+pub trait Named with () {
+    fn name() -> String;
+}
+
+pub struct Pt {
+    pub x: i32,
+}
+
+impl Named for Pt {
+    fn name() -> String {
+        return "dep";
+    }
+}
+
+impl Pt {
+    pub fn mk<U: Named = Self>() -> String {
+        return U::name();
+    }
+}

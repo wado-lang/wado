@@ -2898,6 +2898,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| self.impl_target(struct_name))
     }
 
+    /// The type a static call's receiver `struct_name` names. A key reaching
+    /// a declaration answers for it, since a namespaced `dep::Pt` leaves the
+    /// caller's frame no `Pt`, or another one.
+    pub(super) fn static_receiver_type(
+        &mut self,
+        struct_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+        span: Span,
+    ) -> TypeId {
+        self.type_declared_by(target_hint)
+            .unwrap_or_else(|| self.resolve_unsited_type_name(struct_name, span))
+    }
+
+    /// The type the declaration `key` reaches declares, if it reaches one
+    /// declaring a type.
+    pub(super) fn type_declared_by(&mut self, key: Option<&ImplTargetKey>) -> Option<TypeId> {
+        let def = key?.decl()?;
+        self.declared_self_type(def)
+            .or_else(|| self.newtype_self_type(def))
+    }
+
     /// The trait impl blocks on the receiver `struct_name` at `receiver_args`,
     /// current-module-first; a block binding it as its own parameter only here.
     pub(super) fn trait_impls_for_receiver(
@@ -3067,7 +3088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // free").
         let mut recv = recv;
         if recv.ty.is_none() {
-            recv.ty = Some(self.resolve_unsited_type_name(recv_name, span));
+            recv.ty = Some(self.static_receiver_type(recv_name, recv.key, span));
         }
         match self.static_arg_preselect(recv, method_name, &classes) {
             ArgPreselect::Selected(params) => PreselectedArg::Types(params),
@@ -3471,12 +3492,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
-        self.retype_static_to_newtype(
-            &self.impl_target(struct_name),
-            self.tysys.block_of(&method_ref),
-            impl_type_args,
-            std::slice::from_mut(&mut return_type),
-        );
+        if let Some(key) = &newtype_key {
+            self.retype_static_to_newtype(
+                key,
+                self.tysys.block_of(&method_ref),
+                impl_type_args,
+                std::slice::from_mut(&mut return_type),
+            );
+        }
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
@@ -3533,7 +3556,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let own_ids = sig.own_type_param_ids();
                 let own_params = sig.own_params.clone();
                 let declaring_trait = self.tysys.signatures.declaring_trait(sig);
-                let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
+                let receiver = match &newtype_dispatch {
+                    Some((_, base, _)) => *base,
+                    None => self.resolve_unsited_type_name(struct_name, span),
+                };
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
