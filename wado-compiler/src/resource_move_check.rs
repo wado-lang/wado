@@ -63,8 +63,9 @@ enum MoveError {
     DropSelfMove { type_name: String },
     /// `..base` over a type that implements `Drop`.
     DropSpread { type_name: String },
-    /// A value read after a local it refers into moved, dropped, or went to a
-    /// `&mut` use other than through the value.
+    /// A value read after a local it refers into moved, dropped, went to a
+    /// `&mut` use other than through the value, or took an assignment that
+    /// replaced what the value names.
     DanglingReference {
         holder: String,
         owner: String,
@@ -1075,8 +1076,10 @@ impl MoveWalker<'_, '_> {
 
     /// An assignment at `at` to `place` refills the moves inside it and drops
     /// the old objects below it. A reference taken before into either names
-    /// an object the local no longer holds.
-    fn clear_place(&mut self, place: &PlacePath<'_>, at: Span) {
+    /// an object the local no longer holds: one into a refilled place at or
+    /// below where it moved, or one below `place`. One above a move names an
+    /// object the assignment writes in place.
+    fn assign_place(&mut self, place: &PlacePath<'_>, at: Span) {
         let Some(def) = self.sem().referenced_symbol(place.root.id) else {
             return;
         };
@@ -1098,7 +1101,7 @@ impl MoveWalker<'_, '_> {
             let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
             site.gone = refilled
                 .iter()
-                .find(|(moved, _)| paths_overlap(moved, &path))
+                .find(|(moved, _)| moved.len() <= path.len() && paths_overlap(moved, &path))
                 .map(|(_, span)| Gone::Moved(*span))
                 .or_else(|| {
                     (owner.path.len() > place.fields.len()
@@ -1331,7 +1334,7 @@ impl MoveWalker<'_, '_> {
             }
         }
         match self.place_path(place) {
-            Some(path) => self.clear_place(&path, place.span()),
+            Some(path) => self.assign_place(&path, place.span()),
             None => self.visit_at(place),
         }
     }

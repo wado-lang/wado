@@ -1,5 +1,7 @@
-// A reference taken after an affine local was refilled names the new object.
-// One path's moves and refills leave a reference taken on another readable.
+// A reference taken after an affine local was refilled names the new object,
+// and so does one to a place an assignment writes in place, a field of it
+// moved or not. One path's moves and refills leave a reference taken on
+// another readable.
 
 affine struct Tok {
     id: i32,
@@ -53,6 +55,12 @@ test {
     let q = &p.y;
     p.y = Tok { id: 12 };
     assert q.id == 12;
+
+    let mut o = Pair { x: Tok { id: 13 }, y: Tok { id: 14 } };
+    let w = &o;
+    eat(o.x);
+    o = Pair { x: Tok { id: 15 }, y: Tok { id: 16 } };
+    assert w.x.id == 15;
 }
 
 __DATA__
