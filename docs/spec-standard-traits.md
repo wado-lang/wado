@@ -1202,10 +1202,8 @@ An impl must leave the container as the desugaring would, `a == b` included,
 and fail where the desugaring fails. The desugaring reads `c[b]` before `c[a]`,
 so an impl checks `b` first, then `a`.
 
-A destructuring assignment that keeps its desugaring and copies a value is
-reported by the surviving value-copy remark, with a note naming why it is no
-exchange. One whose elements are affine is a compile error carrying the same
-note.
+A destructuring assignment over affine elements that keeps its desugaring is a
+compile error, with a note naming why it is no exchange.
 
 Rationale: [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md),
 [WEP: Destructuring Assignment](./wep-2026-10-21-destructuring-assignment.md).

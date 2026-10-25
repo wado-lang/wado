@@ -3731,12 +3731,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let label = format!("$for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
-        let into_iter_receiver = adjust_receiver_for_self_kind(
+        let into_iter_receiver = self.adjust_receiver(
             into_iter_receiver,
             info.into_iter_self_kind,
             info.into_iter_is_ref_impl,
             span,
-            &self.tysys.type_table,
+            ctx,
         );
         let iter_type = info.iter_type;
         let into_iter_call = build_tir_method_call(
@@ -3772,12 +3772,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             iter_type,
             span,
         );
-        let next_receiver = adjust_receiver_for_self_kind(
+        let next_receiver = self.adjust_receiver(
             iter_local_ref,
             info.next_self_kind,
             info.next_is_ref_impl,
             span,
-            &self.tysys.type_table,
+            ctx,
         );
         let option_type = self
             .tysys
@@ -5526,13 +5526,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-            let receiver = adjust_receiver_for_self_kind(
-                receiver,
-                dispatch.self_kind,
-                false,
-                span,
-                &self.tysys.type_table,
-            );
+            let receiver = self.adjust_receiver(receiver, dispatch.self_kind, false, span, ctx);
             let index = self.reify_expr(&index_expr.index, ctx, None);
             return WritePlace::IndexAssign {
                 receiver,
@@ -5612,6 +5606,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// [`adjust_receiver_for_self_kind`] for a call reify builds itself. A
+    /// `&mut self` receiver the callee can replace rather than write into is
+    /// boxed, or the mutation has no slot to land in and mutates a copy.
+    fn adjust_receiver(
+        &self,
+        receiver: TirExpr,
+        self_kind: ast::SelfKind,
+        is_ref_impl: bool,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        if !is_ref_impl
+            && matches!(self_kind, ast::SelfKind::MutRef)
+            && self.tysys.mut_self_receiver_needs_box(receiver.type_id)
+            && let TirExprKind::Local { index, .. } = &receiver.kind
+        {
+            ctx.address_taken_locals.insert(*index);
+        }
+        adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span, &self.tysys.type_table)
+    }
+
     /// `[c[i], c[j]] = [c[j], c[i]]` as `{ let $da_N = j; c.index_swap(i, $da_N) }`,
     /// which evaluates `j` and `i` in the order the desugaring first reads
     /// them. `c` is a path neither can change.
@@ -5623,13 +5638,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let receiver = self.reify_expr(transposition.container, ctx, None);
-        let receiver = adjust_receiver_for_self_kind(
-            receiver,
-            dispatch.self_kind,
-            false,
-            span,
-            &self.tysys.type_table,
-        );
+        let receiver = self.adjust_receiver(receiver, dispatch.self_kind, false, span, ctx);
         let j = self.reify_expr(transposition.j, ctx, None);
         let i = self.reify_expr(transposition.i, ctx, None);
         let ctx = &mut ctx.enter_scope();
@@ -5742,13 +5751,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
-            let receiver = adjust_receiver_for_self_kind(
-                recv,
-                dispatch.self_kind,
-                false,
-                span,
-                &self.tysys.type_table,
-            );
+            let receiver = self.adjust_receiver(recv, dispatch.self_kind, false, span, ctx);
             let place = WritePlace::IndexAssign {
                 receiver,
                 index: Box::new(index),
@@ -8052,12 +8055,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 1: build the `container.index_mut(idx)` call.
         let container = self.reify_expr(&index_expr.expr, ctx, None);
-        let receiver_for_index_mut = adjust_receiver_for_self_kind(
+        let receiver_for_index_mut = self.adjust_receiver(
             container,
             inner_dispatch.self_kind,
             false,
             index_expr.span,
-            &self.tysys.type_table,
+            ctx,
         );
         let index_resolved = self.reify_expr(&index_expr.index, ctx, None);
         let index_mut_call = build_tir_method_call(
@@ -8256,21 +8259,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             receiver
         };
 
-        // A receiver the callee can replace rather than write into is boxed, or
-        // the mutation has no slot to land in and `x.bump()` mutates a copy.
-        let needs_implicit_mut_ref = !dispatch.is_ref_impl
-            && matches!(dispatch.self_kind, ast::SelfKind::MutRef)
-            && self.tysys.mut_self_receiver_needs_box(raw_receiver.type_id);
-        if needs_implicit_mut_ref && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
-            ctx.address_taken_locals.insert(*index);
-        }
-
-        let adjusted_receiver = adjust_receiver_for_self_kind(
+        let adjusted_receiver = self.adjust_receiver(
             raw_receiver,
             dispatch.self_kind,
             dispatch.is_ref_impl,
             method_call.span,
-            &self.tysys.type_table,
+            ctx,
         );
 
         // Monomorphization queues instances off exactly what annotate resolved;

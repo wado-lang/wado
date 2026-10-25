@@ -1,0 +1,67 @@
+// An operator calling a `&mut self` method on a local whose type is replaced
+// rather than written into (a variant) boxes it, as a method call does, or the
+// operator mutates a copy.
+use { println, Stdout } from "core:cli";
+
+variant Two<T> {
+    Pair([T, T]),
+}
+
+impl<T> IndexValue<i32> for Two<T> {
+    type Output = T;
+    fn index_value(&self, i: i32) -> T {
+        let Two::Pair([x, y]) = *self;
+        return if i == 0 { x } else { y };
+    }
+}
+
+impl<T> IndexAssign<i32> for Two<T> {
+    type Output = T;
+    fn index_assign(&mut self, i: i32, v: T) {
+        let Two::Pair([x, y]) = *self;
+        *self = if i == 0 { Two::Pair([v, y]) } else { Two::Pair([x, v]) };
+    }
+}
+
+impl<T> IndexSwap<i32> for Two<T> {
+    fn index_swap(&mut self, a: i32, b: i32) {
+        let Two::Pair([x, y]) = *self;
+        *self = Two::Pair([y, x]);
+    }
+}
+
+variant Countdown<T> {
+    Left(i32),
+    Never(T),
+}
+
+impl<T> Iterator for Countdown<T> {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        let Countdown::Left(n) = *self else { return null; };
+        if n == 0 {
+            return null;
+        }
+        *self = Countdown::Left(n - 1);
+        return Some(n);
+    }
+}
+
+export fn run() with Stdout {
+    let mut t = Two::Pair([1, 2]);
+    t[0] = 5;
+    t[1] += 4;
+    println(`${t[0]}${t[1]}`);
+    [t[0], t[1]] = [t[1], t[0]];
+    println(`${t[0]}${t[1]}`);
+    let mut sum = 0;
+    for let x of Countdown::<i32>::Left(3) {
+        sum += x;
+    }
+    println(`${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "56\n65\n6\n"
+}
