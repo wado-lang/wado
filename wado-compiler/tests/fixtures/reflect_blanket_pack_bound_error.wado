@@ -1,0 +1,70 @@
+// A blanket over a reflection kind applies only where every member meets the
+// pack's bound, so a member that misses it is reported where the impl is asked
+// for, not inside the impl's body.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tag for () {
+    fn tag(&self) -> i32 {
+        return 0;
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Tag> Tag for T {
+    fn tag(&self) -> i32 {
+        let mut n = 0;
+        for let f of ReflectStruct::<T>::members() {
+            n += f.get_ref(self).tag();
+        }
+        return n;
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Tag for V {
+    fn tag(&self) -> i32 {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                return case.extract(self).tag();
+            }
+        }
+        unreachable();
+    }
+}
+
+struct Good {
+    a: i32,
+}
+
+struct Bad {
+    a: i32,
+    b: String,
+}
+
+variant Mixed {
+    A(i32),
+    B(String),
+    C,
+}
+
+fn via<T: Tag>(t: &T) -> i32 {
+    return t.tag();
+}
+
+export fn run() {
+    let g = via(&Good { a: 1 });
+    let b = via(&Bad { a: 1, b: "" });
+    let m = via(&Mixed::A(1));
+}
+
+__DATA__
+{
+    "compile_error": ":63:13: analysis error: type 'Bad' does not implement trait 'Tag' required by bound on 'T'; 64:13: type 'Mixed' does not implement trait 'Tag' required by bound on 'T'"
+}

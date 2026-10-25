@@ -1105,7 +1105,7 @@ impl SolverBridge {
             if copies {
                 self.program
                     .facts
-                    .insert((head, copyable), Fact { visible_from: None });
+                    .insert((head, copyable), Fact::default());
             }
         }
     }
@@ -1689,19 +1689,38 @@ impl SolverBridge {
             .collect();
         let defs = tysys.resolutions.defs();
         let eligible = |def: DefId| !table.is_sealed_reflect_member(defs.ast_id(def));
-        let mut state =
-            |head: TypeDeclId, kind: OnBoundTrait, visible_from: Option<Vec<ModuleId>>| {
-                for &(trait_, stated) in &kinds {
-                    let visible_from = if stated == OnBoundTrait::Reflect {
-                        None
-                    } else if stated == kind {
-                        visible_from.clone()
-                    } else {
-                        continue;
-                    };
-                    program.facts.insert((head, trait_), Fact { visible_from });
+        // The member channel a pin reads, spelled with the declaration's own
+        // parameters. One the lowering cannot say is left out, and a pin on it
+        // waits for monomorphization.
+        let channel = |members: &mut dyn Iterator<Item = TypeId>| {
+            said(members.map(|ty| lowering.type_id(table, ty, &by_position)))
+                .ok()
+                .map(SolverType::Tuple)
+        };
+        let mut state = |head: TypeDeclId,
+                         kind: OnBoundTrait,
+                         visible_from: Option<Vec<ModuleId>>,
+                         members: Option<SolverType>| {
+            for &(trait_, stated) in &kinds {
+                if stated == OnBoundTrait::Reflect {
+                    program.facts.insert((head, trait_), Fact::default());
+                    continue;
                 }
-            };
+                if stated != kind {
+                    continue;
+                }
+                let assoc = kind
+                    .member_channel()
+                    .zip(members.clone())
+                    .and_then(|(name, ty)| Some((lowering.known_assoc(trait_, name)?, ty)))
+                    .into_iter()
+                    .collect();
+                let visible_from = visible_from.clone();
+                program
+                    .facts
+                    .insert((head, trait_), Fact { visible_from, assoc });
+            }
+        };
         for (&def, info) in &data.struct_fields {
             if !eligible(def) {
                 continue;
@@ -1718,17 +1737,33 @@ impl SolverBridge {
                 lowering.declared_type(def),
                 OnBoundTrait::ReflectStruct,
                 visible_from,
+                channel(&mut info.fields.iter().map(|(_, ty, _)| *ty)),
             );
         }
+        // A shape's members are its one argument, the tuple of them.
         for &(head, kind) in shapes {
-            state(head, kind, None);
+            state(
+                head,
+                kind,
+                None,
+                Some(SolverType::Tuple(vec![SolverType::Pack(0)])),
+            );
+        }
+        for (&def, info) in &data.variant_cases {
+            if eligible(def) {
+                state(
+                    lowering.declared_type(def),
+                    OnBoundTrait::ReflectVariant,
+                    None,
+                    channel(&mut info.cases.iter().map(|case| case.payload)),
+                );
+            }
         }
         let of = |kind| move |def: &DefId| (*def, kind);
         let memberless = data
-            .variant_cases
+            .enum_cases
             .keys()
-            .map(of(OnBoundTrait::ReflectVariant))
-            .chain(data.enum_cases.keys().map(of(OnBoundTrait::ReflectEnum)))
+            .map(of(OnBoundTrait::ReflectEnum))
             .chain(data.flags_cases.keys().map(of(OnBoundTrait::ReflectFlags)))
             .chain(newtype_decls(data, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
             .chain(
@@ -1738,7 +1773,7 @@ impl SolverBridge {
             );
         for (def, kind) in memberless {
             if eligible(def) {
-                state(lowering.declared_type(def), kind, None);
+                state(lowering.declared_type(def), kind, None, None);
             }
         }
     }
@@ -1761,7 +1796,7 @@ impl SolverBridge {
             {
                 program.facts.insert(
                     (lowering.declared_type(def), trait_),
-                    Fact { visible_from: None },
+                    Fact::default(),
                 );
             }
         };
@@ -1831,7 +1866,7 @@ impl SolverBridge {
                 if holds {
                     self.program
                         .facts
-                        .insert((head, trait_), Fact { visible_from: None });
+                        .insert((head, trait_), Fact::default());
                 }
             }
         }

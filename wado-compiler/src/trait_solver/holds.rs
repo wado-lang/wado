@@ -76,6 +76,7 @@ pub fn holds_with_args(
         env,
         scope,
         asking: Vec::new(),
+        member_next: false,
         at_itself: None,
     }
     .holds(ty, trait_, args)
@@ -158,12 +159,23 @@ fn bound_answers(
         })
 }
 
+/// A question open on the stack.
+struct Open {
+    ty: SolverType,
+    trait_: TraitDeclId,
+    args: Vec<SolverType>,
+    through_member: bool,
+}
+
 /// One question and the questions open under it.
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
     scope: ModuleId,
-    asking: Vec<(SolverType, TraitDeclId, Vec<SolverType>)>,
+    asking: Vec<Open>,
+    /// Whether the next question asks about a member of the type a pin
+    /// bound it from, rather than about a bound's subject.
+    member_next: bool,
     /// A type this query answers about at the type itself, without inheriting
     /// its newtype base's impls. Selection asks this way so that a blanket
     /// whose bound only the base carries is a candidate at the base's level and
@@ -192,16 +204,27 @@ impl Query<'_> {
         args: &[SolverType],
         subject: Option<&SolverType>,
     ) -> Option<Holds> {
+        let through_member = std::mem::take(&mut self.member_next);
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
-        if self
+        if let Some(at) = self
             .asking
             .iter()
-            .any(|(t, tr, a)| t == ty && *tr == trait_ && a == args)
+            .position(|open| open.ty == *ty && open.trait_ == trait_ && open.args == args)
         {
-            return None;
+            // Reached through a member, it is the type's own recursion, which
+            // holds as a derived `Eq` holds of it; through bounds alone it
+            // grounds nothing.
+            let recursive =
+                through_member || self.asking[at + 1..].iter().any(|open| open.through_member);
+            return recursive.then(Holds::default);
         }
-        self.asking.push((ty.clone(), trait_, args.to_vec()));
+        self.asking.push(Open {
+            ty: ty.clone(),
+            trait_,
+            args: args.to_vec(),
+            through_member,
+        });
         let answer = self.decide(ty, trait_, args, subject);
         self.asking.pop();
         answer
@@ -272,13 +295,27 @@ impl Query<'_> {
                 .as_ref()
                 .is_none_or(|modules| modules.contains(&self.scope))
         {
+            let matched: Vec<Option<SolverType>> = match ty {
+                SolverType::Decl(_, args) => args.iter().cloned().map(Some).collect(),
+                _ => Vec::new(),
+            };
             return Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_,
                     structural: false,
                 }],
-                ..Holds::default()
+                assoc: fact
+                    .assoc
+                    .iter()
+                    .map(|(assoc, binding)| {
+                        let member = Member {
+                            binding: binding.clone(),
+                            matched: matched.clone(),
+                        };
+                        (*assoc, member)
+                    })
+                    .collect(),
             });
         }
         // Only an impl of `trait_` itself answers. One of a subtrait owes an
@@ -362,23 +399,34 @@ impl Query<'_> {
                 .flat_map(|p| &p.pins)
                 .any(|pin| pin.ty.mentions_param(index))
         };
-        for (index, param) in def.params.iter().enumerate() {
-            // A parameter only a pin supplies is bound at monomorphization,
-            // and so is its bound (WEP 2026-03-14).
-            let Some(binding) = bindings[index].as_ref() else {
+        // A parameter only a pin supplies is bound by the answer to the bound
+        // carrying the pin, so the ones the target binds go first.
+        let from_pin: Vec<bool> = bindings.iter().map(Option::is_none).collect();
+        let order: Vec<usize> = (0..def.params.len())
+            .filter(|&i| !from_pin[i])
+            .chain((0..def.params.len()).filter(|&i| from_pin[i]))
+            .collect();
+        for index in order {
+            let param = &def.params[index];
+            let through_member = from_pin[index];
+            // One the answers leave unbound reads a projection off a
+            // parameter, and is bound at monomorphization with its bound
+            // (WEP 2026-03-14).
+            let Some(binding) = bindings[index].clone() else {
                 if param.bounds.is_empty() || pinned(index as u32) {
                     continue;
                 }
                 return None;
             };
-            let elements: Vec<&SolverType> = match binding {
+            let elements: Vec<SolverType> = match binding {
                 Binding::One(ty) => vec![ty],
-                Binding::Pack(elems) => elems.iter().collect(),
+                Binding::Pack(elems) => elems,
             };
             // The marker owes no body, so its answer's requests are dropped.
             if param.copyable
                 && let Some(copyable) = program.copyable
                 && !elements.iter().all(|element| {
+                    self.member_next = through_member;
                     self.holds(&peel_newtypes(program, element), copyable, &[])
                         .is_some()
                 })
@@ -398,16 +446,24 @@ impl Query<'_> {
                                 .unwrap_or_else(|| arg.clone())
                         })
                         .collect();
+                    self.member_next = through_member;
                     let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
-                    // one binding nothing is not.
+                    // one binding nothing is not. A pin naming a parameter
+                    // still unbound binds it from what the answer binds.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(expected) = self.at_bindings(&pin.ty, &bindings) else {
+                        let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
                             continue;
                         };
-                        let actual = answer.assoc_at(pin.assoc, &[]);
-                        if actual.is_some_and(|actual| self.normalized(&actual) != expected) {
-                            return None;
+                        let actual = self.normalized(&actual);
+                        match self.at_bindings(&pin.ty, &bindings) {
+                            Some(expected) if expected != actual => return None,
+                            Some(_) => {}
+                            None => {
+                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred) {
+                                    return None;
+                                }
+                            }
                         }
                     }
                     requests.extend(answer.requests);
@@ -638,6 +694,7 @@ pub(super) fn impl_applies(
             env,
             scope,
             asking: Vec::new(),
+            member_next: false,
             at_itself: Some(ty.clone()),
         }
         .impl_answers(id, def, ty)?
@@ -1120,7 +1177,7 @@ mod tests {
     #[test]
     fn a_fact_answers_and_owes_the_body() {
         let p = Builder::default()
-            .fact(POINT, EQ, Fact { visible_from: None })
+            .fact(POINT, EQ, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), EQ, HERE),
@@ -1141,7 +1198,7 @@ mod tests {
     #[test]
     fn a_fact_answers_for_every_instance_of_its_declaration() {
         let p = Builder::default()
-            .fact(LIST, ALPHA, Fact { visible_from: None })
+            .fact(LIST, ALPHA, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &list_of(decl(I32)), ALPHA, HERE),
@@ -1166,6 +1223,7 @@ mod tests {
                 ALPHA,
                 Fact {
                     visible_from: Some(vec![HERE]),
+                    ..Fact::default()
                 },
             )
             .build();
@@ -1308,7 +1366,7 @@ mod tests {
         };
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![EQ])
-            .fact(POINT, EQ, Fact { visible_from: None })
+            .fact(POINT, EQ, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), BETA, HERE),
@@ -1848,7 +1906,7 @@ mod tests {
                 ],
                 ..concrete(ARBITRARY, SolverType::Param(0))
             })
-            .fact(POINT, ALPHA, Fact { visible_from: None })
+            .fact(POINT, ALPHA, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), ARBITRARY, HERE),

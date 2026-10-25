@@ -1,0 +1,31 @@
+// A derived `Hash` needs every field and payload to hash: a `fn` field blocks
+// it, as it blocks `Eq`, and so does an `f64` field, which compares but does
+// not hash.
+
+use { HashMap } from "core:collections";
+
+struct Callback {
+    id: i32,
+    run: fn(),
+}
+
+variant Event {
+    Fire(Callback),
+    Idle,
+}
+
+struct Reading {
+    id: i32,
+    value: f64,
+}
+
+export fn run() {
+    let m = HashMap::<Callback, i32>::new();
+    let n = HashMap::<Event, i32>::new();
+    let r = HashMap::<Reading, i32>::new();
+}
+
+__DATA__
+{
+    "compile_error": ":23:13: analysis error: type 'Callback' does not implement trait 'Hash' required by bound on 'K'; 24:13: type 'Event' does not implement trait 'Hash' required by bound on 'K'; 25:13: type 'Reading' does not implement trait 'Hash' required by bound on 'K'"
+}

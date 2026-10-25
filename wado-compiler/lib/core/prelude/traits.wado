@@ -72,6 +72,33 @@ pub affine trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
 }
 
+/// A struct feeds its fields in declaration order, as its derived `Eq`
+/// compares them.
+impl<T: ReflectStruct<FieldTypes = [..F]> + Eq, ..F: Hash> Hash for T {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for let f of ReflectStruct::<T>::members() {
+            f.get_ref(self).hash(h);
+        }
+    }
+}
+
+/// A variant feeds its live case's tag, then the payload a payload case
+/// carries, as its derived `Eq` compares them.
+impl<V: ReflectVariant<CasePayloads = [..P]> + Eq, ..P: Hash> Hash for V {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                h.write_u64(case.discriminant() as u64);
+                if !case.is_unit() {
+                    case.extract(self).hash(h);
+                }
+                return;
+            }
+        }
+        unreachable();
+    }
+}
+
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]

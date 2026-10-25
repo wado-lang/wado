@@ -45,6 +45,9 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
+use crate::synthesis::traits::{
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
+};
 use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
 
@@ -161,6 +164,28 @@ impl OnBoundTrait {
                 | Self::ReflectNewtype
                 | Self::ReflectTemplate
         )
+    }
+
+    /// The associated type listing a reflection kind's member types, which a
+    /// derivation pins to bind its pack: `ReflectStruct<FieldTypes = [..F]>`.
+    pub(super) fn member_channel(self) -> Option<&'static str> {
+        match self {
+            Self::ReflectStruct => Some(REFLECT_FIELD_TYPES_ASSOC),
+            Self::ReflectVariant => Some(REFLECT_CASE_PAYLOADS_ASSOC),
+            Self::ReflectTemplate => Some(REFLECT_HOLES_ASSOC),
+            Self::Eq
+            | Self::Ord
+            | Self::Serialize
+            | Self::Deserialize
+            | Self::Default
+            | Self::Reflect
+            | Self::ReflectEnum
+            | Self::ReflectFlags
+            | Self::ReflectNewtype
+            | Self::Ref
+            | Self::RefMut
+            | Self::Inspect => None,
+        }
     }
 }
 

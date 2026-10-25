@@ -400,6 +400,10 @@ pub struct Fact {
     /// The modules the fact holds when asked from; `None` is everywhere. A
     /// `Reflect*` bound's visibility gate arrives this way.
     pub visible_from: Option<Vec<ModuleId>>,
+    /// The associated types the kind binds, spelled with the declaration's own
+    /// parameters: a struct's `FieldTypes`, what a pin like
+    /// `ReflectStruct<FieldTypes = [..F]>` reads.
+    pub assoc: Vec<(AssocId, SolverType)>,
 }
 
 /// What the solver is asked about (`docs/wep-2026-09-01-trait-resolution.md`,
