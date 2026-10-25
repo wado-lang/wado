@@ -550,16 +550,14 @@ pub fn create_serve_engine(
 /// `insecure-seed`, and a seed changes how far its probes go.
 #[must_use]
 pub fn new_store(engine: &Engine, mut state: WasiState) -> Store<WasiState> {
-    let metered = engine.get_consume_fuel();
-    if metered {
-        let mut fixed = random::fixed_seed(&mut WasiCtx::builder()).build();
-        *state.ctx.random() = std::mem::take(fixed.random());
+    if !engine.get_consume_fuel() {
+        return Store::new(engine, state);
     }
+    let mut fixed = random::fixed_seed(&mut WasiCtx::builder()).build();
+    *state.ctx.random() = std::mem::take(fixed.random());
+    state.fuel_start = Some(u64::MAX);
     let mut store = Store::new(engine, state);
-    if metered {
-        store.set_fuel(u64::MAX).expect("the engine meters fuel");
-        store.data_mut().fuel_start = Some(u64::MAX);
-    }
+    store.set_fuel(u64::MAX).expect("the engine meters fuel");
     store
 }
 

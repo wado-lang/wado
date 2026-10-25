@@ -209,6 +209,7 @@
 - [Destructuring Assignment and a Swap Without Value Copies](./wep-2026-10-21-destructuring-assignment.md)
 - [A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
+- [Fuel Benchmarks](./wep-2026-10-25-fuel-benchmarks.md)
 
 ## Standard Library
 
@@ -221,6 +222,7 @@
 - [core:digest](./stdlib-core-digest.md)
 - [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
+- [core:fuel](./stdlib-core-fuel.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
 - [core:jsonc](./stdlib-core-jsonc.md)

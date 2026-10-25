@@ -72,11 +72,17 @@ fn regions_are_reported_in_order_and_reproduce() {
     assert_eq!(entry["file"], "loops_test.wado");
     assert_eq!(entry["test"], "loops");
     let regions = entry["regions"].as_array().unwrap();
-    let labels: Vec<_> = regions.iter().map(|r| r["label"].as_str().unwrap()).collect();
+    let labels: Vec<_> = regions
+        .iter()
+        .map(|r| r["label"].as_str().unwrap())
+        .collect();
     assert_eq!(labels, ["short", "long", "map"]);
     let fuel = |i: usize| regions[i]["fuel"].as_u64().unwrap();
     assert!(fuel(0) < fuel(1), "{first}");
-    assert!(fuel(0) + fuel(1) + fuel(2) < entry["fuel"].as_u64().unwrap(), "{first}");
+    assert!(
+        fuel(0) + fuel(1) + fuel(2) < entry["fuel"].as_u64().unwrap(),
+        "{first}"
+    );
 
     // `HashMap::new` hashes under `wasi:random/insecure-seed`, which a metered
     // run fixes.

@@ -2551,8 +2551,9 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
         })
         .and_then(|()| {
             metered.map_or(Ok(()), |results| {
-                let root = std::env::current_dir()
-                    .map_err(|e| CliExit::error(format!("cannot read the current directory: {e}")))?;
+                let root = std::env::current_dir().map_err(|e| {
+                    CliExit::error(format!("cannot read the current directory: {e}"))
+                })?;
                 fuel_host::write_report(&root, &results)
             })
         });

@@ -2253,15 +2253,10 @@ fn compile_after_load<H: CompilerHost>(
     // build and then fail to instantiate wherever it runs.
     if !nir.is_test_world()
         && let Some((entry, package)) = wir_package.import_plan.iter().find_map(|entry| {
+            let (package, _) = entry.fq.split_once('/')?;
             TEST_WORLD_ONLY_PACKAGES
-                .iter()
-                .find(|package| {
-                    entry
-                        .fq
-                        .strip_prefix(**package)
-                        .is_some_and(|rest| rest.starts_with('/'))
-                })
-                .map(|package| (entry, package))
+                .contains(&package)
+                .then_some((entry, package))
         })
     {
         report_without_span(

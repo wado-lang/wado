@@ -34,7 +34,10 @@ pub fn add_to_linker(linker: &mut Linker<WasiState>) -> wasmtime::Result<()> {
     host.func_wrap(
         "report",
         |mut store: StoreContextMut<'_, WasiState>, (label, fuel): (String, u64)| {
-            store.data_mut().fuel_regions().push(FuelRegion { label, fuel });
+            store
+                .data_mut()
+                .fuel_regions()
+                .push(FuelRegion { label, fuel });
             Ok(())
         },
     )
@@ -50,7 +53,8 @@ struct FuelEntry<'a> {
 }
 
 /// Write `build/fuel.json` under `root`: every metered test of the run, by
-/// file and then by test, so one program writes one report.
+/// file and then by test, so the report does not depend on which test
+/// finished first.
 ///
 /// # Errors
 ///
