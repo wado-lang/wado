@@ -235,9 +235,7 @@ impl CoverageMap {
                 && let Some(seed) = seed
                 && let Some(seeded) = seed.sources.iter().position(|s| s == source)
             {
-                map.modules.push(seed.modules[seeded].clone());
-                map.bases.push(seed.bases[seeded]);
-                map.sources.push(source.clone());
+                map.push(source, seed.modules[seeded].clone(), seed.bases[seeded]);
                 continue;
             }
             let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
@@ -257,11 +255,15 @@ impl CoverageMap {
                 map.for_of_bodies
                     .insert(id, base + regions.start..base + regions.end);
             }
-            map.modules.push(plan);
-            map.bases.push(base);
-            map.sources.push(source.clone());
+            map.push(source, plan, base);
         }
         map
+    }
+
+    fn push(&mut self, source: &ModuleSource, plan: ModulePlan, base: u32) {
+        self.modules.push(plan);
+        self.bases.push(base);
+        self.sources.push(source.clone());
     }
 
     /// One past the last id any module takes.
