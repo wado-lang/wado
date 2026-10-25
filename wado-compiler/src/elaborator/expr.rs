@@ -10,13 +10,10 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTraitName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
-    split_local_method,
-};
+use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
+    TirLiteralPattern, TirStruct, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
@@ -2338,10 +2335,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = trait_info.receiver.clone();
-                let mangled_method_name =
-                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
-
                 // `index_ref` returns `&Output`; `index_ref_mut` returns `&mut Output`.
                 let ref_output_type = {
                     let mut tt = self.tysys.type_table.borrow_mut();
@@ -2352,21 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                let func = FunctionRef {
-                    module_source: trait_info.impl_module_source.clone(),
-                    name: mangled_method_name,
-                    template: Some(
-                        self.tysys
-                            .signatures
-                            .declared_template(trait_info.method_def),
-                    ),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        receiver,
-                        Some(trait_info.trait_name.clone()),
-                        index_method.to_string(),
-                    )),
-                };
+                let func = self.indexing_function_ref(&trait_info, index_method);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2401,29 +2380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = trait_info.receiver.clone();
-                let mangled_method_name = MethodName::format_local(
-                    &receiver,
-                    Some(&trait_info.trait_name),
-                    "index_value",
-                );
-
-                // IndexValue returns Output directly (not a reference)
-                let func = FunctionRef {
-                    module_source: trait_info.impl_module_source.clone(),
-                    name: mangled_method_name,
-                    template: Some(
-                        self.tysys
-                            .signatures
-                            .declared_template(trait_info.method_def),
-                    ),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        receiver,
-                        Some(trait_info.trait_name.clone()),
-                        "index_value".to_string(),
-                    )),
-                };
+                let func = self.indexing_function_ref(&trait_info, "index_value");
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s

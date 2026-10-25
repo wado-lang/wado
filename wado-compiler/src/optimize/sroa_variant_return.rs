@@ -2333,7 +2333,7 @@ fn retain_rewritable_locals(
                         sanctioned.extend(expr.as_expr());
                         let guard_writes =
                             arms.iter().filter_map(|a| a.guard?.as_expr()).any(|g| {
-                                body.find_in_live_node_under(NodeRef::Expr(g), |n| {
+                                body.find_in_nodes_under(NodeRef::Expr(g), |n| {
                                     (arena_query::local_written_by(body, n) == Some(local))
                                         .then_some(())
                                 })

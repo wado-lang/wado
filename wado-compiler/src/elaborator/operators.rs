@@ -23,13 +23,16 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
+use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
-use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
+use crate::elaborator::sem::types::{
+    AssignPlace, DestructuringFallback, DesugarKind, FallbackSite, OperatorDispatch,
+};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
@@ -1095,6 +1098,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
+        let cause = match Reading::of(assign) {
+            Reading::Transposition(transposition) => {
+                match self.transpositions.get(&assign.id).copied() {
+                    None => Some(DestructuringFallback::Rebindable),
+                    Some(clean) => {
+                        match self.resolve_index_swap(assign, &transposition, clean, ctx) {
+                            Ok(()) => return TypeTable::UNIT,
+                            Err(cause) => cause,
+                        }
+                    }
+                }
+            }
+            Reading::NotAPermutation => Some(DestructuringFallback::NotAPermutation),
+            Reading::OtherContainers => Some(DestructuringFallback::OtherContainer),
+            Reading::UnplainIndex => Some(DestructuringFallback::UnplainIndex),
+            Reading::Permutation if targets.iter().all(|t| self.is_owned_place(t, ctx)) => {
+                Some(DestructuringFallback::ReferenceReadable)
+            }
+            Reading::Permutation => Some(DestructuringFallback::NotOwned),
+        };
+        self.sem.types.destructuring_fallbacks.insert(
+            assign.span,
+            FallbackSite {
+                cause,
+                target_reads: target_reads(assign),
+            },
+        );
         let places: Vec<Result<WritePlace, ()>> = targets
             .iter()
             .map(|target| self.resolve_write_place(target, ctx))
@@ -1147,6 +1177,195 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_write(target, place, type_id, span, ctx);
         }
         TypeTable::UNIT
+    }
+
+    /// Resolve a transposition as its container's `index_swap`, recording the
+    /// dispatch reify replays. `Err` falls back to the desugaring, with no
+    /// dispatch recorded and no local taken, and says why where the desugaring
+    /// does not report an error. The desugaring resolves again what this
+    /// resolved: its facts replace these, and the logger reports a repeated
+    /// diagnostic once.
+    fn resolve_index_swap(
+        &mut self,
+        assign: &ast::AssignExpr,
+        transposition: &Transposition<'_>,
+        clean: Clean,
+        ctx: &mut FunctionContext,
+    ) -> Result<(), Option<DestructuringFallback>> {
+        let container = transposition.container;
+        let Some(root) = ctx.binding(transposition.container_root()) else {
+            return Err(Some(DestructuringFallback::ContainerNotLocal));
+        };
+        let rebindable_root = clean.container_root_referenced && root.is_mut;
+        let root_type = root.type_id;
+        let container_type = self.resolve_expr(container, ctx, None);
+        if container_type == TypeTable::ERROR {
+            return Err(None);
+        }
+        if self.holds_rebindable_reference(
+            &transposition.container_path(),
+            root_type,
+            rebindable_root,
+        ) {
+            return Err(Some(DestructuringFallback::Rebindable));
+        }
+        if matches!(
+            self.tysys.type_table.borrow().get(container_type),
+            ResolvedType::Ref(_)
+        ) || self.place_roots_at_immutable_ref(container)
+            || self
+                .place_roots_at_immutable_binding(container, ctx)
+                .is_some()
+        {
+            return Err(None);
+        }
+        let base_type_id = self.tysys.through_ref(container_type);
+        let no_index_swap = |this: &Self, key: Option<TypeId>| {
+            let tt = this.tysys.type_table.borrow();
+            Err(Some(DestructuringFallback::NoIndexSwap {
+                container: tt.type_name(base_type_id),
+                key: key.map(|key| tt.type_name(key)),
+            }))
+        };
+        let Some(head) = self.index_dispatch_head(base_type_id) else {
+            return no_index_swap(self, None);
+        };
+        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
+        let lookup = |this: &mut Self, key: Option<TypeId>| {
+            this.index_lookup_or_newtype_base(
+                &head,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_swap_trait_impl(n, t, key),
+            )
+        };
+        // The impl is the one at the key a read of `c[i]` selects.
+        let key_class = self.synthesize_arg_class(transposition.i, ctx);
+        let key = self.index_key_type(container_type, &key_class);
+        let Some((info, _)) = lookup(self, key) else {
+            return no_index_swap(self, key);
+        };
+        let index_type = info.index_type;
+        let i_type = self.resolve_expr(transposition.i, ctx, index_type);
+        let j_type = self.resolve_expr(transposition.j, ctx, index_type);
+        if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
+            return Err(None);
+        }
+        // The desugaring's first write could change a mutable global.
+        if transposition.index_reads().into_iter().any(|read| {
+            matches!(
+                self.assign_place_of(read.id),
+                Some(AssignPlace::Global { mutable: true, .. })
+            )
+        }) {
+            return Err(Some(DestructuringFallback::Rebindable));
+        }
+        if let Some(index_type) = index_type {
+            self.typecheck(i_type, index_type, transposition.i.span());
+            self.typecheck(j_type, index_type, transposition.j.span());
+        }
+        self.resolve_unread_subscripts(assign, index_type, ctx);
+        // Reserve reify's `$da_N` for the second index, so both walks allocate
+        // the same frame.
+        let ctx = &mut ctx.enter_scope();
+        let name = minted_name("da", ctx.fresh_serial());
+        let _local_index = ctx.add_local(name, j_type, false, None);
+        let function_ref = self.indexing_function_ref(&info, "index_swap");
+        self.sem.types.index_swap_dispatch.insert(
+            assign.id,
+            OperatorDispatch {
+                function_ref,
+                method_def: Some(info.method_def),
+                self_kind: info.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+        );
+        Ok(())
+    }
+
+    /// Resolve the parts of a transposition `index_swap` reads none of: the
+    /// second target's container, and the right side, its indices at
+    /// `index_type` as the targets'. A name there is still a reference, and a
+    /// subscript there is a place, not an element read.
+    fn resolve_unread_subscripts(
+        &mut self,
+        assign: &ast::AssignExpr,
+        index_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) {
+        let (ast::AssignTarget::Destructuring { places, .. }, ast::Expr::TupleLiteral(value)) =
+            (&assign.target, &assign.value)
+        else {
+            unreachable!("a transposition assigns a tuple to two targets");
+        };
+        let ast::Expr::Index(second) = &places[1] else {
+            unreachable!("a transposition's targets are subscripts");
+        };
+        self.resolve_expr(&second.expr, ctx, None);
+        for element in &value.elements {
+            let ast::Expr::Index(subscript) = element else {
+                unreachable!("a transposition reads two subscripts");
+            };
+            self.resolve_expr(&subscript.expr, ctx, None);
+            self.resolve_expr(&subscript.index, ctx, index_type);
+        }
+    }
+
+    /// Whether `place` is owned: a local, or a field path from one, reached
+    /// through no reference and no subscript.
+    fn is_owned_place(&self, place: &ast::Expr, ctx: &FunctionContext) -> bool {
+        field_path(place).is_some_and(|path| {
+            ctx.lookup(&path.root.name)
+                .is_some_and(|local| self.tysys.pointee_of(local.type_id).is_none())
+        })
+    }
+
+    /// Whether a place on `path` that something else may write holds a
+    /// reference, so the desugaring's first write could change which container
+    /// the second names. The root is such a place where `root_writable`, and so
+    /// is every place reached through a reference.
+    fn holds_rebindable_reference(
+        &mut self,
+        path: &Path<'_>,
+        root_type: TypeId,
+        root_writable: bool,
+    ) -> bool {
+        let mut writable = root_writable;
+        let mut place_type = root_type;
+        for step in &path.steps {
+            if let Some(pointee) = self.tysys.pointee_of(place_type) {
+                if writable {
+                    return true;
+                }
+                writable = true;
+                place_type = pointee;
+            }
+            if let Step::Field(field) = step {
+                place_type = self
+                    .lookup_field_type(place_type, &field.field, field.span)
+                    .1;
+            }
+        }
+        writable && self.tysys.pointee_of(place_type).is_some()
+    }
+
+    /// The name an indexing trait impl on `base_type_id` is looked up under,
+    /// or `None` for a type no such impl can be written for.
+    fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(base_type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
+            // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the
+            // base name "Array".
+            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
+            _ => None,
+        }
     }
 
     /// Resolve `expr` with every subscript `target` projects through standing as
@@ -1294,29 +1513,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Get base type (unwrap reference if needed)
             let base_type_id = self.tysys.through_ref(indexed_type);
 
-            // Check for IndexAssign trait implementation
-            // Arrays now use IndexAssign trait like other types
             {
-                // Check for IndexAssign trait implementation
-                let struct_name = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(base_type_id) {
-                        ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Newtype { .. }
-                        | ResolvedType::Flags { .. } => tt.base_type_name(base_type_id),
-                        // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
-                        // keyed by the base name "Array".
-                        ResolvedType::BuiltinArray(_) => ARRAY_TYPE_NAME.to_string(),
-                        _ => String::new(),
-                    }
-                };
-
-                // For newtypes, resolve the base type name for trait impl lookup
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-
-                if !struct_name.is_empty() {
+                if let Some(struct_name) = self.index_dispatch_head(base_type_id) {
+                    // For newtypes, resolve the base type name for trait impl lookup
+                    let (lookup_name, lookup_type_id) =
+                        self.tysys.newtype_base_lookup(&struct_name, base_type_id);
                     let assign_info = self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
@@ -1334,29 +1535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     if let Some((trait_info, _)) = assign_info {
                         let output_type = trait_info.output_type;
-                        // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let receiver = trait_info.receiver.clone();
-                        let mangled_method_name = MethodName::format_local(
-                            &receiver,
-                            Some(&trait_info.trait_name),
-                            "index_assign",
-                        );
-
-                        let func = FunctionRef {
-                            module_source: trait_info.impl_module_source.clone(),
-                            name: mangled_method_name,
-                            template: Some(
-                                self.tysys
-                                    .signatures
-                                    .declared_template(trait_info.method_def),
-                            ),
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                receiver,
-                                Some(trait_info.trait_name),
-                                "index_assign".to_string(),
-                            )),
-                        };
+                        let func = self.indexing_function_ref(&trait_info, "index_assign");
 
                         // Record the
                         // resolved `IndexAssign` dispatch keyed by

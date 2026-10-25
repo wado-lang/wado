@@ -175,7 +175,7 @@ fn stmt_disturbs_place(
     let mut disturbs = false;
     // A node the walk stops at disturbs the place on its own; `disturbs`
     // accumulates the rest.
-    let stopped = body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
+    let stopped = body.find_in_nodes_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::GlobalVarSet { .. } => return Some(()),
@@ -265,7 +265,7 @@ fn find_clone_referent_use(
     index: u32,
     descriptors: &[FunctionRef],
 ) -> Option<ExprId> {
-    body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
+    body.find_in_nodes_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind
             && is_consuming_clone(*func_id, descriptors)

@@ -14,6 +14,7 @@ use { zlib_compress, inflate_zlib } from "core:zlib";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
@@ -27,6 +28,13 @@ test "smoke" {
     for let mut i = 0; i < data.len(); i += 1 {
         assert decompressed[i] == data[i];
     }
+}
+
+test "fuel" {
+    let data = #include_bytes("../json_twitter/twitter.json");
+    let compressed = measure("compress", || zlib_compress(&data));
+    let decompressed = measure("decompress", || inflate_zlib(&compressed).unwrap());
+    assert decompressed.len() == data.len();
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

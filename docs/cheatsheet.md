@@ -594,7 +594,7 @@ assert rw as u32 == 3;     // cast to/from u32
 
 A resource is move-only, and so is anything holding one: such a type is
 declared `affine`. A value of it drops once, where its scope ends, unless it
-moved. See [the spec](./spec-types.md#affine-types).
+moved. See [the spec](./spec-affine.md).
 
 ```wado
 affine struct Conn { socket: TcpSocket, retries: i32 }
@@ -1274,6 +1274,8 @@ affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, 
 affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
 affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+// `[c[i], c[j]] = [c[j], c[i]]` calls it: the elements move, affine ones too
+affine trait IndexSwap<I> with () { fn index_swap(&mut self, a: I, b: I); }
 
 // For string template interpolation
 pub affine trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
@@ -1342,7 +1344,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Hash`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable, hashable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -2007,6 +2009,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   point ranges or per character
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
+- [`core:fuel`](./stdlib-core-fuel.md) — `measure`, the fuel (Wasm instructions)
+  a region of a test ran, under `wado test --report-fuel`
 - [`core:eval`](./stdlib-core-eval.md) — compile and run a program from source
   under `wado test`, for testing code generators
 

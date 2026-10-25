@@ -1,0 +1,22 @@
+// A transposition within one container exchanges through `IndexSwap`, which
+// moves the elements, so an affine element exchanges too.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+test {
+    let mut names: List<String> = ["a", "b", "c"];
+    [names[0], names[2]] = [names[2], names[0]];   // IndexSwap::index_swap(0, 2)
+    assert names == ["c", "b", "a"];
+
+    let mut toks: List<Tok> = [];
+    toks.push(Tok { id: 1 });
+    toks.push(Tok { id: 2 });
+    [toks[0], toks[1]] = [toks[1], toks[0]];       // no copy, so no error
+    assert toks[0].id == 2 && toks[1].id == 1;
+}

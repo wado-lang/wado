@@ -13,6 +13,7 @@ use {
     RefMut,
     IndexValue,
     IndexAssign,
+    IndexSwap,
     IndexRef,
     IndexRefMut,
     IntoIterator,
@@ -152,6 +153,15 @@ impl<affine T> IndexAssign<i32> for Array<T> {
 
     fn index_assign(&mut self, index: i32, value: Self::Output) {
         builtin::array_set(self, index, value);
+    }
+}
+
+impl<affine T> IndexSwap<i32> for Array<T> {
+    fn index_swap(&mut self, a: i32, b: i32) {
+        let at_b = builtin::array_take(self, b);
+        let at_a = builtin::array_take(self, a);
+        builtin::array_set(self, b, at_a);
+        builtin::array_set(self, a, at_b);
     }
 }
 

@@ -518,9 +518,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A by-value `self` receiver on a non-resource type. Only resources are
-    /// move-only (WEP 2026-05-21); value types take `&self`.
-    SelfByValueOnNonResource {
+    /// A by-value `self` receiver on a copyable type, which takes `&self`.
+    SelfByValueOnCopyable {
         type_name: String,
         span: Span,
     },
@@ -1361,8 +1360,7 @@ pub enum TypeError {
     },
 
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
-    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
-    /// `Ord` are synthesizable through the bodyless-impl form.
+    /// cannot generate.
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
@@ -1778,10 +1776,10 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SelfByValueOnNonResource { type_name, span } => (
+            TypeError::SelfByValueOnCopyable { type_name, span } => (
                 Code::ReceiverMismatch,
                 format!(
-                    "`self` by value is only allowed on a resource; `{type_name}` is a value type — use `&self`"
+                    "`self` by value is only allowed on an affine type; `{type_name}` is copyable — use `&self`"
                 ),
                 *span,
             ),
@@ -2927,7 +2925,7 @@ impl TypeError {
                 (
                     Code::TraitDeclInvalid,
                     format!(
-                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Hash`, `Default`, and `Inspect`.{hint}"
                     ),
                     *span,
                 )
@@ -3338,7 +3336,7 @@ pub(super) struct MethodInfo {
     pub(super) from_concrete_impl: bool,
     /// True when the receiver `self` is taken by value (not `&self` / `&mut
     /// self` / `self: &T`), so a call transfers ownership of the receiver.
-    /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
+    /// Mirrors `affine_drop`'s `owned_self` at the semantic layer; the
     /// move check reads it to flag use-after-move through a consuming method.
     pub(super) consumes_self: bool,
     /// An inherent member's declared rung. `None` where the member does not

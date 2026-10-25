@@ -172,10 +172,10 @@ Shipped: surviving value copies. `remarks::collect_value_copy_remarks` walks the
 optimized NIR's entry-package functions, collects residual `$value_copy$T` calls
 and `array_clone` / `array_clone_shallow` / `copy_value` calls, and emits one
 info-level remark per survivor anchored to the enclosing statement.
-`logger.remark` carries the span and the module's own filename; tests
-(`wado-compiler/tests/integration/remarks.rs`) pin the behavior at `-O2` — a `List<i32>`
-copied then mutated fires one remark on the copy line; a `Point` that SROA
-scalarizes fires none. No size threshold yet: a synthesized copy helper only
+`logger.remark` carries the span and the module's own filename. E2E fixtures
+pin the behavior at `-O2` with their `remarks` key: a `List<i32>` copied then
+mutated fires one remark on the copy line (`remark_list_copy.wado`); a `Point`
+that SROA scalarizes fires none (`remark_scalarized_struct_copy.wado`). No size threshold yet: a synthesized copy helper only
 exists for non-trivial aggregates, so survivors are already non-trivial.
 
 Next: failed-SROA remarks, reusing the SROA passes' existing hard-escape
@@ -205,7 +205,8 @@ Shipped:
   a dependency and the stdlib stay out. A `Remark` carries its module, since
   a span alone cannot say which file it is in.
 - [x] Surviving value-copy remarks with why + where, plus the survives / elided
-  test pair at `-O2` (`wado-compiler/tests/integration/remarks.rs`).
+  fixture pair at `-O2` (`remark_list_copy.wado`,
+  `remark_scalarized_struct_copy.wado`).
 
 Next:
 

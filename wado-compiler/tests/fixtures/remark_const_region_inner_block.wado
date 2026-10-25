@@ -1,0 +1,22 @@
+// Every template region contains inner blocks that write the buffer their
+// parent owns. Reporting those would bury the region worth reporting, so a
+// template that does not fold leaves exactly one remark, naming the float
+// formatter and not the buffer's cold reshape.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`v=${3.5}`);
+}
+
+__DATA__
+{
+    "stdout": "v=3.5\n",
+    "remarks": {
+        "O2": [
+            {"contains": ["computes a constant at run time"], "count": 1},
+            {"contains": ["computes a constant at run time", "fmt_into"]},
+            {"contains": ["computes a constant at run time", "grow"], "count": 0}
+        ]
+    }
+}

@@ -474,6 +474,14 @@ impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
     }
 }
 
+impl<K: Ord, V> IndexSwap<K> for TreeMap<K, V> {
+    fn index_swap(&mut self, a: K, b: K) {
+        let at_b = self.log.found(self.find_index(b), &b);
+        let at_a = self.log.found(self.find_index(a), &a);
+        self.log.values.index_swap(at_a, at_b);
+    }
+}
+
 impl<K: Ord, V: Ref> IndexRef<K> for TreeMap<K, V> {
     type Output = V;
 

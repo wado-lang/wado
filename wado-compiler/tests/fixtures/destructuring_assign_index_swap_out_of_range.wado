@@ -1,0 +1,26 @@
+// A transposition fails where the desugaring fails: an index past the end
+// traps, whichever of the two it is, and so does a key the map lacks.
+
+use { TreeMap } from "core:collections";
+
+#[expect_trap]
+test "the second index past the end" {
+    let mut xs: List<List<i32>> = [[1], [2]];
+    [xs[0], xs[2]] = [xs[2], xs[0]];
+}
+
+#[expect_trap]
+test "the first index past the end" {
+    let mut xs: List<List<i32>> = [[1], [2]];
+    [xs[2], xs[0]] = [xs[0], xs[2]];
+}
+
+#[expect_trap]
+test "a key the map lacks" {
+    let mut m = TreeMap::<String, List<i32>>::new();
+    m["a"] = [1];
+    [m["a"], m["b"]] = [m["b"], m["a"]];
+}
+
+__DATA__
+{"test": {}}

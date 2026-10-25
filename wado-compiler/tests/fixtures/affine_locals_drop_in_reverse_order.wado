@@ -1,0 +1,90 @@
+// The locals of a scope drop in reverse declaration order, on every path out of
+// it, and a moved one is skipped. A struct without a `Drop` drops its fields in
+// declaration order.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+affine struct Pair {
+    first: Tok,
+    second: Tok,
+}
+
+fn eat(t: Tok) {}
+
+fn falls_off() {
+    let a = Tok { id: 1 };
+    let b = Tok { id: 2 };
+    let c = Tok { id: 3 };
+}
+
+fn returns_early(flag: bool) {
+    let a = Tok { id: 1 };
+    let b = Tok { id: 2 };
+    if flag {
+        let c = Tok { id: 3 };
+        return;
+    }
+    let d = Tok { id: 4 };
+}
+
+fn breaks_out() {
+    let a = Tok { id: 1 };
+    blk: {
+        let b = Tok { id: 2 };
+        let c = Tok { id: 3 };
+        break blk;
+    }
+    let d = Tok { id: 4 };
+}
+
+fn each_iteration() {
+    for let i of 0..<2 {
+        let a = Tok { id: i * 10 + 1 };
+        let b = Tok { id: i * 10 + 2 };
+    }
+}
+
+fn skips_moved() {
+    let a = Tok { id: 1 };
+    let b = Tok { id: 2 };
+    let c = Tok { id: 3 };
+    eat(b);
+    log_stdout("ate 2");
+}
+
+fn fields_in_order() {
+    let a = Tok { id: 1 };
+    let p = Pair { first: Tok { id: 2 }, second: Tok { id: 3 } };
+}
+
+export fn run() with Stdout {
+    println("falls off");
+    falls_off();
+    println("returns early");
+    returns_early(builtin::black_box(true));
+    println("falls through");
+    returns_early(builtin::black_box(false));
+    println("breaks out");
+    breaks_out();
+    println("each iteration");
+    each_iteration();
+    println("skips moved");
+    skips_moved();
+    println("fields in order");
+    fields_in_order();
+}
+
+__DATA__
+{
+    "stdout": "falls off\ndrop 3\ndrop 2\ndrop 1\nreturns early\ndrop 3\ndrop 2\ndrop 1\nfalls through\ndrop 4\ndrop 2\ndrop 1\nbreaks out\ndrop 3\ndrop 2\ndrop 4\ndrop 1\neach iteration\ndrop 2\ndrop 1\ndrop 12\ndrop 11\nskips moved\ndrop 2\nate 2\ndrop 3\ndrop 1\nfields in order\ndrop 2\ndrop 3\ndrop 1\n"
+}

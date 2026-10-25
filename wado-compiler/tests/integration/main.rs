@@ -56,7 +56,6 @@ mod opt_loop_convergence;
 mod package_unused;
 mod purity_sem;
 mod redundant_bce;
-mod remarks;
 mod scalar_read_move;
 mod semantics;
 mod serde_positional;

@@ -1,0 +1,45 @@
+// A float hashes as its `==` compares: every NaN is one key, the two zeroes
+// are one key, and any other value is its own. `f16` and `bf16` hash the `f32`
+// they widen to, which their comparison reads.
+
+use { HashMap, HashSet } from "core:collections";
+
+struct Reading {
+    id: i32,
+    value: f64,
+}
+
+test "zeroes and NaNs are one key each" {
+    let mut m = HashMap::<f64, i32>::new();
+    m[0.0] = 1;
+    m[-0.0] = 2;
+    m[f64::NAN] = 3;
+    m[-f64::NAN] = 4;
+    m[builtin::f64_reinterpret_i64(0x7ff0000000000001)] = 5;
+    m[1.5] = 6;
+    assert m.len() == 3;
+    assert m[0.0] == 2;
+    assert m[f64::NAN] == 5;
+    assert m.get(-1.5) == null;
+}
+
+test "f32 keys" {
+    let s = [0.0, -0.0, f32::NAN, f32::NAN, 2.5] as HashSet<f32>;
+    assert s.len() == 3;
+    assert s.contains(-0.0);
+    assert !s.contains(-2.5);
+}
+
+test "half-precision keys" {
+    let h = [f16::from_bits(0x8000), f16::from_bits(0), f16::NAN, f16::from_bits(0x7E01)] as HashSet<f16>;
+    assert h.len() == 2;
+    let b = [bf16::from_bits(0x8000), bf16::from_bits(0), bf16::NAN] as HashSet<bf16>;
+    assert b.len() == 2;
+}
+
+test "a float field derives Hash" {
+    let mut m = HashMap::<Reading, i32>::new();
+    m[Reading { id: 1, value: -0.0 }] = 7;
+    assert m[Reading { id: 1, value: 0.0 }] == 7;
+    assert m.get(Reading { id: 2, value: 0.0 }) == null;
+}

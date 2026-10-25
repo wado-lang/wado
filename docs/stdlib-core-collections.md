@@ -204,6 +204,10 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn index_value(&self, key: K) -> Self::Output`
 
+#### `impl IndexSwap<K> for TreeMap<K, V>`
+
+##### `fn index_swap(&mut self, a: K, b: K)`
+
 #### `impl IndexRef<K> for TreeMap<K, V>`
 
 ##### `fn index_ref(&self, key: K) -> &V`
@@ -425,6 +429,10 @@ Returns a reference to the value stored under text equal to `key`.
 #### `impl IndexValue<K> for HashMap<K, V>`
 
 ##### `fn index_value(&self, key: K) -> Self::Output`
+
+#### `impl IndexSwap<K> for HashMap<K, V>`
+
+##### `fn index_swap(&mut self, a: K, b: K)`
 
 #### `impl IndexRef<K> for HashMap<K, V>`
 

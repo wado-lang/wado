@@ -1,0 +1,12 @@
+package core:fuel@0.1.0;
+
+/// Host interface behind `core:fuel`. Only `wado test` supplies it, and only
+/// under `--report-fuel` does it meter.
+interface fuel-host {
+    /// The fuel the running test has spent so far, or none when the run is
+    /// not metered.
+    spent: func() -> option<u64>;
+
+    /// Region `label` of the running test spent `fuel`.
+    report: func(label: string, fuel: u64);
+}

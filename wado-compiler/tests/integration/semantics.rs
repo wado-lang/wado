@@ -227,6 +227,36 @@ export fn run() {
     assert_eq!(def_symbol.name, "x");
 }
 
+/// A transposition lowers to `index_swap`, which reads neither the second
+/// target's container nor the right side, yet each name there is a reference.
+#[test]
+fn semantics_resolves_every_name_of_a_lowered_transposition() {
+    let source = r"
+export fn run() {
+    let mut xs: List<List<i32>> = [[1], [2, 2]];
+    let i = 0;
+    [xs[i], xs[1]] = [xs[1], xs[i]];
+}
+";
+    let host = in_memory_host(&[]);
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+    // Line 5: each `xs` and the `i` the right side reads.
+    for column in [6, 13, 23, 30, 33] {
+        let use_id = sem
+            .ast_id_at(&entry, 5, column)
+            .unwrap_or_else(|| panic!("5:{column} should resolve to an AstId"));
+        let def_id = sem
+            .referenced_symbol(use_id)
+            .unwrap_or_else(|| panic!("5:{column} must record a use→def edge"));
+        let name = &sem.symbol_at(def_id).expect("a local symbol").name;
+        assert!(
+            name == "xs" || name == "i",
+            "5:{column} resolved to `{name}`"
+        );
+    }
+}
+
 /// Compile the same source twice on the same thread to force a snapshot
 /// cache hit on the second call, then verify the user→stdlib edge
 /// resolves to the same definition both times.  Divergence here would

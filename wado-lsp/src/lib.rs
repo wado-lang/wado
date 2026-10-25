@@ -138,7 +138,7 @@ impl Snapshot {
             .chain(checked.purity.into_iter().map(Into::into))
             .collect();
         out.extend(
-            wado_compiler::check_resource_moves_semantic(&self.sem)
+            wado_compiler::check_affine_moves_semantic(&self.sem)
                 .into_iter()
                 .map(Into::into),
         );

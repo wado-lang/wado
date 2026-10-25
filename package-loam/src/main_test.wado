@@ -192,8 +192,7 @@ test "a shard the index does not name is refused" {
     let dir = scratch("gen-stray-shard");
     shards(&dir);
     fs::write(`${dir}/other.safetensors`, &write_safetensors(&[])).unwrap();
-    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err(
-    );
+    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err();
     assert refused == `loam: '${dir}/other.safetensors': the index names no shard of this file name`;
 }
 
@@ -240,6 +239,7 @@ outputs
 }
 
 test "dump reports each branch of an If as a scope of its own, with what it owes" {
+<<<<<<< HEAD
     let report = loam(["dump", "--type", "onnxtext", "conformance/branch.onnxtext"]).unwrap();
     assert report.starts_with("graph branch (opset 13)
 axes
@@ -250,6 +250,36 @@ axes
     Y0: minted from Y[0]
 ");
     // A branch lists the axes only it reaches.
+||||||| 05d638d3aca
+    let dir = scratch("dump-branch");
+    let options = "{\"layout\": [
+        {\"pattern\": \"C\", \"axes\": [\"One\"]},
+        {\"pattern\": \"X\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"V\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"P\", \"axes\": [\"Past\", \"Embed\"]},
+        {\"pattern\": \"K\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"W\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"T\", \"axes\": [\"Total\", \"Embed\"], \"graph\": \"with_past\"},
+        {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
+    ]}";
+    fs::write(`${dir}/options.json`, &options).unwrap();
+    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
+    );
+=======
+    let dir = scratch("dump-branch");
+    let options = "{\"layout\": [
+        {\"pattern\": \"C\", \"axes\": [\"One\"]},
+        {\"pattern\": \"X\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"V\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"P\", \"axes\": [\"Past\", \"Embed\"]},
+        {\"pattern\": \"K\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"W\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"T\", \"axes\": [\"Total\", \"Embed\"], \"graph\": \"with_past\"},
+        {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
+    ]}";
+    fs::write(`${dir}/options.json`, &options).unwrap();
+    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap();
+>>>>>>> origin/main
     assert report.contains("
     branch    Y, Z = If(C)
         Y: f32 [Y0=\"Y[0]\", X1=2]

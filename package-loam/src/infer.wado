@@ -517,7 +517,7 @@ fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
             let Symbolic(p) = axis.extent else {
                 continue;
             };
-            if !p.symbols().into_iter().all(|s| bound.contains_str(s.as_str_slice())) {
+            if !p.symbols().into_iter().all(|s| bound.contains_str(s)) {
                 shapes[vi.name].axes[i] = Axis { ..axis, extent: Extent::symbol(&text) };
             }
         }

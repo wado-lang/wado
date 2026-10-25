@@ -250,8 +250,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
     // is ~1.3 MB across 197 parser + 130 lexer rules; the 4 KB +
     // 4 KB/rule heuristic matches that within one doubling.
-    let estimated_size = GEN_BASE_CAPACITY + GEN_PER_RULE_CAPACITY * (grammar.parser_rules.len() + grammar.lexer_rules.len(
-    ));
+    let estimated_size = GEN_BASE_CAPACITY + GEN_PER_RULE_CAPACITY * (grammar.parser_rules.len() + grammar.lexer_rules.len());
     let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
     // `GroupShape` directly. The analysis caches and the tables lowering
@@ -558,8 +557,7 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
                 || verified;
         }
     }
-    let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect(
-    );
+    let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
     if !lr_decisions.is_empty() {
         let sim = lr_sim(atn);
         for let d of lr_decisions {

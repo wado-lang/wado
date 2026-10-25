@@ -1365,22 +1365,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A by-value `self` transfers ownership, so it is legal on a resource
-    /// and on a concrete aggregate that transitively owns one (the consuming
-    /// method hands that resource off). A plain value type's method must take
-    /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
-    /// concrete value type, so they are already permitted.
+    /// A by-value `self` transfers ownership, so a concrete aggregate takes it
+    /// only when it is affine. Generic aggregates resolve to `GenericInstance`
+    /// rather than a concrete value type, so they are already permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
-        let (is_resource, is_concrete_value, type_name) = {
+        let (is_concrete_value, type_name) = {
             let tt = self.tysys.type_table.borrow();
-            let resolved = tt.get(self_ty);
             (
                 matches!(
-                    resolved,
-                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-                ),
-                matches!(
-                    resolved,
+                    tt.get(self_ty),
                     ResolvedType::Struct { .. }
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
@@ -1388,8 +1381,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tt.type_name(self_ty),
             )
         };
-        if is_concrete_value && !is_resource && !self.tysys.carries_resource(self_ty) {
-            let _ = self.emit(TypeError::SelfByValueOnNonResource { type_name, span });
+        if is_concrete_value && !self.tysys.carries_affine(self_ty) {
+            let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
         }
     }
 

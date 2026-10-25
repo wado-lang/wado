@@ -85,11 +85,6 @@ impl Policy {
         for path in BASELINE_READ {
             policy.grant_path(path, Access::ReadExecute);
         }
-        if network == Network::Granted {
-            for path in BASELINE_NETWORK_READ {
-                policy.grant_path(path, Access::ReadExecute);
-            }
-        }
         policy.grant_path("/dev/null", Access::ReadWrite);
         policy
     }
@@ -130,9 +125,10 @@ impl Policy {
     }
 }
 
-/// Read and execute: the loader, the shared libraries, installed programs,
-/// locale data and time zones, and the randomness devices. A path absent on
-/// this machine is skipped. Fixed per OS: nothing here comes from the program's
+/// Read and execute: the loader, the shared libraries, installed programs, the
+/// system configuration (`/etc`: time zones, name resolution, TLS certificates,
+/// a toolchain's settings), and the randomness devices. A path absent on this
+/// machine is skipped. Fixed per OS: nothing here comes from the program's
 /// path, which the guest chooses.
 #[cfg(target_os = "linux")]
 const BASELINE_READ: &[&str] = &[
@@ -144,7 +140,7 @@ const BASELINE_READ: &[&str] = &[
     "/libx32",
     "/usr",
     "/nix/store",
-    "/etc/ld.so.cache",
+    "/etc",
     "/dev/urandom",
     "/dev/random",
     "/dev/zero",
@@ -158,7 +154,7 @@ const BASELINE_READ: &[&str] = &[
     "/System",
     "/opt/homebrew",
     "/opt/local",
-    "/private/etc/localtime",
+    "/private/etc",
     "/private/var/db/timezone",
     "/dev/urandom",
     "/dev/random",
@@ -167,26 +163,6 @@ const BASELINE_READ: &[&str] = &[
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 const BASELINE_READ: &[&str] = &[];
-
-/// Name resolution and TLS certificates, read only with the network granted.
-#[cfg(target_os = "linux")]
-const BASELINE_NETWORK_READ: &[&str] = &[
-    "/etc/resolv.conf",
-    "/etc/hosts",
-    "/etc/nsswitch.conf",
-    "/etc/ssl",
-    "/etc/pki",
-];
-
-#[cfg(target_os = "macos")]
-const BASELINE_NETWORK_READ: &[&str] = &[
-    "/private/etc/resolv.conf",
-    "/private/etc/hosts",
-    "/private/etc/ssl",
-];
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-const BASELINE_NETWORK_READ: &[&str] = &[];
 
 /// Where one of the child's standard streams goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

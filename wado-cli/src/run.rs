@@ -201,7 +201,7 @@ async fn run_cli_component(
     argv: &[String],
     runtime_knobs: RuntimeKnobs,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, profile, runtime_knobs)?;
+    let engine = runtime::create_engine(cranelift_opt, profile, runtime_knobs.clone())?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&component)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, argv, runtime_knobs.process)?;

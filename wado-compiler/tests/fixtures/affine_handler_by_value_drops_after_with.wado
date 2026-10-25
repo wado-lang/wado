@@ -1,0 +1,57 @@
+// An affine handler installed by value moves into the `with`, which drops it as
+// the statement holding the `with` ends, on every path out of it.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+impl Ask for Tok {
+    fn ask(&mut self) -> i32 {
+        resume self.id
+    }
+}
+
+fn falls_off() {
+    let t = Tok { id: 1 };
+    with Ask => t do {
+        log_stdout(`ask ${Ask::ask()}`);
+    }
+    log_stdout("after");
+}
+
+fn returns_early() {
+    let t = Tok { id: 2 };
+    with Ask => t do {
+        log_stdout(`ask ${Ask::ask()}`);
+        return;
+    }
+}
+
+fn yields_a_value() -> i32 {
+    let v = with Ask => Tok { id: 3 } do {
+        Ask::ask()
+    };
+    log_stdout("after");
+    return v;
+}
+
+export fn run() with Stdout {
+    falls_off();
+    returns_early();
+    println(`${yields_a_value()}`);
+}
+
+__DATA__
+{"stdout": "ask 1\ndrop 1\nafter\nask 2\ndrop 2\ndrop 3\nafter\n3\n"}

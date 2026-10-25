@@ -52,8 +52,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         ];
         let got = gpt2::forward(&mut gpu, &input, &mask, &on_gpu);
         println(
-            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs(
-            ) - read}`,
+            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs() - read}`,
         );
     }
 }

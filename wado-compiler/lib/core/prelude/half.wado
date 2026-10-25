@@ -400,6 +400,19 @@ impl Ord for bf16 {
     }
 }
 
+// The widened value is the one the comparison reads, so it is the one hashed.
+impl Hash for f16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        f32::from(*self).hash(h);
+    }
+}
+
+impl Hash for bf16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        f32::from(*self).hash(h);
+    }
+}
+
 impl Default for f16 {
     pub fn default() -> f16 {
         return f16::from_bits(0);

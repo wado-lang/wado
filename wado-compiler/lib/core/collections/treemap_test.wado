@@ -927,3 +927,21 @@ test "get_ref_str refers to the stored value" {
     map.remove("alpha");
     assert map.get_ref_str("alpha") matches { None };
 }
+
+test "index_swap exchanges the values of two keys" {
+    let mut m = TreeMap::<String, List<i32>>::new();
+    m["a"] = [1];
+    m["b"] = [2, 2];
+    m.index_swap("a", "b");
+    assert m["a"].len() == 2 && m["b"].len() == 1;
+    m.index_swap("a", "a");
+    assert m["a"].len() == 2;
+    assert m.len() == 2;
+}
+
+#[expect_trap]
+test "index_swap panics on a missing key" {
+    let mut m = TreeMap::<String, i32>::new();
+    m["a"] = 1;
+    m.index_swap("a", "z");
+}

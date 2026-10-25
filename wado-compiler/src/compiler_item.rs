@@ -277,6 +277,8 @@ pub enum CompilerItem {
     IndexRef,
     IndexRefMut,
     IndexAssign,
+    /// What `[c[i], c[j]] = [c[j], c[i]]` dispatches to.
+    IndexSwap,
     /// The traits an operator dispatches to. The compiler picks each by
     /// construction, so they are items and not spellings a user trait of
     /// the same name could answer for.
@@ -299,6 +301,9 @@ pub enum CompilerItem {
     /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
     /// lowering and for auto-derived `T^Ord::cmp` bodies.
     Ord,
+    /// `Hash` — derived on demand where `Eq` is, its body from the prelude's
+    /// `Reflect*` blankets.
+    Hash,
     /// `From<T>` — what `?` converts an error through, and what the solver
     /// states for the conversions no impl writes.
     From,
@@ -819,6 +824,7 @@ impl CompilerItem {
         Self::IndexRef,
         Self::IndexRefMut,
         Self::IndexAssign,
+        Self::IndexSwap,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -833,6 +839,7 @@ impl CompilerItem {
         Self::Shr,
         Self::Eq,
         Self::Ord,
+        Self::Hash,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -1073,6 +1080,7 @@ impl CompilerItem {
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
             Self::IndexAssign => "index_assign",
+            Self::IndexSwap => "index_swap",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -1087,6 +1095,7 @@ impl CompilerItem {
             Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
+            Self::Hash => "hash",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -1382,9 +1391,11 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::Hash
             | Self::From
             | Self::ListPush
             | Self::ListSplitOff
@@ -1559,7 +1570,7 @@ impl CompilerItem {
                 // mints. The sealed `Reflect*` faces need no entry: that pass
                 // writes them at TIR level, where no AST block exists.
                 | Self::Member
-                // Called by every drop `synthesis::resource_cleanup` writes.
+                // Called by every drop `synthesis::affine_drop` writes.
                 | Self::Drop
         )
     }
@@ -1661,9 +1672,11 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::Hash
             | Self::From
             | Self::Serialize
             | Self::Deserialize

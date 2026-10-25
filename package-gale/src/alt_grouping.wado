@@ -290,8 +290,7 @@ pub fn compute_overlap_groups_of(classes: &List<AltClass>) -> List<List<i32>> {
     // A subsumed alternative is in no branch: no lookahead decides for it.
     let mut out: List<List<i32>> = [];
     for let g of &groups {
-        let kept: List<i32> = g.iter_ref().filter(|slot| !classes[*slot] matches { Subsumed }).map(|slot| *slot).collect(
-        );
+        let kept: List<i32> = g.iter_ref().filter(|slot| !classes[*slot] matches { Subsumed }).map(|slot| *slot).collect();
         if !kept.is_empty() {
             out.push(kept);
         }

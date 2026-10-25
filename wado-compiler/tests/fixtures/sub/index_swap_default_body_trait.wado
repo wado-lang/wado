@@ -1,0 +1,21 @@
+use { log_stderr } from "core:cli";
+
+pub affine struct Tok {
+    pub id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stderr(`drop ${self.id}`);
+    }
+}
+
+pub trait Flip with () {
+    fn flip(&self) -> i32 {
+        let mut ts: List<Tok> = [];
+        ts.push(Tok { id: 1 });
+        ts.push(Tok { id: 2 });
+        [ts[0], ts[1]] = [ts[1], ts[0]];
+        return ts[0].id;
+    }
+}

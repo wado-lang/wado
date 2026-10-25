@@ -100,7 +100,7 @@ fn has_only_pure_returns(body: &Body, type_table: &TypeTable) -> bool {
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.
-    body.find_in_live_node_under(NodeRef::Block(root), |node| {
+    body.find_in_nodes_under(NodeRef::Block(root), |node| {
         let NodeRef::Stmt(s) = node else { return None };
         match &body.stmts[s].kind {
             StmtKind::Return { value: None } => Some(()),

@@ -32,6 +32,7 @@ use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
 use super::types::{ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned};
 use crate::external::find_program;
+use crate::user_config::user_config;
 
 /// How long a child has between `SIGTERM` at its timeout and `SIGKILL`.
 const TIMEOUT_GRACE: Duration = Duration::from_secs(3);
@@ -157,7 +158,7 @@ fn start(
             Descriptor::Dir(dir) => Some(Arc::clone(&dir.dir)),
             Descriptor::File(_) => return Ok(Err(ErrorCode::Io)),
         },
-        None => grants.first().map(|grant| Arc::clone(&grant.dir)),
+        None => grants.dirs.first().map(|grant| Arc::clone(&grant.dir)),
     };
     let host_stdio = matches!(view.ctx.stdio, GuestStdio::Host);
     let stdin = match stdin {
@@ -187,8 +188,11 @@ fn start(
         };
         let program = resolve(program, &cwd)?;
         let mut policy = Policy::new(Network::Granted);
-        for grant in grants {
+        for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
+        }
+        for path in grants.read.iter().chain(user_config().process_read()) {
+            policy.grant_path(path.clone(), Reach::ReadExecute);
         }
         policy.grant_path(scratch.0.path(), Reach::ReadWrite);
         if inherits {

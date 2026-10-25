@@ -8,6 +8,7 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 struct FtsResult {
     total_bytes: u64,
@@ -35,6 +36,10 @@ test "smoke" {
     let r = fts_run(100);
     assert r.total_bytes > 0;
     assert r.byte_sum > 0;
+}
+
+test "fuel" {
+    measure("format", || fts_run(1000000));
 }
 
 export fn run() with (Stdout, MonotonicClock) {
