@@ -1,0 +1,33 @@
+//! Regression: a value-form `with` holds the body's value in an `Option<T>`
+//! slot. Instantiated at `T = ()`, its `Some` case carries no slot, and the
+//! WIR builder pushed the body's call as a field of `struct.new` anyway. The
+//! optimizer then dropped that call's missing value, an invalid core module at
+//! -O1 and above.
+use { println, Stdout } from "core:cli";
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+struct One {}
+
+impl Ask for One {
+    fn ask(&mut self) -> i32 {
+        resume 1
+    }
+}
+
+fn around<T, effect E>(mut body: fn mut() -> T with (Ask, E)) -> T with E {
+    let mut one = One {};
+    return with Ask => &mut one do {
+        body()
+    };
+}
+
+export fn run() with Stdout {
+    around(|| { println(`${Ask::ask()}`); });
+    println(`${around(|| Ask::ask() + 1)}`);
+}
+
+__DATA__
+{"stdout": "1\n2\n"}

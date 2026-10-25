@@ -1467,15 +1467,17 @@ impl FunctionTranslator<'_, '_> {
         };
 
         let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-        if let Some(payload_expr) = payload {
-            let payload = self.translate_operand(payload_expr);
-            fields.push(if carries_payload {
-                let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
-                self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr))
-            } else {
-                payload
-            });
+        let Some(payload_expr) = payload else {
+            return self.struct_new(struct_type_id, fields);
+        };
+        let payload = self.translate_operand(payload_expr);
+        if !carries_payload {
+            // A stackless payload (`Some(())`) has no slot; it runs for its
+            // effects only.
+            return WirInstr::Seq(vec![payload, self.struct_new(struct_type_id, fields)]);
         }
+        let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
+        fields.push(self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr)));
         self.struct_new(struct_type_id, fields)
     }
 
