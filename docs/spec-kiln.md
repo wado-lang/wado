@@ -204,7 +204,9 @@ export struct Options {
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],
     /// Outputs `forward` returns only the last position of, each by the axis
-    /// it is cut along, so what computes the other positions is left out.
+    /// it is cut along. What computes each position from the same position of
+    /// its operands computes the last alone; what reads across them, as
+    /// attention does, still computes them all.
     pub last: TreeMap<String, i32> = {},
     /// Whether operators fuse into one kernel where the plan finds they can.
     /// Off, every kernel writes its output, which is what a fused module is

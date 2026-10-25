@@ -25,7 +25,9 @@ export struct Options {
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],
     /// Outputs `forward` returns only the last position of, each by the axis
-    /// it is cut along, so what computes the other positions is left out.
+    /// it is cut along. What computes each position from the same position of
+    /// its operands computes the last alone; what reads across them, as
+    /// attention does, still computes them all.
     pub last: TreeMap<String, i32> = {},
     /// Whether operators fuse into one kernel where the plan finds they can.
     /// Off, every kernel writes its output, which is what a fused module is
@@ -89,7 +91,7 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
     // Where a cut can move depends on each operand's rank and on which axes
     // broadcast, which only a check of the graph as it stands knows.
     for let [output, axis] of options.last.entries() {
-        keep_last(&mut graph, &checked.shapes, output, *axis).map_err(|e| at(path, &e))?;
+        keep_last(&mut graph, &checked, output, *axis).map_err(|e| at(path, &e))?;
         checked = infer(&graph, &schema).map_err(|e| at(path, &e))?;
     }
     return Result::Ok(Model { graph, checked, fuse: options.fuse });

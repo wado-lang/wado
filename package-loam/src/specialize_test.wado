@@ -163,7 +163,7 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
     };
     let mut checked = infer(graph, &schema).unwrap();
     for let [output, axis] of last.entries() {
-        keep_last(graph, &checked.shapes, output, *axis)?;
+        keep_last(graph, &checked, output, *axis)?;
         assert defined_before_read(graph);
         checked = infer(graph, &schema).unwrap();
     }
@@ -248,6 +248,17 @@ test "a product by a vector computes no position of its batch alone" {
         }`,
     ).unwrap();
     assert cut(&mut graph, { Y: 0 }).unwrap() == "Y/whole=MatMul(X,G) Y=Slice(Y/whole,loam.last-2.starts) | Y Batch,Seq";
+}
+
+test "a value stage 0 folds stays whole where a cut node reads it" {
+    let mut graph = read(
+        `g (float[N, S, 4] X) => (float[N, S, 4] Y) {
+            C = Constant <value = float[1, 1, 4] {1, 2, 3, 4}> ()
+            U = Cast <to = 1> (C)
+            Y = Add(X, U)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Seq,Embed";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {

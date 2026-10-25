@@ -5,7 +5,7 @@
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
 use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
-use { is_reduction, is_unary_elementwise } from "./infer.wado";
+use { Checked, is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// An invocation option the graph cannot take, and why.
@@ -147,18 +147,13 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
 /// nodes that compute each position along that axis from the same position of
 /// their operands, so those compute the one position kept: an elementwise
 /// operator, a reduction keeping the axis, and a product along its rows.
-/// `shapes` is what checking the graph as it stands found: each operand's
-/// rank, and the axes that broadcast.
-pub fn keep_last(
-    graph: &mut Graph,
-    shapes: &HashMap<String, Shape>,
-    output: &String,
-    axis: i32,
-) -> Result<(), OptionConflict> {
+/// `checked` is what checking the graph as it stands found: each operand's
+/// rank, the axes that broadcast, and the values stage 0 folds.
+pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
     let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
         return conflict("last", `the graph declares no output ${*output}`);
     };
-    let rank = shapes.get(*output).unwrap().rank();
+    let rank = checked.shapes.get(*output).unwrap().rank();
     if axis < 0 || axis >= rank {
         return conflict("last", `${*output} has ${rank} axes, and no axis ${axis}`);
     }
@@ -168,7 +163,7 @@ pub fn keep_last(
     if !graph.nodes.into_iter().any(|n| n.outputs.contains_str(output)) {
         return conflict("last", `no node computes ${*output}, which the graph is given`);
     }
-    cut_last(graph, shapes, output, axis - rank);
+    cut_last(graph, checked, output, axis - rank);
     if let Dims(written) = graph.outputs[at].rank {
         let mut declared = written;
         declared[axis] = Dim::Static(1);
@@ -178,7 +173,8 @@ pub fn keep_last(
 }
 
 /// `output` cut to its last position along `axis`, counted from the end.
-fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String, axis: i32) {
+fn cut_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) {
+    let shapes = &checked.shapes;
     let mut readers: HashMap<String, List<i32>> = HashMap::new();
     let mut producer: HashMap<String, i32> = HashMap::new();
     for let [i, node] of graph.nodes.into_iter().enumerate() {
@@ -203,7 +199,7 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
     let mut cut = HashMap::<i32, List<bool>>::new();
     for let mut i = graph.nodes.len() - 1; i >= 0; i -= 1 {
         let node = &graph.nodes[i];
-        let Some(positional) = positional_reads(node, shapes, axis) else {
+        let Some(positional) = positional_reads(node, checked, axis) else {
             continue;
         };
         let kept = node.outputs.into_iter().all(|o| {
@@ -294,7 +290,13 @@ fn cut_last(graph: &mut Graph, shapes: &HashMap<String, Shape>, output: &String,
 /// from its operands at that position and others read whole: whether it reads
 /// each operand at that position. A product reads its right matrix whole, as
 /// its rows are the inner axis, and a reduction its axes.
-fn positional_reads(node: &Node, shapes: &HashMap<String, Shape>, axis: i32) -> Option<List<bool>> {
+fn positional_reads(node: &Node, checked: &Checked, axis: i32) -> Option<List<bool>> {
+    let shapes = &checked.shapes;
+    // A value stage 0 folds is computed at the build, so a cut spares nothing
+    // of it, and its own operands have no shape to cut by.
+    if checked.known.contains_key(node.outputs[0]) {
+        return null;
+    }
     let Some(out) = shapes.get(node.outputs[0]) else {
         return null;
     };
