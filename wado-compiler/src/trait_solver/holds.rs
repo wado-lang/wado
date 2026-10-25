@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
-    RefRule, SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Pin,
+    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -396,12 +396,13 @@ impl Query<'_> {
                 }]
             }
         };
-        let pinned = |index: u32| {
+        let pinned_by = |index: u32, admits: &dyn Fn(&Pin) -> bool| {
             def.params
                 .iter()
                 .flat_map(|p| &p.pins)
-                .any(|pin| pin.ty.mentions_param(index))
+                .any(|pin| admits(pin) && pin.ty.mentions_param(index))
         };
+        let pinned = |index: u32| pinned_by(index, &|_| true);
         // A parameter only a pin supplies is bound by the answer to the bound
         // carrying the pin, so the ones the target binds go first.
         let from_pin: Vec<bool> = bindings.iter().map(Option::is_none).collect();
@@ -411,7 +412,12 @@ impl Query<'_> {
             .collect();
         for index in order {
             let param = &def.params[index];
-            let through_member = from_pin[index];
+            // Only a pin on a member channel descends into the type's members;
+            // any other associated type is no part of it.
+            let through_member = from_pin[index]
+                && pinned_by(index as u32, &|pin| {
+                    program.member_channels.contains(&pin.assoc)
+                });
             // One the answers leave unbound reads a projection off a
             // parameter, and is bound at monomorphization with its bound
             // (WEP 2026-03-14).

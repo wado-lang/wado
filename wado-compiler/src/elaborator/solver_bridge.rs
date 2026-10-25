@@ -1711,12 +1711,11 @@ impl SolverBridge {
                 if stated != kind {
                     continue;
                 }
-                let assoc = kind
+                let member_assoc = kind
                     .member_channel()
-                    .zip(members.clone())
-                    .and_then(|(name, ty)| Some((lowering.known_assoc(trait_, name)?, ty)))
-                    .into_iter()
-                    .collect();
+                    .and_then(|name| lowering.known_assoc(trait_, name));
+                program.member_channels.extend(member_assoc);
+                let assoc = member_assoc.zip(members.clone()).into_iter().collect();
                 let visible_from = visible_from.clone();
                 program.facts.insert(
                     (head, trait_),

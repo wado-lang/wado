@@ -547,7 +547,10 @@ unbound (`FieldTypes = [..F]`) binds that parameter from what the answering impl
 or reflection fact binds. The parameter's own bound (`..F: Arbitrary`) is then
 checked of each element where the blanket is asked for, so a member that fails
 it is reported at the use and not inside the blanket's body. Asking that bound
-is the member descent the cycle rule above names. A pin the answer binds to
+is the member descent the cycle rule above names when the pin is on a member
+channel (`FieldTypes`, `CasePayloads`, `Holes`); a pin on any other associated
+type (`Carrier<Item = U>`) descends into nothing, so a repeat through it does not
+hold. A pin the answer binds to
 nothing still reads the projection, and its parameter's bound waits for
 monomorphization.
 

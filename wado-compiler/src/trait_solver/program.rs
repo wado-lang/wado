@@ -450,6 +450,9 @@ pub struct Program {
     /// a written `Eq` or `Ord` reaching a type withholds the derived one, as
     /// it may equate values whose members differ.
     pub hash: Option<TraitDeclId>,
+    /// The associated types a [`Fact`] binds to a declaration's members. A
+    /// pin on one descends into the type, which the cycle rule admits.
+    pub member_channels: IndexSet<AssocId>,
     /// Every impl written again after its first copy. Coherence reports each
     /// where it is written, and no candidate set holds one, so a copy never
     /// ties with its original. Set by [`super::mark_duplicates`].
