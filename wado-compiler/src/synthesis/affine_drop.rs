@@ -1361,22 +1361,10 @@ fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
     elab_scope(block, Vec::new(), TemporaryScope::Enclosing, tail, cx);
 }
 
-<<<<<<< HEAD:wado-compiler/src/synthesis/resource_cleanup.rs
 /// Elaborate `block`, the body `target` is reached from. The block binding a
 /// template's holes is part of the statement holding the template, as a plain
 /// block is: its temporaries outlive the call the holes are read by.
-fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) -> Flow {
-||||||| ed92649a8:wado-compiler/src/synthesis/resource_cleanup.rs
-/// Elaborate `block`, the body `target` is reached from. An expanded template
-/// string's block is part of the statement holding the template, as a plain
-/// block is: its temporaries outlive the string it breaks out with.
-fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) -> Flow {
-=======
-/// Elaborate `block`, the body `target` is reached from. An expanded template
-/// string's block is part of the statement holding the template, as a plain
-/// block is: its temporaries outlive the string it breaks out with.
 fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) {
->>>>>>> origin/main:wado-compiler/src/synthesis/affine_drop.rs
     let temporaries = if label.as_deref().is_some_and(is_template_block) {
         TemporaryScope::Enclosing
     } else {
@@ -1752,7 +1740,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         }
 
         TirExprKind::StructLiteral { fields, .. } => {
-            let owns_fields = !cx.resources.is_template(type_id);
+            let owns_fields = !cx.affine_types.is_template(type_id);
             for field in fields {
                 elab_expr(&mut field.value, owns_fields, cx);
             }

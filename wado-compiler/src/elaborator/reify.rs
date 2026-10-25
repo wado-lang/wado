@@ -3413,20 +3413,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         value: TirExpr,
         string_type: TypeId,
         span: Span,
-<<<<<<< HEAD
         ctx: &mut FunctionContext,
     ) -> (TirExpr, Option<String>) {
         let inspect_spec = FormatKind::Inspect.as_char().map(String::from);
-        let can_be_moved = self.tysys.carries_resource(value.type_id) && {
-||||||| ed92649a8
-    ) -> (TirExpr, Option<TemplateFormatSpec>) {
-        let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
-        let can_be_moved = self.tysys.carries_resource(value.type_id) && {
-=======
-    ) -> (TirExpr, Option<TemplateFormatSpec>) {
-        let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
         let can_be_moved = self.tysys.carries_affine(value.type_id) && {
->>>>>>> origin/main
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(value.type_id);
             tt.nominal_def(head)

@@ -112,7 +112,6 @@ pub fn analyze_ownership(
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
         exits: Vec::new(),
-<<<<<<< HEAD
         reference_locals: all_locals
             .iter()
             .copied()
@@ -122,15 +121,12 @@ pub fn analyze_ownership(
                     .is_some_and(|local| place::is_reference(local.type_id, type_table))
             })
             .collect(),
-||||||| ed92649a8
-=======
         field_slots: FieldSlots {
             first: u32::try_from(all_locals.len()).unwrap(),
             ids: IndexMap::default(),
             by_root: IndexMap::default(),
             imprecise: false,
         },
->>>>>>> origin/main
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
@@ -823,7 +819,7 @@ impl<'a> Analyzer<'a> {
                     && !path.through_ref
                     && !self.reference_locals.contains(&path.root)
                     && let Some(location) = self.points_to.location(self.frame, path.root)
-                    && !landed.contains(location)
+                    && !landed.iter().any(|l| l == location)
                 {
                     continue;
                 }

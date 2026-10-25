@@ -37,7 +37,7 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{self, cold_exprs, cold_path_id, unreached_through};
 use super::body_memo::BodyMemo;
-use super::dce::{ReachabilityCache, callee_descriptor, reachable_function_positions};
+use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
@@ -1035,7 +1035,6 @@ pub(super) struct InlineScans {
     bodies: BodyMemo<BodyScan>,
     /// Indexed by store position.
     read: Vec<SweepRead>,
-    reachability: ReachabilityCache,
 }
 
 /// What a sweep reads about a function that its own body does not decide:
@@ -1848,20 +1847,10 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
-<<<<<<< HEAD
-fn call_site_counts(scans: &[BodyScan], live: &IndexSet<usize>) -> Vec<usize> {
-    let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in live.iter().flat_map(|&caller| &scans[caller].calls) {
-||||||| ed92649a8
-fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
-    let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
-=======
 /// A site in a function no entry reaches never runs, so it is not counted.
 fn call_site_counts(sites: &[Vec<ArgSite>]) -> Vec<usize> {
     let mut counts = vec![0usize; sites.len()];
     for (callee, _) in sites.iter().flatten() {
->>>>>>> origin/main
         counts[callee.index()] += 1;
     }
     counts
@@ -2148,30 +2137,13 @@ pub fn inline_functions(
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
-    let InlineScans {
-        bodies,
-        read,
-        reachability,
-    } = scans;
-    // Only a live caller's sites count: no pass inside the fixed-point loop
-    // deletes a function, so a clone that took over every site of its original
-    // keeps that original calling its callees, and a callee whose one live site
-    // shrinks it would read as having two.
-    let live =
-        reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
     let descriptors = descriptor_cache.descriptors(project);
     let cold_path = cold_path_id(descriptors);
+    let InlineScans { bodies, read } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
-<<<<<<< HEAD
-    let call_sites = call_site_counts(scans, &live);
-    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
-||||||| ed92649a8
-    let call_sites = call_site_counts(scans);
-    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
-=======
     let call_sites = call_site_counts(&sites);
     let (live_ref, no_callees) = (&live, &IndexSet::default());
     let live_edges = |pick: fn(&BodyScan) -> &IndexSet<FuncId>| {
@@ -2184,7 +2156,6 @@ pub fn inline_functions(
         }
     };
     let cold = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
->>>>>>> origin/main
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
     let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));

@@ -20,13 +20,8 @@ use crate::name::{
     TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-<<<<<<< HEAD
-    mangle_tuple_type, pack_element_name, ref_type_name, repeated_element, type_pack_name,
-||||||| ed92649a8
-    mangle_tuple_type, ref_type_name, type_pack_name,
-=======
-    mangle_tuple_type, ref_type_name, template_shape_name, type_pack_name,
->>>>>>> origin/main
+    mangle_tuple_type, pack_element_name, ref_type_name, repeated_element, template_shape_name,
+    type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -4698,24 +4693,38 @@ impl TypeTable {
             return replaced;
         }
         match self.get(type_id).clone() {
-<<<<<<< HEAD
-            // A mapped pack the substitution leaves keeps its length, its
-            // element substituted.
+            ResolvedType::TypeParam { name, index } => match leaves.params.get(&index) {
+                Some(&filled) => filled,
+                None => match leaves.renames.get(&index) {
+                    Some(&moved) => self.make_type_param(name, moved),
+                    None => type_id,
+                },
+            },
             ResolvedType::TypePack {
                 name,
                 index,
-                mapped_elem: Some(element),
-            } if !leaves.params.contains_key(&index) => {
-                let substituted = self.subst_rec(element, leaves);
-                if substituted == element {
-                    type_id
-                } else {
-                    self.make_mapped_type_pack(name, index, substituted)
-                }
-            }
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                leaves.params.get(&index).copied().unwrap_or(type_id)
-            }
+                mapped_elem,
+            } => match leaves.params.get(&index) {
+                Some(&filled) => filled,
+                None => match (leaves.renames.get(&index), mapped_elem) {
+                    (Some(&moved), Some(elem)) => {
+                        let elem = self.subst_rec(elem, leaves);
+                        self.make_mapped_type_pack(name, moved, elem)
+                    }
+                    (Some(&moved), None) => self.make_type_pack(name, moved),
+                    // A mapped pack the substitution leaves keeps its length,
+                    // its element substituted.
+                    (None, Some(elem)) => {
+                        let substituted = self.subst_rec(elem, leaves);
+                        if substituted == elem {
+                            type_id
+                        } else {
+                            self.make_mapped_type_pack(name, index, substituted)
+                        }
+                    }
+                    (None, None) => type_id,
+                },
+            },
             // Unrolling its walk fills the element's slot; a renaming into
             // another pack keeps it an element of that pack. Anything else the
             // pack becomes leaves it to its own walk's unroll: an enclosing
@@ -4734,36 +4743,6 @@ impl TypeTable {
                     type_id
                 }
             }
-||||||| ed92649a8
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                leaves.params.get(&index).copied().unwrap_or(type_id)
-            }
-=======
-            ResolvedType::TypeParam { name, index } => match leaves.params.get(&index) {
-                Some(&filled) => filled,
-                None => match leaves.renames.get(&index) {
-                    Some(&moved) => self.make_type_param(name, moved),
-                    None => type_id,
-                },
-            },
-            ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem,
-            } => match leaves.params.get(&index) {
-                Some(&filled) => filled,
-                None => match leaves.renames.get(&index) {
-                    Some(&moved) => match mapped_elem {
-                        Some(elem) => {
-                            let elem = self.subst_rec(elem, leaves);
-                            self.make_mapped_type_pack(name, moved, elem)
-                        }
-                        None => self.make_type_pack(name, moved),
-                    },
-                    None => type_id,
-                },
-            },
->>>>>>> origin/main
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,

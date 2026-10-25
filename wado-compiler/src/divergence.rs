@@ -9,7 +9,7 @@
 //! block it names, never right after the loop.
 
 use crate::ast::{self, AstVisitor};
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
 
@@ -376,10 +376,6 @@ fn tir_expr_always_exits(tt: &TypeTable, expr: &TirExpr) -> bool {
             elements.iter().any(exits)
         }
         TirExprKind::VariantConstruct { payload, .. } => payload.as_deref().is_some_and(exits),
-        TirExprKind::TemplateString { parts } => parts.iter().any(|part| match part {
-            TirTemplatePart::Interpolation { expr, .. } => exits(expr),
-            TirTemplatePart::Literal(_) => false,
-        }),
         TirExprKind::WithHandler { bindings, body, .. } => {
             bindings.iter().any(|b| exits(&b.handler)) || tir_block_always_exits(tt, body)
         }
