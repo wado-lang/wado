@@ -81,13 +81,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/wasi:random/InsecureSeed::get_insecure_seed" = fn(i32);  // TypeId(21)
+type "functype//wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed" = fn(i32);  // TypeId(21)
 
 type "functype//branch_settles_sibling_static_call.wado/$test_0_a_static_call_takes_its_type_parameters_from_a_sibling_branch" = fn();  // TypeId(22)
 
-type "functype//branch_settles_sibling_static_call.wado/$cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(23)
+type "functype//branch_settles_sibling_static_call.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(23)
 
 type "functype//branch_settles_sibling_static_call.wado/$cm_export__$test_0_a_static_call_takes_its_type_parameters_from_a_sibling_branch" = fn();  // TypeId(24)
 
@@ -191,8 +191,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:random/InsecureSeed::get_insecure_seed from "wasi/wasi:random/InsecureSeed::get_insecure_seed";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed from "wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -300,11 +300,11 @@ fn "branch_settles_sibling_static_call.wado/$test_0_a_static_call_takes_its_type
     }
 }
 
-fn "branch_settles_sibling_static_call.wado/$cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
+fn "branch_settles_sibling_static_call.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed"() with InsecureSeed {
     let $outptr: i32;
     let $lifted_result_1: i64;
     let $lifted_result_2: i64;
-    "wasi/wasi:random/InsecureSeed::get_insecure_seed"(local.tee $outptr("mem/realloc"(0, 0, 8, 16)));
+    "wasi/$wasi:random/insecure-seed@0.3.0#get-insecure-seed"(local.tee $outptr("mem/realloc"(0, 0, 8, 16)));
     $lifted_result_1 = builtin::load_i64($outptr);
     $lifted_result_2 = builtin::load_i64($outptr + 8);
     drop("mem/realloc"($outptr, 16, 8, 0));
@@ -506,7 +506,7 @@ condition: a.len() == 0
 
 fn "core:collections/hashmap.wado/host_seed"() with InsecureSeed {
     let $pattern_temp_0: ref "tuple//[u64, u64]";
-    return local.tee $pattern_temp_0("branch_settles_sibling_static_call.wado/$cm_binding__InsecureSeed_get_insecure_seed"()).0, $pattern_temp_0.1;
+    return local.tee $pattern_temp_0("branch_settles_sibling_static_call.wado/$cm_binding__wasi:random/insecure-seed@0.3.0#get-insecure-seed"()).0, $pattern_temp_0.1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -676,7 +676,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
