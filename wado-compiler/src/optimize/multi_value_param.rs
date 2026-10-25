@@ -267,7 +267,7 @@ impl<'a> ParamScope<'_, 'a> {
     fn value(&self, v: ValueId, reads: &mut Reads<'a>, seen: &mut IndexSet<ValueId>) {
         let values = &self.body.values;
         let reads_local = |id: ValueId| match values.kind(id) {
-            ValueKind::Opaque(oid) => values.opaque_local(*oid) == Some(self.local),
+            ValueKind::Opaque(oid) => values.promoted_opaque_local(*oid) == self.local,
             _ => false,
         };
         values.walk_values::<()>(v, seen, |id, kind| {

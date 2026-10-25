@@ -680,6 +680,12 @@ impl ValuePool {
         self.opaque_locals.get(&opaque).copied()
     }
 
+    /// The local an `Opaque` in a promoted operand reads, as every one does.
+    pub fn promoted_opaque_local(&self, opaque: OpaqueId) -> u32 {
+        self.opaque_local(opaque)
+            .expect("a promoted Opaque must read a local")
+    }
+
     /// A stable `Opaque(Local idx)`, the same value on every call. It is
     /// version-free, so the caller owes a single-version proof
     /// ([`crate::nir_engine::Engine::local_has_one_version`]); without one, two

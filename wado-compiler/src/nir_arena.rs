@@ -1965,7 +1965,7 @@ impl Body {
                 _ => None,
             },
             Operand::Value(v) => match self.values.kind(v) {
-                ValueKind::Opaque(oid) => self.values.opaque_local(*oid),
+                ValueKind::Opaque(oid) => Some(self.values.promoted_opaque_local(*oid)),
                 _ => None,
             },
         }

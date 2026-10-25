@@ -325,11 +325,9 @@ impl<'a> CostWalk<'a> {
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 self.value_folds(view, *operand)
             }
-            ValueKind::Opaque(oid) => self
-                .body
-                .values
-                .opaque_local(*oid)
-                .is_some_and(|l| view.params.contains(&l)),
+            ValueKind::Opaque(oid) => view
+                .params
+                .contains(&self.body.values.promoted_opaque_local(*oid)),
             ValueKind::Const(..) => true,
             ValueKind::Int(..)
             | ValueKind::Float(..)
@@ -3482,10 +3480,7 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
             heap_ver,
         },
         ValueKind::Opaque(oid) => {
-            let idx = callee
-                .values
-                .opaque_local(oid)
-                .expect("a promoted Opaque must read a local");
+            let idx = callee.values.promoted_opaque_local(oid);
             let new = caller.values.fresh_opaque_local(ctx.local(idx));
             if let Some(t) = recorded_ty {
                 caller.values.set_type(new, t);

@@ -383,7 +383,7 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     let ValueKind::Opaque(oid) = body.values.kind(op.as_value()?) else {
         return None;
     };
-    body.values.opaque_local(*oid)
+    Some(body.values.promoted_opaque_local(*oid))
 }
 
 /// The local an operand reads: a bare skeleton `Local`, or the promoted value

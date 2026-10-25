@@ -1885,10 +1885,7 @@ fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
             continue;
         }
         match body.values.kind(v) {
-            ValueKind::Opaque(oid) => f(body
-                .values
-                .opaque_local(*oid)
-                .expect("a promoted Opaque must read a local")),
+            ValueKind::Opaque(oid) => f(body.values.promoted_opaque_local(*oid)),
             ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 stack.push(*operand);

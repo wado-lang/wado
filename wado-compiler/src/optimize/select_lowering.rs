@@ -162,7 +162,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
         return true;
     }
     match kind {
-        ValueKind::Opaque(oid) => body.values.opaque_local(*oid).is_some(),
+        ValueKind::Opaque(_) => true,
         ValueKind::Unary { op, operand, .. } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
                 && is_select_eligible_value(body, *operand, type_table)

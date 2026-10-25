@@ -2745,12 +2745,7 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            ValueKind::Opaque(id) => self.local_get(
-                self.body
-                    .values
-                    .opaque_local(id)
-                    .expect("a promoted Opaque must read a local"),
-            ),
+            ValueKind::Opaque(id) => self.local_get(self.body.values.promoted_opaque_local(id)),
             // A `Select` (control-merge of pure values) extracts as a
             // value-producing `if`. Sound because the arms are pure values
             // (the builder constructs `Select` only at merges of pure values);
@@ -2797,8 +2792,9 @@ impl FunctionTranslator<'_, '_> {
                 // materialised), read the split local directly — a `StructGet`
                 // would read an uninitialised slot. Mirrors `translate_expr_inner`.
                 if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
-                    && let Some(idx) = self.body.values.opaque_local(*oid)
-                    && let Some(splits) = self.multi_value_split_locals.get(&idx)
+                    && let Some(splits) = self
+                        .multi_value_split_locals
+                        .get(&self.body.values.promoted_opaque_local(*oid))
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
                     let (held, ty) = (local_get(name, ty), ty.clone());
