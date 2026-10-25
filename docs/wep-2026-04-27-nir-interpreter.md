@@ -514,11 +514,6 @@ Only a `&mut` written directly in the literal a `let` binds becomes a place
 field. One in a nested literal, or in a literal assigned or passed rather than
 bound, leaves the place clobbered.
 
-### Bit counting builtins
-
-`i64_clz` and its siblings are not CTFE builtins, so `` `${255:x}` ``, whose
-digit count reads one, does not fold.
-
 ### Comparing two literal strings as a guard
 
 It reaches the engine as a guard over a method call on references. `niri` folds a

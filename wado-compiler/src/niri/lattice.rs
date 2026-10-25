@@ -634,6 +634,19 @@ impl Interpreter<'_> {
                 prim: PrimitiveType::I32,
             }),
             &CtfeBuiltin::AmbientStdio(writes) => Lattice::Const(Value::Bool(writes)),
+            &CtfeBuiltin::BitCount(count) => match args {
+                [value] => match self.operand_lattice_folded(body, value.expr) {
+                    Lattice::Const(value) => {
+                        let (value, prim) = value.as_int().expect("a bit count takes an integer");
+                        Lattice::Const(Value::Int {
+                            value: count.of(value, prim),
+                            prim,
+                        })
+                    }
+                    _ => Lattice::Unevaluated,
+                },
+                _ => unreachable!("a bit count takes one integer"),
+            },
             CtfeBuiltin::IsMoved => match args {
                 [place] => match self.operand_lattice_folded(body, place.expr) {
                     Lattice::Const(value) => {

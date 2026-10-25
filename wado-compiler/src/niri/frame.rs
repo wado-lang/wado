@@ -666,7 +666,8 @@ impl Interpreter<'_> {
             | CtfeBuiltin::Ieee754Comparison(_)
             | CtfeBuiltin::HeapBase(_)
             | CtfeBuiltin::AmbientStdio(_)
-            | CtfeBuiltin::IsMoved => None,
+            | CtfeBuiltin::IsMoved
+            | CtfeBuiltin::BitCount(_) => None,
         }
     }
 

@@ -15,6 +15,7 @@ use crate::nir_arena::{
 use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
+use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -103,6 +104,39 @@ pub enum CtfeBuiltin {
     AmbientStdio(bool),
     /// `is_moved`: whether the place it reads holds the `null` a move wrote.
     IsMoved,
+    /// `i32_clz` … `i64_popcnt`.
+    BitCount(BitCount),
+}
+
+/// What an `i32_*` or `i64_*` bit counting builtin counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitCount {
+    LeadingZeros,
+    TrailingZeros,
+    Ones,
+}
+
+impl BitCount {
+    /// The count over `value`, a `Value::Int` of `prim`, as Wasm answers it.
+    fn of(self, value: u64, prim: PrimitiveType) -> u64 {
+        let count = match prim {
+            PrimitiveType::I32 => {
+                let value = value as u32;
+                match self {
+                    Self::LeadingZeros => value.leading_zeros(),
+                    Self::TrailingZeros => value.trailing_zeros(),
+                    Self::Ones => value.count_ones(),
+                }
+            }
+            PrimitiveType::I64 => match self {
+                Self::LeadingZeros => value.leading_zeros(),
+                Self::TrailingZeros => value.trailing_zeros(),
+                Self::Ones => value.count_ones(),
+            },
+            _ => unreachable!("a bit counting builtin takes an i32 or an i64"),
+        };
+        u64::from(count)
+    }
 }
 
 impl CtfeBuiltin {
@@ -124,7 +158,8 @@ impl CtfeBuiltin {
             | Self::Ieee754Comparison(_)
             | Self::HeapBase(_)
             | Self::AmbientStdio(_)
-            | Self::IsMoved => false,
+            | Self::IsMoved
+            | Self::BitCount(_) => false,
         }
     }
 }
@@ -308,6 +343,9 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
             Some("is_moved") => CtfeBuiltin::IsMoved,
+            Some("i32_clz" | "i64_clz") => CtfeBuiltin::BitCount(BitCount::LeadingZeros),
+            Some("i32_ctz" | "i64_ctz") => CtfeBuiltin::BitCount(BitCount::TrailingZeros),
+            Some("i32_popcnt" | "i64_popcnt") => CtfeBuiltin::BitCount(BitCount::Ones),
             Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
                 CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
             }
