@@ -189,7 +189,7 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, two maps, a list of strings, and a flag.
+Loam's options hold two maps, a list of strings, and a flag.
 They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
@@ -197,8 +197,6 @@ the entry module re-exports them:
 
 ```wado
 export struct Options {
-    /// Patterns naming the axes of the graph's inputs and initializers.
-    pub layout: List<LayoutRule> = [],
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
     pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
@@ -220,24 +218,17 @@ out; the list and map fields may be left out without one. The rest are for the
 `loam` command, which reads the struct from JSON through `core:serde`, where a
 field without a default is required. From a prebuilt Loam, `fuse` is required.
 
-Each struct in `layout` is written as a record literal, and the `dims` map as an
-object:
+The `dims` map is written as an object:
 
 <!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
 
 ```wado
-use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
+use { N, Weights, X1, X2, forward } from "./specialize.onnxtext"
     with {
         type: "onnxtext",
         generator: {
             module: "lib:loam",
             options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Batch", "Row", "Col"],
-                    },
-                ],
                 dims: { N: 2 },
                 outputs: ["Y"],
             },
