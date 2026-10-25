@@ -2097,7 +2097,7 @@ impl<'a> Unparser<'a> {
             binary_op_str(b.op),
             &parts,
             |s, part, first| {
-                s.with_parens_if(needs_parens(part, b.op, first), |s| s.unparse_expr(part))
+                s.with_parens_if(needs_parens(part, b.op, first), |s| s.unparse_expr(part));
             },
             |part| tail_call_span_start(part),
         );
