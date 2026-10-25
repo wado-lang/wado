@@ -371,6 +371,15 @@ test {
 }
 ```
 
+A type declared in an interface takes its CM name from that interface
+([Effect Definition](./spec-effects.md#effect-definition)). A `#[cm("…#name")]`
+on a module-level type is an error, so that form names only an operation.
+
+> Not yet implemented: a type is not yet declared inside an interface, so
+> `TerminalOutput` and `ErrorCode` above sit at module level and name their
+> interface through `#[cm]`
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
+
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
 #### Resource Linearity

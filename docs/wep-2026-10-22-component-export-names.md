@@ -83,17 +83,18 @@ made general.
 
 ### A module generated from WIT takes full names too
 
-The `wasi:*` modules keep their shape. Each interface one of them offers can
-also be imported by its full name:
+Each interface a `wasi:*` module offers can also be imported by its full name:
 
 ```wado
 use { "wasi:cli/stdout" as Stdout } from "wasi:cli";
 ```
 
-The ranking does not reach them. A `wasi:*` module is Wado source, and
-its module-level names are the ones its `pub use` list chooses: `wasi:sockets`
-offers the `ErrorCode` of `wasi:sockets/types`, though
-`wasi:sockets/ip-name-lookup` declares one too.
+The ranking does not reach them. A `wasi:*` module is Wado source, and the
+interfaces it offers are the ones its `pub use` list chooses. It offers no type
+by bare name, since each WASI type is declared inside its interface, as any
+interface's type is (below). `wasi:sockets/types` and
+`wasi:sockets/ip-name-lookup` each declare an `ErrorCode`, named
+`Types::ErrorCode` and `IpNameLookup::ErrorCode`.
 
 A world is not imported by its full name. A `.wasm` cannot offer one, since its
 world's name is not observed (see the known gap below), and a world one module
@@ -129,6 +130,7 @@ pub interface Geo {
     flags Axis { X, Y }
     type Meters = f64;
     resource Canvas {
+        fn new() -> Canvas;
         fn draw(&self, shape: Shape);
     }
 
@@ -139,8 +141,7 @@ pub interface Geo {
 An interface body holds operations and the type declarations WIT has: `struct`,
 `enum`, `variant`, `flags`, `resource`, and `type Name = T;`. It holds nothing
 else, so no `impl`, `trait` or `global`. An interface has no associated types,
-since an operation declares only a name, parameters and a return type, so
-`type Name = T;` in one declares a newtype. A type in an interface needs no
+so `type Name = T;` in one declares a newtype. A type in an interface needs no
 `#[cm]`: its CM name is the interface's name with the type's name in kebab case.
 
 Several alternatives were weighed. Keeping every type at module level and
@@ -177,10 +178,11 @@ impl Geo for Flat {
 }
 ```
 
-An `impl` of a type declared in an interface, such as `impl Display for Geo::Point`, follows the rules for a type declared in another module. A type
-name and an operation name never coincide, since one is `PascalCase` and the
-other `snake_case`, and WIT keeps a type and a function of one interface apart
-too.
+An `impl` of a type declared in an interface, such as
+`impl Display for Geo::Point`, follows the same rules as an `impl` of any other
+type. A type name and an operation name never coincide, since one is
+`PascalCase` and the other `snake_case`, and WIT keeps a type and a function of
+one interface apart too.
 
 No form names the type `Point` outside the interface: not a `use` of the
 interface's types, not a re-export, and not a type alias. Each of those was
@@ -221,14 +223,20 @@ never exported.
 
 A component's bindings declare each non-default interface's types inside that
 interface. A WIT `use` between two interfaces becomes a path, `Other::Point`,
-that the resolver answers. A module generated from WIT keeps its shape: each
-`wasi:*` file holds one interface, so the file is that interface's scope, and
-its types stay module items.
+that the resolver answers. A module generated from WIT is written the same way:
+each `wasi:*` file holds one interface and declares its types inside it, so the
+standard library names a WASI type as user code does, `SystemClock::Instant`.
 
-A module that declares types in an interface makes that module their declaring
-module, as
+A type takes its CM name only from the interface that declares it. A
+module-level type no longer carries a `#[cm("…#name")]` that names it into an
+interface. The `wasi:*` files are what use that form today, and keeping it for
+user code alone would leave the standard library and user code writing one
+thing two ways. The `#[cm]` of an operation, a case or a flag is unchanged.
+
+The module that declares an interface is then the declaring module of its
+types, the one module per CM interface that
 [§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
-requires of every module declaring a `#[cm]` type.
+requires.
 
 #### The default interface
 
@@ -243,6 +251,17 @@ A full name may leave out its version where the module offers that interface at
 one version: `"wasi:cli/stdout"` reaches `wasi:cli/stdout@0.3.0`. Where it
 offers two, the version is required, and a name without one is an error naming
 both.
+
+### Each component's exports are its own
+
+Two components may export one interface name, as two builds of one library do.
+Each component's module declares its own interface for it, and a call through
+either reaches the component it was imported from. The program imports each
+under a name tagged with a digest of its component, as
+`acme:geo-dependency{digest}/geo`, so the two never meet among the composed
+component's imports, and composition wires each to its component's export. A
+world function two components export is imported the same way, under a tagged
+label.
 
 ### A component's imports are items of its module
 
@@ -263,11 +282,12 @@ with RenderHook => &mut hook do {
 
 Its full name is `"wado-lang:marl/render-hook" as RenderHook`.
 
-An interface name has one declaration in the whole program, as
+An imported interface name has one declaration in the whole program, as
 [§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
 asks of every WIT name. Two components that import `x:y/log` name one Wado
 interface, so one handler serves both. Their shapes of it must agree, and a
-disagreement is an error naming both files.
+disagreement is an error naming both files. An exported interface is not shared
+this way, since each component's export is its own declaration.
 
 ## Roadmap
 
@@ -276,12 +296,20 @@ disagreement is an error naming both files.
 - [x] A name items of different ranks share goes to the higher rank, and one
   two items of one rank share is an error naming what it could mean. The
   fixture from issue #2421 imports both `trip` interfaces by full name.
-- [x] Each interface of a component is a scope of its own, and an operation is
-  bound to its interface's declaration.
+- [x] Each interface of a component is a scope of its own for its operations,
+  and an operation is bound to its interface's declaration.
   `cm_interface_name_shared_with_stdlib.wado` passes.
+- [x] Two components that export one interface name each declare their own,
+  imported under a name tagged with the component, and composition wires each to
+  its component's export.
+  `cm_component_import_same_interface_two_components.wado` passes.
 - [ ] A Wado `interface` declares the WIT type kinds, named bare inside it and
   only through it outside. A visibility modifier on one, and a field that is not
   `pub` in a `#[cm]` interface, are errors.
+- [ ] Each `wasi:*` type is declared inside its interface: `wado-from-idl` emits
+  it there, the facades re-export only interfaces, and the standard library, the
+  packages and the fixtures name each WASI type by its path. A module-level type
+  carrying `#[cm("…#name")]` is then an error.
 - [ ] A component's interface types are named only through their interface,
   except the default interface's, which are items of the module. Two interfaces
   of one component that each declare a `pt` both import.
@@ -299,11 +327,12 @@ interface name for two declarations: the import its consumer handles and the
 export its consumer calls, so naming that interface in a `use` is an error.
 What it admits is a component no Wado program can call through that interface.
 
-Across two components the same name meets the one-declaration rule: one
-component exports `x:y/log` and another imports it. Whether `Log::emit()` calls
-the first or dispatches to a handler for the second, and which module declares
-the one `Log`, is not decided. What it admits is a program whose call through
-`Log` has no defined meaning.
+Across two components the name is two declarations: one component exports
+`x:y/log` as its own `Log`, and another imports `x:y/log`, which the program
+declares once. Whether composition wires the importer to the exporter, or the
+import waits for a handler the program installs, is not decided. What it admits
+is a pair of components that meet only through a forwarding handler written by
+hand.
 
 ## Known gap: when two imports of one interface agree
 
