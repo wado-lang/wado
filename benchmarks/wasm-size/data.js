@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792903159041,
+  "lastUpdate": 1792908729018,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70565,6 +70565,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05d638d3aca63a268cbeb0d91fd65d1880bdcf8e",
+          "message": "Merge pull request #2448 from wado-lang/loam-webgpu-profile\n\nperf(loam): Gemma 3 on WebGPU within 1.09 times llama.cpp's time a token",
+          "timestamp": "2026-10-25T14:50:32+09:00",
+          "tree_id": "2438dc3cd720f4b830d5560640461329a5dcb7d6",
+          "url": "https://github.com/wado-lang/wado/commit/05d638d3aca63a268cbeb0d91fd65d1880bdcf8e"
+        },
+        "date": 1792908728019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
             "unit": "bytes"
           }
         ]
