@@ -342,6 +342,17 @@ decided whether `x:y/log@1.0.0` and `x:y/log@1.1.0` are one interface name or
 two. What it admits is an ordinary pair of components the compiler may reject,
 or accept as one interface when they are two.
 
+## Known gap: where a shared import's types are declared
+
+Two components that import `x:y/log` name one Wado interface, so its types,
+such as a `record entry`, are declared once. Each component's module offers
+that interface, and the program may declare `x:y/log` in source too, so which
+module is the one declaring module
+[§9 of Declaration Identity](./wep-2026-08-12-declaration-identity.md#one-declaring-module-per-cm-interface)
+requires is not decided. What it admits is a handler for the shared interface
+with no one path to name its types by: `first::Log::Entry` and
+`second::Log::Entry` are one type under two spellings, or two types.
+
 ## Known gap: a component's world name is not observed
 
 A component built from `world root` in package `a:x` decodes, through
