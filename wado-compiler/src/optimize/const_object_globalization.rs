@@ -240,7 +240,7 @@ pub fn globalize_const_objects(
         return false;
     }
     let functions = &project.functions;
-    exec.map(&per_function, |hoists| {
+    exec.for_each(&per_function, |hoists| {
         let Some((_, first)) = hoists.first() else {
             return;
         };

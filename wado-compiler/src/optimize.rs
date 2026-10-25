@@ -411,20 +411,26 @@ fn run_dce(
                 let functions_before = live_bodies(project);
                 let globals_before = project.globals.len();
                 let mut summaries = summarize(project, exec).0;
-                if unhoist_unobserved_globals(project, descriptors, &summaries) {
+                if unhoist_unobserved_globals(project, descriptors, &summaries, exec) {
                     // A rewritten body only lost work, so its real summary
                     // shrank, and the stale table refuses deletions nothing
                     // has a reason to refuse.
                     summaries = summarize(project, exec).0;
                 }
-                if drop_self_feeding_globals(project, &summaries) {
+                if drop_self_feeding_globals(project, &summaries, exec) {
                     summaries = summarize(project, exec).0;
                 }
                 let analysis = analyze_dce(project, descriptors, exec);
                 // Clearing an unreachable function's body leaves its entry
                 // describing the body it had, which no surviving body calls.
                 remove_unreachable_functions(project, &analysis.functions);
-                remove_unreachable_globals(project, &analysis.globals, &summaries, initializers);
+                remove_unreachable_globals(
+                    project,
+                    &analysis.globals,
+                    &summaries,
+                    initializers,
+                    exec,
+                );
                 let settled = functions_before == live_bodies(project)
                     && globals_before == project.globals.len();
                 (analysis, settled)

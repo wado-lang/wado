@@ -180,6 +180,11 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   scratchpad/prof.json --under 'container_sroa::movers_of'
 
+# Split a shared helper's cost by the three frames calling it: which pass
+# spends it
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
+  scratchpad/prof.json --callers 'dce::reachable_function_positions'
+
 # Keep one thread: `main` drives the compile, and what it runs outside the
 # `wado-opt-*` sweeps is the serial part of the wall time
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
