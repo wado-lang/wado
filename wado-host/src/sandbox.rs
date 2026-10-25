@@ -126,9 +126,9 @@ impl Policy {
 }
 
 /// Read and execute: the loader, the shared libraries, installed programs, the
-/// system configuration (`/etc`: time zones, name resolution, TLS
-/// certificates, a toolchain's settings), and the randomness devices. A path absent on
-/// this machine is skipped. Fixed per OS: nothing here comes from the program's
+/// system configuration (`/etc`: time zones, name resolution, TLS certificates,
+/// a toolchain's settings), and the randomness devices. A path absent on this
+/// machine is skipped. Fixed per OS: nothing here comes from the program's
 /// path, which the guest chooses.
 #[cfg(target_os = "linux")]
 const BASELINE_READ: &[&str] = &[

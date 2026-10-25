@@ -216,9 +216,8 @@ child may read more than the guest. It is defined, not open-ended:
 | ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
 | Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
 | Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| System configuration           | `/etc`                                                   | `/private/etc`                        |
-| Name resolution (network only) | `/etc` alone                                             | mDNSResponder                         |
-| TLS certificates               | `/etc` alone                                             | the keychain                          |
+| System configuration           | `/etc`, name resolution and TLS certificates among it    | `/private/etc`, the keychain          |
+| Name resolution (network only) | nothing beyond `/etc`                                    | mDNSResponder                         |
 | Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
 | Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
 | Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |

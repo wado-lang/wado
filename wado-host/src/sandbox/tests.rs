@@ -226,8 +226,7 @@ fn reads_only_what_is_granted() {
 fn reads_the_system_configuration() {
     assert_available();
     let tree = Tree::new();
-    let read = |path: &str| sh(&tree.policy(Network::Denied), &format!("cat {path}"));
-    assert_eq!(read("/etc/passwd"), OK);
+    assert_eq!(sh(&tree.policy(Network::Denied), "cat /etc/passwd"), OK);
 }
 
 #[test]
