@@ -252,11 +252,6 @@ spelling with parentheses or division.
 axis an extent but not its parts, so regrouping such an axis stops the build
 naming the part.
 
-How an axis name Loam mints is spelled is open, and so is which `dim_param` an
-axis takes where several reach it. Each decides what a caller writes for an axis
-no `layout` names. What one name means where it reaches two axes the graph keeps
-apart, a `layout` word or a `dim_param`, is open too.
-
 ### Graphs and branches
 
 A model exported as two graphs carries its weights twice. GPT-2's decoder and
