@@ -32,6 +32,10 @@ pub struct Axis {
     pub extent: Extent,
     /// The axes a merge put side by side, in order; empty for an axis of its own.
     pub parts: List<Axis> = [],
+    /// The extent-1 axes a regrouping took in just ahead of this one. They hold
+    /// no element, so no type carries them, but a split that puts an extent-1
+    /// axis back there puts back the same one.
+    pub units: List<Axis> = [],
 }
 
 impl Axis {
@@ -141,7 +145,7 @@ impl Axes {
             let root = self.find(&axis.name);
             let class = self.classes[root];
             if class.parts.is_empty() {
-                return Axis { name: root, extent: axis.extent };
+                return Axis { name: root, extent: axis.extent, units: axis.units };
             }
             class.parts;
         } else {
@@ -354,9 +358,9 @@ impl Shape {
         return Shape { axes };
     }
 
-    /// `Reshape` onto `targets`, once `extents` has shown every part stated:
-    /// each output axis is the run of parts it spans, merged where several, or
-    /// `None` where no regrouping determines it. A product no polynomial holds
+    /// `Reshape` onto `targets`: each output axis is the run of parts it spans,
+    /// merged where several, or `None` where no regrouping determines it. An
+    /// extent-1 target takes the extent-1 part standing there. A product no polynomial holds
     /// cannot be compared, so it determines no axis from there on.
     pub fn regroup(&self, targets: &List<Extent>) -> List<Option<Axis>> {
         let parts = self.parts();
@@ -379,13 +383,17 @@ impl Shape {
                 continue;
             }
             let mut run: List<Axis> = [];
+            let mut units: List<Axis> = [];
             while next < parts.len() && short_of(&consumed, &produced) {
                 let Some(c) = consumed.try_mul(&parts[next].extent.poly()) else {
                     return undetermined_past(out, targets.len());
                 };
                 consumed = c;
-                if !parts[next].extent.is_one() {
-                    run.push(parts[next]);
+                if parts[next].extent.is_one() {
+                    units.push(parts[next]);
+                } else {
+                    run.push(Axis { ..parts[next], units });
+                    units = [];
                 }
                 next += 1;
             }
@@ -400,15 +408,14 @@ impl Shape {
         return out;
     }
 
-    /// The axes with each merged one replaced by the parts it was made of.
-    /// `extents` has shown every part stated.
+    /// The axes with each merged one replaced by the parts it was made of, and
+    /// each preceded by the extent-1 axes it took in.
     fn parts(&self) -> List<Axis> {
         let mut parts: List<Axis> = [];
         for let axis of self.axes {
-            if axis.parts.is_empty() {
-                parts.push(axis);
-            } else {
-                parts.extend(&axis.parts);
+            for let part of if axis.parts.is_empty() { [axis] as List<Axis> } else { axis.parts } {
+                parts.extend(&part.units);
+                parts.push(Axis { ..part, units: [] });
             }
         }
         return parts;

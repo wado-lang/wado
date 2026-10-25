@@ -71,6 +71,20 @@ test "a Gemm between a flattening Reshape and its restoring one is one product o
     assert p.of(&"G") == fused("Y");
 }
 
+test "a Gemm over a batch of one the flattening drops is still one product over the leading axes" {
+    let source = `
+lin (float[1, 4, 8] X, float[8, 6] W, float[6] B) => (float[1, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {1, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+    assert plan_of(source).spread_of(&"G") matches { Some(s) && s.operand == "X" && s.restored == "R" };
+}
+
 test "a Gemm whose flattened operand or product the scope returns is no spread" {
     for let returned of ["float[8, 8] F", "float[8, 6] G"] {
         let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, ${returned})`);

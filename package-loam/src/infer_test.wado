@@ -644,6 +644,19 @@ test "Reshape merges adjacent axes into one named by its parts" {
     assert y_axes(source).unwrap() == "X0=1,Merged<[X1, X2, X3]>=256";
 }
 
+test "a split puts back the extent-1 axis the merge before it took in" {
+    // An exporter's linear layer over a batch of one: the batch goes into the
+    // rows and comes back out of them.
+    let shapes = shapes_of(`g (float[1, 4, 8] X) => (float[1, 4, 8] Y)
+    <int64[2] Flat = {-1, 8}, int64[3] Back = {1, 4, 8}> {
+        F = Reshape(X, Flat)
+        R = Relu(F)
+        Y = Reshape(R, Back)
+    }`);
+    assert shapes["Y"] == shapes["X"];
+    assert shapes["F"] == shapes["X"][1..<3].to_list();
+}
+
 test "Reshape reads 0 as the input's extent and -1 as what remains" {
     let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {0, -1}> {
         Y = Reshape(X, S)
