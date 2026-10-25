@@ -1,0 +1,56 @@
+// A permutation of owned targets with no readable reference moves every value:
+// a transposition, a rotation, and one over fields of a local. Each target is
+// a list, so a value copy would show.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    x: List<i32>,
+    y: List<i32>,
+}
+
+fn transpose() -> i32 {
+    let mut a: List<i32> = [1];
+    let mut b: List<i32> = [2, 3];
+    [a, b] = [b, a];
+    return a.len() * 10 + b.len();
+}
+
+// A double buffer: the iterator holding `&a` is dead once the walk ends.
+fn swap_buffers(n: i32) -> i32 {
+    let mut a: List<i32> = [1, 2];
+    let mut b: List<i32> = [5];
+    let mut total = 0;
+    for let i of 0..<n {
+        for let v of &a {
+            total += *v;
+        }
+        [a, b] = [b, a];
+    }
+    return total + a.len() * 100 + b.len() * 10;
+}
+
+fn rotate() -> i32 {
+    let mut a: List<i32> = [1];
+    let mut b: List<i32> = [2, 2];
+    let mut c: List<i32> = [3, 3, 3];
+    [a, b, c] = [b, c, a];
+    return a.len() * 100 + b.len() * 10 + c.len();
+}
+
+fn fields() -> i32 {
+    let mut p = Pair { x: [1], y: [2, 2] };
+    [p.x, p.y] = [p.y, p.x];
+    return p.x.len() * 10 + p.y.len();
+}
+
+export fn run() with Stdout {
+    println(`${transpose()} ${swap_buffers(3)} ${rotate()} ${fields()}`);
+}
+
+__DATA__
+{
+    "stdout": "21 131 231 21\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

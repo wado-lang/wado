@@ -279,7 +279,7 @@ fn apply_drve(
     }
     // Step C: name each voided function for its signature. One voided into a
     // function that already stands, reached by another route, is that one.
-    touched.extend(project.rename_reshaped(confirmed.iter().copied()));
+    touched.extend(project.rename_reshaped(confirmed.iter().copied(), exec));
     touched.into_iter().collect()
 }
 

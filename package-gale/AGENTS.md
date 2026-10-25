@@ -146,6 +146,8 @@ Two rules follow from every byte of these files landing in every generated parse
 - **No comments.** They would be copied into hundreds of generated files. State intent through names, decomposition, and asserts.
 - **Nothing test-only.** String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
 
+A map in a fragment hashes under a fixed `HashSeed` (`LATN_SEED` in `latn.wado`) rather than taking one from `new()`. A seed from the host would make every generated parser import `wasi:random/insecure-seed`.
+
 ## Failed approaches (do not repeat)
 
 Prediction dead-ends — the static path always has edges (a decidability limit); the complete answer is the runtime ATN simulator (see `antlr4-compatibility.md`):

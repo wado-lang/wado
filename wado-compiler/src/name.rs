@@ -18,6 +18,7 @@ use crate::{ast, tir};
 use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
 use sha2::{Digest, Sha256};
 use std::fmt;
+use std::fmt::Write as _;
 use std::hash::Hash;
 
 /// The one character every name the compiler mints starts with, whether local,
@@ -412,8 +413,15 @@ fn short_digest(digest: &[u8]) -> String {
     digest[..8]
         .iter()
         .fold(String::with_capacity(16), |mut hex, byte| {
+<<<<<<< HEAD
             fmt::Write::write_fmt(&mut hex, format_args!("{byte:02x}"))
                 .expect("writing to a String cannot fail");
+||||||| b0344c114
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+=======
+            write!(hex, "{byte:02x}").expect("a String accepts every write");
+>>>>>>> origin/main
             hex
         })
 }

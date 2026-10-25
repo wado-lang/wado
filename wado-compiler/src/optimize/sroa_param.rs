@@ -253,24 +253,26 @@ fn collect_and_validate(
     // Phase 2: resolve each param to the one field it reads, dropping the ones
     // that escape or disagree — one fixpoint, since a param forwarded to another
     // candidate position takes its answer from there.
-    let mut forwards: IndexMap<FnKey, IndexMap<u32, Vec<(FnKey, usize)>>> = IndexMap::default();
-    for &(key, _) in candidates.keys() {
-        forwards.entry(key).or_insert_with(|| {
-            let func = project.functions[key.index()].borrow();
+    // A function's positions sit together, as `per_function` collected them.
+    let mut keys: Vec<FnKey> = candidates.keys().map(|&(key, _)| key).collect();
+    keys.dedup();
+    let forwards: IndexMap<FnKey, IndexMap<u32, Vec<(FnKey, usize)>>> = keys
+        .iter()
+        .copied()
+        .zip(gate.exec().map(&keys, |key| {
+            let func = functions[key.index()].borrow();
             whole_forwards(
                 func.body
                     .as_ref()
                     .expect("is_eligible rejects a body-less function"),
             )
-        });
-    }
+        }))
+        .collect();
     loop {
-        let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
-        let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
-        let mut widened: Vec<(FnKey, usize)> = Vec::new();
-        for ((key, pi), info) in &candidates {
-            let func = project.functions[key.index()].borrow();
-            let local_index = func.params[*pi].local_index;
+        let entries: Vec<(&(FnKey, usize), &SroaInfo)> = candidates.iter().collect();
+        let uses = gate.exec().map(&entries, |&(&(key, pi), info)| {
+            let func = functions[key.index()].borrow();
+            let local_index = func.params[pi].local_index;
             let body = func
                 .body
                 .as_ref()
@@ -279,23 +281,29 @@ fn collect_and_validate(
             // becomes that argument as it stands, so it must hold the field the
             // same way: held by value it is a copy, and the callee's writes land
             // on the copy.
-            if info.form == FieldForm::Value
-                && forwards[key].get(&local_index).is_some_and(|positions| {
+            let widens = info.form == FieldForm::Value
+                && forwards[&key].get(&local_index).is_some_and(|positions| {
                     positions.iter().any(|position| {
                         candidates
                             .get(position)
                             .is_some_and(|target| target.form == FieldForm::Mutable)
                     })
-                })
-            {
-                widened.push((*key, *pi));
+                });
+            (widens, param_field_use(body, local_index, &candidates))
+        });
+        let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
+        let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
+        let mut widened: Vec<(FnKey, usize)> = Vec::new();
+        for ((&k, info), (widens, field_use)) in entries.into_iter().zip(uses) {
+            if widens {
+                widened.push(k);
             }
-            match param_field_use(body, local_index, &candidates) {
+            match field_use {
                 FieldUse::Invalid => {
-                    invalid.insert((*key, *pi));
+                    invalid.insert(k);
                 }
                 FieldUse::Field(fi) if fi != info.field_index => {
-                    resolved.push(((*key, *pi), fi));
+                    resolved.push((k, fi));
                 }
                 FieldUse::Field(_) | FieldUse::Unresolved => {}
             }

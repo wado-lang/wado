@@ -1,0 +1,73 @@
+// A generic newtype calling a static its base supplies, its arguments
+// inferred: the call solves the newtype's own parameters, which `Listed`
+// places inside the base's argument, and reads the base as the newtype in
+// both its parameters and its result. Every spelling of the receiver does,
+// bare, with a turbofish or `_`, along a chain, or through a namespace.
+// A static the newtype declares itself keeps the type it wrote.
+use { println, Stdout } from "core:cli";
+use dep from "./sub/generic_newtype_inherited_static_dep.wado";
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn id(v: T) -> T {
+        return v;
+    }
+
+    fn make(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
+    }
+
+    fn pair<U>(w: Wrap<T>, u: U) -> T {
+        return w.v;
+    }
+}
+
+type Same<T> = Wrap<T>;
+type Listed<T> = Wrap<List<T>>;
+type Chained<T> = Same<T>;
+
+impl<T> Same<T> {
+    fn raw(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+}
+
+export fn run() with Stdout {
+    let l: List<i32> = [1, 2];
+    let a = Same::id(1);
+    let b: Same<i32> = Same::make(2);
+    let c = Listed::id(l);
+    let d: Listed<i32> = Listed::make(l);
+    let e = Listed::<_>::id(l);
+    let f: Chained<i32> = Chained::make(3);
+    let g: Wrap<i32> = Same::raw(4);
+    let h: dep::Same<i32> = dep::Same::make(5);
+    let i = dep::Listed::id(l);
+    println(`${a} ${b.v} ${c.len()} ${d.v.len()} ${e.len()} ${f.v} ${g.v} ${h.v} ${i.len()}`);
+
+    let j = Same::take(b);
+    let k = Same::<i32>::take(b);
+    let m = Same::<_>::take(b);
+    let n = Listed::take(d).len();
+    let o = Listed::<i32>::take(d).len();
+    let p = Chained::take(f);
+    let q = Chained::<_>::take(f);
+    let r = dep::Same::take(h);
+    println(`${j} ${k} ${m} ${n} ${o} ${p} ${q} ${r}`);
+
+    let s = Same::pair(b, "u");
+    let t = Same::<i32>::pair(b, "u");
+    let u = Same::<_>::pair(b, "u");
+    let w = Chained::<i32>::pair::<String>(f, "u");
+    println(`${s} ${t} ${u} ${w}`);
+}
+
+__DATA__
+{"stdout": "1 2 2 2 2 3 4 5 2\n2 2 2 2 2 3 3 5\n2 2 2 3\n"}
