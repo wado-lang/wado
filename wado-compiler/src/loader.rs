@@ -259,10 +259,10 @@ impl LoadError {
         }
     }
 
-    /// A failure reading the file `written` names, naming it as written: the
-    /// host names the file it resolved, absolute or joined onto a `./`.
-    pub(crate) fn reading(err: SourceError, written: &str) -> Self {
-        let path = written.to_string();
+    /// A failure reading a file, naming it `name` rather than as the host
+    /// resolved it, absolute or joined onto a `./` ([`read_name`]).
+    pub(crate) fn reading(err: SourceError, name: &str) -> Self {
+        let path = name.to_string();
         match err {
             SourceError::NotFound { .. } => LoadError::ModuleNotFound { path },
             SourceError::IoError { message, .. } | SourceError::NetworkError { message, .. } => {
@@ -272,13 +272,13 @@ impl LoadError {
     }
 
     /// [`Self::reading`] for the file an `#include_*` names.
-    fn reading_include(err: SourceError, written: &str) -> Self {
+    fn reading_include(err: SourceError, name: &str) -> Self {
         match err {
             SourceError::NotFound { .. } => LoadError::IncludeNotFound {
-                path: written.to_string(),
+                path: name.to_string(),
             },
             err @ (SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
-                Self::reading(err, written)
+                Self::reading(err, name)
             }
         }
     }
@@ -642,8 +642,8 @@ pub fn resolve_wasm_asset_path(
     }
 }
 
-/// A path as a `use` or an `#include_*` wrote it, and where: an error loading
-/// what it names is reported there, naming the file as written.
+/// A path as a `use` wrote it, and where: an error loading what it names is
+/// reported there.
 #[derive(Debug, Clone)]
 pub struct PathSite {
     pub written: String,
