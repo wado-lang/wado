@@ -38,10 +38,12 @@ section records only the current state.
   Fixtures: `effect_handler_cross_function.wado`,
   `effect_handler_nested_same.wado`, `effect_handler_self_delegation.wado`.
 - [x] Early-exit restore. `return v` / `break L: v` / `continue` /
-  label-less `break` that cross out of a `with` body splice the
-  restore sequence in front of the jump (`RestoreInjector` TIR
-  walker). Value-carrying jumps evaluate the value under the
-  still-installed handler before restoring. Jumps to labels declared
+  label-less `break` that cross out of a `with` body break out of
+  the body's labeled block instead, and are retaken after the
+  restore (`ExitRedirector` TIR walker), so the body's locals drop
+  under the handler and the rest after the restore. Value-carrying
+  jumps evaluate the value under the still-installed handler and
+  park it in an `Option` slot. Jumps to labels declared
   inside the do-block body are skipped; closures are not descended
   into. Fixtures: `effect_handler_early_return.wado`,
   `effect_handler_break_label_cross.wado`,
