@@ -8,7 +8,8 @@ use crate::const_eval::Value;
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
 use crate::type_table::TypeTable;
@@ -104,10 +105,15 @@ fn value_of_block_flow(flow: Flow, label: Option<&str>) -> Result<Lattice, Flow>
 /// value it took *this* time round — `acc + 1` becomes the literal `1` on the
 /// first pass — so without restoring, later iterations read the first one's
 /// results.
+///
+/// The locals the body binds are kept for the same reason: a statement reduces
+/// the subtree it heads before running it, so a read below a `let` the
+/// iteration has yet to reach would fold to the binding the previous one left.
 struct LoopSnapshot {
     exprs: Vec<(ExprId, ExprNode)>,
     stmts: Vec<(StmtId, StmtNode)>,
     blocks: Vec<(BlockId, Vec<StmtId>)>,
+    bound: Vec<u32>,
 }
 
 impl LoopSnapshot {
@@ -117,14 +123,24 @@ impl LoopSnapshot {
             exprs: Vec<ExprId>,
             stmts: Vec<StmtId>,
             blocks: Vec<BlockId>,
+            bound: Vec<u32>,
         }
         impl NirRefVisitor for Collect {
             fn visit_node(&mut self, body: &Body, node: NodeRef) {
                 match node {
                     NodeRef::Expr(e) => self.exprs.push(e),
-                    NodeRef::Stmt(s) => self.stmts.push(s),
+                    NodeRef::Stmt(s) => {
+                        if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                            self.bound.push(*local_index);
+                        }
+                        self.stmts.push(s);
+                    }
                     NodeRef::Block(b) => self.blocks.push(b),
-                    NodeRef::Pat(_) => {}
+                    NodeRef::Pat(p) => {
+                        if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                            self.bound.push(*local_index);
+                        }
+                    }
                 }
                 self.walk_node(body, node);
             }
@@ -147,12 +163,13 @@ impl LoopSnapshot {
                 .into_iter()
                 .map(|b| (b, body.blocks[b].stmts.clone()))
                 .collect(),
+            bound: collect.bound,
         }
     }
 
-    /// Put the captured nodes back. Nodes an iteration allocated are left
-    /// behind unreferenced.
-    fn restore(&self, body: &mut Body) {
+    /// Put the captured nodes back and unbind the body's locals. Nodes an
+    /// iteration allocated are left behind unreferenced.
+    fn restore(&self, body: &mut Body, frame: &mut FrameState) {
         for (e, node) in &self.exprs {
             body.exprs[*e] = node.clone();
         }
@@ -162,6 +179,14 @@ impl LoopSnapshot {
         for (b, stmts) in &self.blocks {
             body.blocks[*b].stmts.clone_from(stmts);
         }
+        for index in &self.bound {
+            frame.env.swap_remove(index);
+            frame.place_aliases.swap_remove(index);
+            frame.ref_roots.swap_remove(index);
+            frame.ref_global_aliases.swap_remove(index);
+        }
+        frame.scratch_folds.clear();
+        frame.region_misses.clear();
     }
 }
 
@@ -392,9 +417,7 @@ impl Interpreter<'_> {
                 }
                 other => return other,
             }
-            snapshot.restore(body);
-            self.frame.scratch_folds.clear();
-            self.frame.region_misses.clear();
+            snapshot.restore(body, &mut self.frame);
         }
     }
 
