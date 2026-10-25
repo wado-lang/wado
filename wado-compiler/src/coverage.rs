@@ -229,7 +229,10 @@ impl CoverageMap {
         let mut map = Self::default();
         let mut next = seed.map_or(0, CoverageMap::end);
         for (source, module) in modules {
-            if let Some(seed) = seed
+            // The snapshot serves the stdlib only. Its entry is its own empty
+            // one, which every entry compares equal to.
+            if let ModuleSource::Core { .. } = source
+                && let Some(seed) = seed
                 && let Some(seeded) = seed.sources.iter().position(|s| s == source)
             {
                 map.modules.push(seed.modules[seeded].clone());
