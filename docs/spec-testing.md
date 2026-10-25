@@ -64,7 +64,7 @@ test {
 - A test declares no return type and no effects, and may perform any effect. A
   function value it hands on is still bound by the function type it is moved
   into, which holds none of the test's effects
-- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis)) may appear before the `test` keyword
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis), [`#[workload]`](./spec-attributes.md#workload)) may appear before the `test` keyword
 
 ## Test Semantics
 
@@ -298,6 +298,12 @@ included), each `match` arm, a loop body, the `else` of `let … else`, the righ
 operand of `&&` and `||`, the early return of `?`, and the statements after one
 that can leave its block with `return`, `break`, `continue` or `?`. A region
 counts as run once any test runs its start.
+
+Each region also counts how often it ran, and LCOV carries the counts. A test
+that traps adds one run for each region it reached, since its count stops at
+the trap.
+
+> Not yet implemented: the counts.
 
 A region that leads to nothing but a call to `unreachable()` is not one: the
 call, returned or not, is all it holds, or it holds nothing and only the call

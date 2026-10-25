@@ -293,6 +293,18 @@ with none has no section. `wado doc` runs nothing.
 
 Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 
+### `#[workload]`
+
+Test block attribute. The test runs like any other, and it also states the
+package's real workload: `wado pgo` runs the workloads and records how often
+each region ran into a profile the package commits. A compile that reads the
+profile changes only what the program costs, never what it computes. It
+combines with the other test attributes.
+
+> Not yet implemented: the attribute, `wado pgo` and the profile.
+
+Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
+
 ### `#[coverage(off)]`
 
 On a `fn`, an `impl` or a module (`#![coverage(off)]`), leaves that code out of
