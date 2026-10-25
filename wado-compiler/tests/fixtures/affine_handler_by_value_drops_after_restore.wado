@@ -71,6 +71,25 @@ fn generic<T>(rx: Stream<u8>, _: T) {
     }
 }
 
+// The body's own locals drop while `Holder` is installed, the ones outside it
+// after the restore.
+fn scoped_locals(outer: Stream<u8>, inner: Stream<u8>) {
+    let kept = outer;
+    with Holder { rx: closed_stream() } do {
+        let local = inner;
+        let _ = Ask::ask();
+    }
+}
+
+fn scoped_locals_returning(outer: Stream<u8>, inner: Stream<u8>) {
+    let kept = outer;
+    with Holder { rx: closed_stream() } do {
+        let local = inner;
+        let _ = Ask::ask();
+        return;
+    }
+}
+
 fn closed_stream() -> Stream<u8> {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
@@ -84,9 +103,11 @@ export fn run() with Stdout {
         returns_early(closed_stream());
         breaks_out(closed_stream());
         generic(closed_stream(), 0);
+        scoped_locals(closed_stream(), closed_stream());
+        scoped_locals_returning(closed_stream(), closed_stream());
     }
     println(`inner=${INNER} outer=${o.drops}`);
 }
 
 __DATA__
-{"stdout": "inner=0 outer=4\n"}
+{"stdout": "inner=2 outer=8\n"}
