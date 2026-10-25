@@ -181,6 +181,18 @@ so its impls take a copyable `V`.
 `List::swap` moves elements the same way, but it is not that impl: its contract
 checks `a` before `b`, the reverse of the desugaring's order.
 
+### `unchecked` goes on the reads
+
+`unchecked xs[i]` vouches for a read's contract, and a transposition makes no
+read: its right side names the arguments of `index_swap`. Marking the reads is
+where a reader looks, and keeps the statement in TypeScript's shape, so a read
+marked `unchecked` still counts as naming its place, and the mark vouches for
+the `index_swap` call instead. The call's contract is the conjunction of the
+two reads', so `[xs[i], xs[j]] = [unchecked xs[j], unchecked xs[i]]` calls the
+unchecked twin, and a statement marking one read calls the checked one. Either
+way it still swaps rather than falling back, and `unchecked` on a call to an
+`index_swap` with no `contract` clause is the error it is on any call.
+
 ### What is not guaranteed, and why
 
 A destructuring assignment with a target that is not owned keeps the
@@ -258,14 +270,6 @@ well.
 The left side takes only a flat tuple of targets. `_`, a rest `..`, a nested
 tuple and a struct pattern (`{ x, y } = p`) are not accepted. Neither is a
 compound assignment to a tuple (`[a, b] += [1, 2]`).
-
-### `unchecked` on a transposition
-
-`unchecked xs[i]` vouches for a `List` index contract. Nothing says where
-`unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
-always checks both indices. A right side that marks its reads
-(`[unchecked xs[j], unchecked xs[i]]`) is not read as the targets, so it keeps
-the desugaring: an affine element fails to compile, with no note naming why.
 
 ### What counts as referencing an index local
 

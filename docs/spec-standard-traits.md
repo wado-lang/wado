@@ -1103,6 +1103,12 @@ none, and a missing key panics; a range index clamps rather than fails.
 `IndexAssign` states none either: a list assignment past the end traps, and a
 map's inserts the key. `IndexSwap` on a `List` requires both indices in range.
 
+A transposition that exchanges through `IndexSwap` reads neither subscript on
+its right side, so `unchecked` there vouches for the `index_swap` call. The
+call's contract covers both reads, so marking both
+(`[c[i], c[j]] = [unchecked c[j], unchecked c[i]]`) runs it unchecked; marking
+one leaves it checked. Either way, the callee must state a contract.
+
 `Ref` and `RefMut` are sealed marker traits the compiler provides for every
 eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 

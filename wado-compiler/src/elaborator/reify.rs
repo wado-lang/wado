@@ -5655,9 +5655,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_id,
             span,
         ));
+        let mut function_ref = dispatch.function_ref;
+        if transposition.vouched {
+            function_ref.retarget_to_unchecked_twin();
+        }
         let swap = build_tir_method_call(
             receiver,
-            dispatch.function_ref,
+            function_ref,
             vec![],
             vec![CallArg::new(i, false), CallArg::new(j, false)],
             dispatch.return_type,

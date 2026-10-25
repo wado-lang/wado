@@ -50,6 +50,10 @@ impl<'a> Reading<'a> {
             container: &first.expr,
             i: &first.index,
             j: &second.index,
+            vouched: value
+                .elements
+                .iter()
+                .all(|read| matches!(read, Expr::Index(read) if read.unchecked.is_some())),
         };
         // An index read out of the container could change with the first write.
         let root = transposition.container_root();
@@ -93,6 +97,9 @@ pub(super) struct Transposition<'a> {
     pub(super) container: &'a Expr,
     pub(super) i: &'a Expr,
     pub(super) j: &'a Expr,
+    /// Whether the right side marks both reads `unchecked`, which together
+    /// vouch for `index_swap`'s contract: the conjunction of theirs.
+    pub(super) vouched: bool,
 }
 
 impl<'a> Transposition<'a> {
@@ -246,10 +253,9 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
     }
 }
 
+/// `unchecked` vouches for a read, and the read names the same place.
 fn same_subscript(a: &IndexExpr, b: &IndexExpr) -> bool {
-    a.unchecked.is_none()
-        && b.unchecked.is_none()
-        && same(&a.expr, &b.expr)
+    same(&a.expr, &b.expr)
         && same(&a.index, &b.index)
 }
 

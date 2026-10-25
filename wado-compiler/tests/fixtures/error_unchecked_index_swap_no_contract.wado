@@ -1,0 +1,32 @@
+// A transposition lowered to `index_swap` makes its reads vouch for that call,
+// so `unchecked` on one needs a `contract` clause on the swap, whatever the
+// read's own subscript states.
+affine struct Grid {
+    cells: List<i32>,
+}
+
+impl IndexRef<i32> for Grid {
+    type Output = i32;
+
+    fn index_ref(&self, i: i32) -> &i32
+        contract 0 <= i < self.cells.len()
+    {
+        return &self.cells[i];
+    }
+}
+
+impl IndexSwap<i32> for Grid {
+    fn index_swap(&mut self, a: i32, b: i32) {
+        [self.cells[a], self.cells[b]] = [self.cells[b], self.cells[a]];
+    }
+}
+
+export fn run() {
+    let mut g = Grid { cells: [1, 2] };
+    [g[0], g[1]] = [unchecked g[1], g[0]];
+}
+
+__DATA__
+{
+  "compile_error": ":26:21: analysis error: the callee has no `contract` clause for `unchecked` to vouch for"
+}

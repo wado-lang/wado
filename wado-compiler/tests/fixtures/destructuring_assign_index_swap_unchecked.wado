@@ -1,0 +1,45 @@
+// `unchecked` on both reads of a transposition vouches for `index_swap`'s
+// contract, which is theirs together, so the swap calls the unchecked twin. On
+// one read it vouches for that read alone, and the swap stays checked.
+
+use { println, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+fn toks() -> List<Tok> {
+    let mut ts: List<Tok> = [];
+    ts.push(Tok { id: 1 });
+    ts.push(Tok { id: 2 });
+    return ts;
+}
+
+fn both_vouched() -> i32 {
+    let mut ts = toks();
+    [ts[0], ts[1]] = [unchecked ts[1], unchecked ts[0]];
+    return ts[0].id * 10 + ts[1].id;
+}
+
+fn one_vouched() -> i32 {
+    let mut ts = toks();
+    [ts[0], ts[1]] = [unchecked ts[1], ts[0]];
+    return ts[0].id * 10 + ts[1].id;
+}
+
+export fn run() with Stdout {
+    println(`${both_vouched()} ${one_vouched()}`);
+}
+
+__DATA__
+{
+    "stdout": "21 21\n",
+    "wir_expect:O0": [
+        "List<$Tok>^core:prelude/traits.wado/IndexSwap<i32>::index_swap$unchecked",
+        "List<$Tok>^core:prelude/traits.wado/IndexSwap<i32>::index_swap("
+    ]
+}
