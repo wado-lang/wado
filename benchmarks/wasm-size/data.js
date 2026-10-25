@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792938033446,
+  "lastUpdate": 1792939343413,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70853,6 +70853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4d8612dfb87a2b816c054d9a24b4f1b3f077f79d"
         },
         "date": 1792938032559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ee1f04082ae7d10d153697bca31eceef226b81ce",
+          "message": "Merge pull request #2457 from wado-lang/ccr-a8831b13-amp4il\n\nfeat(hash): floats key a HashMap, hashing as they compare",
+          "timestamp": "2026-10-25T23:01:25+09:00",
+          "tree_id": "674f3548b8744cbf1bf53f79296aeb3d85ebaa0b",
+          "url": "https://github.com/wado-lang/wado/commit/ee1f04082ae7d10d153697bca31eceef226b81ce"
+        },
+        "date": 1792939342674,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
