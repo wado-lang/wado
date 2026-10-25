@@ -21,127 +21,6 @@ use gpt2 from "./gpt2.onnxtext"
                 outputs: ["logits"],
                 // Only the last position ranks the next token.
                 last: { logits: 1 },
-                layout: [
-                    {
-                        pattern: "input_ids",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "attention_mask",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "transformer.wte.weight",
-                        axes: ["Vocab", "Embed"],
-                    },
-                    {
-                        pattern: "transformer.wpe.weight",
-                        axes: ["Pos", "Embed"],
-                    },
-                    {
-                        pattern: "*ln_1.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*ln_2.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*ln_f.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*c_attn.weight",
-                        axes: ["Embed", "Qkv"],
-                    },
-                    {
-                        pattern: "*c_attn.bias",
-                        axes: ["Qkv"],
-                    },
-                    {
-                        pattern: "*attn.c_proj.weight",
-                        axes: ["(Head Dim)", "Embed"],
-                    },
-                    {
-                        pattern: "*c_proj.bias",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.weight",
-                        axes: ["Embed", "Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.bias",
-                        axes: ["Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_proj.weight",
-                        axes: ["Inner", "Embed"],
-                    },
-                    // The language-model head: the token embedding, transposed.
-                    {
-                        pattern: "onnx::MatMul_3718",
-                        axes: ["Embed", "Vocab"],
-                    },
-                    {
-                        pattern: "/transformer/Range_output_0",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_2_output_0",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_4_output_0",
-                        axes: ["Batch", "Head", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_5_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                    {
-                        pattern: "*/c_attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Qkv"],
-                    },
-                    {
-                        pattern: "*/c_proj/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/c_fc/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Inner"],
-                    },
-                    {
-                        pattern: "*/attn/Split_output_*",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_2_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    // The causal mask, sliced from a buffer the size of the
-                    // context to the sequence the run gives.
-                    {
-                        pattern: "onnx::Slice_335",
-                        axes: ["Batch", "Head", "Pos", "Pos"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_3_output_0",
-                        axes: ["Batch", "Head", "Seq", "Pos"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_4_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                ],
             },
         },
     };
@@ -169,22 +48,22 @@ impl<affine Bk: Backend> Model<Bk> {
     /// How many positions the model reads: one per row of `wpe`, which the
     /// graph's causal mask covers. `forward` refuses a longer sequence.
     pub fn positions(&self) -> i32 {
-        return gpt2::Pos::EXTENT;
+        return gpt2::TransformerWpeWeight0::EXTENT;
     }
 
     /// The token the model ranks first after `ids`.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
-        let vocab = gpt2::Vocab::EXTENT;
+        let vocab = gpt2::Logits2::EXTENT;
         for let id of ids {
             assert 0 <= *id < vocab, "every token id is in the vocabulary";
         }
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
-        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
+        let extents: List<i32> = [gpt2::BatchSize::EXTENT, ids.len()];
         self.backend.begin();
-        let input_ids = self.backend.upload(&Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents });
+        let input_ids = self.backend.upload(&Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: input, extents });
         let mask = self.backend.upload(
-            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
+            &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: List::<i64>::filled(ids.len(), 1), extents },
         );
         let logits = gpt2::pass(&mut self.backend, &input_ids, &mask, &self.weights);
         // The backend ranks the last position, so one index is read back
