@@ -115,9 +115,9 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
     let $local_21: i32;
     let $local_22: i32;
     let $local_23: u8;
-    let bytes_32: ref Array<u8>;
-    let ptr_33: i32;
-    let self_34: i32;
+    let bytes_30: ref Array<u8>;
+    let ptr_31: i32;
+    let self_32: i32;
     let i: i32;
     $d_disc = ref.test "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some"(d);
     $d_inner0 = 0;
@@ -129,19 +129,19 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
     $label_inner0 = 0;
     $label_inner1 = 0;
     if ref.is_null(label) == 0 {
-        $label_inner0 = builtin::i32_wrap_i64(local.tee $local_12(self_34 = local.tee $local_11(ref.as_non_null(label)).used; bytes_32 = $local_11.repr; ptr_33 = "mem/realloc"(0, 0, 1, self_34); i = 0; b2: block {
+        $label_inner0 = builtin::i32_wrap_i64(local.tee $local_12(self_32 = local.tee $local_11(ref.as_non_null(label)).used; bytes_30 = $local_11.repr; ptr_31 = "mem/realloc"(0, 0, 1, self_32); i = 0; b2: block {
             l3: loop {
-                break_if b2 i >= self_34;
-                builtin::store_u8(ptr_33 + i, builtin::array_get_value_u8(bytes_32, i));
+                break_if b2 i >= self_32;
+                builtin::store_u8(ptr_31 + i, builtin::array_get_value_u8(bytes_30, i));
                 i = i + 1;
                 continue l3;
             };
-        }; builtin::i64_extend_i32_u(ptr_33) | (builtin::i64_extend_i32_s(self_34) << 32_i64)));
+        }; builtin::i64_extend_i32_u(ptr_31) | (builtin::i64_extend_i32_s(self_32) << 32_i64)));
         $label_inner1 = builtin::i32_wrap_i64($local_12 >> 32_i64);
     } else {
     }
-    self_34 = ref.is_null(bytes) == 0;
-    ptr_33 = 0;
+    self_32 = ref.is_null(bytes) == 0;
+    ptr_31 = 0;
     i = 0;
     if ref.is_null(bytes) == 0 {
         $local_19 = local.tee $local_17(ref.as_non_null(bytes)).used;
@@ -152,22 +152,22 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
         }
         $local_20 = "mem/realloc"(0, 0, 1, $local_19);
         $local_21 = 0;
-        bytes_32 = $local_17.repr;
+        bytes_30 = $local_17.repr;
         b6: block {
             l7: loop {
                 break_if b6 $local_21 >= $local_19;
                 $local_22 = $local_20 + $local_21;
-                $local_23 = builtin::array_get_value<u8>(bytes_32, $local_21);
+                $local_23 = builtin::array_get_value<u8>(bytes_30, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
                 continue l7;
             };
         };
-        ptr_33 = $local_20;
+        ptr_31 = $local_20;
         i = $local_19;
     } else {
     }
-    return "wasi/$wasi:demo/gfx@0.1.0#pick"($d_disc, $d_inner0, $label_disc, $label_inner0, $label_inner1, self_34, ptr_33, i);
+    return "wasi/$wasi:demo/gfx@0.1.0#pick"($d_disc, $d_inner0, $label_disc, $label_inner0, $label_inner1, self_32, ptr_31, i);
 }
 
 fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
