@@ -217,7 +217,12 @@ and the profile's.
 
 `-f no-cold-paths` leaves alone what the compiler knows from traps: the hints
 `infer_branch_hints` derives and the markers `match_to_switch` writes. Those
-follow from what the program does, not from a guess.
+follow from what the program does, not from a guess. Reify and lowering write
+such a marker as `builtin::known_cold_path()`, ahead of a trap or past a
+global's once-guard, so the flag can tell it from the author's until NIR, which
+has one marker. The marker on a `?` propagating a failure is a guess and is
+written as the author's. An author's marker ahead of a trap stands in for the
+compiler's, so dropping it leaves the compiler's in its place.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the

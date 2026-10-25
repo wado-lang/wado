@@ -1741,6 +1741,8 @@ mod tests {
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
+    use crate::tir::{TirExpr, TirExprKind};
+    use crate::tir_visitor::TirRefVisitor;
 
     /// The body walk's facts stay in the [`ModuleSemantics`] that recorded
     /// them, and `Semantics` reads through to it rather than holding a copy.
@@ -1867,6 +1869,50 @@ mod tests {
         assert_eq!(base_of(map, "core:prelude"), base_of(seed, "core:prelude"));
         assert!(base_of(map, "core:json") >= Some(seed.end()));
         assert!(base_of(map, "entry.wado") >= Some(seed.end()));
+    }
+
+    /// A cold marker says after reify who placed it: the author's and `?`'s
+    /// guesses are `cold_path`, and the compiler's, where the program itself
+    /// makes a path rare, are `known_cold_path`.
+    #[test]
+    fn a_cold_marker_records_who_placed_it() {
+        struct Markers(Vec<String>);
+        impl TirRefVisitor for Markers {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                if let TirExprKind::Call { func, .. } = &expr.kind
+                    && let Some(name @ ("cold_path" | "known_cold_path")) = func.intrinsic()
+                {
+                    self.0.push(name.to_string());
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(
+            "fn authored(x: i32) -> i32 { if x > 0 { builtin::cold_path(); return 1; } return 0; }
+             fn guessed(o: Option<i32>) -> Option<i32> { let v = o?; return Some(v); }
+             fn asserted(x: i32) { assert x > 0; }
+             fn panicked(x: i32) { if x > 0 { panic(\"no\"); } }
+             export fn run() { authored(1); guessed(null); asserted(1); panicked(0); }",
+            &host,
+            Some("entry.wado"),
+        ));
+        let entry = &sem.tir_modules[&sem.entry_module_source];
+        let markers = |name: &str| {
+            let func = entry
+                .functions
+                .iter()
+                .find(|f| f.borrow().name == name)
+                .expect("`run` keeps it live")
+                .borrow();
+            let mut markers = Markers(Vec::new());
+            markers.visit_block(func.body.as_ref().expect("it has a body"));
+            markers.0
+        };
+        assert_eq!(markers("authored"), ["cold_path"]);
+        assert_eq!(markers("guessed"), ["cold_path"]);
+        assert_eq!(markers("asserted"), ["known_cold_path"]);
+        assert_eq!(markers("panicked"), ["known_cold_path"]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

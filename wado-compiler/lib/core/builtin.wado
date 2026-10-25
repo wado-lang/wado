@@ -541,6 +541,13 @@ internal fn swap_handles<R>(a: &R, b: &R);
 #[side_effect(hint)]
 pub fn cold_path();
 
+/// The `cold_path()` the compiler places where the program itself makes the
+/// path rare: ahead of a trap, or past a global's once-guard. Only who placed
+/// it differs, and lowering gives NIR the one marker.
+#[storage(none)]
+#[side_effect(hint)]
+internal fn known_cold_path();
+
 // =========================================================================
 // CM canonical intrinsics (raw flat ABI signatures)
 //
