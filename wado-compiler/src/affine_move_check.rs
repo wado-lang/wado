@@ -274,8 +274,7 @@ struct Checker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     drops: &'a Drops,
-<<<<<<< HEAD:wado-compiler/src/resource_move_check.rs
-    out: &'a mut Vec<ResourceMoveError>,
+    out: &'a mut Vec<AffineMoveError>,
     /// [`Semantics::destructuring_fallbacks`].
     fallbacks: &'a IndexMap<Span, &'a FallbackSite>,
     /// The falling-back destructuring assignment whose right side is being
@@ -289,16 +288,10 @@ struct NotedFallback {
     /// [`FallbackSite::target_reads`].
     target_reads: Vec<Span>,
     note: String,
-||||||| 5ae89b2ce:wado-compiler/src/resource_move_check.rs
-    out: &'a mut Vec<ResourceMoveError>,
-=======
-    out: &'a mut Vec<AffineMoveError>,
->>>>>>> origin/main:wado-compiler/src/affine_move_check.rs
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
-<<<<<<< HEAD:wado-compiler/src/resource_move_check.rs
         // A copy the fallback makes is a read of a target: a move out of a
         // reference, or a second read of one the right side moved already,
         // between the assignment's first token and this read.
@@ -312,12 +305,7 @@ impl<'a> Checker<'a> {
                 _ => false,
             })
             .map(|f| f.note.clone());
-        self.out.push(ResourceMoveError {
-||||||| 5ae89b2ce:wado-compiler/src/resource_move_check.rs
-        self.out.push(ResourceMoveError {
-=======
         self.out.push(AffineMoveError {
->>>>>>> origin/main:wado-compiler/src/affine_move_check.rs
             kind,
             span,
             module: self.module.source_path(),
