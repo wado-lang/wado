@@ -1373,20 +1373,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack left answering for itself is unanswered, whatever a caller's
         // pack of the same name interns to. One spread over the caller's own
         // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
-        let scope = self.scope_type_param_ids();
+        let table = self.tysys.type_table.borrow();
+        let scope = table.type_keys(&self.scope_type_param_ids());
+        let in_scope = |t: TypeId| scope.contains(&table.type_key(t));
         let open: Vec<String> = reached_packs
             .into_iter()
             .filter(|&(_, slot, arg)| {
-                arg == slot
-                    || (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
-                    || self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .any_type_pack(arg, &|pack| !scope.contains(&pack))
+                table.type_key(arg) == table.type_key(slot)
+                    || (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
+                    || table.any_type_pack(arg, &|pack| !in_scope(pack))
             })
             .map(|(p, _, _)| p.name.clone())
             .collect();
+        drop(table);
         if open.is_empty() {
             return;
         }

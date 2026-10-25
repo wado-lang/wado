@@ -3390,13 +3390,8 @@ impl TypeTable {
     /// Whether `written`, one of `sig`'s refs, reads a parameter of the trait
     /// declaring it, and so means nothing where its arguments are unknown.
     pub fn reads_trait_params(&self, sig: &AssocTypeSig, written: &TraitRef) -> bool {
-        written.args.iter().any(|&arg| {
-            sig.frame
-                .params
-                .iter()
-                .flatten()
-                .any(|&param| self.mentions(arg, param))
-        })
+        let params: Vec<TypeId> = sig.frame.params.iter().flatten().copied().collect();
+        written.args.iter().any(|&arg| self.mentions_any(arg, &params))
     }
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
@@ -3440,11 +3435,6 @@ impl TypeTable {
             filled.push(self.substitute_type_params(default?, &slots));
         }
         Some(filled)
-    }
-
-    /// Whether `id` is or is built over `part`.
-    fn mentions(&self, id: TypeId, part: TypeId) -> bool {
-        id == part || self.any_constituent(id, &mut |t| self.mentions(t, part))
     }
 
     /// `trait_ref` as a name, its arguments spelled.
@@ -5615,10 +5605,13 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` is one of `slots` or is built over one, matched by id as a
-    /// substitution binds them.
+    /// Whether `id` is one of `slots` or is built over one.
     pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
-        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
+        self.mentions_key(id, &self.type_keys(slots))
+    }
+
+    fn mentions_key(&self, id: TypeId, keys: &[TypeKey]) -> bool {
+        keys.contains(&self.type_key(id)) || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.

@@ -305,7 +305,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
     fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
+        let table = self.tysys.type_table.borrow();
+        self.tysys.is_unbound_type_param(t) && !table.type_keys(scope_params).contains(&table.type_key(t))
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
