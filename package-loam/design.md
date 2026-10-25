@@ -52,6 +52,20 @@ initializers `gpt2.onnxtext` declares without values, in the order the graph
 lists them, which is the order `tools/onnx_split.wado` writes the checkpoint
 in. Its output is byte for byte the checkpoint `fetch.sh` writes.
 
+## Inferred Axis Names
+
+Every axis takes its name as
+[WEP: Loam § Axis Names Are Inferred From the Graph](../docs/wep-2026-09-20-loam.md#axis-names-are-inferred-from-the-graph)
+says, which also settles which name a class takes where several reach it. No
+example and no conformance model carries a `layout` option: MNIST-12, the tiny
+GPT-2's three graphs, GPT-2 (124M) and Gemma 3 (270M) all build from the graph
+alone. `loam dump` opens with the axes, each beside where it took its name: a
+`layout` word, a `dim_param`, or the tensor and position it was minted from.
+
+A caller names the inferred types, so a cache the examples carry between passes
+is relabelled to each layer's axes with `reshape`, until A Decoder's Cache Is
+One Value gathers it.
+
 ## Sharded Checkpoints
 
 A large model is published as several safetensors files beside an index, in
