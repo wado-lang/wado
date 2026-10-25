@@ -16,6 +16,7 @@ use crate::trait_solver::{
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
     derive, derive_alongside, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
+    written_comparison,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -999,10 +1000,11 @@ impl std::fmt::Debug for SolverBridge {
 }
 
 impl SolverBridge {
-    /// The four structural traits [`derive`] generates impls for.
-    const DERIVED: [CompilerItem; 4] = [
+    /// The structural traits [`derive`] generates impls for.
+    const DERIVED: [CompilerItem; 5] = [
         CompilerItem::Eq,
         CompilerItem::Ord,
+        CompilerItem::Hash,
         CompilerItem::Serialize,
         CompilerItem::Deserialize,
     ];
@@ -1073,6 +1075,7 @@ impl SolverBridge {
         ) {
             pair_comparisons(&mut program, eq, ord);
         }
+        program.hash = Self::derived_trait(tysys, &mut lowering, CompilerItem::Hash);
         let mut bridge = Self { program, lowering };
         // Before the declarations, whose derived `Copyable` reads them.
         bridge.state_copyable_facts();
@@ -1621,7 +1624,10 @@ impl SolverBridge {
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
-                CompilerItem::Ord | CompilerItem::Serialize | CompilerItem::Deserialize => {
+                CompilerItem::Ord
+                | CompilerItem::Hash
+                | CompilerItem::Serialize
+                | CompilerItem::Deserialize => {
                     &declarations[..handles_from]
                 }
                 other => unreachable!("{other:?} is not derived"),
@@ -2428,21 +2434,42 @@ impl SolverBridge {
         table: &TypeTable,
         instance: TypeId,
     ) -> Option<(CompilerItem, DefId)> {
-        let (eq, _) = self.program.comparisons?;
-        // A shape the lowering cannot say is one no source names, so no written
-        // impl reaches it.
-        let ty = self.lowering.type_id(table, instance, &by_position).ok()?;
+        let ty = self.comparison_subject(table, instance)?;
         let (written, impl_) = comparison_row(&self.program, &ty)?;
-        let item = if written == eq {
-            CompilerItem::Eq
-        } else {
-            CompilerItem::Ord
-        };
         Some((
-            item,
+            self.comparison_item(written),
             self.impl_def_of(impl_)
                 .expect("a written impl names its block"),
         ))
+    }
+
+    /// Which of `Eq` and `Ord` a written impl reaching `instance` implements,
+    /// withholding its derived `Hash`, by [`written_comparison`].
+    pub(crate) fn hash_withheld_by(
+        &self,
+        table: &TypeTable,
+        instance: TypeId,
+    ) -> Option<CompilerItem> {
+        let ty = self.comparison_subject(table, instance)?;
+        Some(self.comparison_item(written_comparison(&self.program, &ty)?))
+    }
+
+    /// `instance` lowered, where the comparison table pairs `Eq` with `Ord`. A
+    /// shape the lowering cannot say is one no source names, so no written impl
+    /// reaches it.
+    fn comparison_subject(&self, table: &TypeTable, instance: TypeId) -> Option<SolverType> {
+        self.program.comparisons?;
+        self.lowering.type_id(table, instance, &by_position).ok()
+    }
+
+    fn comparison_item(&self, trait_: TraitDeclId) -> CompilerItem {
+        let (eq, ord) = self.program.comparisons.expect("comparisons are paired");
+        if trait_ == eq {
+            CompilerItem::Eq
+        } else {
+            assert_eq!(trait_, ord);
+            CompilerItem::Ord
+        }
     }
 
     /// Whether a written block applies at `instance`, its bounds included: what

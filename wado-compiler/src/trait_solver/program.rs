@@ -446,6 +446,10 @@ pub struct Program {
     /// `Eq` and `Ord`, the pair the comparison table relates. Set by
     /// [`super::pair_comparisons`].
     pub comparisons: Option<(TraitDeclId, TraitDeclId)>,
+    /// `Hash`, whose derived body feeds the members a derived `Eq` compares:
+    /// a written `Eq` or `Ord` reaching a type withholds the derived one, as
+    /// it may equate values whose members differ.
+    pub hash: Option<TraitDeclId>,
     /// Every impl written again after its first copy. Coherence reports each
     /// where it is written, and no candidate set holds one, so a copy never
     /// ties with its original. Set by [`super::mark_duplicates`].

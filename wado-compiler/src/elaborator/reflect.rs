@@ -822,6 +822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             OnBoundTrait::ReflectNewtype
             | OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default
@@ -1556,6 +1557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             OnBoundTrait::ReflectFlags => ScalarReflectSpec::FLAGS,
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default

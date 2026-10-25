@@ -77,6 +77,7 @@ pub(super) enum DerivedAt {
 pub(super) enum OnBoundTrait {
     Eq,
     Ord,
+    Hash,
     Serialize,
     Deserialize,
     Default,
@@ -100,6 +101,7 @@ impl OnBoundTrait {
         match self {
             Self::Eq => CompilerItem::Eq,
             Self::Ord => CompilerItem::Ord,
+            Self::Hash => CompilerItem::Hash,
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
             Self::Default => CompilerItem::Default,
@@ -122,6 +124,7 @@ impl OnBoundTrait {
         let found = match item {
             CompilerItem::Eq => Self::Eq,
             CompilerItem::Ord => Self::Ord,
+            CompilerItem::Hash => Self::Hash,
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
             CompilerItem::Default => Self::Default,
@@ -149,7 +152,7 @@ impl OnBoundTrait {
     pub(super) fn is_field_recursive(self) -> bool {
         matches!(
             self,
-            Self::Eq | Self::Ord | Self::Serialize | Self::Deserialize
+            Self::Eq | Self::Ord | Self::Hash | Self::Serialize | Self::Deserialize
         )
     }
 
@@ -175,6 +178,7 @@ impl OnBoundTrait {
             Self::ReflectTemplate => Some(REFLECT_HOLES_ASSOC),
             Self::Eq
             | Self::Ord
+            | Self::Hash
             | Self::Serialize
             | Self::Deserialize
             | Self::Default
@@ -1131,6 +1135,7 @@ impl TypeSystem {
         while chain.len() < 8 {
             let written_instead = match tr {
                 OnBoundTrait::Ord => self.ord_withheld_note(type_id),
+                OnBoundTrait::Hash => self.hash_withheld_note(type_id),
                 OnBoundTrait::Eq
                     if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
                 {
@@ -1265,6 +1270,7 @@ impl TypeSystem {
                 return true;
             }
             OnBoundTrait::Ord if self.ord_withheld_by(type_id).is_some() => return false,
+            OnBoundTrait::Hash if self.hash_withheld_note(type_id).is_some() => return false,
             _ => {}
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1506,6 +1512,35 @@ impl TypeSystem {
         Some(format!(
             "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
             self.type_id_to_string(link)
+        ))
+    }
+
+    /// Why `type_id` has no `Hash`, where a written comparison is the cause:
+    /// it may equate values whose members differ, which a derived `hash`
+    /// would tell apart. The cause is the first link of the newtype chain
+    /// writing one, below every link writing `Hash`. A primitive's `Hash` is
+    /// written or absent, never withheld.
+    pub(super) fn hash_withheld_note(&self, type_id: TypeId) -> Option<String> {
+        let hash = self.compiler_trait_def(CompilerItem::Hash)?;
+        let (link, method) = {
+            let tt = self.type_table.borrow();
+            let solver = self.solver();
+            let mut link = type_id;
+            loop {
+                if matches!(tt.get(link), ResolvedType::Primitive(_))
+                    || written_impl_reaches(&self.trait_env, hash, link, &tt)
+                {
+                    return None;
+                }
+                if let Some(written) = solver.hash_withheld_by(&tt, link) {
+                    break (link, tt.compiler_items().trait_method_name(written).to_string());
+                }
+                link = tt.get_newtype_base(link)?;
+            }
+        };
+        Some(format!(
+            "`{}` writes `{method}`, so no `Hash` is derived for it; write `hash` beside it",
+            self.type_id_to_string(link),
         ))
     }
 
@@ -1823,6 +1858,7 @@ impl TypeSystem {
             OnBoundTrait::ReflectTemplate => None,
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default
@@ -1866,6 +1902,7 @@ fn declaring_module_of_kind(
         | OnBoundTrait::ReflectTemplate
         | OnBoundTrait::Eq
         | OnBoundTrait::Ord
+        | OnBoundTrait::Hash
         | OnBoundTrait::Serialize
         | OnBoundTrait::Deserialize
         | OnBoundTrait::Default

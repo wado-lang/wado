@@ -338,7 +338,9 @@ impl Query<'_> {
                 Some(answer.holds)
             })
             .or_else(|| {
-                if self.at_itself.as_ref() == Some(ty) {
+                if self.at_itself.as_ref() == Some(ty)
+                    || written_only_at(program, ty) == Some(trait_)
+                {
                     return None;
                 }
                 let base = newtype_base(program, ty)?;
@@ -372,7 +374,10 @@ impl Query<'_> {
         {
             return None;
         }
-        if reached_by(program, implemented, ty, def.origin.yields_to()) {
+        if reached_by(program, implemented, ty, def.origin.yields_to())
+            || (def.origin != ImplOrigin::Written
+                && written_only_at(program, ty) == Some(implemented))
+        {
             return None;
         }
         let mut requests = match def.origin {
@@ -641,6 +646,24 @@ fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
     program
         .comparisons
         .is_some_and(|(eq, ord)| trait_ == ord && row_is(program, ty, eq))
+}
+
+/// The trait only an impl written at `ty` itself answers: [`Program::hash`],
+/// where a written comparison reaches `ty`. Neither a derived body nor a
+/// newtype's base answers it there.
+pub(super) fn written_only_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    program
+        .hash
+        .filter(|_| written_comparison(program, ty).is_some())
+}
+
+/// Which of `Eq` and `Ord` a written impl reaching `ty` implements, `Eq` first.
+#[must_use]
+pub fn written_comparison(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    let (eq, ord) = program.comparisons?;
+    [eq, ord]
+        .into_iter()
+        .find(|&written| reached_by(program, written, ty, &[ImplOrigin::Written]))
 }
 
 /// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.

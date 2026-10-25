@@ -154,9 +154,11 @@ pub trait Hash: Eq with () {
 }
 ```
 
-`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, tuples,
-`List`, `String`, integers, `char` and `bool` wherever a use needs it. Every
-implementation keeps `a == b` implying equal hashes. `String` and `StrSlice`
+`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, enums
+and flags types, and written for tuples, `List`, `String`, integers, `char` and
+`bool`. Every implementation keeps `a == b` implying equal hashes, so a written
+`eq` or `cmp` withholds the derived `hash`, which would feed members the
+comparison ignores. `String` and `StrSlice`
 hash alike, so `HashMap<String, V>` offers `get_str` as `TreeMap` does.
 
 The hash function is a seeded multiply-and-fold hash, chosen by measurement.
