@@ -1,0 +1,28 @@
+// A static call whose type parameters nothing at the call answers
+// (`HashMap::new()`) takes them from a sibling branch that settles them, as a
+// generic function's call and a variant case do: in either branch of an `if`, in
+// a `match` arm, and through a namespace.
+
+use { HashMap } from "core:collections";
+use collections from "core:collections";
+
+fn made() -> HashMap<String, bool> {
+    let mut m = HashMap::<String, bool>::new();
+    m["a"] = true;
+    return m;
+}
+
+test "a static call takes its type parameters from a sibling branch" {
+    let c = builtin::black_box(false);
+    let a = if c { made() } else { HashMap::new() };
+    let b = if c { HashMap::new() } else { made() };
+    let d = match c {
+        true => made(),
+        false => HashMap::new(),
+    };
+    let e = if c { collections::HashMap::new() } else { made() };
+    assert a.len() == 0;
+    assert b.len() == 1;
+    assert d.len() == 0;
+    assert e.len() == 1;
+}

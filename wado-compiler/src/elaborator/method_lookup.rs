@@ -17,8 +17,8 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
 use crate::tir::{
-    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext, TemplateId,
-    TypeId, positional_substitution,
+    EffectRows, FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
+    TemplateId, TypeId, positional_substitution,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -31,7 +31,7 @@ use super::call::{
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiation};
-use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
+use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
@@ -127,9 +127,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl MethodInfo {
-    /// The receiver's own method `sig`, its types as `instantiated` settled
-    /// them; the fields no signature carries start empty.
-    pub(super) fn of_sig(sig: &MethodSig, instantiated: InstantiatedSig) -> Self {
+    /// The receiver's own method `sig`, its types as `received` settled them;
+    /// the fields no signature carries start empty.
+    pub(super) fn of_sig(sig: &MethodSig, received: ReceivedSig) -> Self {
+        let ReceivedSig {
+            sig: instantiated,
+            own_slots,
+        } = received;
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
         Self {
             method_def: Some(sig.def),
@@ -143,7 +147,7 @@ impl MethodInfo {
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name.clone(),
             is_ref_impl: false,
-            method_type_param_ids: sig.own_type_param_ids(),
+            method_type_param_ids: own_slots,
             method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
@@ -961,14 +965,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
+        // The call committing to the impl checks the bounds against the
+        // answer (`Self::defer_awaited_impl_bounds`).
+        let bounded = receiver_type_args.map(|args| self.bounded_at_answer(args));
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 def,
                 Some(receiver),
-                receiver_type_args,
+                bounded.as_deref(),
             )
+    }
+
+    /// `args` with each awaiting its report standing as the error type a
+    /// report leaves, which meets every bound: the variable carries its bounds
+    /// to its answer.
+    fn bounded_at_answer(&self, args: &[TypeId]) -> Vec<TypeId> {
+        let tt = self.tysys.type_table.borrow();
+        args.iter()
+            .map(|&arg| {
+                if self.awaits_report(&tt, arg) {
+                    TypeTable::ERROR
+                } else {
+                    arg
+                }
+            })
+            .collect()
+    }
+
+    /// Check the bounds impl `def` places on `receiver`'s arguments still
+    /// awaiting their report against what answers them, as
+    /// [`Self::inherent_impl_applies`] let them meet every bound.
+    pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
+        // As the block reads them, which for a newtype is at its base where
+        // the block is the base's.
+        let Some(type_args) = self
+            .tysys
+            .receiver_args_at_impl(Some(receiver), &[], Some(def))
+        else {
+            return;
+        };
+        let binding = {
+            let tt = self.tysys.type_table.borrow();
+            if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
+                return;
+            }
+            let open = |ty: TypeId| self.awaits_report(&tt, ty);
+            tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
+        };
+        if let Some(binding) = binding {
+            self.defer_open_impl_bounds(def, &binding.slots, span);
+        }
     }
 
     /// Whether impl block `def` offers `method_name` to a call: an inherent
@@ -1078,13 +1126,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_args: &[TypeId],
         span: Span,
     ) {
+        let receiver_args = self.bounded_at_answer(receiver_args);
         if let Some(block) = block
             && let Some(unmet) = self.tysys.unmet_impl_bound(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 block,
                 None,
-                Some(receiver_args),
+                Some(&receiver_args),
             )
         {
             self.report_unmet(unmet, span);
@@ -1215,8 +1264,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param = names
                 .name_of(slot)
                 .and_then(|name| header.type_params.iter().find(|p| p.name == name));
+            let open = self.awaits_pending_call(arg)
+                || self.awaits_report(&self.tysys.type_table.borrow(), arg);
             if let Some(param) = param
-                && self.awaits_pending_call(arg)
+                && open
             {
                 self.defer_bounds_to_answer(param, arg, None, &[], span);
             }
@@ -1536,20 +1587,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack left answering for itself is unanswered, whatever a caller's
         // pack of the same name interns to. One spread over the caller's own
         // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
-        let scope = self.scope_type_param_ids();
+        let scope_ids = self.scope_type_param_ids();
+        let table = self.tysys.type_table.borrow();
+        let scope = table.type_keys(&scope_ids);
+        let in_scope = |t: TypeId| scope.contains(&table.type_key(t));
         let open: Vec<String> = reached_packs
             .into_iter()
             .filter(|&(_, slot, arg)| {
-                arg == slot
-                    || (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
-                    || self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .any_type_pack(arg, &|pack| !scope.contains(&pack))
+                table.type_key(arg) == table.type_key(slot)
+                    || (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
+                    || table.any_type_pack(arg, &|pack| !in_scope(pack))
             })
             .map(|(p, _, _)| p.name.clone())
             .collect();
+        drop(table);
         if open.is_empty() {
             return;
         }
@@ -2348,7 +2399,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .impl_effect_binding(impl_ref.0, receiver_type_args.unwrap_or(&[]));
-            let instantiated = method_sig.decl.instantiate_bound(
+            let instantiated = method_sig.instantiate_received(
                 &scope.tysys.type_table,
                 &impl_slots,
                 &SlotProjections::default(),
@@ -2397,12 +2448,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|(name, &ty)| ProjectionAnswer::at_any(trait_decl, name.clone(), ty))
                     .collect();
-                let instantiated = default_method.sig.decl.instantiate_slots_with(
+                let instantiated = default_method.sig.instantiate_received(
                     tt,
                     &default_method
                         .sig
                         .call_slots(tt, None, &declaring_args, &[]),
                     &SlotProjections::from_iter([(0, own_assoc)]),
+                    &EffectRows::default(),
                 );
 
                 found_traits.push(TraitMethodMatch {
@@ -3665,7 +3717,7 @@ impl TypeSystem {
             .type_table
             .borrow()
             .impl_effect_binding(impl_ref.0, receiver_type_args);
-        let instantiated = sig.decl.instantiate_bound(
+        let instantiated = sig.instantiate_received(
             &self.type_table,
             &slots,
             &SlotProjections::default(),
@@ -3725,9 +3777,12 @@ impl TypeSystem {
         if sig.self_kind == ast::SelfKind::None {
             return None;
         }
-        let instantiated = sig
-            .decl
-            .instantiate(&self.type_table, receiver_type_args.unwrap_or(&[]));
+        let instantiated = sig.instantiate_received(
+            &self.type_table,
+            &positional_substitution(receiver_type_args.unwrap_or(&[])),
+            &SlotProjections::default(),
+            &EffectRows::default(),
+        );
         Some(MethodInfo::of_sig(sig, instantiated))
     }
 

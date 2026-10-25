@@ -1,0 +1,17 @@
+// A static call whose type parameters nothing answers is reported at the call
+// that left them open, once nothing later answered them either. Until then a
+// bound on them holds, as one on the error type a report leaves does, so
+// `.len()` in `impl<K: Hash, V>` adds no "no method" beside the real error.
+
+use { HashMap } from "core:collections";
+
+test {
+    let m = HashMap::new();
+    assert m.len() == 0;
+}
+
+__DATA__
+{
+    "compile_error": "9:13: analysis error: cannot infer type parameter `K`, `V` of `HashMap::new`",
+    "compile_errors_not_contains": ["no method"]
+}

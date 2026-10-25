@@ -551,6 +551,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver, method_name);
+            if let Some(def) = method_info.as_ref().and_then(|info| info.impl_block) {
+                self.defer_awaited_impl_bounds(def, base_type_id, span);
+            }
         }
 
         // Fall back to base type trait methods
@@ -1910,9 +1913,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Newtype { def, .. } if inherited => Some(*def),
                 _ => None,
             };
-            let at_base = match newtype {
-                Some(def) => self.args_at_representation(def, &args),
-                None => args.clone(),
+            let (at_base, expected_at_base) = match newtype {
+                Some(def) => (
+                    self.args_at_representation(def, &args),
+                    expected_type
+                        .map(|expected| self.tysys.represent_newtype_in_type(expected, def)),
+                ),
+                None => (args.clone(), expected_type),
             };
             // A `_` is answered as the bare spelling answers the slot it
             // leaves out, by the one inference both spellings share.
@@ -1922,7 +1929,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &static_call.method,
                     &static_call.args,
                     &at_base,
-                    expected_type,
+                    expected_at_base,
                     static_call.span,
                     struct_key_for_lookup.as_ref(),
                 )

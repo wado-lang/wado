@@ -45,7 +45,7 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -2264,10 +2264,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fq_trait_name = self
             .tysys
             .trait_named_from_slots(fq_trait_name, &bound, &slots);
-        let instantiated = sig.decl.instantiate_slots_with(
+        let instantiated = sig.instantiate_received(
             &self.tysys.type_table,
             &slots,
             &SlotProjections::from_iter([(0, answers)]),
+            &EffectRows::default(),
         );
         // A bare bound dispatches on the parameter itself, off no `impl` block.
         Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))

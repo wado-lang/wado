@@ -2,6 +2,7 @@
 
 use crate::elaborator::synth::{ArgProbe, ArgSource};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
@@ -101,8 +102,9 @@ impl CalleeSignature {
     }
 }
 
-/// Which static method a call names: the two segments, and the namespace's
-/// receiver key where the spelling has one.
+/// Which static method a call names: the two segments, and the receiver's key
+/// where the call site resolved one.
+#[derive(Clone, Copy)]
 pub(super) struct StaticCallee<'a> {
     pub type_name: &'a str,
     pub method_name: &'a str,
@@ -565,20 +567,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.chain_expected_return(own_vars, ret);
         let collection = PendingLiterals::of_call(own_vars);
         let packs = self.own_packs(own_vars);
+        let mut stand_ins: Vec<(TypeId, TypeId)> = Vec::new();
         let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {
-                let param = this.with_packs_answered(&packs, param_types, &resolved, i);
-                if matches!(arg, ast::Expr::Closure(_)) && this.param_still_open(param) {
+                let answered = this.packs_answered(&packs, param_types, &resolved, i);
+                if matches!(arg, ast::Expr::Closure(_))
+                    && this.param_still_open(answered.as_ref().map(|a| a.declared))
+                {
                     deferred.push(i);
                     continue;
                 }
+                let param = answered.map(|a| this.standing_in_open_packs(a, &mut stand_ins));
                 resolved[i] =
                     Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
             }
             for i in deferred {
-                let param = this.with_packs_answered(&packs, param_types, &resolved, i);
+                let param = this
+                    .packs_answered(&packs, param_types, &resolved, i)
+                    .map(|a| this.standing_in_open_packs(a, &mut stand_ins));
                 resolved[i] =
                     Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars, &hints));
             }
@@ -587,6 +595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
+        self.answer_stand_ins(&packs, param_types, &resolved, &stand_ins);
         let settled = self.settle_pending_literals(pending, args, ret, ctx);
         for (i, arg) in args.iter().enumerate() {
             if let Some(&ty) = settled.get(&arg.id()) {
@@ -620,16 +629,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Parameter `i`'s type, each of `packs` the arguments resolved so far
-    /// answer replaced by its answer. A pack is no variable the module-end
-    /// sweep substitutes, so an argument resolved against it would keep the
-    /// callee's slot in its own type, as a list literal's element type does.
-    fn with_packs_answered(
+    /// answer replaced by its answer.
+    fn packs_answered(
         &mut self,
         packs: &[(TypeId, u32)],
         param_types: &[TypeId],
         resolved: &[Option<TypeId>],
         i: usize,
-    ) -> Option<TypeId> {
+    ) -> Option<PacksAnswered> {
         let param = param_types.get(i).copied()?;
         let mentions_pack = {
             let table = self.tysys.type_table.borrow();
@@ -638,27 +645,113 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .any(|&(_, index)| table.contains_type_param_index(param, index))
         };
         if !mentions_pack {
-            return Some(param);
+            return Some(PacksAnswered {
+                declared: param,
+                open: Vec::new(),
+            });
         }
+        let answers = self.pack_answers(packs, param_types, resolved);
+        let declared = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(param, &answers);
+        let open = packs
+            .iter()
+            .filter(|&&(_, index)| !answers.contains_key(&index))
+            .map(|&(slot, _)| slot)
+            .collect();
+        Some(PacksAnswered { declared, open })
+    }
+
+    /// What a parameter `answered` reads its argument against. A pack is no
+    /// variable the module-end sweep substitutes, so a value typed from a tuple
+    /// holding one, as a list literal's element type is, would keep the
+    /// callee's slot in its own type. So each tuple a pack still open holds
+    /// stands in as a variable, pushed to `stand_ins` with the tuple, for
+    /// [`Self::answer_stand_ins`].
+    fn standing_in_open_packs(
+        &mut self,
+        answered: PacksAnswered,
+        stand_ins: &mut Vec<(TypeId, TypeId)>,
+    ) -> ArgParam {
+        let PacksAnswered { declared, open } = answered;
+        if open.is_empty() {
+            return ArgParam::of(declared);
+        }
+        let held = self
+            .tysys
+            .type_table
+            .borrow()
+            .tuples_holding(declared, &open);
+        let declared_key = self.tysys.type_table.borrow().type_key(declared);
+        let mut replacements = IndexMap::default();
+        // A tuple parameter itself stays, for the unifier to splice the pack
+        // across its argument's elements.
+        for (key, tuple) in held.into_iter().filter(|&(key, _)| key != declared_key) {
+            let var = self.mint_infer_var();
+            replacements.insert(key, var);
+            stand_ins.push((var, tuple));
+        }
+        let checked = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .replace_subterms(declared, &replacements);
+        ArgParam { checked, declared }
+    }
+
+    /// What the arguments `resolved` so far answer of `packs`, by slot index.
+    fn pack_answers(
+        &self,
+        packs: &[(TypeId, u32)],
+        param_types: &[TypeId],
+        resolved: &[Option<TypeId>],
+    ) -> IndexMap<u32, TypeId> {
         let mut bindings = IndexMap::default();
         for (&declared, actual) in param_types.iter().zip(resolved) {
             if let Some(actual) = *actual {
                 unify(&self.tysys.type_table, declared, actual, &mut bindings);
             }
         }
-        let answers: IndexMap<u32, TypeId> = packs
+        packs
             .iter()
             .filter_map(|&(slot, index)| bindings.get(&slot).map(|&tuple| (index, tuple)))
-            .collect();
-        if answers.is_empty() {
-            return Some(param);
+            .collect()
+    }
+
+    /// Answer each stand-in [`Self::standing_in_open_packs`] minted that its
+    /// argument left open, as an empty list literal does, with its tuple under
+    /// what every argument answers of `packs`. One whose tuple still holds a
+    /// pack stays open: the call reports that pack unanswered.
+    fn answer_stand_ins(
+        &mut self,
+        packs: &[(TypeId, u32)],
+        param_types: &[TypeId],
+        resolved: &[TypeId],
+        stand_ins: &[(TypeId, TypeId)],
+    ) {
+        if stand_ins.is_empty() {
+            return;
         }
-        Some(
-            self.tysys
+        let resolved: Vec<Option<TypeId>> = resolved.iter().copied().map(Some).collect();
+        let answers = self.pack_answers(packs, param_types, &resolved);
+        let slots: Vec<TypeId> = packs.iter().map(|&(slot, _)| slot).collect();
+        for &(var, tuple) in stand_ins {
+            let answered = self
+                .tysys
                 .type_table
                 .borrow_mut()
-                .substitute_type_params(param, &answers),
-        )
+                .substitute_type_params(tuple, &answers);
+            if !self
+                .tysys
+                .type_table
+                .borrow()
+                .mentions_any(answered, &slots)
+            {
+                self.chain_infer_var(var, answered);
+            }
+        }
     }
 
     /// Whether a parameter type still holds an unanswered variable.
@@ -677,22 +770,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
-        param_type: Option<TypeId>,
+        param: Option<ArgParam>,
         own_vars: &[TypeId],
         hints: &IndexMap<InferVarId, TypeId>,
     ) -> TypeId {
-        let Some(param_type) = param_type else {
+        let Some(param) = param else {
             return self.resolve_expr(arg, ctx, None);
         };
-        let expected = self.apply_infer_holes(param_type);
+        let expected = self.apply_infer_holes(param.checked);
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
+            let declared = self.apply_infer_holes(param.declared);
             let answerable = self.answerable_vars(own_vars);
-            self.solve_own_infer_holes_against(expected, resolved, &answerable);
+            self.solve_own_infer_holes_against(declared, resolved, &answerable);
         }
         resolved
     }
+}
+
+/// The type a call reads one argument against, and the parameter type it
+/// stands for. They differ only where a tuple holds a pack no argument has
+/// answered yet, which `checked` holds as a variable.
+#[derive(Clone, Copy)]
+struct ArgParam {
+    checked: TypeId,
+    declared: TypeId,
+}
+
+impl ArgParam {
+    fn of(param: TypeId) -> Self {
+        Self {
+            checked: param,
+            declared: param,
+        }
+    }
+}
+
+/// A parameter type with the packs the arguments so far answer substituted.
+struct PacksAnswered {
+    declared: TypeId,
+    /// The packs still open, by slot.
+    open: Vec<TypeId>,
 }
 
 impl TypeSystem {
@@ -1644,12 +1763,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
+                //
+                // Keyed at the receiver's own segment, as the resolution that
+                // recorded the use→def edge above is: a key derived from the
+                // bare name asks the caller's frame, which an alias leaves
+                // without that name at all.
+                let receiver_key = self.impl_target_at(receiver_site, prefix);
+                let callee = StaticCallee {
+                    type_name: prefix,
+                    method_name: suffix,
+                    receiver_key: Some(&receiver_key),
+                };
                 let Some(mut static_args) = self.static_call_type_args(
-                    StaticCallee {
-                        type_name: prefix,
-                        method_name: suffix,
-                        receiver_key: None,
-                    },
+                    callee,
                     &call.args,
                     &args,
                     expected_type,
@@ -1658,6 +1784,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) else {
                     return TypeTable::ERROR;
                 };
+                // Before the record, which then holds what stands in for a slot
+                // deferred.
+                self.defer_or_report_uninferred_static_method_type_args(
+                    callee,
+                    &mut static_args.impl_args,
+                    &mut static_args.method_args,
+                    &args,
+                    expected_type,
+                    call.span,
+                );
                 // Record `[impl_args, method_args]` — the same order
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
@@ -1668,14 +1804,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                self.report_uninferred_static_method_type_args(
-                    prefix,
-                    suffix,
-                    &mut static_args.impl_args,
-                    &mut static_args.method_args,
-                    call.span,
-                    None,
-                );
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
                 let StaticTypeArgs {
@@ -1700,11 +1828,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                // Keyed at the receiver's own segment, as the resolution that
-                // recorded the use→def edge above is: a key derived from the
-                // bare name asks the caller's frame, which an alias leaves
-                // without that name at all.
-                let receiver_key = self.impl_target_at(receiver_site, prefix);
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
@@ -1942,12 +2065,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
+                    let callee = StaticCallee {
+                        type_name,
+                        method_name,
+                        receiver_key: ns_key.as_ref(),
+                    };
                     let Some(mut static_args) = self.static_call_type_args(
-                        StaticCallee {
-                            type_name,
-                            method_name,
-                            receiver_key: ns_key.as_ref(),
-                        },
+                        callee,
                         &call.args,
                         &args,
                         expected_type,
@@ -1956,13 +2080,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ) else {
                         return TypeTable::ERROR;
                     };
-                    self.report_uninferred_static_method_type_args(
-                        type_name,
-                        method_name,
+                    self.defer_or_report_uninferred_static_method_type_args(
+                        callee,
                         &mut static_args.impl_args,
                         &mut static_args.method_args,
+                        &args,
+                        expected_type,
                         call.span,
-                        ns_key.as_ref(),
                     );
                     self.enforce_static_method_bounds(&static_args, ns_receiver_type, call.span);
                     let StaticTypeArgs {
@@ -3312,39 +3436,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
-    /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
-    /// `fn`-bound ones (constrained structurally), defaulted ones (already
-    /// filled), and ones bound to an outer-scope `TypeParam` (the caller
-    /// forwarding its own generics) are all excluded. A slot it reports is the
-    /// error type from then on, as
-    /// [`Self::report_uninferred_static_method_type_args`] leaves one.
+    /// an unsubstituted `TypeParam` reach codegen and trap. `type_args` is the
+    /// dense space [`RealTypeParams`] lists, so an effect parameter and a
+    /// `fn`-bound one hold no slot. Defaulted parameters (already filled) and
+    /// ones bound to an outer-scope `TypeParam` (the caller forwarding its own
+    /// generics) are excluded. A slot it reports is the error type from then
+    /// on, as [`Self::defer_or_report_uninferred_static_method_type_args`]
+    /// leaves one.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
         span: token::Span,
     ) {
-        let params = self.lookup_function_type_params(callee);
+        let declared = self.lookup_function_type_params(callee);
+        let params = RealTypeParams::borrowed(&declared);
         let scope_params = self.scope_type_param_ids();
 
         // When inference produced no type args at all, every inferable
         // parameter is unresolved. Otherwise check each against its inferred
-        // slot (parallel to the full declared parameter list).
-        let is_inferable =
-            |p: &ast::GenericParam| !p.is_effect && p.default.is_none() && !p.has_fn_bound();
+        // slot.
+        let is_inferable = |p: &ast::GenericParam| p.default.is_none() && !p.has_fn_bound();
         let unresolved: Vec<usize> = if type_args.is_empty() {
             (0..params.len())
-                .filter(|&i| is_inferable(&params[i]))
+                .filter(|&i| is_inferable(params[i]))
                 .collect()
         } else if type_args.len() == params.len() {
             (0..params.len())
                 .filter(|&i| {
-                    is_inferable(&params[i]) && self.slot_unanswered(type_args[i], &scope_params)
+                    is_inferable(params[i]) && self.slot_unanswered(type_args[i], &scope_params)
                 })
                 .collect()
         } else {
-            // Length mismatch (packs/effects interleaved): be conservative
-            // and do not risk a false diagnostic.
+            // Length mismatch (packs interleaved): be conservative and do not
+            // risk a false diagnostic.
             return;
         };
 
@@ -3371,17 +3496,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// A slot it reports is the error type from then on: left as the callee's
-    /// own binder, it reads as whatever the caller declares under that name.
-    fn report_uninferred_static_method_type_args(
+    /// Defer or report the slots a static call left unanswered, as
+    /// [`Self::defer_or_report_uninferred_fn_type_args`] does a free
+    /// function's. A slot it reports is the error type from then on: left as
+    /// the callee's own binder, it reads as whatever the caller declares under
+    /// that name.
+    fn defer_or_report_uninferred_static_method_type_args(
         &mut self,
-        prefix: &str,
-        suffix: &str,
+        callee: StaticCallee,
         impl_type_args: &mut Vec<TypeId>,
         method_type_args: &mut Vec<TypeId>,
+        args: &[TypeId],
+        expected_type: Option<TypeId>,
         span: token::Span,
-        receiver_key: Option<&ImplTargetKey>,
     ) {
+        let StaticCallee {
+            type_name: prefix,
+            method_name: suffix,
+            receiver_key,
+        } = callee;
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
@@ -3426,35 +3559,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if impl_unresolved.is_empty() && method_unresolved.is_empty() {
             return;
         }
-        let type_level_unresolved = !impl_unresolved.is_empty();
+        let turbofish = if impl_unresolved.is_empty() {
+            format!("`{prefix}::{suffix}::<...>()`")
+        } else {
+            format!("`{prefix}::<...>::{suffix}()`")
+        };
         let names: Vec<String> = impl_unresolved
             .iter()
             .chain(&method_unresolved)
             .map(|(_, name)| name.clone())
             .collect();
-        for (args, unresolved) in [
-            (&mut *impl_type_args, &impl_unresolved),
-            (&mut *method_type_args, &method_unresolved),
+        let owner = format!("`{prefix}::{suffix}`");
+        let defers = self.defers_uninferred(args, expected_type);
+        let message = TypeError::cannot_infer_message(&names, &owner, &turbofish);
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let impl_params: &[ast::GenericParam] = sig
+            .declaring_impl
+            .map_or(&[], |def| &trait_env.impl_headers[&def].type_params);
+        for (type_args, unresolved, declaring) in [
+            (&mut *impl_type_args, &impl_unresolved, true),
+            (&mut *method_type_args, &method_unresolved, false),
         ] {
-            for &(slot, _) in unresolved {
-                if args.len() <= slot {
-                    args.resize(slot + 1, TypeTable::ERROR);
+            for (slot, name) in unresolved {
+                let inferred = type_args.get(*slot).copied();
+                if type_args.len() <= *slot {
+                    type_args.resize(slot + 1, TypeTable::ERROR);
                 }
-                args[slot] = TypeTable::ERROR;
+                type_args[*slot] = if defers {
+                    let param = if declaring {
+                        impl_params.iter().find(|p| &p.name == name)
+                    } else {
+                        sig.own_params.get(*slot)
+                    };
+                    let bounds =
+                        param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
+                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
+                } else {
+                    TypeTable::ERROR
+                };
             }
         }
+        if !defers {
+            let _ = self.emit(TypeError::CannotInferType { message, span });
+        }
+    }
 
-        let turbofish = if type_level_unresolved {
-            format!("`{prefix}::<...>::{suffix}()`")
-        } else {
-            format!("`{prefix}::{suffix}::<...>()`")
-        };
-        let _ = self.emit(TypeError::cannot_infer(
-            &names,
-            &format!("`{prefix}::{suffix}`"),
-            &turbofish,
-            span,
-        ));
+    /// Whether a slot nothing at the call site answers waits for a sink the
+    /// call's value reaches, a sibling branch's type among them. It does where
+    /// no type is expected of the call and its arguments hold no variable.
+    fn defers_uninferred(&self, args: &[TypeId], expected_type: Option<TypeId>) -> bool {
+        expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a))
     }
 
     /// Each of `sig`'s declaring block's parameters whose argument in
@@ -3474,7 +3628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// [`Self::report_uninferred_static_method_type_args`] for a derived method,
+    /// [`Self::defer_or_report_uninferred_static_method_type_args`] for a derived method,
     /// whose slots are its type's own parameters.
     fn report_uninferred_derived_type_args(
         &mut self,
@@ -3643,22 +3797,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let can_defer =
-            expected_type.is_none() && args.iter().all(|a| !self.type_has_infer_hole(*a));
-        if !can_defer {
+        if !self.defers_uninferred(args, expected_type) {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
 
         let func_name = callee.name();
-        let message = format!(
-            "cannot infer type parameter {} of function `{func_name}`; \
-             add a turbofish (`{func_name}::<...>()`) or a type annotation",
-            unresolved_names
-                .iter()
-                .map(|n| format!("`{n}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
+        let message = TypeError::cannot_infer_message(
+            &unresolved_names,
+            &format!("function `{func_name}`"),
+            &format!("`{func_name}::<...>()`"),
         );
 
         let mut new_args: Vec<TypeId> = Vec::with_capacity(n);
@@ -3668,22 +3816,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let bounds = self.declared_bounds(p, None, &[]);
-            // `infer_fn_type_args` already instantiated this slot, so the
-            // variable standing in for it is the one to blame — minting a
-            // second would orphan the first, which the sweep would then pin to
-            // `error` behind a diagnostic nobody asked for.
-            let existing = type_args
-                .get(i)
-                .copied()
-                .filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
-            new_args.push(match existing {
-                Some(var) => {
-                    self.attach_infer_var_diag(var, span, message.clone());
-                    self.attach_infer_var_bounds(var, p.name.clone(), bounds, span);
-                    var
-                }
-                None => self.mint_infer_hole(span, message.clone(), p.name.clone(), bounds),
-            });
+            let stand_in = self.defer_slot(
+                type_args.get(i).copied(),
+                span,
+                message.clone(),
+                p.name.clone(),
+                bounds,
+            );
+            new_args.push(stand_in);
         }
         *type_args = new_args;
     }
@@ -4244,7 +4384,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if derived.is_empty()
                 && let Some(base) = self.newtype_base_target(&key)
             {
-                return self.infer_through_newtype(&key, base, method_name, raw_args, args, span);
+                return self.infer_through_newtype(
+                    &key,
+                    base,
+                    method_name,
+                    raw_args,
+                    args,
+                    expected_type,
+                    span,
+                );
             }
             return (derived, vec![]);
         };
@@ -4293,7 +4441,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the shape the newtype gives the base's arguments, so
     /// `type Wl<T> = Wrap<List<T>>` takes a `List<i32>` for `Wrap`'s slot and
     /// never an `i32`. A slot that shape leaves open comes back as a bare
-    /// variable nothing answers, which the uninferred report then names.
+    /// variable nothing answers, which the uninferred report then names. An
+    /// expected instance of the newtype is read at the base, as the arguments
+    /// are.
     fn infer_through_newtype(
         &mut self,
         key: &ImplTargetKey,
@@ -4301,18 +4451,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         raw_args: &[Expr],
         args: &[TypeId],
+        expected_type: Option<TypeId>,
         span: token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let newtype = key
             .decl()
             .expect("a newtype receiver names its declaration");
         let base_args = self.args_at_representation(newtype, args);
+        let expected_at_base =
+            expected_type.map(|expected| self.tysys.represent_newtype_in_type(expected, newtype));
         let (inferred, method_args) = self.infer_static_method_type_args(
             &base_name,
             method_name,
             raw_args,
             &base_args,
-            None,
+            expected_at_base,
             span,
             Some(&base_key),
         );
@@ -4342,7 +4495,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((newtype, _)) = self.newtype_at_base_args(key, base_args) else {
             return;
         };
-        if self.tysys.type_table.borrow().contains_infer_var(newtype) {
+        let open = {
+            let tt = self.tysys.type_table.borrow();
+            tt.contains_infer_var(newtype) && !self.awaits_report(&tt, newtype)
+        };
+        if open {
             return;
         }
         let base = self.tysys.peeled_base(newtype).0;
@@ -4379,13 +4536,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope_params = self.scope_type_param_ids();
         let mut infer = InferCtx::new(&self.tysys.type_table, vars.clone());
         for (&spelled, &answer) in shape.iter().zip(base_args) {
-            if self.tysys.is_usable_answer(answer) && !self.slot_unanswered(answer, &scope_params) {
+            // A slot deferred to a sink answers as the variable it is, which
+            // the sink's answer then reaches through the newtype.
+            let deferred = self.awaits_report(&self.tysys.type_table.borrow(), answer);
+            if deferred
+                || (self.tysys.is_usable_answer(answer)
+                    && !self.slot_unanswered(answer, &scope_params))
+            {
                 infer.add(spelled, answer);
             }
         }
         let solved = infer.solve();
         for (&var, &answer) in vars.iter().zip(&solved) {
-            self.solve_infer_var(var, answer);
+            self.chain_infer_var(var, answer);
         }
         let open = vars.iter().zip(&solved).find(|(var, answer)| var == answer);
         let shaped = shape
@@ -4402,7 +4565,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        Some((self.apply_infer_holes(instance), shaped))
+        // Built afresh rather than substituted, so the base the instance
+        // carries is written in the answers, as the call's types are.
+        if vars.is_empty() {
+            return Some((instance, shaped));
+        }
+        // Built afresh rather than substituted, so the base the instance
+        // carries is written in the answers, as the call's types are.
+        let answered = vars
+            .iter()
+            .map(|&var| self.apply_infer_holes(var))
+            .collect();
+        Some((self.generic_newtype_instance(def, answered), shaped))
     }
 
     /// The impl level of a derived method called by type path, solved from the
@@ -5178,14 +5352,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let params_arg_exprs = call.args.get(receiver..).unwrap_or_default();
 
             // If no explicit type args, infer method-level type params from argument
-            // types via the shared `InferCtx` solver. `find_method_in_trait_bounds`
-            // already registered the method's own type params inside its resolution
-            // scope and handed them back via `method_type_param_ids`; we feed those
-            // to the solver so it knows exactly which TypeIds to bind. Outer-scope
-            // type params (`Self`, forwarded caller params) will not appear in
-            // `method_type_param_ids` and therefore cannot contaminate the result
-            // even when interning assigns them the same index as a method-level
-            // one.
+            // types via the shared `InferCtx` solver. The lookup moved the method's
+            // own slots past every frame's (`MethodSig::instantiate_received`), so
+            // a caller's parameter of the same index is not among them.
             if method_type_args.is_empty()
                 && !method_info_result.param_types.is_empty()
                 && !method_info_result.method_type_param_ids.is_empty()

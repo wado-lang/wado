@@ -1,0 +1,31 @@
+// Two lengths reached by different paths from one root are two bounds.
+// `node.outputs.len()` and `node.inputs.len()` both end in the field `used`,
+// and a check against one moved into the check against the other:
+// `outputs[0]` then trapped on a list of one element as if it read index 1.
+
+use { println, Stdout } from "core:cli";
+use { HashMap } from "core:collections";
+
+struct Node {
+    outputs: List<String>,
+    inputs: List<String>,
+}
+
+fn second_input(node: &Node) -> HashMap<String, String> {
+    let mut map = HashMap::<String, String>::new();
+    for let t of node.inputs {
+        map[t] = t;
+    }
+    map[node.outputs[0]] = node.inputs[1];
+    return map;
+}
+
+export fn run() with Stdout {
+    let node = Node { outputs: ["A"], inputs: ["X", "W"] };
+    println(`${second_input(&node).get("A"):?}`);
+}
+
+__DATA__
+{
+    "stdout": "Option::Some(\"W\")\n"
+}

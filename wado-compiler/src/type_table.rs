@@ -3385,13 +3385,11 @@ impl TypeTable {
     /// Whether `written`, one of `sig`'s refs, reads a parameter of the trait
     /// declaring it, and so means nothing where its arguments are unknown.
     pub fn reads_trait_params(&self, sig: &AssocTypeSig, written: &TraitRef) -> bool {
-        written.args.iter().any(|&arg| {
-            sig.frame
-                .params
-                .iter()
-                .flatten()
-                .any(|&param| self.mentions(arg, param))
-        })
+        let params: Vec<TypeId> = sig.frame.params.iter().flatten().copied().collect();
+        written
+            .args
+            .iter()
+            .any(|&arg| self.mentions_any(arg, &params))
     }
 
     /// The substitution reading `frame` at a reference: `Self` as `base`, each
@@ -3435,11 +3433,6 @@ impl TypeTable {
             filled.push(self.substitute_type_params(default?, &slots));
         }
         Some(filled)
-    }
-
-    /// Whether `id` is or is built over `part`.
-    fn mentions(&self, id: TypeId, part: TypeId) -> bool {
-        id == part || self.any_constituent(id, &mut |t| self.mentions(t, part))
     }
 
     /// `trait_ref` as a name, its arguments spelled.
@@ -4215,11 +4208,24 @@ impl TypeTable {
         substitution: &IndexMap<u32, TypeId>,
         projections: &SlotProjections,
     ) -> TypeId {
+        self.substitute_type_params_moving(type_id, substitution, projections, &NO_RENAMES)
+    }
+
+    /// [`Self::substitute_type_params_with`], moving each slot `renames` names
+    /// and `substitution` does not fill to its new index in the same pass.
+    pub fn substitute_type_params_moving(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+        renames: &IndexMap<u32, u32>,
+    ) -> TypeId {
         self.subst_rec(
             type_id,
             &Leaves {
                 params: substitution,
                 projections,
+                renames,
                 ..Leaves::NONE
             },
         )
@@ -4243,6 +4249,50 @@ impl TypeTable {
                 ..Leaves::NONE
             },
         )
+    }
+
+    /// `type_id` with each type `replacements` names replaced by its value,
+    /// wherever it stands.
+    pub fn replace_subterms(
+        &mut self,
+        type_id: TypeId,
+        replacements: &IndexMap<TypeKey, TypeId>,
+    ) -> TypeId {
+        self.subst_rec(
+            type_id,
+            &Leaves {
+                subterms: replacements,
+                ..Leaves::NONE
+            },
+        )
+    }
+
+    /// The tuples `id` is built over that hold one of `packs` as an element,
+    /// the outermost where one holds another.
+    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexMap<TypeKey, TypeId> {
+        let packs = self.type_keys(packs);
+        let mut found = IndexMap::default();
+        self.collect_tuples_holding(id, &packs, &mut found);
+        found
+    }
+
+    fn collect_tuples_holding(
+        &self,
+        id: TypeId,
+        packs: &[TypeKey],
+        found: &mut IndexMap<TypeKey, TypeId>,
+    ) {
+        if self
+            .as_tuple(id)
+            .is_some_and(|elems| elems.iter().any(|&e| packs.contains(&self.type_key(e))))
+        {
+            found.entry(self.type_key(id)).or_insert(id);
+            return;
+        }
+        self.any_constituent(id, &mut |t| {
+            self.collect_tuples_holding(t, packs, found);
+            false
+        });
     }
 
     /// `type_id` with each effect parameter or variable `rows` names replaced
@@ -4517,10 +4567,36 @@ impl TypeTable {
         if leaves.is_empty() {
             return type_id;
         }
+        if !leaves.subterms.is_empty()
+            && let Some(&replaced) = leaves.subterms.get(&self.type_key(type_id))
+        {
+            return replaced;
+        }
         match self.get(type_id).clone() {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                leaves.params.get(&index).copied().unwrap_or(type_id)
-            }
+            ResolvedType::TypeParam { name, index } => match leaves.params.get(&index) {
+                Some(&filled) => filled,
+                None => match leaves.renames.get(&index) {
+                    Some(&moved) => self.make_type_param(name, moved),
+                    None => type_id,
+                },
+            },
+            ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem,
+            } => match leaves.params.get(&index) {
+                Some(&filled) => filled,
+                None => match leaves.renames.get(&index) {
+                    Some(&moved) => match mapped_elem {
+                        Some(elem) => {
+                            let elem = self.subst_rec(elem, leaves);
+                            self.make_mapped_type_pack(name, moved, elem)
+                        }
+                        None => self.make_type_pack(name, moved),
+                    },
+                    None => type_id,
+                },
+            },
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,
@@ -4626,7 +4702,7 @@ impl TypeTable {
                                         }
                                     }
                                 } else {
-                                    new_elems.push(e);
+                                    new_elems.push(self.subst_rec(e, leaves));
                                 }
                             }
                             _ => {
@@ -5528,10 +5604,14 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` is one of `slots` or is built over one, matched by id as a
-    /// substitution binds them.
+    /// Whether `id` is one of `slots` or is built over one.
     pub fn mentions_any(&self, id: TypeId, slots: &[TypeId]) -> bool {
-        slots.contains(&id) || self.any_constituent(id, &mut |t| self.mentions_any(t, slots))
+        self.mentions_key(id, &self.type_keys(slots))
+    }
+
+    fn mentions_key(&self, id: TypeId, keys: &[TypeKey]) -> bool {
+        keys.contains(&self.type_key(id))
+            || self.any_constituent(id, &mut |t| self.mentions_key(t, keys))
     }
 
     /// The frame slots `id` (recursively) mentions, projections included.
@@ -7150,6 +7230,8 @@ static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
 static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
+static NO_SUBTERMS: IndexMap<TypeKey, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_RENAMES: IndexMap<u32, u32> = IndexMap::with_hasher(FxBuildHasher);
 
 /// Where a type's spelling writes its function types' rows. A function value
 /// is one whatever its row, so an instance whose arguments differ only in
@@ -7186,6 +7268,11 @@ struct Leaves<'s> {
     rows: &'s EffectRows,
     /// Whether every row is emptied, not just the names `rows` holds.
     erase_rows: bool,
+    /// Whole types replaced wherever they stand, before any leaf inside them.
+    subterms: &'s IndexMap<TypeKey, TypeId>,
+    /// Slots moved to another index, name and pack shape kept, where `params`
+    /// fills none.
+    renames: &'s IndexMap<u32, u32>,
 }
 
 /// One generic associated type's parameters, and the arguments a projection
@@ -7205,6 +7292,8 @@ impl Leaves<'static> {
         projections: &NO_PROJECTIONS,
         rows: &NO_ROWS,
         erase_rows: false,
+        subterms: &NO_SUBTERMS,
+        renames: &NO_RENAMES,
     };
 }
 
@@ -7216,6 +7305,8 @@ impl Leaves<'_> {
             && self.projections.is_empty()
             && self.rows.is_empty()
             && !self.erase_rows
+            && self.subterms.is_empty()
+            && self.renames.is_empty()
     }
 
     /// `effects` with each parameter or variable this substitution names

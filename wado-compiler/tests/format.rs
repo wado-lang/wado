@@ -3155,6 +3155,30 @@ fn run() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+#[test]
+fn test_format_let_chain_multiline() {
+    let source = r"
+fn run() {
+    if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    let expected = r"fn run() {
+    if let Some(transposed) = uses.right.get(vi.name)
+        && !uses.elsewhere.contains(vi.name)
+        && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 // ============================================================
 // Round-trip AST equivalence tests
 //
