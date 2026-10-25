@@ -4,6 +4,8 @@
 //! still see a `push_str` before `inline`.
 //! Only the env-free half of constant folding runs here.
 
+use std::sync::Arc;
+
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
@@ -97,7 +99,8 @@ pub(super) fn run_peephole(
     let summaries = mod_ref.summaries(project, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
-    gate.run_gated_par(gated_pass, len, |buffers, fid| {
+    let exec = Arc::clone(gate.exec());
+    let changed = gate.run_gated_par(gated_pass, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
@@ -208,5 +211,7 @@ pub(super) fn run_peephole(
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         engine.run(&rules)
-    })
+    });
+    exec.drop_all(callees);
+    changed
 }

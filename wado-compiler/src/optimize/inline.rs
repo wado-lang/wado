@@ -2554,6 +2554,9 @@ pub fn inline_functions(
     drop(inline_call_immutability);
     drop(inline_type_table);
 
+    // Every caller's new strings, for one pass over `string_literals` rather
+    // than one per caller.
+    let mut new_literals: IndexSet<String> = IndexSet::default();
     for (caller, inlined_funcs) in &spliced_into {
         let (caller_module_source, func_name) = {
             let func = project.functions[caller.index()].borrow();
@@ -2589,16 +2592,13 @@ pub fn inline_functions(
                 .collect();
             caller_strings.extend(to_add);
         }
-        let to_add: Vec<String> = {
-            let existing_literals: IndexSet<&str> =
-                project.string_literals.iter().map(String::as_str).collect();
-            all_inlined_strings
-                .into_iter()
-                .filter(|s| !existing_literals.contains(s.as_str()))
-                .collect()
-        };
-        project.string_literals.extend(to_add);
+        new_literals.extend(all_inlined_strings);
     }
+    let existing_literals: IndexSet<&str> =
+        project.string_literals.iter().map(String::as_str).collect();
+    new_literals.retain(|s| !existing_literals.contains(s.as_str()));
+    project.string_literals.extend(new_literals);
+    exec.drop_all(inline_candidates);
     !spliced_into.is_empty()
 }
 

@@ -29,6 +29,7 @@ use crate::nir::{
     NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
+use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
 use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
@@ -666,7 +667,11 @@ impl NirPackage {
     /// already holds is that function, reached by another route: its callers
     /// call the holder, and it is retired. Returns the store positions of the
     /// functions whose bodies changed.
-    pub fn rename_reshaped(&mut self, ids: impl IntoIterator<Item = FuncId>) -> Vec<usize> {
+    pub fn rename_reshaped(
+        &mut self,
+        ids: impl IntoIterator<Item = FuncId>,
+        exec: &Executor,
+    ) -> Vec<usize> {
         use cranelift_entity::EntityRef;
         let renames = ids
             .into_iter()
@@ -688,14 +693,14 @@ impl NirPackage {
                 func.name
             );
         }
-        let mut touched = Vec::new();
-        for (i, func_rc) in self.functions.iter().enumerate() {
-            if let Some(body) = func_rc.borrow_mut().body.as_mut()
-                && retarget_calls(body, &merged)
-            {
-                touched.push(i);
-            }
-        }
+        let functions = &self.functions;
+        let touched = exec.indices_where(functions.len(), |i| {
+            functions[i]
+                .borrow_mut()
+                .body
+                .as_mut()
+                .is_some_and(|body| retarget_calls(body, &merged))
+        });
         for global in &mut self.globals {
             retarget_calls(global.init.slot_expr_mut().body_mut(), &merged);
         }
