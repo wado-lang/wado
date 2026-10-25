@@ -93,7 +93,8 @@ code, tested from `<module>_test.wado` like any other module.
 The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
 cover. `mise run test-stdlib-coverage` holds the stdlib to
 `scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
-a difference either way. `mise run update-stdlib-coverage-baseline` rewrites it.
+a difference either way. `mise run update-baselines` rewrites it, with the
+fuel baseline (`benchmark/AGENTS.md`).
 
 Coverage serves the code, not the reverse: never bend correct, fast code to fit
 the baseline. New code gets a test. A region that never runs says so in the code

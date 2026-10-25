@@ -312,7 +312,7 @@ either. A name repeated within a file takes `#2`, `#3`, … in source order.
 `mise run test-stdlib-coverage <level>` runs the stdlib tests with `--coverage`
 and `scripts/stdlib-coverage.json`. CI runs it in the `O0` and `O3` jobs in
 place of their plain stdlib run, since a coverage run is a stdlib run too.
-`mise run update-stdlib-coverage-baseline` rewrites the file.
+`mise run update-baselines` rewrites the file.
 The baseline starts as whatever the first run leaves uncovered, and the work
 toward 100% is emptying it: a test for each region that can run, and
 `unreachable()` or `#[coverage(off)]` for each that cannot. Code is never bent to

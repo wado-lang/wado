@@ -18,6 +18,11 @@ the guest ran, about one unit each. It does not depend on the host, so one run
 on any machine gives the figure that only a change to the program or to
 wasmtime moves.
 
+Fuel leaves out what the host does for the guest, GC included, by design: that
+work depends on the host, and counting it would give up the determinism. A
+change that allocates more costs no fuel for the allocation itself. The
+wall-clock benchmarks in `benchmark/` stay as they are and show that work.
+
 ### `core:fuel` measures a region of a test
 
 `measure(label, f)` runs `f` and reports the fuel it spent as region `label` of
@@ -51,26 +56,28 @@ against the other implementations, and gains a `test "fuel"` block that
 measures the same phases once. The block reads its input with `#include_bytes`,
 since a test reaches no file.
 
-`benchmark/fuel.ts` runs the blocks at `-O2` with `--allocator freelist`, the
-allocator a shipped program gets, and names each region
-`<benchmark directory>/<label> (-O2)`.
+`benchmark/fuel.ts` runs the blocks at `-O1`, `-O2` and `-O3`, as the
+wall-clock series did, with `--allocator freelist`, the allocator a shipped
+program gets. It names each region `<benchmark directory>/<label> (<level>)`.
 
 ### CI holds fuel exactly and records it
 
-`benchmark/fuel.json` is the baseline. A pull request fails on any difference
-from it, either way, and names each series that moved. A change that moves fuel
-commits the result of `mise run update-fuel-baseline`, so the diff shows its
-cost. A push to main records the series on gh-pages under `benchmarks/fuel`.
+`benchmark/fuel.json` is the baseline, every level included. A pull request
+fails on any difference from it, either way, and names each series that moved.
+Fuel has no noise to tolerate, so every level is held, not only `-O2` as the
+wall-clock gate was. A push to main records the series on gh-pages under
+`benchmarks/fuel`.
+
+`mise run update-baselines` rewrites it together with the stdlib coverage
+baseline, since a change to the compiler or the stdlib moves either. A change
+that moves fuel commits the result, so the diff shows its cost.
 
 The wall-clock series on gh-pages stops. Its history stays where it is.
 
 ## Known gaps
 
-- Fuel leaves out the host's work for the guest, GC included. A change that
-  allocates more costs no fuel for the allocation itself.
 - Fuel prices every instruction alike, so a branch shape or a cache effect does
   not show.
-- Only `-O2` is measured.
 - A region that reads `wasi:random/random`, a clock, or I/O can spend different
   fuel on each run.
 - Two pull requests that each update the baseline can merge into a main whose

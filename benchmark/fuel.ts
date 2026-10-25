@@ -8,17 +8,17 @@
 //   write   rewrites benchmark/fuel.json
 //
 // Each mode first measures, under `wado test --report-fuel` (the dev build,
-// through scripts/dev-bin.sh). A series is named
-// `<benchmark directory>/<region label> (-O2)` and holds the region's fuel, in
-// github-action-benchmark's `customSmallerIsBetter` form. Fuel does not
-// depend on the host, so a difference is the program's or wasmtime's, never
-// noise.
+// through scripts/dev-bin.sh), at each level of OPT_LEVELS. A series is named
+// `<benchmark directory>/<region label> (<level>)` and holds the region's
+// fuel, in github-action-benchmark's `customSmallerIsBetter` form. Fuel does
+// not depend on the host, so a difference is the program's or wasmtime's,
+// never noise.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-const OPT_LEVEL = "-O2";
+const OPT_LEVELS = ["-O1", "-O2", "-O3"];
 const REPORT = "build/fuel.json";
 const BASELINE = "benchmark/fuel.json";
 
@@ -28,28 +28,30 @@ type Series = { name: string; unit: string; value: number };
 
 // `freelist` is the allocator a shipped program gets. The test world's
 // default, `debug`, never reuses memory, and its cost is not the program's.
-function measure(): Entry[] {
+function measure(level: string): Series[] {
   execFileSync(
     "scripts/dev-bin.sh",
-    ["wado", "test", OPT_LEVEL, "--allocator", "freelist", "--report-fuel", "--test-name", "fuel", "benchmark"],
+    ["wado", "test", level, "--allocator", "freelist", "--report-fuel", "--test-name", "fuel", "benchmark"],
     { stdio: ["ignore", process.stderr, "inherit"] },
   );
-  return JSON.parse(readFileSync(REPORT, "utf8")) as Entry[];
-}
-
-function seriesOf(entries: Entry[]): Series[] {
+  const entries = JSON.parse(readFileSync(REPORT, "utf8")) as Entry[];
   const series = entries
     .filter((entry) => entry.test === "fuel")
     .flatMap((entry) =>
       entry.regions.map((region) => ({
-        name: `${basename(dirname(entry.file))}/${region.label} (${OPT_LEVEL})`,
+        name: `${basename(dirname(entry.file))}/${region.label} (${level})`,
         unit: "fuel",
         value: region.fuel,
       })),
     );
   if (series.length === 0) {
-    throw new Error(`${REPORT} holds no fuel region`);
+    throw new Error(`${REPORT} holds no fuel region at ${level}`);
   }
+  return series;
+}
+
+function measureAll(): Series[] {
+  const series = OPT_LEVELS.flatMap(measure);
   if (new Set(series.map((s) => s.name)).size !== series.length) {
     throw new Error("two regions share a series name");
   }
@@ -73,7 +75,7 @@ function differs(current: Series[], baseline: Series[]): boolean {
     console.error(`${name}: ${b ?? "absent"} -> ${a ?? "absent"}${ratio}`);
   }
   if (moved) {
-    console.error(`\nfuel differs from ${BASELINE}: run \`mise run update-fuel-baseline\` and commit it`);
+    console.error(`\nfuel differs from ${BASELINE}: run \`mise run update-baselines\` and commit it`);
   }
   return moved;
 }
@@ -84,7 +86,7 @@ function main(): void {
     console.error("usage: node benchmark/fuel.ts series|check|write");
     process.exit(1);
   }
-  const current = seriesOf(measure());
+  const current = measureAll();
   if (mode === "write") {
     writeFileSync(BASELINE, render(current));
     return;
