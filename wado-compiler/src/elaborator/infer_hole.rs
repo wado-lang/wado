@@ -309,14 +309,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.is_unbound_type_param(t) && !table.type_keys(scope_params).contains(&table.type_key(t))
     }
 
-    /// Whether `ty` names a variable still open that finalize reports, so a
-    /// diagnostic about `ty` would only repeat that one.
-    pub(super) fn awaits_reported_hole(&self, ty: TypeId) -> bool {
-        let ty = self.apply_infer_holes(ty);
-        let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
-        vars.iter().any(|var| self.infer_holes.diags.contains_key(var))
-    }
-
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
         if self.infer_holes.is_empty() {
             return false;
