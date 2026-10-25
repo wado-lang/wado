@@ -82,11 +82,11 @@ section records only the current state.
 
 - [x] Generic-resource handler dispatch (`Stream<T>`,
   `StreamWritable<T>`, `Future<T>`, `FutureWritable<T>`).
-  The dispatch synthesis runs in two halves around the cm_binding
-  pass: `synthesize_pre_cm_binding` (wrappers, globals, structs,
-  call-site rewriting) before `cm_binding`, and
-  `synthesize_post_check` (`WithHandler` desugaring) after
-  `effect_check`. Per instantiation key (the declaration and the
+  The dispatch synthesis, `synthesize_pre_cm_binding` (wrappers,
+  globals, structs, call-site rewriting, `WithHandler` desugaring),
+  runs before `cm_binding` and before drop elaboration, so a handler
+  held by value drops after the `with` restores the one it shadowed.
+  Per instantiation key (the declaration and the
   `TypeKey`s of its type args), the synthesis substitutes the resource's operation template
   and emits a distinct `$Dispatch_<module>/Stream<u8>` struct +
   `$effect_<module>/Stream<u8>` global +

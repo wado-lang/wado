@@ -586,7 +586,11 @@ pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, generics: 
 
 /// Elaborate the instances `elaborate_instance_drops` names, returning the
 /// glue they call that does not exist yet.
-fn elaborate_instances(flat: &FlatPackage, first: usize, affine_types: AffineTypes) -> Vec<TirFunction> {
+fn elaborate_instances(
+    flat: &FlatPackage,
+    first: usize,
+    affine_types: AffineTypes,
+) -> Vec<TirFunction> {
     let mut glue = DropGlue {
         entry: flat.entry_module_source.clone(),
         called: IndexMap::default(),
@@ -1814,7 +1818,11 @@ enum MovingBuiltin {
 impl MovingBuiltin {
     /// The moving builtin `name` names, given its first argument `first`; an
     /// array builtin over an element that is not affine moves nothing.
-    fn named(name: &str, first: Option<&TirExpr>, affine_types: AffineTypes) -> Option<MovingBuiltin> {
+    fn named(
+        name: &str,
+        first: Option<&TirExpr>,
+        affine_types: AffineTypes,
+    ) -> Option<MovingBuiltin> {
         match name {
             "replace" => return Some(MovingBuiltin::Replace),
             "array_take" | "array_set" | "array_move" | "array_release" => {}

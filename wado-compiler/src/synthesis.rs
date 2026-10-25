@@ -129,9 +129,9 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     let project =
         effect_dispatch::synthesize_pre_cm_binding(project).map_err(SynthesisError::from)?;
 
-    // Insert `resource.drop` for every owned Component Model resource that is
-    // never transferred. Runs before CM-binding synthesis, whose rewrite of
-    // resource method calls would obscure the reference-vs-transfer distinction.
+    // Insert the drop of every affine value that never moves. Runs before
+    // CM-binding synthesis, whose rewrite of resource method calls would
+    // obscure the reference-vs-transfer distinction.
     let mut project = project;
     affine_drop::elaborate_affine_drops(&mut project);
     effect_dispatch::rewrite_resource_drops(&project);

@@ -213,8 +213,7 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
 /// All the bookkeeping needed to emit / refer to one effect's dispatch
 /// infrastructure. Built once per active effect by
 /// `synthesize_dispatch_infrastructure`, then consumed by the lowering and
-/// call-site-rewriting passes. The map lives on `Package::dispatch_plans` so the
-/// late synthesis half does not re-derive it.
+/// call-site-rewriting passes.
 #[derive(Debug, Clone)]
 pub struct DispatchPlan {
     /// `TypeId` of the synthesised `$Dispatch_<E>` struct.

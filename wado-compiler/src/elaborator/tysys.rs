@@ -142,15 +142,15 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or holds at any depth, an affine resource: what
+    /// Whether `type_id` is, or holds at any depth, an affine type: what
     /// makes a binding of it move-only, and a by-value `self` on it legal.
     pub(crate) fn carries_affine(&self, type_id: TypeId) -> bool {
         holds_affine(self, type_id)
     }
 
     /// Whether a value of `type_id` is move-only in a body whose `affine`
-    /// type parameters are `affine_params`: it holds an affine resource, or
-    /// one of those parameters, at any depth.
+    /// type parameters are `affine_params`: it holds an affine type, or one of
+    /// those parameters, at any depth.
     pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
         holds_affine(
             &AffineParams {
@@ -887,7 +887,7 @@ fn reaches(
 }
 
 /// What a type holds inside a body that declares `affine_params`: each of
-/// them counts as an affine resource.
+/// them counts as affine.
 struct AffineParams<'a> {
     types: &'a TypeSystem,
     affine_params: &'a [TypeId],
