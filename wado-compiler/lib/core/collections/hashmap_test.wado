@@ -370,3 +370,24 @@ test "tuple keys" {
     assert map[[1, "x"]] == 1;
     assert map.get([1, "y"]) == null;
 }
+
+struct Spot {
+    x: i32,
+    label: String,
+}
+
+variant Mark {
+    At(Spot),
+    Nowhere,
+}
+
+test "struct and variant keys hash by their members" {
+    let mut map = HashMap::<Mark, i32>::new();
+    map[Mark::At(Spot { x: 1, label: "a" })] = 1;
+    map[Mark::Nowhere] = 2;
+    assert map[Mark::At(Spot { x: 1, label: "a" })] == 1;
+    assert map[Mark::Nowhere] == 2;
+    assert map.get(Mark::At(Spot { x: 1, label: "b" })) == null;
+    let set = [(), ()] as HashSet<()>;
+    assert set.len() == 1;
+}
