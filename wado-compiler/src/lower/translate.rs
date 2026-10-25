@@ -32,9 +32,10 @@ use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
-    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
-    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    template_segment_helper_name, variant_tag_helper_name,
+    COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
+    case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
+    hole_fmt_helper_name, hole_get_helper_name, template_segment_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -3171,8 +3172,8 @@ fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
 
 pub(super) fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
     // Who placed a cold marker matters only up to NIR, which has one.
-    let name = if func.is_builtin_named("known_cold_path") {
-        "cold_path"
+    let name = if func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC) {
+        COLD_PATH_INTRINSIC
     } else {
         &func.name
     };

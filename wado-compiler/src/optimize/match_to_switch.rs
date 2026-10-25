@@ -7,6 +7,7 @@
 use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
+use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncId, FuncParts, FunctionRef, NirGlobal, NirLiteralPattern};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind, Tracked,
@@ -135,7 +136,7 @@ impl<'t> MatchToSwitchRule<'t> {
 pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (FuncId, FuncId) {
     let cold_path_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
-        name: "cold_path".to_string(),
+        name: COLD_PATH_INTRINSIC.to_string(),
         monomorph_info: None,
         method_info: None,
     });

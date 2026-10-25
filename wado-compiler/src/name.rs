@@ -149,6 +149,13 @@ pub const CONTRACT_CLAUSE_INTRINSIC: &str = "$contract_clause";
 /// clause's own where a call reaches the function through a value.
 pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 
+/// The `core:builtin` intrinsic marking a path rare, the one marker NIR has.
+pub const COLD_PATH_INTRINSIC: &str = "cold_path";
+
+/// The `core:builtin` intrinsic marking a path the program itself makes rare,
+/// which the compiler writes where an author would write `cold_path`.
+pub const KNOWN_COLD_PATH_INTRINSIC: &str = "known_cold_path";
+
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.

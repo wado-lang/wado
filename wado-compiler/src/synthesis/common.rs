@@ -13,7 +13,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
@@ -54,8 +54,18 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
 /// `builtin::known_cold_path();`, the marker the compiler places where the
 /// program itself makes the path rare.
 pub fn known_cold_path_stmt(span: Span) -> TirStmt {
+    marker_stmt(KNOWN_COLD_PATH_INTRINSIC, span)
+}
+
+/// `builtin::cold_path();`, for a path the compiler guesses is rare as an
+/// author would.
+pub fn cold_path_stmt(span: Span) -> TirStmt {
+    marker_stmt(COLD_PATH_INTRINSIC, span)
+}
+
+fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
     TirStmt::new(
-        TirStmtKind::Expr(builtin_call("known_cold_path", Vec::new(), TypeTable::UNIT)),
+        TirStmtKind::Expr(builtin_call(intrinsic, Vec::new(), TypeTable::UNIT)),
         span,
     )
 }

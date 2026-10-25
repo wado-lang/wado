@@ -24,8 +24,8 @@ use crate::lower::plan::value_copy::place::{
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    contract_report_name, minted_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC,
+    LocalMethodName, RefKind, contract_report_name, minted_name,
 };
 use crate::synthesis::common::known_cold_path_stmt;
 use crate::tir::{
@@ -542,7 +542,7 @@ fn report_function(
     // The report is cold as a whole; the call to it keeps the marker.
     let stmts = stmts
         .into_iter()
-        .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, "known_cold_path")))
+        .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, KNOWN_COLD_PATH_INTRINSIC)))
         .collect();
     let mut body = TirExpr::new(
         TirExprKind::Block(TirBlock::new(stmts, span)),

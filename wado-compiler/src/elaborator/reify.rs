@@ -25,8 +25,9 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
-    global_init_function, global_name, unchecked_twin_name,
+    COLD_PATH_INTRINSIC, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName,
+    KNOWN_COLD_PATH_INTRINSIC, Receiver, contract_owner_name, global_init_function, global_name,
+    unchecked_twin_name,
 };
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
@@ -93,7 +94,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
-use crate::synthesis::common::{builtin_call, known_cold_path_stmt};
+use crate::synthesis::common::{builtin_call, cold_path_stmt, known_cold_path_stmt};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -2369,7 +2370,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let is_marker = |s: &TirStmt| {
             matches!(&s.kind, TirStmtKind::Expr(e)
                 if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if matches!(func.intrinsic(), Some("cold_path" | "known_cold_path"))))
+                    if matches!(func.intrinsic(), Some(name) if name == COLD_PATH_INTRINSIC || name == KNOWN_COLD_PATH_INTRINSIC)))
         };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes the rest of its block cold, which is where `block_cut`
@@ -3277,13 +3278,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         cap_ctx.emitted_lets.extend(decls);
 
         spliced
-    }
-
-    /// The marker on a `?` propagating its operand's failure. A failure is not
-    /// a trap, so how rare it is is a guess, placed as an author's would be.
-    fn guessed_cold_path_stmt(span: Span) -> TirStmt {
-        let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
-        TirStmt::new(TirStmtKind::Expr(call), span)
     }
 
     /// A conditional slot's failure-message text, chosen in the cold branch so
@@ -5803,7 +5797,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        Self::guessed_cold_path_stmt(span),
+                        // A failure is no trap, so its rarity is a guess.
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 // `Option<U>` and the operand's `Option<T>`
@@ -5936,7 +5931,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        Self::guessed_cold_path_stmt(span),
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(err_variant),
