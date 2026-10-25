@@ -1171,12 +1171,12 @@ The compiler writes some trait impls itself. This section says which, and when.
 
 Each prelude trait follows one policy for when an impl exists:
 
-| Policy    | `T: Trait` holds when                                                             | Traits                                             |
-| --------- | --------------------------------------------------------------------------------- | -------------------------------------------------- |
-| on demand | every member of `T` satisfies the trait                                           | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
-| total     | always                                                                            | `Inspect`                                          |
-| written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
-| explicit  | an impl is written                                                                | every user-defined trait                           |
+| Policy    | `T: Trait` holds when                                                             | Traits                                                     |
+| --------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| on demand | every member of `T` satisfies the trait                                           | `Eq`, `Ord`, `Default`, `Hash`, `Serialize`, `Deserialize` |
+| total     | always                                                                            | `Inspect`                                                  |
+| written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                                  |
+| explicit  | an impl is written                                                                | every user-defined trait                                   |
 
 One exception narrows the on-demand row. `Default` asks that every field carry a
 default expression, not that every member satisfy `Default`, so only a struct
@@ -1211,8 +1211,9 @@ type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
 bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
 a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
-A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
-type have no members, so they satisfy those three outright.
+A `fn`-typed member blocks `Eq`, `Ord`, `Hash`, and serde. A plain `enum` and a
+`flags` type have no members, so they satisfy `Eq`, `Ord`, and serde outright.
+A float member blocks `Hash` alone: `f32` and `f64` compare but do not hash.
 [Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
 derived `Eq` and `Ord` compares.
 

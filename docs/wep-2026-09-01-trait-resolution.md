@@ -543,9 +543,13 @@ answer it: the defaults are on the trait, `Self` meaning the impl's target. And
 it may pin an associated type (`T: Mul<Output = T>`): the pin is on the bound,
 and the impl that answers it must bind the type as the pin says, read off the
 impl's own `type Output = …`. A pin naming a parameter the target leaves
-unbound (`Members = [..C]`) reads the projection rather than checking it. A
-bound on that parameter (`..C: Arbitrary`) waits for monomorphization
-(WEP 2026-03-14).
+unbound (`FieldTypes = [..F]`) binds that parameter from what the answering impl
+or reflection fact binds. The parameter's own bound (`..F: Arbitrary`) is then
+checked of each element where the blanket is asked for, so a member that fails
+it is reported at the use and not inside the blanket's body. Asking that bound
+is the member descent the cycle rule above names. A pin the answer binds to
+nothing still reads the projection, and its parameter's bound waits for
+monomorphization.
 
 #### The five questions
 

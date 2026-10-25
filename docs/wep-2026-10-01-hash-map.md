@@ -198,7 +198,7 @@ an all-zero seed.
 
 ## Roadmap
 
-- [ ] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
+- [x] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
   every type listed above hashes consistently with its `Eq`.
 - [ ] The hash function, chosen by measurement on Wasm.
 - [x] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they

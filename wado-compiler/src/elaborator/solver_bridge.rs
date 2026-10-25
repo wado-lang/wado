@@ -1103,9 +1103,7 @@ impl SolverBridge {
                 | DeclKey::UndeclaredEffect => false,
             };
             if copies {
-                self.program
-                    .facts
-                    .insert((head, copyable), Fact::default());
+                self.program.facts.insert((head, copyable), Fact::default());
             }
         }
     }
@@ -1716,9 +1714,13 @@ impl SolverBridge {
                     .into_iter()
                     .collect();
                 let visible_from = visible_from.clone();
-                program
-                    .facts
-                    .insert((head, trait_), Fact { visible_from, assoc });
+                program.facts.insert(
+                    (head, trait_),
+                    Fact {
+                        visible_from,
+                        assoc,
+                    },
+                );
             }
         };
         for (&def, info) in &data.struct_fields {
@@ -1794,10 +1796,9 @@ impl SolverBridge {
                 .compiler_trait_def(item)
                 .and_then(|def| lowering.known_trait(def))
             {
-                program.facts.insert(
-                    (lowering.declared_type(def), trait_),
-                    Fact::default(),
-                );
+                program
+                    .facts
+                    .insert((lowering.declared_type(def), trait_), Fact::default());
             }
         };
 
@@ -1864,9 +1865,7 @@ impl SolverBridge {
             };
             for (holds, trait_) in [(is_ref, ref_), (is_ref_mut, ref_mut)] {
                 if holds {
-                    self.program
-                        .facts
-                        .insert((head, trait_), Fact::default());
+                    self.program.facts.insert((head, trait_), Fact::default());
                 }
             }
         }

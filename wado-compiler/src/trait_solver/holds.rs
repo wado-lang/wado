@@ -295,9 +295,11 @@ impl Query<'_> {
                 .as_ref()
                 .is_none_or(|modules| modules.contains(&self.scope))
         {
-            let matched: Vec<Option<SolverType>> = match ty {
-                SolverType::Decl(_, args) => args.iter().cloned().map(Some).collect(),
-                _ => Vec::new(),
+            let matched = || -> Vec<Option<SolverType>> {
+                let SolverType::Decl(_, args) = ty else {
+                    unreachable!("only a declaration's fact binds an associated type");
+                };
+                args.iter().cloned().map(Some).collect()
             };
             return Some(Holds {
                 requests: vec![DerivationRequest {
@@ -311,7 +313,7 @@ impl Query<'_> {
                     .map(|(assoc, binding)| {
                         let member = Member {
                             binding: binding.clone(),
-                            matched: matched.clone(),
+                            matched: matched(),
                         };
                         (*assoc, member)
                     })
@@ -365,14 +367,10 @@ impl Query<'_> {
         }
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred)
+            || !self.projections_met(&deferred, &bindings)
+        {
             return None;
-        }
-        for (projection, met) in &deferred {
-            let expected = self.at_bindings(projection, &bindings)?;
-            if expected != self.normalized(met) {
-                return None;
-            }
         }
         if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
@@ -460,7 +458,10 @@ impl Query<'_> {
                             Some(expected) if expected != actual => return None,
                             Some(_) => {}
                             None => {
-                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred) {
+                                let from = deferred.len();
+                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred)
+                                    || !self.projections_met(&deferred[from..], &bindings)
+                                {
                                     return None;
                                 }
                             }
@@ -497,6 +498,19 @@ impl Query<'_> {
                         .unwrap_or_else(|| arg.clone())
                 })
                 .collect(),
+        })
+    }
+
+    /// Whether each projection a match met holds what it was matched against,
+    /// read at `bindings`.
+    fn projections_met(
+        &mut self,
+        deferred: &[(SolverType, SolverType)],
+        bindings: &[Option<Binding>],
+    ) -> bool {
+        deferred.iter().all(|(projection, met)| {
+            self.at_bindings(projection, bindings)
+                .is_some_and(|expected| expected == self.normalized(met))
         })
     }
 
@@ -1176,9 +1190,7 @@ mod tests {
     /// and a fact's answer owes the body, as a derived impl's does.
     #[test]
     fn a_fact_answers_and_owes_the_body() {
-        let p = Builder::default()
-            .fact(POINT, EQ, Fact::default())
-            .build();
+        let p = Builder::default().fact(POINT, EQ, Fact::default()).build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), EQ, HERE),
             Some(Holds {
