@@ -591,8 +591,7 @@ fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, 
     uses.note(graph, checked, fuse);
     let mut out = HashMap::<String, bool>::new();
     for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
-        ) == 2 {
+        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
             out[vi.name] = transposed;
         }
     }

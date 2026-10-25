@@ -42,8 +42,7 @@ test "translate rewrites a token label member to the context API" {
     let g = parse("grammar T;
 r : x=ID { print($x.text); } ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($x.text); ", false, &NO_BINDINGS).unwrap(
-    );
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($x.text); ", false, &NO_BINDINGS).unwrap();
     assert out == " print(p.token_text(x)); ";
 }
 
@@ -90,8 +89,7 @@ test "translate camelCase label uses the snake_case binding" {
 r : myTok=ID { print($myTok.text); } ;
 ID : [a-z]+ ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($myTok.text); ", false, &NO_BINDINGS).unwrap(
-    );
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($myTok.text); ", false, &NO_BINDINGS).unwrap();
     assert out == " print(p.token_text(my_tok)); ";
 }
 
@@ -169,16 +167,13 @@ e : ID ;
     let a = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap();
     assert a == " p.emit(p.rule_string_tree()); ";
     // ANTLR / java2wado idiom `toStringTree(this)` — the `(this)` argument is absorbed.
-    let b = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap(
-    );
+    let b = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap();
     assert b == " p.emit(p.rule_string_tree()); ";
     // Bare reference (no parens) still emits a complete call.
-    let c = translate_wado_action(rule, &g.parser_rules, " let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap(
-    );
+    let c = translate_wado_action(rule, &g.parser_rules, " let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap();
     assert c == " let t = p.rule_string_tree(); print(t); ";
     // Any ASCII whitespace (incl. a newline) before the call is absorbed.
-    let d = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap(
-    );
+    let d = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap();
     assert d == " p.emit(p.rule_string_tree()); ";
 }
 

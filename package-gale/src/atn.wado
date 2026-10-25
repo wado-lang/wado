@@ -777,8 +777,10 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
         }
     }
 
-    let total = 8 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
-    ) + tr_follow.len() + tr_prec.len() + 2 + atn.sets.iter_ref().fold(0, |n, set| n + 2 + set.len() * 2);
+    let total = 8 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len() + tr_follow.len() + tr_prec.len() + 2 + atn.sets.iter_ref().fold(
+        0,
+        |n, set| n + 2 + set.len() * 2,
+    );
     let mut bytes: ByteList = ByteList::with_capacity(total);
     push_u16(&mut bytes, nrules);
     push_u16(&mut bytes, ndec);

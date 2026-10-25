@@ -2244,7 +2244,8 @@ impl<'a> Unparser<'a> {
     /// Emit `(args)`, one line per argument when the single-line form would
     /// overflow, wrap anyway, or leave a comment inside the call unplaced.
     /// `span` is the call expression's, so an empty argument list holding a
-    /// comment wraps too.
+    /// comment wraps too. One holding none never does: wrapping it shortens
+    /// nothing.
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
         // in that case we skip the single-line attempt entirely, as does a
@@ -2253,10 +2254,12 @@ impl<'a> Unparser<'a> {
         if forced {
             self.force_wrap = None;
         }
-        if (!has_trailing_comma || args.is_empty()) && !forced {
+        if args.is_empty() || (!has_trailing_comma && !forced) {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
-            if !self.exceeds_width_since(snap) && !self.has_comment_in_range(span.start, span.end) {
+            if (args.is_empty() || !self.exceeds_width_since(snap))
+                && !self.has_comment_in_range(span.start, span.end)
+            {
                 return;
             }
             self.rollback(snap);

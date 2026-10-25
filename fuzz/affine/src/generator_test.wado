@@ -70,8 +70,7 @@ test "a move inside a closure is rejected, and only there" {
             let Err(EvalError::CompileFailed(failure)) = result else {
                 panic(`${case.label()}: expected a rejection, got ${result:?}`);
             };
-            assert failure.rendered.contains("a closure captures `t` by reference, so its body cannot move it"), `${case.label(
-            )}: ${failure.rendered}`;
+            assert failure.rendered.contains("a closure captures `t` by reference, so its body cannot move it"), `${case.label()}: ${failure.rendered}`;
         }
     }
 }
