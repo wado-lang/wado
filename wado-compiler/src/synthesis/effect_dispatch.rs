@@ -1101,42 +1101,33 @@ struct LowerCtx {
     with_serial: u32,
 }
 
-/// One frame on `LowerCtx.scopes`. The outermost is always `Function` and owns
-/// the `locals` vector, moved back into `TirFunction.locals` on exit. A
-/// `Closure` frame owns only a `next_local` counter — the lower phase rebuilds
-/// each functor's local table from the body's `Let` statements.
-enum LocalScope {
-    Function {
-        next_local: u32,
-        locals: Vec<TirLocal>,
-    },
-    Closure {
-        next_local: u32,
-    },
+/// One frame on `LowerCtx.scopes`: a function's local table, or a closure
+/// body's, whose parameters are numbered ahead of it. A local allocated here is
+/// recorded in the table, which drop elaboration then numbers its own after.
+struct LocalScope {
+    first: u32,
+    locals: Vec<TirLocal>,
+}
+
+impl LocalScope {
+    fn enter(first: u32, locals: &mut Vec<TirLocal>) -> Self {
+        Self {
+            first,
+            locals: std::mem::take(locals),
+        }
+    }
+
+    fn next_local(&self) -> u32 {
+        self.first + self.locals.len() as u32
+    }
 }
 
 impl LowerCtx {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
-        match scope {
-            LocalScope::Function { next_local, locals } => {
-                let idx = *next_local;
-                *next_local += 1;
-                locals.push(TirLocal {
-                    name: format!("$local_{idx}"),
-                    type_id: ty,
-                    is_mut: false,
-                    span: token::Span::default(),
-                });
-                idx
-            }
-            LocalScope::Closure { next_local } => {
-                let idx = *next_local;
-                *next_local += 1;
-                let _ = ty; // closure-local types are rebuilt later
-                idx
-            }
-        }
+        let idx = scope.next_local();
+        scope.locals.push(TirLocal::synth(idx, ty, false));
+        idx
     }
 
     fn fresh_with_label(&mut self) -> String {
@@ -1173,24 +1164,15 @@ fn lower_with_handler_dispatch_in_modules(
 
 fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv) {
     if let Some(body) = &mut func.body {
-        let locals = std::mem::take(&mut func.locals);
+        assert_eq!(func.local_count as usize, func.locals.len());
         let mut ctx = LowerCtx {
-            scopes: vec![LocalScope::Function {
-                next_local: func.local_count,
-                locals,
-            }],
+            scopes: vec![LocalScope::enter(0, &mut func.locals)],
             with_serial: 0,
         };
         lower_dispatch_in_block(body, env, &mut ctx);
-        match ctx.scopes.pop().expect("function scope") {
-            LocalScope::Function { next_local, locals } => {
-                func.local_count = next_local;
-                func.locals = locals;
-            }
-            LocalScope::Closure { .. } => {
-                unreachable!("outermost scope must be a function frame")
-            }
-        }
+        let scope = ctx.scopes.pop().expect("function scope");
+        func.local_count = scope.next_local();
+        func.locals = scope.locals;
     }
 }
 
@@ -1348,16 +1330,20 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_expr(elem, env, ctx);
             }
         }
-        TirExprKind::Closure { params, body, .. } => {
-            // Push a closure-local scope. The closure body's lets and
-            // any nested `WithHandler` desugaring allocate locals in
-            // this scope. `next_local` starts past the closure's own
-            // params plus any pre-existing body lets we discover.
-            let body_max = max_local_index_in_expr(body);
-            let start = (params.len() as u32).max(body_max + 1);
-            ctx.scopes.push(LocalScope::Closure { next_local: start });
+        TirExprKind::Closure {
+            params,
+            body,
+            body_locals,
+            ..
+        } => {
+            let scope = LocalScope::enter(params.len() as u32, body_locals);
+            assert!(
+                local_index_bound(body) <= scope.next_local(),
+                "a closure's locals must list every local its body reads"
+            );
+            ctx.scopes.push(scope);
             lower_dispatch_in_expr(body, env, ctx);
-            ctx.scopes.pop();
+            *body_locals = ctx.scopes.pop().expect("closure scope").locals;
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1394,23 +1380,19 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
     }
 }
 
-/// Largest local index in use anywhere inside `expr`, counting reads and binding
-/// sites alike, or `0` if there are none. Seeds a closure body's local counter
-/// so synthesis does not collide with indices the body already uses. Nested
-/// closures are not descended into — their locals are a different scope.
-fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
-    let mut visitor = MaxLocalIndex(0);
+/// One past the largest local index `expr` reads or binds. Nested closures are
+/// not descended into: their locals are a different frame.
+fn local_index_bound(expr: &TirExpr) -> u32 {
+    let mut visitor = LocalIndexBound(0);
     visitor.visit_expr(expr);
     visitor.0
 }
 
-struct MaxLocalIndex(u32);
+struct LocalIndexBound(u32);
 
-impl MaxLocalIndex {
+impl LocalIndexBound {
     fn note(&mut self, idx: u32) {
-        if idx > self.0 {
-            self.0 = idx;
-        }
+        self.0 = self.0.max(idx + 1);
     }
 
     fn walk_pattern(&mut self, pattern: &TirPattern) {
@@ -1443,7 +1425,7 @@ impl MaxLocalIndex {
     }
 }
 
-impl TirRefVisitor for MaxLocalIndex {
+impl TirRefVisitor for LocalIndexBound {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.note(*index),
