@@ -23,9 +23,7 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
-use super::transposition::{
-    Clean, Path, Reading, Step, Transposition, field_path, target_reads,
-};
+use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -1204,8 +1202,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if container_type == TypeTable::ERROR {
             return Err(None);
         }
-        if self.holds_rebindable_reference(&transposition.container_path(), root_type, rebindable_root)
-        {
+        if self.holds_rebindable_reference(
+            &transposition.container_path(),
+            root_type,
+            rebindable_root,
+        ) {
             return Err(Some(DestructuringFallback::Rebindable));
         }
         if matches!(
@@ -1343,7 +1344,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 place_type = pointee;
             }
             if let Step::Field(field) = step {
-                place_type = self.lookup_field_type(place_type, &field.field, field.span).1;
+                place_type = self
+                    .lookup_field_type(place_type, &field.field, field.span)
+                    .1;
             }
         }
         writable && self.tysys.pointee_of(place_type).is_some()

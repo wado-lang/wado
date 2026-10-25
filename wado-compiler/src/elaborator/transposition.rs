@@ -1,8 +1,8 @@
 //! What the syntax of a destructuring assignment says of it (WEP: Destructuring
 //! Assignment), and which may be a transposition within one container. Annotate
-//! settles the rest: that the container is a local, that no `mut` reference
-//! local it is reached through is referenced, that no index reads a mutable
-//! global, and that the type implements `IndexSwap`.
+//! settles the rest: that the container is a local, that no reference it is
+//! reached through can be rebound, that no index reads a mutable global, and
+//! that the type implements `IndexSwap`.
 
 use crate::ast::{
     AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, FieldAccessExpr, Function,
