@@ -983,14 +983,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         let header = impl_header(&self.tysys.trait_env, &ImplBlockRef(def));
         let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
-        if let Some(required) = required
-            && header.trait_def().map(Resolution::Def) != Some(required.decl)
-        {
+        let Some(trait_) = header.trait_def() else {
+            return required.is_none() && declares(&header.methods);
+        };
+        if required.is_some_and(|r| r.decl != Resolution::Def(trait_)) {
             return false;
         }
-        let Some(trait_) = header.trait_def() else {
-            return declares(&header.methods);
-        };
         (declares(&header.methods)
             || self
                 .tysys
