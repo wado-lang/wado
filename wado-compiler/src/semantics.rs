@@ -1839,7 +1839,10 @@ mod tests {
     #[test]
     fn a_stdlib_measuring_compile_seeds_from_the_probed_snapshot() {
         let snap = get_or_init_snapshot(Some(STDLIB)).expect("not re-entering the builder");
-        let seed = snap.coverage.as_ref().expect("the snapshot measures the stdlib");
+        let seed = snap
+            .coverage
+            .as_ref()
+            .expect("the snapshot measures the stdlib");
         let sem = measuring_stdlib(
             "use { to_string } from \"core:json\";\nfn main() { let _ = to_string(&1); }",
         );
