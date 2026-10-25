@@ -2,6 +2,7 @@
 
 use crate::elaborator::synth::{ArgProbe, ArgSource};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
@@ -3554,21 +3555,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the value reaches may yet, a sibling branch's type among them.
         let defers = expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a));
         let blame = format!("of {owner}; add a turbofish ({turbofish}) or a type annotation");
-        for (type_args, unresolved) in [
-            (&mut *impl_type_args, &impl_unresolved),
-            (&mut *method_type_args, &method_unresolved),
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let impl_params: &[ast::GenericParam] = sig
+            .declaring_impl
+            .map_or(&[], |def| &trait_env.impl_headers[&def].type_params);
+        for (type_args, unresolved, declaring) in [
+            (&mut *impl_type_args, &impl_unresolved, true),
+            (&mut *method_type_args, &method_unresolved, false),
         ] {
             for (slot, name) in unresolved {
                 if type_args.len() <= *slot {
                     type_args.resize(slot + 1, TypeTable::ERROR);
                 }
-                type_args[*slot] = if defers {
-                    let var = self.mint_infer_var_named(name);
-                    self.attach_infer_var_blame(var, span, name.clone(), blame.clone());
-                    var
+                if !defers {
+                    type_args[*slot] = TypeTable::ERROR;
+                    continue;
+                }
+                let var = self.mint_infer_var_named(name);
+                self.attach_infer_var_blame(var, span, name.clone(), blame.clone());
+                let param = if declaring {
+                    impl_params.iter().find(|p| &p.name == name)
                 } else {
-                    TypeTable::ERROR
+                    sig.own_params.get(*slot)
                 };
+                if let Some(param) = param {
+                    let bounds = self.declared_bounds(param, None, &[]);
+                    self.attach_infer_var_bounds(var, name.clone(), bounds, span);
+                }
+                type_args[*slot] = var;
             }
         }
         if !defers {

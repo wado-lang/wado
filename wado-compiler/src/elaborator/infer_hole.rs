@@ -208,11 +208,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Set the diagnostic `var` raises if it is never solved. The first one
     /// wins, matching the solutions map's keep-the-first policy.
     pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
-        self.infer_holes.diags.entry(var).or_insert(Blame {
-            span,
-            param: None,
-            owner: message,
-        });
+        self.blame_var(
+            var,
+            Blame {
+                span,
+                param: None,
+                owner: message,
+            },
+        );
+    }
+
+    fn blame_var(&mut self, var: TypeId, blame: Blame) {
+        self.infer_holes.diags.entry(var).or_insert(blame);
+        let key = self.tysys.type_table.borrow().type_key(var);
+        self.annotate_ctx.reported_holes.insert(key);
     }
 
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
@@ -224,11 +233,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: String,
         owner: String,
     ) {
-        self.infer_holes.diags.entry(var).or_insert(Blame {
-            span,
-            param: Some(param),
-            owner,
-        });
+        self.blame_var(
+            var,
+            Blame {
+                span,
+                param: Some(param),
+                owner,
+            },
+        );
     }
 
     /// Defer a variant constructor whose type arguments did not resolve here.
