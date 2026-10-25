@@ -415,11 +415,12 @@ test {
 
 ### Core Modules
 
-Each function export becomes a free function of the same name. A call to it
-calls that export, whatever the name: an export named like a `core:builtin`
-intrinsic or like another asset's export is still its own asset's function. An
-export spelled like a Wado keyword is imported under an alias
-(`use { resume as seven } from ...`).
+Each function export becomes a free function named by its export's
+`snake_case` reading, as a component's function is: `add-one` and `addOne` are
+both `add_one`. A reading that is a Wado keyword takes a trailing `_`
+(`use { resume_ as seven } from ...`). A call to it calls that export, whatever
+the name: an export named like a `core:builtin` intrinsic or like another
+asset's export is still its own asset's function.
 
 An asset is embedded in the output and shares the component's memory. The
 memory's first pages, as many as the asset's own memory declares at minimum,
@@ -433,6 +434,8 @@ rejected at the import when it:
   64-bit, shared, has a custom page size, or has a minimum of 2 GiB or more;
 - has a `start` section;
 - exports a function that re-exports an imported one;
+- exports a function whose `snake_case` reading is no Wado identifier (`1st`),
+  or two whose readings are one name (`a-b` and `a_b`);
 - exports a function whose parameters are not `i32`, `i64`, `f32`, `f64`, or
   `v128`, or that has more than one result, or a result of any other type.
 

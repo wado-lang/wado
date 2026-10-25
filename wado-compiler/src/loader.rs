@@ -17,7 +17,7 @@ use crate::compiler_host::{
 };
 use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
-use crate::lexer::{LexError, lex};
+use crate::lexer::{LexError, is_valid_ident, lex};
 use crate::logger::Logger;
 use crate::module_source::{
     CmNamespace, ExportRefusal, ModuleSource, ModuleSourceInterner, WasmAssetKind,
@@ -26,7 +26,7 @@ use crate::module_source::{
 use crate::name::{
     canonicalize_entry_point, decl_file_of, entry_dir_of, is_package_namespace,
     resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
-    split_exported_file,
+    split_exported_file, wado_identifier,
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
@@ -404,6 +404,9 @@ impl WasmCoreValType {
 pub struct WasmExportSig {
     /// Export name.
     pub name: String,
+    /// The name the bindings declare it under ([`wado_identifier`]), as a
+    /// Component Model function's: `add-one` and `addOne` read as `add_one`.
+    pub binding: String,
     /// Parameter types.
     pub params: Vec<WasmCoreValType>,
     /// Result types. 0 or 1 is accepted; multi-return is rejected.
@@ -741,12 +744,12 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
                 let _ = writeln!(
                     out,
                     "pub fn {}({params}) -> {};",
-                    sig.name,
+                    sig.binding,
                     wasm_core_val_type_name(*ret),
                 );
             }
             None => {
-                let _ = writeln!(out, "pub fn {}({params});", sig.name);
+                let _ = writeln!(out, "pub fn {}({params});", sig.binding);
             }
         }
     }
@@ -946,7 +949,23 @@ fn parse_wasm_module_exports(
     // module-defined funcs). Module-defined funcs index into
     // `func_type_idx`, which then resolves through `func_types`.
     let mut function_exports = Vec::with_capacity(exports.len());
+    let mut bound: IndexMap<String, String> = IndexMap::default();
     for (name, func_index) in exports {
+        let binding = wado_identifier(&name);
+        if !is_valid_ident(&binding) {
+            return Err(LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!(
+                    "export `{name}` reads as `{binding}`, which is no Wado identifier"
+                ),
+            });
+        }
+        if let Some(first) = bound.insert(binding.clone(), name.clone()) {
+            return Err(LoadError::WasmImport {
+                module_source: source.clone(),
+                message: format!("exports `{first}` and `{name}` both read as `{binding}`"),
+            });
+        }
         if func_index < imported_func_count {
             return Err(LoadError::WasmImport {
                 module_source: source.clone(),
@@ -1006,6 +1025,7 @@ fn parse_wasm_module_exports(
 
         function_exports.push(WasmExportSig {
             name,
+            binding,
             params,
             results,
         });
