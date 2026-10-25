@@ -994,18 +994,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// awaiting their report against what answers them, as
     /// [`Self::inherent_impl_applies`] let them meet every bound.
     pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
+        // As the block sees them: a newtype's base carries a base's block.
+        let Some(type_args) = self
+            .tysys
+            .receiver_args_at_impl(Some(receiver), &[], Some(def))
+        else {
+            return;
+        };
         let binding = {
             let tt = self.tysys.type_table.borrow();
-            let (ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }) = tt.get(receiver)
-            else {
-                return;
-            };
             if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
                 return;
             }
             let open = |ty: TypeId| self.awaits_report(&tt, ty);
-            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &open)
+            tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
         };
         if let Some(binding) = binding {
             self.defer_open_impl_bounds(def, &binding.slots, span);

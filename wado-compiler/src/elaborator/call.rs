@@ -102,13 +102,23 @@ impl CalleeSignature {
     }
 }
 
-/// Which static method a call names: the two segments, and the namespace's
-/// receiver key where the spelling has one.
+/// Which static method a call names: the two segments, and the receiver's key
+/// where the call site resolved one.
 #[derive(Clone, Copy)]
 pub(super) struct StaticCallee<'a> {
     pub type_name: &'a str,
     pub method_name: &'a str,
     pub receiver_key: Option<&'a ImplTargetKey>,
+}
+
+/// A generic newtype whose static call reaches its base's method: one
+/// variable per parameter, which the call answers, and the base the newtype
+/// makes of them.
+struct NewtypeReceiver {
+    def: DefId,
+    holes: Vec<TypeId>,
+    base: TypeId,
+    base_key: ImplTargetKey,
 }
 
 /// Where a resolved argument came from, for its diagnostics. A tagged
@@ -1075,15 +1085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             (*def, table.reflect_structure_head(named))
         };
-        let expected = expected.map(|ty| {
-            let table = self.tysys.type_table.borrow();
-            match table.get_unerased(ty) {
-                ResolvedType::Newtype { def, .. } if *def == newtype_def => {
-                    table.reflect_structure_head(ty)
-                }
-                _ => ty,
-            }
-        });
+        let expected = self.expected_at_newtype_base(expected, newtype_def);
         let constructed = construct(self, expected);
         if constructed == TypeTable::ERROR {
             return constructed;
@@ -1110,6 +1112,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         self.generic_newtype_instance(newtype_def, args)
+    }
+
+    /// `expected` as the base of the newtype `def` reads it: the base, where it
+    /// is an instance of that newtype.
+    pub(super) fn expected_at_newtype_base(
+        &self,
+        expected: Option<TypeId>,
+        def: DefId,
+    ) -> Option<TypeId> {
+        expected.map(|ty| {
+            let table = self.tysys.type_table.borrow();
+            match table.get_unerased(ty) {
+                ResolvedType::Newtype { def: of, .. } if *of == def => {
+                    table.reflect_structure_head(ty)
+                }
+                _ => ty,
+            }
+        })
     }
 
     /// The owner and case a case callee constructs: a bare `Case(…)` the
@@ -1770,17 +1790,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
+                //
+                // Keyed at the receiver's own segment, as the resolution that
+                // recorded the use→def edge above is: a key derived from the
+                // bare name asks the caller's frame, which an alias leaves
+                // without that name at all.
+                let receiver_key = self.impl_target_at(receiver_site, prefix);
+                // A generic newtype's base answers the call, at arguments that
+                // answer the newtype's own parameters in turn.
+                let newtype = self.generic_newtype_receiver(&receiver_key, prefix, suffix);
+                let inferred_against = newtype.as_ref().map_or(expected_type, |newtype| {
+                    self.expected_at_newtype_base(expected_type, newtype.def)
+                });
                 let callee = StaticCallee {
                     type_name: prefix,
                     method_name: suffix,
-                    receiver_key: None,
+                    receiver_key: Some(newtype.as_ref().map_or(&receiver_key, |n| &n.base_key)),
                 };
                 let (mut impl_type_args_inferred, mut method_type_args) = self
                     .static_call_type_args(
                         callee,
                         &call.args,
                         &args,
-                        expected_type,
+                        inferred_against,
                         call.span,
                         written,
                     );
@@ -1798,7 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &mut impl_type_args_inferred,
                     &mut method_type_args,
                     &args,
-                    expected_type,
+                    inferred_against,
                     call.span,
                 );
                 // Record `[impl_args, method_args]` — the same order
@@ -1813,7 +1845,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // The type prefix is what `Self` means here, so a bound written
                 // `Assoc = Self::Item` projects off it as it does on a method call.
-                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
+                let receiver_type = match &newtype {
+                    Some(newtype) => self.answer_newtype_receiver(
+                        newtype,
+                        &impl_type_args_inferred,
+                        prefix,
+                        call.span,
+                    ),
+                    None => self.resolve_unsited_type_name(prefix, call.span),
+                };
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
                     let self_binding = SelfBinding {
@@ -1845,11 +1885,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                // Keyed at the receiver's own segment, as the resolution that
-                // recorded the use→def edge above is: a key derived from the
-                // bare name asks the caller's frame, which an alias leaves
-                // without that name at all.
-                let receiver_key = self.impl_target_at(receiver_site, prefix);
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
@@ -1964,6 +1999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // cannot reconstruct from the AST alone. It returns only a
                 // typed placeholder.
                 return self.resolve_static_method_call_from_qualified(
+                    newtype.is_some().then_some(receiver_type),
                     prefix,
                     suffix,
                     &args,
@@ -2084,17 +2120,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
+                    let newtype = ns_key
+                        .as_ref()
+                        .and_then(|key| self.generic_newtype_receiver(key, type_name, method_name));
+                    let inferred_against = newtype.as_ref().map_or(expected_type, |newtype| {
+                        self.expected_at_newtype_base(expected_type, newtype.def)
+                    });
                     let callee = StaticCallee {
                         type_name,
                         method_name,
-                        receiver_key: ns_key.as_ref(),
+                        receiver_key: newtype
+                            .as_ref()
+                            .map_or(ns_key.as_ref(), |n| Some(&n.base_key)),
                     };
                     let (mut impl_type_args_inferred, mut method_type_args) = self
                         .static_call_type_args(
                             callee,
                             &call.args,
                             &args,
-                            expected_type,
+                            inferred_against,
                             call.span,
                             method_type_args,
                         );
@@ -2103,9 +2147,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &mut impl_type_args_inferred,
                         &mut method_type_args,
                         &args,
-                        expected_type,
+                        inferred_against,
                         call.span,
                     );
+                    let ns_receiver_type = match &newtype {
+                        Some(newtype) => Some(self.answer_newtype_receiver(
+                            newtype,
+                            &impl_type_args_inferred,
+                            type_name,
+                            call.span,
+                        )),
+                        None => ns_receiver_type,
+                    };
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
                         receiver_key: ns_key.as_ref(),
@@ -3566,6 +3619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (&mut *method_type_args, &method_unresolved, false),
         ] {
             for (slot, name) in unresolved {
+                let inferred = type_args.get(*slot).copied();
                 if type_args.len() <= *slot {
                     type_args.resize(slot + 1, TypeTable::ERROR);
                 }
@@ -3577,7 +3631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let bounds =
                         param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    self.mint_infer_hole(span, message.clone(), name.clone(), bounds)
+                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
                 } else {
                     TypeTable::ERROR
                 };
@@ -3800,22 +3854,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let bounds = self.declared_bounds(p, None, &[]);
-            // `infer_fn_type_args` already instantiated this slot, so the
-            // variable standing in for it is the one to blame — minting a
-            // second would orphan the first, which the sweep would then pin to
-            // `error` behind a diagnostic nobody asked for.
-            let existing = type_args
-                .get(i)
-                .copied()
-                .filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
-            new_args.push(match existing {
-                Some(var) => {
-                    self.attach_infer_var_diag(var, span, message.clone());
-                    self.attach_infer_var_bounds(var, p.name.clone(), bounds, span);
-                    var
-                }
-                None => self.mint_infer_hole(span, message.clone(), p.name.clone(), bounds),
-            });
+            let stand_in = self.defer_slot(
+                type_args.get(i).copied(),
+                span,
+                message.clone(),
+                p.name.clone(),
+                bounds,
+            );
+            new_args.push(stand_in);
         }
         *type_args = new_args;
     }
@@ -4183,6 +4229,84 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_type_args = explicit;
         merge_turbofish_type_args(&mut method_type_args, &method_args);
         (impl_args, method_type_args)
+    }
+
+    /// The generic newtype `key` names, where its base answers `method`: a
+    /// static the newtype declares itself shadows the base's.
+    fn generic_newtype_receiver(
+        &mut self,
+        key: &ImplTargetKey,
+        prefix: &str,
+        method: &str,
+    ) -> Option<NewtypeReceiver> {
+        let def = key.decl()?;
+        let names: Vec<String> = self
+            .lookup_generic_newtype_of_decl(def)?
+            .type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        if self.impl_method_entries(key, method).next().is_some() {
+            return None;
+        }
+        let (base_key, _) = self.newtype_base_target(key, prefix)?;
+        let holes: Vec<TypeId> = names
+            .iter()
+            .map(|name| self.mint_infer_var_named(name))
+            .collect();
+        let instance = self.generic_newtype_instance(def, holes.clone());
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(instance);
+        Some(NewtypeReceiver {
+            def,
+            holes,
+            base,
+            base_key,
+        })
+    }
+
+    /// Answer `receiver`'s variables with what `impl_args`, the arguments the
+    /// call settled for its base's impl, make of the base, and the instance
+    /// they then make. A parameter the base does not mention is left to a
+    /// sink the call's value reaches.
+    fn answer_newtype_receiver(
+        &mut self,
+        receiver: &NewtypeReceiver,
+        impl_args: &[TypeId],
+        prefix: &str,
+        span: token::Span,
+    ) -> TypeId {
+        let written = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(receiver.base)
+            .unwrap_or_default();
+        let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+        for (&written, &answered) in written.iter().zip(impl_args) {
+            unify(&self.tysys.type_table, written, answered, &mut bindings);
+        }
+        let args = receiver
+            .holes
+            .iter()
+            .map(|&hole| match bindings.get(&hole) {
+                Some(&answer) => answer,
+                None => {
+                    self.attach_infer_var_diag(
+                        hole,
+                        span,
+                        uninferable_type_param("newtype", prefix),
+                    );
+                    hole
+                }
+            })
+            .collect();
+        // Built afresh rather than substituted, so the base the instance
+        // carries is the one the call's return type is written in.
+        self.generic_newtype_instance(receiver.def, args)
     }
 
     /// Whether `struct_name::method_name` is declared, but by no block reaching

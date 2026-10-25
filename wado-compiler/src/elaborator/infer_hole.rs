@@ -106,6 +106,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
+    /// [`Self::mint_infer_hole`] for a call's type argument `slot`. A variable
+    /// inference already put there takes the diagnostic and the bounds: a
+    /// second one would orphan it, which the sweep would then pin to `error`
+    /// behind a diagnostic nobody asked for.
+    pub(super) fn defer_slot(
+        &mut self,
+        slot: Option<TypeId>,
+        span: Span,
+        message: String,
+        param_name: String,
+        bounds: Vec<DeclaredBound>,
+    ) -> TypeId {
+        let existing = slot.filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
+        let Some(var) = existing else {
+            return self.mint_infer_hole(span, message, param_name, bounds);
+        };
+        self.attach_infer_var_diag(var, span, message);
+        self.attach_infer_var_bounds(var, param_name, bounds, span);
+        var
+    }
+
     /// The bounds `param` declares, each as the trait its own site names plus
     /// the spelling that site wrote, with the enclosing impl's parameters at
     /// `impl_args`, which the solution is checked against long after the

@@ -1,11 +1,18 @@
 // An inherent method called on a value whose type parameter awaits its answer
 // is found whatever the parameter becomes, and its impl's bounds are checked
 // against the answer. Here a sibling branch answers `T` with a type that is not
-// `Ord`, which `impl<T: Ord> V<T>` requires of `me`.
+// `Ord`, which `impl<T: Ord> V<T>` requires of `me`. Through the generic
+// newtype `W` the receiver is a `W`, whose base the block is written on.
 
 variant V<T> {
     A,
     B(T),
+}
+
+impl<T> V<T> {
+    fn none() -> V<T> {
+        return V::A;
+    }
 }
 
 impl<T: Ord> V<T> {
@@ -13,6 +20,8 @@ impl<T: Ord> V<T> {
         return *self;
     }
 }
+
+type W<T> = V<T>;
 
 struct NoOrd {
     f: fn() -> i32,
@@ -26,9 +35,12 @@ test {
     let c = builtin::black_box(true);
     let x = if c { V::A.me() } else { V::B(NoOrd { f: one }) };
     assert x matches { A };
+    let y = if c { W::none().me() } else { W::B(NoOrd { f: one }) };
+    assert y matches { A };
 }
 
 __DATA__
 {
-    "compile_error": "27:20: analysis error: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'"
+    "compile_error": "36:20: analysis error: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'",
+    "compile_errors_contains": ["38:20: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'"]
 }

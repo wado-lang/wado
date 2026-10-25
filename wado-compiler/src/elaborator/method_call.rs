@@ -4,6 +4,7 @@ use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME,
@@ -22,7 +23,7 @@ use super::call::{
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
-use super::infer::InferCtx;
+use super::infer::{InferCtx, unify};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
@@ -1890,14 +1891,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None,
             );
             // A `_` is answered as the bare spelling answers the slot it
-            // leaves out, by the one inference both spellings share.
+            // leaves out, by the one inference both spellings share. That
+            // reads the base a newtype target reaches, so it reads the
+            // expected type there too, and what it answers is matched against
+            // the base the target makes of its variables.
+            let holey = self.with_written_args(target_type_id, &declaring_args);
+            let (base, newtype_def) = {
+                let table = self.tysys.type_table.borrow();
+                let newtype_def = match table.get_unerased(holey) {
+                    ResolvedType::Newtype { def, .. } => Some(*def),
+                    _ => None,
+                };
+                (table.reflect_structure_head(holey), newtype_def)
+            };
+            let expected_at_base = match newtype_def {
+                Some(def) => self.expected_at_newtype_base(expected_type, def),
+                None => expected_type,
+            };
             let inferred = struct_name_for_lookup.clone().map(|name| {
                 self.infer_static_method_type_args(
                     &name,
                     &static_call.method,
                     &static_call.args,
                     &args,
-                    expected_type,
+                    expected_at_base,
                     static_call.span,
                     struct_key_for_lookup.as_ref(),
                 )
@@ -1911,15 +1928,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|id| self.tysys.type_table.borrow().impl_target_args(id).to_vec())
                 .unwrap_or_default();
             let scope_params = self.scope_type_param_ids();
-            for &(i, var) in &receiver_holes {
+            let written = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(base)
+                .unwrap_or_default();
+            let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+            for (position, &written) in written.iter().enumerate() {
                 let answer = inferred
                     .as_ref()
-                    .and_then(|impl_args| impl_args.get(i).copied())
-                    .or_else(|| block_target.get(i).copied())
+                    .and_then(|impl_args| impl_args.get(position).copied())
+                    .or_else(|| block_target.get(position).copied())
                     .filter(|&answer| {
                         self.tysys.is_usable_answer(answer)
                             && !self.slot_unanswered(answer, &scope_params)
                     });
+                if let Some(answer) = answer {
+                    unify(&self.tysys.type_table, written, answer, &mut bindings);
+                }
+            }
+            for &(i, var) in &receiver_holes {
+                let answer = bindings.get(&var).copied();
                 if let Some(answer) = answer {
                     self.solve_infer_var(var, answer);
                 }
@@ -3264,9 +3294,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
-    /// Resolve a static method call from a qualified name like `Point::origin()`
+    /// Resolve a static method call from a qualified name like `Point::origin()`.
+    /// `generic_newtype` is the instance a generic newtype `struct_name`
+    /// names answered at, which declares no one type to look up by name.
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
+        generic_newtype: Option<TypeId>,
         struct_name: &str,
         method_name: &str,
         args: &[TypeId],
@@ -3284,64 +3317,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // then fall back to the base type's static method
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
         // The written name keys the impl indices; the fq form names the method.
-        let (actual_struct_name, actual_struct_fq, actual_mangled_name) =
-            if let Some(newtype_id) = self.lookup_newtype(struct_name) {
-                // First check if the newtype itself has this static method
-                if self.declares_method_directly(struct_name, method_name) {
-                    (
-                        struct_name.to_string(),
-                        qualified_struct_name,
-                        mangled_func_name.to_string(),
-                    )
-                } else {
-                    let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
-                    match resolved {
-                        ResolvedType::Newtype { .. } => {
-                            let (declared, representation) = {
-                                let tt = self.tysys.type_table.borrow();
-                                (
-                                    tt.reflect_structure_head(newtype_id),
-                                    tt.representation_head(newtype_id),
-                                )
-                            };
-                            let base_type_id = if self.flags_answers_itself(declared, method_name) {
-                                declared
-                            } else {
-                                representation
-                            };
-                            let base_args = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .nominal_type_args(base_type_id)
-                                .unwrap_or_default();
-                            newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                            let base_fq = self.tysys.fq_receiver_head(base_type_id);
-                            let mangled = MethodName::format_local(&base_fq, None, method_name);
-                            let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
-                            (base_name, base_fq, mangled)
-                        }
-                        ResolvedType::Flags { .. }
-                            if !self.flags_answers_itself(newtype_id, method_name) =>
-                        {
-                            let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
-                            let mangled = MethodName::format_local(&base_fq, None, method_name);
-                            (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
-                        }
-                        _ => (
-                            struct_name.to_string(),
-                            qualified_struct_name,
-                            mangled_func_name.to_string(),
-                        ),
-                    }
-                }
-            } else {
+        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
+            generic_newtype.or_else(|| self.lookup_newtype(struct_name))
+        {
+            // First check if the newtype itself has this static method
+            if self.declares_method_directly(struct_name, method_name) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
                     mangled_func_name.to_string(),
                 )
-            };
+            } else {
+                let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
+                match resolved {
+                    ResolvedType::Newtype { .. } => {
+                        let (declared, representation) = {
+                            let tt = self.tysys.type_table.borrow();
+                            (
+                                tt.reflect_structure_head(newtype_id),
+                                tt.representation_head(newtype_id),
+                            )
+                        };
+                        let base_type_id = if self.flags_answers_itself(declared, method_name) {
+                            declared
+                        } else {
+                            representation
+                        };
+                        let base_args = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .nominal_type_args(base_type_id)
+                            .unwrap_or_default();
+                        newtype_dispatch = Some((newtype_id, base_type_id, base_args));
+                        let base_fq = self.tysys.fq_receiver_head(base_type_id);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
+                        (base_name, base_fq, mangled)
+                    }
+                    ResolvedType::Flags { .. }
+                        if !self.flags_answers_itself(newtype_id, method_name) =>
+                    {
+                        let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
+                    }
+                    _ => (
+                        struct_name.to_string(),
+                        qualified_struct_name,
+                        mangled_func_name.to_string(),
+                    ),
+                }
+            }
+        } else {
+            (
+                struct_name.to_string(),
+                qualified_struct_name,
+                mangled_func_name.to_string(),
+            )
+        };
 
         let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
             Some((_, _, base_args)) if impl_type_args.is_empty() && !base_args.is_empty() => {
