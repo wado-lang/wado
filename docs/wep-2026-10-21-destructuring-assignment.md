@@ -129,17 +129,20 @@ It is that call where all of these hold:
 - The right side is a tuple literal whose two elements are the two targets, in
   the other order.
 - `c` is one path written twice: a local, a field path from a local
-  (`self.items`), or a dereference of one. A call, or any other expression that
-  could yield a different container, falls back.
+  (`self.items`), or a dereference of one. A local a closure captures counts.
+  A global, a call, or any other expression that could yield a different
+  container, falls back.
 - Each index is a literal, a constant, a local, or arithmetic over them. An
-  index read out of `c` (`c[c[0]]`) falls back.
-- No index local, and no reference local that `c` dereferences (`r` in `*r`),
-  is referenced or captured anywhere in the body. The desugaring's first
+  index read out of `c` (`c[c[0]]`), or one reading a mutable global, falls
+  back.
+- No index local, and no `mut` reference local that `c` dereferences (`r` in
+  `*r`), is referenced or captured anywhere in the body. The desugaring's first
   `index_assign` could otherwise write through that reference, and its second
   target would then name another slot, or another container. A closure
-  capturing the local counts, though it writes no `&`. A reference to the
-  container itself does not: a write through it changes the container's
-  contents, never which container `c` names.
+  capturing the local counts, though it writes no `&`. A reference local that
+  is not `mut` cannot be rebound, and a reference to the container itself does
+  not count either: a write through it changes the container's contents, never
+  which container `c` names.
 - `c`'s type implements `IndexSwap` at the index type.
 
 The call evaluates `c`, `j` and `i` once each, in that order: the order in which
@@ -206,8 +209,9 @@ functions. It anchors to the statement and adds a note that names the cause:
   container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
-- an index reads a mutable global, or an index local or a reference local the
-  container is reached through is referenced or captured;
+- the container is not reached from a local;
+- an index reads a mutable global, or an index local or a `mut` reference local
+  the container is reached through is referenced or captured;
 - the container's type does not implement `IndexSwap`.
 
 A scalar has no value copy, so a scalar target is never reported.

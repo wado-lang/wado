@@ -194,8 +194,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::abstract_selections`] by default body, shared by every module
     /// (`AnnotateState::abstract_selections`).
     pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
-    /// The current module's [`transposition::transpositions`].
-    pub(super) transpositions: hashmap::IndexSet<ast::AstId>,
+    /// `AnnotateState::transpositions`.
+    transpositions: Rc<hashmap::IndexMap<ast::AstId, transposition::Clean>>,
 }
 
 /// What a default body's author selected at one call through a bound.
@@ -1807,7 +1807,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `ModuleSemantics` first.
     pub fn annotate_module_bodies(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
-        self.transpositions = transposition::transpositions(module);
         let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
 
         let mut test_count = 0usize;

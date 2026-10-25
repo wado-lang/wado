@@ -23,7 +23,7 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
-use super::transposition::{Reading, Transposition};
+use super::transposition::{Clean, Reading, Transposition, target_reads};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -31,7 +31,7 @@ use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{
-    AssignPlace, DestructuringFallback, DesugarKind, OperatorDispatch,
+    AssignPlace, DestructuringFallback, DesugarKind, FallbackSite, OperatorDispatch,
 };
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
@@ -1098,14 +1098,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
-        let fallback = match Reading::of(assign) {
-            Reading::Transposition(_) if !self.transpositions.contains(&assign.id) => {
-                Some(DestructuringFallback::Rebindable)
-            }
+        let cause = match Reading::of(assign) {
             Reading::Transposition(transposition) => {
-                match self.resolve_index_swap(assign.id, &transposition, ctx) {
-                    Ok(type_id) => return type_id,
-                    Err(fallback) => fallback,
+                match self.transpositions.get(&assign.id).copied() {
+                    None => Some(DestructuringFallback::Rebindable),
+                    Some(clean) => {
+                        match self.resolve_index_swap(assign.id, &transposition, clean, ctx) {
+                            Ok(type_id) => {
+                                // Reify reads none of the right side, but a
+                                // name in it is still a reference. Its
+                                // subscripts are places, not element reads.
+                                let ast::Expr::TupleLiteral(value) = &assign.value else {
+                                    unreachable!("a transposition's right side is a tuple");
+                                };
+                                for element in &value.elements {
+                                    let ast::Expr::Index(subscript) = element else {
+                                        unreachable!("a transposition reads two subscripts");
+                                    };
+                                    self.resolve_expr(&subscript.expr, ctx, None);
+                                    self.resolve_expr(&subscript.index, ctx, None);
+                                }
+                                return type_id;
+                            }
+                            Err(cause) => cause,
+                        }
+                    }
                 }
             }
             Reading::NotAPermutation => Some(DestructuringFallback::NotAPermutation),
@@ -1115,12 +1132,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Reading::Permutation => Some(DestructuringFallback::NotOwned),
         };
-        if let Some(fallback) = fallback {
-            self.sem
-                .types
-                .destructuring_fallbacks
-                .insert(assign.span, fallback);
-        }
+        self.sem.types.destructuring_fallbacks.insert(
+            assign.span,
+            FallbackSite {
+                cause,
+                target_reads: target_reads(assign),
+            },
+        );
         let places: Vec<Result<WritePlace, ()>> = targets
             .iter()
             .map(|target| self.resolve_write_place(target, ctx))
@@ -1183,11 +1201,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         assign_id: AstId,
         transposition: &Transposition<'_>,
+        clean: Clean,
         ctx: &mut FunctionContext,
     ) -> Result<TypeId, Option<DestructuringFallback>> {
         let container = transposition.container;
-        if ctx.lookup(transposition.container_root()).is_none() {
-            return Err(Some(DestructuringFallback::OtherContainer));
+        let Some(root) = ctx.binding(transposition.container_root()) else {
+            return Err(Some(DestructuringFallback::ContainerNotLocal));
+        };
+        if clean.container_root_referenced
+            && root.is_mut
+            && self.tysys.pointee_of(root.type_id).is_some()
+        {
+            return Err(Some(DestructuringFallback::Rebindable));
         }
         let container_type = self.resolve_expr(container, ctx, None);
         if container_type == TypeTable::ERROR {

@@ -418,15 +418,23 @@ pub(crate) struct TypeAnnotations {
     /// Outside [`BodyFacts`] because a pattern names the same float whichever
     /// element a tuple `for-of` binds.
     pub(crate) inexact_float_patterns: IndexMap<Span, IndexSet<String>>,
-    /// Why each destructuring assignment keeps its desugaring, keyed by its
-    /// span: the note a surviving value copy's remark, or an affine value's
-    /// move error, carries there.
-    pub(crate) destructuring_fallbacks: IndexMap<Span, DestructuringFallback>,
+    /// Each destructuring assignment that keeps its desugaring, keyed by its
+    /// span. One that is absent from every walk is an `index_swap`.
+    pub(crate) destructuring_fallbacks: IndexMap<Span, FallbackSite>,
 }
 
-/// Why a destructuring assignment keeps its desugaring, which copies each value
-/// it reads (WEP: Destructuring Assignment § A fallback that makes a value copy
-/// is reported, an affine one is an error).
+/// A destructuring assignment that keeps its desugaring, which copies each
+/// value it reads (WEP: Destructuring Assignment § A fallback that makes a
+/// value copy is reported, an affine one is an error).
+#[derive(Clone, Debug)]
+pub(crate) struct FallbackSite {
+    /// Why, where the desugaring reports no error of its own.
+    pub(crate) cause: Option<DestructuringFallback>,
+    /// The right side's elements that read a target: the copies the fallback
+    /// makes, and so the ones the cause is noted on.
+    pub(crate) target_reads: Vec<Span>,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum DestructuringFallback {
     NotAPermutation,
@@ -434,6 +442,7 @@ pub(crate) enum DestructuringFallback {
     ReferenceReadable,
     NotOwned,
     OtherContainer,
+    ContainerNotLocal,
     Rebindable,
     NoIndexSwap {
         container: String,
@@ -453,8 +462,9 @@ impl DestructuringFallback {
             Self::OtherContainer => "the two subscripts name different containers, or one \
                  the compiler cannot show to be the same"
                 .into(),
-            Self::Rebindable => "an index reads a mutable global, or an index local or the \
-                 local the container is reached through is referenced or captured"
+            Self::ContainerNotLocal => "the container is not reached from a local".into(),
+            Self::Rebindable => "an index reads a mutable global, or an index local or a \
+                 `mut` reference local the container is reached through is referenced or captured"
                 .into(),
             Self::NoIndexSwap { container } => {
                 format!("`{container}` does not implement `IndexSwap`")

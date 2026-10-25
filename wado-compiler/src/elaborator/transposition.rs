@@ -1,13 +1,15 @@
 //! What the syntax of a destructuring assignment says of it (WEP: Destructuring
 //! Assignment), and which may be a transposition within one container. Annotate
-//! settles the rest: that the container is a local, that no index reads a
-//! mutable global, and that the type implements `IndexSwap`.
+//! settles the rest: that the container is a local, that no `mut` reference
+//! local it is reached through is referenced, that no index reads a mutable global, and
+//! that the type implements `IndexSwap`.
 
 use crate::ast::{
-    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, IndexExpr, Literal, Module,
-    UnaryOp, walk_expr,
+    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, IndexExpr, Literal,
+    Module, UnaryOp, walk_expr, walk_function,
 };
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::token::Span;
 
 pub(super) enum Reading<'a> {
     /// The right side is not the targets, reordered.
@@ -52,6 +54,21 @@ impl<'a> Reading<'a> {
     }
 }
 
+/// The spans of the right side's elements that spell one of the targets.
+pub(super) fn target_reads(assign: &AssignExpr) -> Vec<Span> {
+    let (AssignTarget::Destructuring { places, .. }, Expr::TupleLiteral(value)) =
+        (&assign.target, &assign.value)
+    else {
+        return Vec::new();
+    };
+    value
+        .elements
+        .iter()
+        .filter(|element| places.iter().any(|place| same(place, element)))
+        .map(Expr::span)
+        .collect()
+}
+
 /// Whether `values` is `places`, reordered.
 fn is_permutation(places: &[Expr], values: &[Expr]) -> bool {
     let mut unmatched: Vec<&Expr> = places.iter().collect();
@@ -81,51 +98,69 @@ impl<'a> Transposition<'a> {
     pub(super) fn container_root(&self) -> &'a str {
         root_local(self.container).expect("a container path starts from a local")
     }
-
-    /// The locals a reference or a capture could rebind between the
-    /// desugaring's two writes: each index's, and the one the container is
-    /// reached through where a dereference reaches it.
-    fn rebindable_locals(&self) -> Vec<&'a str> {
-        let mut locals = Vec::new();
-        for index in [self.i, self.j] {
-            collect_idents(index, &mut locals);
-        }
-        if derefs(self.container) {
-            locals.push(self.container_root());
-        }
-        locals
-    }
 }
 
-/// The destructuring assignments in `module` that [`Transposition::of`]
-/// reads, where no local in [`Transposition::rebindable_locals`] is referenced
-/// or captured anywhere in the item holding it.
-pub(super) fn transpositions(module: &Module) -> IndexSet<AstId> {
-    let mut found = IndexSet::default();
-    for item in &module.items {
-        let mut scan = Scan::default();
-        scan.visit_item(item);
-        found.extend(
-            scan.candidates
-                .into_iter()
-                .filter(|(_, locals)| locals.iter().all(|l| !scan.referenced.contains(l)))
-                .map(|(id, _)| id),
-        );
+/// What [`transpositions`] knows of one transposition whose index locals no
+/// reference or capture reaches.
+#[derive(Clone, Copy)]
+pub(super) struct Clean {
+    /// Whether the local the container is reached from is referenced or
+    /// captured. Where that local is a `mut` reference, rebinding it changes
+    /// which container the second target names, which only its type tells.
+    pub(super) container_root_referenced: bool,
+}
+
+/// The destructuring assignments in `modules` that [`Transposition::of`]
+/// reads, where no index local is referenced or captured anywhere in the
+/// function holding it. Every module's, since a default body is walked in
+/// each module that takes it.
+pub(super) fn transpositions<'m>(
+    modules: impl IntoIterator<Item = &'m Module>,
+) -> IndexMap<AstId, Clean> {
+    let mut scan = Scan::default();
+    for module in modules {
+        for item in &module.items {
+            scan.visit_item(item);
+            scan.settle();
+        }
     }
-    found
+    scan.found
 }
 
 #[derive(Default)]
 struct Scan<'ast> {
     /// Names something takes a reference to, a method may take `&self` of, or
-    /// a closure captures. Keyed by name, so a shadowed binding counts too.
+    /// a closure captures, in the function being walked. Keyed by name, so a
+    /// shadowed binding counts too.
     referenced: IndexSet<&'ast str>,
     /// The parameters of each closure being walked, innermost last.
     closure_params: Vec<IndexSet<&'ast str>>,
-    candidates: Vec<(AstId, Vec<&'ast str>)>,
+    /// Each transposition in the function being walked, with its index locals
+    /// and its container root.
+    candidates: Vec<(AstId, Vec<&'ast str>, &'ast str)>,
+    found: IndexMap<AstId, Clean>,
+}
+
+impl<'ast> Scan<'ast> {
+    /// Move the candidates the walk so far leaves clean into `found`.
+    fn settle(&mut self) {
+        for (id, index_locals, root) in std::mem::take(&mut self.candidates) {
+            if index_locals.iter().all(|l| !self.referenced.contains(l)) {
+                let container_root_referenced = self.referenced.contains(root);
+                self.found.insert(id, Clean { container_root_referenced });
+            }
+        }
+        self.referenced.clear();
+    }
 }
 
 impl<'ast> AstVisitor<'ast> for Scan<'ast> {
+    fn visit_function(&mut self, func: &'ast Function) {
+        self.settle();
+        walk_function(self, func);
+        self.settle();
+    }
+
     fn visit_expr(&mut self, expr: &'ast Expr) {
         match expr {
             Expr::Unary(unary) if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) => {
@@ -153,8 +188,15 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
                 if matches!(assign.target, AssignTarget::Destructuring { .. })
                     && let Some(transposition) = Transposition::of(assign)
                 {
-                    self.candidates
-                        .push((assign.id, transposition.rebindable_locals()));
+                    let mut index_locals = Vec::new();
+                    for index in [transposition.i, transposition.j] {
+                        collect_idents(index, &mut index_locals);
+                    }
+                    self.candidates.push((
+                        assign.id,
+                        index_locals,
+                        transposition.container_root(),
+                    ));
                 }
             }
             _ => {}
@@ -258,21 +300,10 @@ fn collect_idents<'a>(expr: &'a Expr, out: &mut Vec<&'a str>) {
     }
 }
 
-fn derefs(path: &Expr) -> bool {
-    match path {
-        Expr::FieldAccess(field) => derefs(&field.expr),
-        Expr::Unary(_) => true,
-        _ => false,
-    }
-}
-
 /// The local a place expression starts from.
 fn root_local(place: &Expr) -> Option<&str> {
-    match place {
+    match place.place_root() {
         Expr::Ident(ident) if ident.segments.is_empty() => Some(&ident.name),
-        Expr::FieldAccess(field) => root_local(&field.expr),
-        Expr::Index(index) => root_local(&index.expr),
-        Expr::Unary(unary) if unary.op == UnaryOp::Deref => root_local(&unary.expr),
         _ => None,
     }
 }

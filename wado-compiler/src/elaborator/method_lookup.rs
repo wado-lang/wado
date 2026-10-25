@@ -2736,7 +2736,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexRef,
             "index_ref",
-            "Output",
             expected_index_type,
         )
     }
@@ -2755,7 +2754,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexRefMut,
             "index_ref_mut",
-            "Output",
             expected_index_type,
         )
     }
@@ -2836,7 +2834,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexAssign,
             "index_assign",
-            "Output",
             None,
         )
     }
@@ -2851,7 +2848,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexSwap,
             "index_swap",
-            "Output",
             None,
         )
     }
@@ -2885,7 +2881,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexRefMut,
             "index_ref_mut",
-            "Output",
             None,
         )
     }
@@ -2903,7 +2898,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexValue,
             "index_value",
-            "Output",
             expected_index_type,
         )
     }
@@ -2920,7 +2914,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexValue,
             "index_value",
-            "Output",
             None,
         );
         let by_ref = self.indexing_trait_impls(
@@ -2928,7 +2921,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             CompilerItem::IndexRef,
             "index_ref",
-            "Output",
             None,
         );
         by_value
@@ -3170,7 +3162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         item: CompilerItem,
         method_name: &str,
-        assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.indexing_trait_impls(
@@ -3178,7 +3169,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             item,
             method_name,
-            assoc_type_name,
             expected_index_type,
         )
         .into_iter()
@@ -3193,7 +3183,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         item: CompilerItem,
         method_name: &str,
-        assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Vec<IndexingTraitInfo> {
         let concrete_type_args = self
@@ -3248,9 +3237,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = s.tysys.signatures.method_sig(method_header.def)?.self_kind;
                 let impl_source = s.tysys.impl_block_module_source(impl_ref);
 
+                // `IndexSwap` declares no `Output`, and its dispatch reads none.
                 let assoc_type = impl_sig
                     .associated_types
-                    .get(assoc_type_name)
+                    .get("Output")
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
-    self, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt, Type,
+    self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt, Type,
     declared_handle_classes, declares_unrestricted, walk_expr, walk_stmt, walk_type,
     world_import_of,
 };
@@ -55,7 +55,9 @@ use crate::elaborator::trait_env::{
     namespace_imports_of, written_arg_nodes,
 };
 use crate::elaborator::unchecked::misplaced_unchecked;
-use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
+use crate::elaborator::{
+    build_func_index, collect_unavailable, liveness, scope, sig, transposition,
+};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{
@@ -458,6 +460,10 @@ pub(crate) struct AnnotateState {
     /// [`Elaborator::abstract_selections`] by default body. A selection is the
     /// body's own, so every module with an impl inheriting it shares one walk.
     pub(crate) abstract_selections: Rc<RefCell<AbstractSelectionCache>>,
+    /// [`transposition::transpositions`] of every module, computed before the
+    /// body walks. One set, so a default body lowers alike in each module
+    /// that walks it.
+    pub(super) transpositions: Rc<IndexMap<AstId, transposition::Clean>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
@@ -1271,6 +1277,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             invocations,
             interner,
             abstract_selections: Rc::default(),
+            transpositions: Rc::default(),
             liveness: Liveness::default(),
             coverage: None,
         })
@@ -1366,7 +1373,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             infer_holes: InferHoleTable::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
             abstract_selection_cache: Rc::clone(&state.abstract_selections),
-            transpositions: hashmap::IndexSet::default(),
+            transpositions: Rc::clone(&state.transpositions),
         }
     }
 
@@ -1644,6 +1651,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .decls
                 .imported_globals = imported;
         }
+
+        state.transpositions = Rc::new(transposition::transpositions(modules.values()));
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
         // module to populate `ModuleSemantics`; reify (Phase 2, below) is the

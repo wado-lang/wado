@@ -12,7 +12,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::divergence::{self, ExprTypes};
-use crate::elaborator::sem::types::DestructuringFallback;
+use crate::elaborator::sem::types::{DestructuringFallback, FallbackSite};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
@@ -276,26 +276,35 @@ struct Checker<'a> {
     drops: &'a Drops,
     out: &'a mut Vec<ResourceMoveError>,
     /// This module's [`Semantics::destructuring_fallbacks`].
-    fallbacks: IndexMap<Span, DestructuringFallback>,
-    /// The span (its first token) and note of the falling-back destructuring
-    /// assignment whose right side is being walked.
-    in_fallback: Option<(Span, String)>,
+    fallbacks: IndexMap<Span, FallbackSite>,
+    /// The falling-back destructuring assignment whose right side is being
+    /// walked, where it has a cause to note.
+    in_fallback: Option<NotedFallback>,
+}
+
+struct NotedFallback {
+    /// The assignment's span, its first token.
+    at: Span,
+    /// [`FallbackSite::target_reads`].
+    target_reads: Vec<Span>,
+    note: String,
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
-        // A copy the fallback makes is a move out of a reference, or a second
-        // read of a target the right side moved already: between the
-        // assignment's first token and this read.
+        // A copy the fallback makes is a read of a target: a move out of a
+        // reference, or a second read of one the right side moved already,
+        // between the assignment's first token and this read.
         let note = self
             .in_fallback
             .as_ref()
-            .filter(|(at, _)| match &kind {
+            .filter(|f| f.target_reads.iter().any(|read| read.encloses(&span)))
+            .filter(|f| match &kind {
                 MoveError::MoveOutOfReference { .. } => true,
-                MoveError::UseAfterMove { moved_at, .. } => at.merge(&span).encloses(moved_at),
+                MoveError::UseAfterMove { moved_at, .. } => f.at.merge(&span).encloses(moved_at),
                 _ => false,
             })
-            .map(|(_, note)| note.clone());
+            .map(|f| f.note.clone());
         self.out.push(ResourceMoveError {
             kind,
             span,
@@ -1334,15 +1343,25 @@ impl MoveWalker<'_, '_> {
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
-        let fallback = self
-            .checker
-            .fallbacks
-            .get(&a.span)
-            .filter(|f| !matches!(f, DestructuringFallback::ReferenceReadable))
-            .map(|f| (a.span, f.note()));
-        let enclosing = std::mem::replace(&mut self.checker.in_fallback, fallback);
-        self.visit_at(&a.value);
-        self.checker.in_fallback = enclosing;
+        let destructuring = matches!(a.target, AssignTarget::Destructuring { .. });
+        match self.checker.fallbacks.get(&a.span) {
+            // An `index_swap` in every walk reads no element out: the right
+            // side names the places the targets write.
+            None if destructuring => {}
+            site => {
+                let noted = site.and_then(|site| match &site.cause {
+                    Some(DestructuringFallback::ReferenceReadable) | None => None,
+                    Some(cause) => Some(NotedFallback {
+                        at: a.span,
+                        target_reads: site.target_reads.clone(),
+                        note: cause.note(),
+                    }),
+                });
+                let enclosing = std::mem::replace(&mut self.checker.in_fallback, noted);
+                self.visit_at(&a.value);
+                self.checker.in_fallback = enclosing;
+            }
+        }
         let places = a.places();
         let owners: Vec<Owners> = match (&a.value, &a.target) {
             (Expr::TupleLiteral(value), AssignTarget::Destructuring { .. })

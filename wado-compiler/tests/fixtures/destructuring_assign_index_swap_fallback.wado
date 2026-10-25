@@ -83,8 +83,9 @@ fn index_captured() {
     [ts[i], ts[1]] = [ts[1], ts[i]];
 }
 
-fn container_reference_referenced(r: &mut List<Tok>) {
-    let rr = &r;
+fn container_reference_referenced(ts: &mut List<Tok>) {
+    let mut r = ts;
+    let rr = &mut r;
     [(*r)[0], (*r)[1]] = [(*r)[1], (*r)[0]];
 }
 
@@ -93,12 +94,18 @@ fn mutable_global_index() {
     [ts[K], ts[1]] = [ts[1], ts[K]];
 }
 
-fn captured_container() {
-    let mut ts = toks();
-    let mut f = || {
-        [ts[0], ts[1]] = [ts[1], ts[0]];
-    };
-    f();
+global mut G: List<Tok> = [];
+
+fn global_container() {
+    [G[0], G[1]] = [G[1], G[0]];
+}
+
+// The read the right side makes of no target is the program's own move, so its
+// error carries no note.
+fn moves_a_non_target(r: &Tok) {
+    let mut a = Tok { id: 1 };
+    let mut b = Tok { id: 2 };
+    [a, b] = [*r, a];
 }
 
 export fn run() {
@@ -112,8 +119,9 @@ export fn run() {
     let mut ts = toks();
     container_reference_referenced(&mut ts);
     mutable_global_index();
-    captured_container();
+    global_container();
+    moves_a_non_target(&ts[0]);
 }
 
 __DATA__
-{"compile_error":":40:18: analysis error: affine value `b` used after it was moved (moved at 40:15)\n  note: the right side is not a permutation of the targets; 45:25: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 45:33: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 57:23: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 57:30: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 63:23: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 63:30: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 69:31: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 69:42: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 76:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 76:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 83:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 83:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 88:27: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 88:36: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 93:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 93:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured; 99:27: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 99:34: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same"}
+{"compile_error":":40:18: analysis error: affine value `b` used after it was moved (moved at 40:15)\n  note: the right side is not a permutation of the targets; 45:25: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 45:33: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 57:23: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 57:30: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 63:23: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 63:30: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 69:31: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 69:42: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 76:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 76:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 83:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 83:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 89:27: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 89:36: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 94:23: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 94:30: cannot move affine type `Tok` out of a reference\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured; 100:21: cannot move affine type `Tok` out of a reference\n  note: the container is not reached from a local; 100:27: cannot move affine type `Tok` out of a reference\n  note: the container is not reached from a local; 108:15: cannot move affine type `Tok` out of a reference"}

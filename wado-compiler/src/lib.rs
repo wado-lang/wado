@@ -2195,11 +2195,15 @@ fn compile_after_load<H: CompilerHost>(
             .into_iter()
             .map(|mut remark| {
                 // A copy a destructuring assignment makes says why it is no move.
-                if let Some(fallback) = destructuring_fallbacks
+                // The remark anchors to the statement, so a statement reading
+                // no target makes no copy of its own to explain.
+                if let Some(site) = destructuring_fallbacks
                     .get(&remark.module)
                     .and_then(|fallbacks| fallbacks.get(&remark.span))
+                    && !site.target_reads.is_empty()
+                    && let Some(cause) = &site.cause
                 {
-                    remark.message = format!("{}\n  note: {}", remark.message, fallback.note());
+                    remark.message = format!("{}\n  note: {}", remark.message, cause.note());
                 }
                 remark
             })

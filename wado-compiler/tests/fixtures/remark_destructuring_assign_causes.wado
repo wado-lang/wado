@@ -76,25 +76,35 @@ fn no_index_swap() -> i32 {
     return s.rows.len();
 }
 
+global mut SHELF: List<List<i32>> = [];
+
+fn container_not_local() -> i32 {
+    SHELF = rows();
+    [SHELF[0], SHELF[1]] = [SHELF[1], SHELF[0]];
+    return SHELF[0].len();
+}
+
 export fn run() with Stdout {
     let mut rs = rows();
     let mut x: List<i32> = [3];
     println(`${not_a_permutation()} ${reference_readable()} ${not_owned(&mut rs, &mut x)}`);
     println(`${other_container()} ${index_referenced()} ${mutable_global_index()} ${no_index_swap()}`);
+    println(`${container_not_local()}`);
 }
 
 __DATA__
 {
-    "stdout": "3 2 2\n4 1 1 2\n",
+    "stdout": "3 2 2\n4 1 1 2\n1\n",
     "remarks": {
         "O2": [
             {"contains": [":16:5 remark: a copy of", "\n  note: the right side is not a permutation of the targets"]},
             {"contains": [":25:5 remark: a copy of", "\n  note: a reference to a target is readable after the statement"]},
             {"contains": [":30:5 remark: a copy of", "\n  note: a target is not owned, and the statement is not a transposition within one container"]},
             {"contains": [":37:5 remark: a copy of", "\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same"]},
-            {"contains": [":45:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured"]},
-            {"contains": [":51:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or the local the container is reached through is referenced or captured"]},
-            {"contains": [":75:5 remark: a copy of", "\n  note: `Shelf` does not implement `IndexSwap`"]}
+            {"contains": [":45:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured"]},
+            {"contains": [":51:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured"]},
+            {"contains": [":75:5 remark: a copy of", "\n  note: `Shelf` does not implement `IndexSwap`"]},
+            {"contains": [":83:5 remark: a copy of", "\n  note: the container is not reached from a local"]}
         ]
     }
 }

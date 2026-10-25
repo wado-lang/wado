@@ -21,7 +21,7 @@ use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{
-    CoercionKind, DestructuringFallback, DesugarKind, MethodDispatch, TypeAnnotations,
+    CoercionKind, DesugarKind, FallbackSite, MethodDispatch, TypeAnnotations,
 };
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -385,13 +385,14 @@ impl Semantics {
         by_module
     }
 
-    /// Why each destructuring assignment keeps its desugaring, by the module
-    /// that writes it, keyed by the assignment's span. Gathered from every
-    /// walk, as [`Self::inexact_float_patterns`] are.
+    /// The destructuring assignments that keep their desugaring, by the module
+    /// that writes them, keyed by the assignment's span. Gathered from every
+    /// walk, as [`Self::inexact_float_patterns`] are, so one that falls back in
+    /// any walk of a default body is here.
     pub(crate) fn destructuring_fallbacks(
         &self,
-    ) -> IndexMap<ModuleSource, IndexMap<Span, DestructuringFallback>> {
-        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, DestructuringFallback>> =
+    ) -> IndexMap<ModuleSource, IndexMap<Span, FallbackSite>> {
+        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, FallbackSite>> =
             IndexMap::default();
         for types in self.walks() {
             for (site, fallback) in &types.destructuring_fallbacks {
