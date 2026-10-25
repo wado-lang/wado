@@ -1240,7 +1240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |s, n, t| s.find_index_swap_trait_impl(n, t, key),
             )
         };
-        // The key a read of `c[i]` would select an impl by selects this one.
+        // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
         let key = self
             .index_key_type(container_type, &key_class)
@@ -1289,10 +1289,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// second target's container, and the right side. A name there is still a
     /// reference, and a subscript there is a place, not an element read.
     fn resolve_unread_subscripts(&mut self, assign: &ast::AssignExpr, ctx: &mut FunctionContext) {
-        let (
-            ast::AssignTarget::Destructuring { places, .. },
-            ast::Expr::TupleLiteral(value),
-        ) = (&assign.target, &assign.value)
+        let (ast::AssignTarget::Destructuring { places, .. }, ast::Expr::TupleLiteral(value)) =
+            (&assign.target, &assign.value)
         else {
             unreachable!("a transposition assigns a tuple to two targets");
         };

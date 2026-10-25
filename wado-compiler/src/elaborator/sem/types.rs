@@ -472,7 +472,10 @@ impl DestructuringFallback {
             Self::Rebindable => "an index reads a mutable global, or an index local or a \
                  `mut` reference local the container is reached through is referenced or captured"
                 .into(),
-            Self::NoIndexSwap { container, key: None } => {
+            Self::NoIndexSwap {
+                container,
+                key: None,
+            } => {
                 format!("`{container}` does not implement `IndexSwap`")
             }
             Self::NoIndexSwap {

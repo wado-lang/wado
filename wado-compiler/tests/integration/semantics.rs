@@ -250,7 +250,10 @@ export fn run() {
             .referenced_symbol(use_id)
             .unwrap_or_else(|| panic!("5:{column} must record a use→def edge"));
         let name = &sem.symbol_at(def_id).expect("a local symbol").name;
-        assert!(name == "xs" || name == "i", "5:{column} resolved to `{name}`");
+        assert!(
+            name == "xs" || name == "i",
+            "5:{column} resolved to `{name}`"
+        );
     }
 }
 
