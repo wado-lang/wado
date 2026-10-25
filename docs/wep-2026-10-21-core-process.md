@@ -471,8 +471,6 @@ cannot be taken back.
   `status` and `read`, with its stdlib reference and a cheatsheet entry.
 - [ ] Filtering the network per host through a proxy, for the guest and the
   child together.
-- [ ] WSL2: confirm the Landlock ABI its kernel offers. Done when the escape
-  tests pass under WSL2.
 
 ## Known gaps
 
@@ -491,6 +489,9 @@ cannot be taken back.
   inherited terminal or none.
 - The compiler's e2e harness does not link `core:process`, so a fixture cannot
   spawn; the stdlib's own tests cover it under `wado test`.
+- WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
+  tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:
+  availability answers `unsupported`, and nothing spawns.
 
 ### Left open by the OS mechanisms
 
