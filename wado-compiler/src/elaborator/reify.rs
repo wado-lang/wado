@@ -2858,13 +2858,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // be rejected by codegen (`expected i32, found (ref $T)`),
                     // so replay the recorded method call instead. Unary
                     // operators take no extra arguments.
-                    let receiver = adjust_receiver_for_self_kind(
-                        inner,
-                        dispatch.self_kind,
-                        /* is_ref_impl */ false,
-                        span,
-                        &self.tysys.type_table,
-                    );
+                    let receiver =
+                        self.adjust_receiver(inner, dispatch.self_kind, false, span, ctx);
                     return build_tir_method_call(
                         receiver,
                         dispatch.function_ref,
@@ -4698,6 +4693,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
+        assert!(
+            !matches!(dispatch.self_kind, ast::SelfKind::MutRef),
+            "a binary operator trait takes `&self`, so its receiver needs no box"
+        );
         let receiver = adjust_receiver_for_self_kind(
             left,
             dispatch.self_kind,
@@ -5481,6 +5480,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         idx: &TirExpr,
         index_expr: &ast::IndexExpr,
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> TirExpr {
         let Some(dispatch) = self.index_read_dispatch(index_expr) else {
             // Write-only `IndexAssign` type — annotate diagnosed the missing
@@ -5492,8 +5492,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let deref_type = self
             .tysys
             .index_deref_type(self.ann_expression_types(index_expr.id), &dispatch);
+        let recv = self.adjust_receiver(recv.clone(), dispatch.self_kind, false, span, ctx);
         self.tysys.build_index_read_from_dispatch(
-            recv.clone(),
+            recv,
             idx.clone(),
             dispatch,
             deref_type,
@@ -5606,7 +5607,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// [`adjust_receiver_for_self_kind`] for a call reify builds itself. A
+    /// [`adjust_receiver_for_self_kind`] for a dispatched receiver. A
     /// `&mut self` receiver the callee can replace rather than write into is
     /// boxed, or the mutation has no slot to land in and mutates a copy.
     fn adjust_receiver(
@@ -5753,7 +5754,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let recv = self.reify_expr(&index_expr.expr, ctx, None);
             let index = self.reify_expr(&index_expr.index, ctx, None);
 
-            let read = self.build_index_trait_read(&recv, &index, index_expr, span);
+            let read = self.build_index_trait_read(&recv, &index, index_expr, span, ctx);
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
@@ -6200,6 +6201,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(dispatch) = self.index_read_dispatch(index) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
+            let receiver =
+                self.adjust_receiver(receiver, dispatch.self_kind, false, index.span, ctx);
             return self.tysys.build_index_read_from_dispatch(
                 receiver, idx_expr, dispatch, deref_type, index.span,
             );
@@ -10166,22 +10169,16 @@ impl TypeSystem {
     }
 
     /// The trait read `*recv.index(idx)` (or `recv.index_value(idx)`) `dispatch`
-    /// records; `deref_type` types the `*…` when `dispatch.needs_deref`.
+    /// records, on a receiver already adjusted to its `self_kind`; `deref_type`
+    /// types the `*…` when `dispatch.needs_deref`.
     fn build_index_read_from_dispatch(
         &self,
-        receiver: TirExpr,
+        adjusted: TirExpr,
         idx: TirExpr,
         dispatch: OperatorDispatch,
         deref_type: TypeId,
         span: Span,
     ) -> TirExpr {
-        let adjusted = adjust_receiver_for_self_kind(
-            receiver,
-            dispatch.self_kind,
-            false,
-            span,
-            &self.type_table,
-        );
         let method_call = build_tir_method_call(
             adjusted,
             dispatch.function_ref,

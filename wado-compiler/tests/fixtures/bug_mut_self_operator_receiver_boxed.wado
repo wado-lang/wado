@@ -30,6 +30,34 @@ impl<T> IndexSwap<i32> for Two<T> {
     }
 }
 
+struct Point {
+    x: i32,
+    calls: i32,
+}
+
+variant Cell<T> {
+    One(Point),
+    Never(T),
+}
+
+impl<T> IndexRef<i32> for Cell<T> {
+    type Output = Point;
+    fn index_ref(&self, i: i32) -> &Point {
+        let Cell::One(p) = self else { unreachable(); };
+        return p;
+    }
+}
+
+impl<T> IndexRefMut<i32> for Cell<T> {
+    type Output = Point;
+    fn index_ref_mut(&mut self, i: i32) -> &mut Point {
+        let Cell::One(seen) = *self else { unreachable(); };
+        *self = Cell::One(Point { x: seen.x, calls: seen.calls + 1 });
+        let Cell::One(p) = self else { unreachable(); };
+        return p;
+    }
+}
+
 variant Countdown<T> {
     Left(i32),
     Never(T),
@@ -54,6 +82,10 @@ export fn run() with Stdout {
     println(`${t[0]}${t[1]}`);
     [t[0], t[1]] = [t[1], t[0]];
     println(`${t[0]}${t[1]}`);
+    let mut c = Cell::<i32>::One(Point { x: 1, calls: 0 });
+    c[0].x = 5;
+    let Cell::One(p) = c else { unreachable(); };
+    println(`${p.x} ${p.calls}`);
     let mut sum = 0;
     for let x of Countdown::<i32>::Left(3) {
         sum += x;
@@ -63,5 +95,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "56\n65\n6\n"
+    "stdout": "56\n65\n5 1\n6\n"
 }
