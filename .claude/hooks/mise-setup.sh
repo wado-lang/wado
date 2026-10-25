@@ -149,7 +149,7 @@ else
 read = ["${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs"]
 EOF
     # wado ignores a config another user could write.
-    chmod go-w "$WADO_CONFIG"
+    chmod o-w "$WADO_CONFIG"
     log "Wrote $WADO_CONFIG"
 fi
 

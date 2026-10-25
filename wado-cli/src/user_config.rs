@@ -3,7 +3,7 @@
 //!
 //! The file can open paths to every child a guest spawns, so one that another
 //! user can write is ignored whole, as `ssh` ignores such a config: owned by
-//! someone else, or writable by group or others.
+//! someone else, or writable by every user.
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -79,8 +79,11 @@ fn check_trusted(meta: &std::fs::Metadata) -> Result<(), String> {
     if meta.uid() != me && meta.uid() != 0 {
         return Err("it is owned by another user".to_owned());
     }
-    if meta.mode() & 0o022 != 0 {
-        return Err("other users can write it (`chmod go-w` it)".to_owned());
+    // Group write is let through: under a user private group, the umask most
+    // Linux distributions set, a file the user writes is 664 and the group is
+    // the user alone.
+    if meta.mode() & 0o002 != 0 {
+        return Err("other users can write it (`chmod o-w` it)".to_owned());
     }
     Ok(())
 }

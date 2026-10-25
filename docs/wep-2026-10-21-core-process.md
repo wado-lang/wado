@@ -238,8 +238,10 @@ child may read more than the guest. It is defined, not open-ended:
     `~/`, and is resolved at the first spawn. An entry that names no file on
     this machine warns and is skipped, so one file can serve several machines.
     The file is ignored whole, with a warning, when another user could have
-    written it: it is owned by someone other than the user or root, or it is
-    writable by group or others. `ssh` treats its config the same way.
+    written it: it is owned by someone other than the user or root, or every
+    user can write it. Group write is allowed, since under the user private
+    groups most Linux distributions use, a file the user writes is `664` and
+    the group holds the user alone.
 
   A manifest never adds one: it is the project's content, and a grant the
   project could widen would reach past what its own code is given. The user

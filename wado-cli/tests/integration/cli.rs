@@ -1821,7 +1821,7 @@ fn test_run_process_read_opens_a_path_to_the_child() {
             .arg(&data)
             .assert()
     };
-    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o664)).unwrap();
     run_configured().success().stdout("from the tool");
     std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o666)).unwrap();
     run_configured()
