@@ -133,20 +133,16 @@ impl Interpreter<'_> {
         field_index: u32,
         field_name: &str,
     ) -> Lattice {
-        let receiver = match self.global_receiver_key(body, inner) {
-            Some(key) => {
-                let known = self.global_field(&key, field_name);
-                if !matches!(known, Lattice::Unevaluated) {
-                    return known;
-                }
-                self.global_lattice(&key.0, &key.1)
+        let receiver = if let Some(key) = self.global_receiver_key(body, inner) {
+            let known = self.global_field(&key, field_name);
+            if !matches!(known, Lattice::Unevaluated) {
+                return known;
             }
-            None => {
-                if let Some(read) = self.place_field_read(body, inner, Some(field_index)) {
-                    return read;
-                }
-                self.projected_lattice(body, inner)
-            }
+            self.global_lattice(&key.0, &key.1)
+        } else if let Some(read) = self.place_field_read(body, inner, Some(field_index)) {
+            return read;
+        } else {
+            self.projected_lattice(body, inner)
         };
         match receiver {
             Lattice::Const(receiver) => receiver

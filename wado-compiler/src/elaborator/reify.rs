@@ -89,8 +89,8 @@ use crate::lexer::defaults_to_float;
 use crate::name::{
     DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, template_block_label, template_hole_local,
-    test_function_name, widened_half_local_name,
+    minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
+    widened_half_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};

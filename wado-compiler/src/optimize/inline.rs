@@ -2127,7 +2127,8 @@ pub fn inline_functions(
     // deletes a function, so a clone that took over every site of its original
     // keeps that original calling its callees, and a callee whose one live site
     // shrinks it would read as having two.
-    let live = reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
+    let live =
+        reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
     let descriptors = descriptor_cache.descriptors(project);
     let cold_path = cold_path_id(descriptors);
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
@@ -2923,10 +2924,6 @@ pub(super) struct InlineRevalInfo {
     pub call_expr: ExprId,
 }
 
-/// Core inlining routine: builds a labeled block (in the caller arena) that
-/// binds each prepared parameter value and executes the spliced callee body
-/// with locals remapped into the caller's frame and `return`s converted to
-/// `break label`.
 /// For an argument `&mut <temporary>`, the `let mut` binding the temporary
 /// to local `index`, which the argument then references instead. A reference
 /// to a local is one `ref_elim` folds away and a compile-time frame can write
@@ -2990,6 +2987,10 @@ fn bind_mut_ref_temporary(
     ))
 }
 
+/// Core inlining routine: builds a labeled block (in the caller arena) that
+/// binds each prepared parameter value and executes the spliced callee body
+/// with locals remapped into the caller's frame and `return`s converted to
+/// `break label`.
 fn build_inlined_labeled_block(
     caller: &mut Body,
     candidate: &NirFunction,

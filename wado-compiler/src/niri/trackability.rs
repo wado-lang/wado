@@ -533,7 +533,9 @@ fn unwritten_locals(body: &Body, reassigned: &LocalSet) -> LocalSet {
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(s) => {
             if let StmtKind::Let {
-                local_index, is_mut, ..
+                local_index,
+                is_mut,
+                ..
             } = &body.stmts[s].kind
             {
                 if !is_mut && set.insert(*local_index) {

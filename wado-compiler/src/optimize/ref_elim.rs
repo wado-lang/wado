@@ -144,10 +144,8 @@ impl Rule for RefElimRule {
                 // orphaned `resolved` node and `inner_e`. A shared child would let
                 // a later single-parent rewrite (SROA scalarization, copy-prop
                 // redirect) corrupt one parent while leaving the other dangling.
-                let referent = std::mem::replace(
-                    &mut engine.body.exprs[resolved].kind,
-                    ExprKind::Dead,
-                );
+                let referent =
+                    std::mem::replace(&mut engine.body.exprs[resolved].kind, ExprKind::Dead);
                 engine.body.exprs[inner_e].type_id = engine.body.exprs[resolved].type_id;
                 engine.replace_expr_kind(inner_e, referent);
                 true

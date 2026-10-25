@@ -867,7 +867,9 @@ impl<'a> Interpreter<'a> {
     /// displaces any place alias the index held, and never restores it.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
-        self.frame.place_fields.retain(|(root, _), _| *root != index);
+        self.frame
+            .place_fields
+            .retain(|(root, _), _| *root != index);
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {

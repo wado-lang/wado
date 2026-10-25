@@ -815,7 +815,9 @@ impl Interpreter<'_> {
             return None;
         }
         self.frame.env.swap_remove(&index);
-        self.frame.place_fields.retain(|(holder, _), _| *holder != index);
+        self.frame
+            .place_fields
+            .retain(|(holder, _), _| *holder != index);
         self.frame.place_aliases.insert(index, (root, path));
         Some(())
     }
@@ -898,12 +900,22 @@ impl Interpreter<'_> {
     /// What reading `op` (extended by `field`) yields when it roots at a local
     /// holding a place field. `None` for any other operand, which the ordinary
     /// projection answers.
-    pub(super) fn place_field_read(&self, body: &Body, op: Operand, field: Option<u32>) -> Option<Lattice> {
+    pub(super) fn place_field_read(
+        &self,
+        body: &Body,
+        op: Operand,
+        field: Option<u32>,
+    ) -> Option<Lattice> {
         if self.frame.place_fields.is_empty() {
             return None;
         }
         let (root, mut path) = self.aliased_place_of(body, op)?;
-        if !self.frame.place_fields.keys().any(|(holder, _)| *holder == root) {
+        if !self
+            .frame
+            .place_fields
+            .keys()
+            .any(|(holder, _)| *holder == root)
+        {
             return None;
         }
         path.extend(field);
