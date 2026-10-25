@@ -1,0 +1,10 @@
+// A provider path naming no file is reported by the path as written.
+use { println, Stdout } from "core:cli";
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/no_such_provider.wado" };
+
+export fn run() with Stdout {
+    println(Hlc::wrap("x", "wado").text);
+}
+
+__DATA__
+{"compile_error": "analysis error: provider `./sub/no_such_provider.wado` not found"}

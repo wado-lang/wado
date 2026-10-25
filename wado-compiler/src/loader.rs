@@ -259,6 +259,18 @@ impl LoadError {
         }
     }
 
+    /// A failure reading the file `written` names, naming it as written: the
+    /// host names the file it resolved, absolute or joined onto a `./`.
+    fn reading(err: SourceError, written: &str) -> Self {
+        let path = written.to_string();
+        match err {
+            SourceError::NotFound { .. } => LoadError::ModuleNotFound { path },
+            SourceError::IoError { message, .. } | SourceError::NetworkError { message, .. } => {
+                LoadError::IoError { path, message }
+            }
+        }
+    }
+
     /// The code for a variant whose diagnostic message is its `Display` text.
     fn code(&self) -> Code {
         match self {
@@ -344,16 +356,6 @@ impl From<LoadError> for Diagnostic {
                 message: other.to_string(),
                 span: None,
             },
-        }
-    }
-}
-
-impl From<SourceError> for LoadError {
-    fn from(err: SourceError) -> Self {
-        match err {
-            SourceError::NotFound { path } => LoadError::ModuleNotFound { path },
-            SourceError::IoError { path, message } => LoadError::IoError { path, message },
-            SourceError::NetworkError { url, message } => LoadError::IoError { path: url, message },
         }
     }
 }
@@ -628,9 +630,19 @@ pub fn resolve_wasm_asset_path(
     }
 }
 
-/// Where an error loading what `use_decl` names is reported: the path it names.
-fn use_site(from: &ModuleSource, use_decl: &UseDecl) -> DiagnosticSpan {
-    DiagnosticSpan::from_span(&use_decl.source_span, Some(&from.source_path()))
+/// A path as a `use` or an `#include_*` wrote it, and where: an error loading
+/// what it names is reported there, naming the file as written.
+#[derive(Clone)]
+struct PathSite {
+    written: String,
+    at: DiagnosticSpan,
+}
+
+fn use_site(from: &ModuleSource, use_decl: &UseDecl) -> PathSite {
+    PathSite {
+        written: use_decl.source.to_string(),
+        at: DiagnosticSpan::from_span(&use_decl.source_span, Some(&from.source_path())),
+    }
 }
 
 /// Join `relative` onto the directory of `base` — a slash-separated
@@ -1326,7 +1338,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// coordinate `use { X } from "ns:pkg"` resolved to an already-materialized
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
-    pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
+    pending_component_imports: Vec<(ModuleSource, WasmAssetKind, PathSite)>,
     /// Bundled stdlib modules a decoded CM component needs: its host-leaf
     /// packages and whatever its binding module imports. Loaded once every
     /// component import is seen.
@@ -1464,7 +1476,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_start(&format!("load {entry_name}"));
 
         // Collect imports from entry module (before bind)
-        let mut pending: VecDeque<(ModuleSource, ModuleSource, DiagnosticSpan)> = VecDeque::new();
+        let mut pending: VecDeque<(ModuleSource, PathSite)> = VecDeque::new();
         let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, UseDecl)> = Vec::new();
         self.collect_imports(
             &entry_ast,
@@ -1484,7 +1496,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
-        while let Some((from_module_source, module_source, at)) = pending.pop_front() {
+        while let Some((module_source, site)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
                 continue;
@@ -1516,9 +1528,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Load and parse the module
             let source = self
-                .get_source(&module_source, &from_module_source)
+                .get_source(&module_source, &site.written)
                 .await
-                .map_err(|error| error.at_path(at))?;
+                .map_err(|error| error.at_path(site.at))?;
             let skip_generated_bodies =
                 self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
@@ -1584,8 +1596,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Load registry-component dependencies resolved from a coordinate `use`
         // (already-materialized `.wasm` paths from the dependency index).
         let components = std::mem::take(&mut self.pending_component_imports);
-        for (source, kind) in components {
-            self.handle_wasm_source(source, kind).await?;
+        for (source, kind, site) in components {
+            self.handle_wasm_source(source, kind, site).await?;
         }
 
         // Now that every component import (file-path and registry-coordinate)
@@ -1642,7 +1654,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         &mut self,
         module: &Module,
         from_module_source: &ModuleSource,
-        pending: &mut VecDeque<(ModuleSource, ModuleSource, DiagnosticSpan)>,
+        pending: &mut VecDeque<(ModuleSource, PathSite)>,
         wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, UseDecl)>,
     ) -> Result<(), LoadError> {
         for item in &module.items {
@@ -1651,16 +1663,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     wasm_imports_out.push((from_module_source.clone(), kind, use_decl.clone()));
                     continue;
                 }
-                let at = use_site(from_module_source, use_decl);
+                let site = use_site(from_module_source, use_decl);
                 let resolved = self
                     .resolve_import(from_module_source, &use_decl.source)
-                    .map_err(|error| error.at_path(at.clone()))?;
+                    .map_err(|error| error.at_path(site.at.clone()))?;
                 // A coordinate resolving to a prebuilt component (registry
                 // dependency) loads across the CM boundary, not as Wado source.
                 if let ModuleSource::Wasm { kind, .. } = &resolved {
                     let kind = *kind;
-                    self.note_asset_origin(&resolved, at);
-                    self.pending_component_imports.push((resolved, kind));
+                    self.pending_component_imports.push((resolved, kind, site));
                     continue;
                 }
                 let declares_generator = use_decl
@@ -1688,7 +1699,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     .entry(from_module_source.clone())
                     .or_default()
                     .push(resolved.clone());
-                pending.push_back((from_module_source.clone(), resolved, at));
+                pending.push_back((resolved, site));
             }
         }
         Ok(())
@@ -1702,40 +1713,37 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         use_decl: &UseDecl,
     ) -> Result<(), LoadError> {
         let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
-        let at = use_site(from_module_source, use_decl);
+        let site = use_site(from_module_source, use_decl);
         let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)
-            .map_err(|error| error.at_path(at.clone()))?;
+            .map_err(|error| error.at_path(site.at.clone()))?;
         let source = self.interner.wasm(&path, kind);
-        self.note_asset_origin(&source, at);
-        self.handle_wasm_source(source, kind).await
-    }
-
-    /// Report an error loading `asset`, or a diagnostic in its bindings, at
-    /// `at`, unless an earlier `use` imported it.
-    fn note_asset_origin(&mut self, asset: &ModuleSource, at: DiagnosticSpan) {
-        self.asset_origins.entry(asset.source_path()).or_insert(at);
+        self.handle_wasm_source(source, kind, site).await
     }
 
     /// Load a wasm asset from an already-resolved [`ModuleSource::Wasm`] — the
     /// shared body of [`Self::handle_wasm_import`], reused for a registry
     /// component dependency whose `.wasm` path is resolved from the dependency
-    /// index rather than a `with { type: "wasm" }` clause. Both note the asset's
-    /// origin first, where an error loading it is reported.
+    /// index rather than a `with { type: "wasm" }` clause. A diagnostic in its
+    /// bindings is reported at the first `site` importing it.
     async fn handle_wasm_source(
         &mut self,
         source: ModuleSource,
         kind: WasmAssetKind,
+        site: PathSite,
     ) -> Result<(), LoadError> {
-        let at = self.asset_origins[&source.source_path()].clone();
-        self.load_wasm_source(source, kind)
+        self.asset_origins
+            .entry(source.source_path())
+            .or_insert_with(|| site.at.clone());
+        self.load_wasm_source(source, kind, &site.written)
             .await
-            .map_err(|error| error.at_path(at))
+            .map_err(|error| error.at_path(site.at))
     }
 
     async fn load_wasm_source(
         &mut self,
         source: ModuleSource,
         kind: WasmAssetKind,
+        written: &str,
     ) -> Result<(), LoadError> {
         let namespace = source
             .wasm_canonical_namespace()
@@ -1750,7 +1758,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         };
         let raw_bytes = {
             let _span = self.logger.span(&format!("load_wasm_asset {namespace}"));
-            self.fetch_wasm_asset_bytes(&source, &path).await?
+            self.fetch_wasm_asset_bytes(&source, &path, written).await?
         };
 
         let core_wasm_bytes = match kind {
@@ -1848,7 +1856,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             "a component binding module imports no wasm asset"
         );
         self.pending_component_stdlib_deps
-            .extend(binding_imports.into_iter().map(|(_, ms, _)| ms));
+            .extend(binding_imports.into_iter().map(|(ms, _)| ms));
 
         self.cm_source_interfaces.extend(bindings.source_interfaces);
         self.bind_module(&bindings.module, source)?;
@@ -1892,6 +1900,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         &self,
         source: &ModuleSource,
         path: &str,
+        written: &str,
     ) -> Result<Vec<u8>, LoadError> {
         if is_bundled_specifier(path) {
             return stdlib::get_stdlib_wasm_asset(path)
@@ -1900,7 +1909,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     path: source.to_string(),
                 });
         }
-        self.host.load_source(path).await.map_err(LoadError::from)
+        self.host
+            .load_source(path)
+            .await
+            .map_err(|e| LoadError::reading(e, written))
     }
 
     /// Load implicit modules required by the compiler
@@ -1947,7 +1959,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     continue;
                 }
 
-                while let Some((_from_ms, dep_ms, _at)) = pending.pop_front() {
+                while let Some((dep_ms, _)) = pending.pop_front() {
                     if self.loaded.contains_key(&dep_ms) {
                         continue;
                     }
@@ -2083,23 +2095,27 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     async fn get_source(
         &self,
         module_source: &ModuleSource,
-        _from_module_source: &ModuleSource,
+        written: &str,
     ) -> Result<String, LoadError> {
+        let read = |bytes: Vec<u8>| {
+            String::from_utf8(bytes).map_err(|_| LoadError::IoError {
+                path: written.to_string(),
+                message: "file is not valid UTF-8".to_string(),
+            })
+        };
         match module_source {
-            ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => {
-                let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
-                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                    path: path.to_string(),
-                    message: "file is not valid UTF-8".to_string(),
-                })
+            ModuleSource::Local {
+                path: host_path, ..
             }
-            ModuleSource::Remote { url, .. } => {
-                let bytes = self.host.load_source(url).await.map_err(LoadError::from)?;
-                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                    path: url.to_string(),
-                    message: "file is not valid UTF-8".to_string(),
-                })
+            | ModuleSource::Dependency {
+                path: host_path, ..
             }
+            | ModuleSource::Remote { url: host_path, .. } => read(
+                self.host
+                    .load_source(host_path)
+                    .await
+                    .map_err(|e| LoadError::reading(e, written))?,
+            ),
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
@@ -2140,15 +2156,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // absolute path. Other schemes are passed through
                 // unchanged so in-memory hosts can use the URI as a key.
                 let host_path = strip_kiln_scheme(uri).unwrap_or_else(|| uri.to_string());
-                let bytes = self
-                    .host
-                    .load_source(&host_path)
-                    .await
-                    .map_err(LoadError::from)?;
-                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                    path: host_path,
-                    message: "file is not valid UTF-8".to_string(),
-                })
+                read(
+                    self.host
+                        .load_source(&host_path)
+                        .await
+                        .map_err(|e| LoadError::reading(e, written))?,
+                )
             }
         }
     }
@@ -2254,8 +2267,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
             let bytes = self.host.load_source(&resolved).await.map_err(|e| {
                 match e {
-                    SourceError::NotFound { path } => LoadError::IncludeNotFound { path },
-                    e => LoadError::from(e),
+                    SourceError::NotFound { .. } => LoadError::IncludeNotFound {
+                        path: raw_path.clone(),
+                    },
+                    e => LoadError::reading(e, raw_path),
                 }
                 .at_path(at)
             })?;

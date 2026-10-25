@@ -1454,10 +1454,15 @@ async fn resolve_inline_providers<H: CompilerHost>(
 
         let resolved = loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir)
             .map_err(|_| bail(format!("cannot resolve provider path `{prov_path}`")))?;
-        let bytes = host
-            .load_source(&resolved)
-            .await
-            .map_err(|e| bail(format!("cannot read provider `{prov_path}`: {e}")))?;
+        let bytes = host.load_source(&resolved).await.map_err(|e| {
+            bail(match e {
+                SourceError::NotFound { .. } => format!("provider `{prov_path}` not found"),
+                SourceError::IoError { message, .. }
+                | SourceError::NetworkError { message, .. } => {
+                    format!("cannot read provider `{prov_path}`: {message}")
+                }
+            })
+        })?;
         let provider_src = String::from_utf8_lossy(&bytes).into_owned();
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
