@@ -30,8 +30,8 @@ A probe records only that a region ran, not how often.
 
 `benchmark/` measures Wado on real programs, and most benchmarks already call
 their kernel from a `test` block. `http_routing`, a `wasi:http/service`, has
-none yet. `benchmark/` is where a change to the optimizer is judged, so
-it is where profile-guided optimization should prove itself first.
+none yet. `benchmark/` is where a change to the optimizer is judged, so it is
+where profile-guided optimization should prove itself first.
 
 ## Decision
 
