@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792908729018,
+  "lastUpdate": 1792909674912,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70589,6 +70589,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05d638d3aca63a268cbeb0d91fd65d1880bdcf8e"
         },
         "date": 1792908728019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c74372993f9cd9e63cc11448565c3e1900dad252",
+          "message": "Merge pull request #2452 from wado-lang/ccr-265861c3-ck1jgj\n\nrefactor(nir): every whole-body walk is the reachable one",
+          "timestamp": "2026-10-25T15:10:45+09:00",
+          "tree_id": "4f94bd126a7bba599b498f62c02b0042b2a1304d",
+          "url": "https://github.com/wado-lang/wado/commit/c74372993f9cd9e63cc11448565c3e1900dad252"
+        },
+        "date": 1792909673978,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
