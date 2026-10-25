@@ -6,32 +6,12 @@ use { assert_close, tensor_of } from "./oracle.wado";
 use exp from "../tests/onnx/pytorch-operator/test_operator_exp/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Row", "Col"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 use sqrt from "../tests/onnx/pytorch-operator/test_operator_sqrt/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Row", "Col"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "Exp reproduces the output ONNX ships" {
@@ -44,7 +24,7 @@ test "Exp reproduces the output ONNX ships" {
 
     let got = exp::forward(
         &mut Cpu {},
-        &Tensor::<f32, [exp::Row, exp::Col]> { data: x, extents: x_extents },
+        &Tensor::<f32, [exp::Axis00, exp::Axis01]> { data: x, extents: x_extents },
         &exp::Weights {}.prepare(&mut Cpu {}),
     );
 
@@ -62,7 +42,7 @@ test "Sqrt reproduces the output ONNX ships" {
 
     let got = sqrt::forward(
         &mut Cpu {},
-        &Tensor::<f32, [sqrt::Row, sqrt::Col]> { data: x, extents: x_extents },
+        &Tensor::<f32, [sqrt::Axis00, sqrt::Axis01]> { data: x, extents: x_extents },
         &sqrt::Weights {}.prepare(&mut Cpu {}),
     );
 

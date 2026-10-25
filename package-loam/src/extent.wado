@@ -4,14 +4,12 @@
 use { HashSet, TreeMap } from "core:collections";
 use { Condition, Poly } from "./poly.wado";
 
-/// A length the graph states, one only the run knows, or none at all.
+/// A length the graph states, or one only the run knows.
 /// See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
 pub variant Extent {
     Static(i32),
     /// A polynomial over the graph's symbols. One with no symbol left is `Static`.
     Symbolic(Poly),
-    /// A part of a merge the layout names, whose own length nothing states.
-    Unstated,
 }
 
 impl Extent {
@@ -52,25 +50,19 @@ impl Extent {
         return Option::Some(Extent::Static(c as i32));
     }
 
-    /// The length as a polynomial. The caller has shown it stated.
+    /// The length as a polynomial.
     pub fn poly(&self) -> Poly {
         return match self {
             Static(n) => Poly::constant(*n as i64),
             Symbolic(p) => *p,
-            Unstated => unreachable(),
         };
-    }
-
-    /// Whether anything states the length, as a merge's layout-named part leaves none.
-    pub fn is_stated(&self) -> bool {
-        return !self matches { Unstated };
     }
 
     /// Whether stage 0 can prove these are the same length: the same number, or
     /// the same polynomial of the same symbols. A symbol proves nothing about a
     /// number.
     pub fn agrees(&self, other: &Extent) -> bool {
-        return self.is_stated() && other.is_stated() && self.poly() == other.poly();
+        return self.poly() == other.poly();
     }
 
     /// What the inputs owe for stage 0 to count these as one length: nothing
@@ -79,9 +71,6 @@ impl Extent {
     /// difference is read, so a derived term both share owes nothing. `None`
     /// where no reading makes them one length.
     pub fn agreement(&self, other: &Extent) -> Option<List<Condition>> {
-        if !self.is_stated() || !other.is_stated() {
-            return null;
-        }
         let mut conditions: List<Condition> = [];
         let difference = self.poly().try_sub(&other.poly())?.presumed(&mut conditions)?;
         return if difference == Poly::constant(0) { Option::Some(conditions) } else { null };
@@ -200,7 +189,6 @@ impl Display for Extent {
         match self {
             Static(n) => f.write_str(`${n}`),
             Symbolic(p) => p.fmt(f),
-            Unstated => f.write_str("?"),
         }
     }
 }

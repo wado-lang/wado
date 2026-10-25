@@ -8,7 +8,6 @@ use { emit } from "lib:loam/src/emit.wado";
 use { Graph, Known, Stored } from "lib:loam/src/graph.wado";
 use { infer } from "lib:loam/src/infer.wado";
 use { known_tensor, read_tensor } from "lib:loam/src/onnx_proto.wado";
-use { Schema } from "lib:loam/src/schema.wado";
 
 /// The backend a generated module's `forward` runs through in these tests,
 /// spliced after the module; see `opaque_backend.wado`.
@@ -23,10 +22,10 @@ use { println, Stdout } from "core:cli";
 `;
 }
 
-/// The module the generator writes for `graph` under `schema`, its kernels
-/// fused where `fuse` lets them, or why the build refuses it.
-pub fn generated(graph: &Graph, schema: &Schema, fuse: bool = true) -> Result<String, String> {
-    let checked = infer(graph, schema).map_err(|e| `${e}`)?;
+/// The module the generator writes for `graph`, its kernels fused where `fuse`
+/// lets them, or why the build refuses it.
+pub fn generated(graph: &Graph, fuse: bool = true) -> Result<String, String> {
+    let checked = infer(graph).map_err(|e| `${e}`)?;
     return emit(graph, &checked, &"lib:loam", fuse).map_err(|e| `${e}`);
 }
 

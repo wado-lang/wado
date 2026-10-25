@@ -3,26 +3,12 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close } from "./oracle.wado";
-use { Batch, Embed, Seq, Vocab, Weights, forward } from "./last.onnxtext"
+use { N, S, W1, Weights, X2, forward } from "./last.onnxtext"
     with {
         type: "onnxtext",
         generator: {
             module: "lib:loam",
             options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "G",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "W",
-                        axes: ["Embed", "Vocab"],
-                    },
-                ],
                 last: { Y: 1 },
             },
         },
@@ -65,18 +51,18 @@ fn last_rows(batch: i32, seq: i32) -> List<f32> {
     return rows;
 }
 
-fn run(batch: i32, seq: i32) -> Tensor<f32, [Batch, Seq, Vocab]> {
+fn run(batch: i32, seq: i32) -> Tensor<f32, [N, S, W1]> {
     return forward(
         &mut Cpu {},
-        &Tensor::<f32, [Batch, Seq, Embed]> {
+        &Tensor::<f32, [N, S, X2]> {
             data: X[0..<batch * seq * 4].to_list(),
             extents: [batch, seq, 4],
         },
-        &Tensor::<f32, [Embed]> {
+        &Tensor::<f32, [X2]> {
             data: G,
             extents: [4],
         },
-        &Tensor::<f32, [Embed, Vocab]> {
+        &Tensor::<f32, [X2, W1]> {
             data: W,
             extents: [4, 3],
         },

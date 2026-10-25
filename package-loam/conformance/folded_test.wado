@@ -1,26 +1,16 @@
 //! A folded output is returned as the literal the build wrote for it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Feat, Weights, forward } from "./folded.onnxtext"
+use { Weights, X0, forward } from "./folded.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Feat"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "a folded scalar output comes back as a rank-0 tensor" {
     let got: Tensor<f32, []> = forward(
         &mut Cpu {},
-        &Tensor::<f32, [Feat]> {
+        &Tensor::<f32, [X0]> {
             data: [1.0, 2.0],
             extents: [2],
         },

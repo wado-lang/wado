@@ -51,26 +51,6 @@ impl Axis {
         };
     }
 
-    /// The axis a layout names: a plain name, or `(A B)` for a merge of `A` and
-    /// `B`, whose parts' extents the layout does not say.
-    pub fn named(name: &String, extent: Extent) -> Axis {
-        if !(name.starts_with("(") && name.ends_with(")")) {
-            return Axis { name: *name, extent };
-        }
-        let inner = name.as_str_slice().slice(1, name.len() - 1);
-        let mut parts: List<Axis> = [];
-        for let part of inner.split_whitespace() {
-            parts.push(Axis {
-                name: part.to_string(),
-                extent: Extent::Unstated,
-            });
-        }
-        if parts.len() == 1 {
-            return Axis { name: parts[0].name, extent };
-        }
-        return Axis::merged(parts, extent);
-    }
-
     /// The extent of an axis the caller has already shown static.
     pub fn static_extent(&self) -> i32 {
         let Static(e) = self.extent else {
@@ -84,8 +64,6 @@ impl Axis {
 struct Class {
     /// Which class came first, which the root of a join is.
     serial: i32,
-    /// The word a `layout` gave it, and the tensor the word was given at.
-    author: Option<[String, String]> = null,
     /// The `dim_param`s it was declared with, in the order the graph declares
     /// them.
     params: List<Declared> = [],
@@ -96,8 +74,8 @@ struct Class {
 }
 
 /// The classes the axes a graph meets fall into, as a type checker's
-/// unification variables do. Each axis stage 0 creates is a variable, named by
-/// a key no word spells, and a meeting joins two. See WEP 2026-09-20 § "Axis
+/// unification variables do. Each axis stage 0 creates is a variable, and a
+/// meeting joins two. See WEP 2026-09-20 § "Axis
 /// Names Are Inferred From the Graph".
 pub struct Axes {
     /// Each joined key's class, toward its root.
@@ -113,14 +91,8 @@ pub struct Axes {
     next: i32 = 0,
 }
 
-/// The key of variable `serial`, which no `layout` word or `dim_param` spells.
 fn key(serial: i32) -> String {
     return `$${serial}`;
-}
-
-/// Whether `name` is a variable's key rather than a name stage 0 gave.
-fn is_variable(name: &String) -> bool {
-    return name.starts_with("$");
 }
 
 impl Axes {
@@ -130,22 +102,6 @@ impl Axes {
         self.next += 1;
         self.classes[key(serial)] = Class { serial, origin };
         return Axis { name: key(serial), extent };
-    }
-
-    /// A new class the author named `word` at `tensor`. A merged word, `(A B)`,
-    /// is a merge of a class per part.
-    pub fn authored(&mut self, word: &String, tensor: &String, origin: String, extent: Extent) -> Axis {
-        let written = Axis::named(word, extent);
-        if written.parts.is_empty() {
-            let axis = self.mint(origin, extent);
-            self.classes[axis.name].author = Option::Some([*word, *tensor]);
-            return axis;
-        }
-        let mut parts: List<Axis> = [];
-        for let [k, part] of written.parts.into_iter().enumerate() {
-            parts.push(self.authored(&part.name, tensor, `${origin}.${k}`, part.extent));
-        }
-        return Axis::merged(parts, extent);
     }
 
     /// Record that `axis` was declared with the `dim_param` `word` at `tensor`,
@@ -179,13 +135,9 @@ impl Axes {
     }
 
     /// `axis` as the meetings so far make it: its class's root, or the merge
-    /// that class stands for, its parts read the same way. An axis stage 0 has
-    /// named reads as itself.
+    /// that class stands for, its parts read the same way.
     pub fn read(&self, axis: &Axis) -> Axis {
         let parts = if axis.parts.is_empty() {
-            if !is_variable(&axis.name) {
-                return *axis;
-            }
             let root = self.find(&axis.name);
             let class = self.classes[root];
             if class.parts.is_empty() {
@@ -212,19 +164,17 @@ impl Axes {
         return Shape { axes: shape.axes.into_iter().map(|a| self.read(&a)).collect() };
     }
 
-    /// Make two axes one, as a meeting does. `false` where they cannot be: two
-    /// words a `layout` gave apart, a merge of a different count of parts, or a
-    /// merge meeting a class a word names.
+    /// Make two axes one, as a meeting does. `false` where they cannot be: a
+    /// merge of a different count of parts, or a merge meeting a class a
+    /// `dim_param` names.
     pub fn unify(&mut self, left: &Axis, right: &Axis) -> bool {
         let [l, r] = [
             self.read(left),
             self.read(right),
         ];
         if l.parts.is_empty() && r.parts.is_empty() {
-            if !is_variable(&l.name) || !is_variable(&r.name) {
-                return l.name == r.name;
-            }
-            return self.join(&l.name, &r.name);
+            self.join(&l.name, &r.name);
+            return true;
         }
         if l.parts.is_empty() {
             return self.bind(&l.name, &r);
@@ -244,33 +194,26 @@ impl Axes {
     }
 
     /// Join two roots, under the one minted first.
-    fn join(&mut self, a: &String, b: &String) -> bool {
+    fn join(&mut self, a: &String, b: &String) {
         if *a == *b {
-            return true;
+            return;
         }
         let [ca, cb] = [self.classes[*a], self.classes[*b]];
         assert ca.parts.is_empty() && cb.parts.is_empty(), "a merge meets through its parts";
-        if let Some(wa) = ca.author && let Some(wb) = cb.author && wa.0 != wb.0 {
-            return false;
-        }
         let [root, child, kept, joined] = if ca.serial < cb.serial { [*a, *b, ca, cb] } else { [*b, *a, cb, ca] };
         let mut params = kept.params;
         params.extend(&joined.params);
-        self.classes[root] = Class {
-            ..kept,
-            author: if kept.author matches { Some(_) } { kept.author } else { joined.author },
-            params: by_declaration(params),
-        };
+        self.classes[root] = Class { ..kept, params: by_declaration(params) };
         self.classes.remove(child);
         self.parent[child] = root;
-        return true;
     }
 
-    /// Make root `root` the merge `merged` stands for, which a class a word
-    /// names cannot be, and which cannot hold the class itself.
+    /// Make root `root` the merge `merged` stands for, which a class a
+    /// `dim_param` names cannot be, since a merge takes its parts' names, and
+    /// which cannot hold the class itself.
     fn bind(&mut self, root: &String, merged: &Axis) -> bool {
         let class = self.classes[*root];
-        if class.author matches { Some(_) } || !class.params.is_empty() {
+        if !class.params.is_empty() {
             return false;
         }
         if merged.parts.into_iter().any(|p| p.name == *root) {
@@ -280,16 +223,13 @@ impl Axes {
         return true;
     }
 
-    /// What a diagnostic calls `axis`: the word that names its class, else the
-    /// tensor axis it first reached.
+    /// What a diagnostic calls `axis`: the `dim_param` that names its class,
+    /// else the tensor axis it first reached.
     pub fn label(&self, axis: &Axis) -> String {
         let read = self.read(axis);
         if !read.parts.is_empty() {
             let parts: List<String> = read.parts.into_iter().map(|p| self.label(&p)).collect();
             return `Merged<[${parts.join(", ")}]>`;
-        }
-        if !is_variable(&read.name) {
-            return read.name;
         }
         if let Some(w) = self.word(&read.name) {
             return w.word;
@@ -297,19 +237,15 @@ impl Axes {
         return self.origin(&read.name);
     }
 
-    /// The word the graph names root `root`'s class with, and where it said
-    /// so: a `layout` word, else the first `dim_param` it was declared with.
+    /// The first `dim_param` root `root`'s class was declared with, and where.
     /// `None` for a class only a minted name names.
     pub fn word(&self, root: &String) -> Option<AxisWord> {
         let class = self.classes[*root];
-        if let Some([word, tensor]) = class.author {
-            return Option::Some(AxisWord { word, tensor, from_layout: true });
-        }
         if class.params.is_empty() {
             return null;
         }
         let first = class.params[0];
-        return Option::Some(AxisWord { word: first.word, tensor: first.tensor, from_layout: false });
+        return Option::Some(AxisWord { word: first.word, tensor: first.tensor });
     }
 
     /// Each root, in the order its class was minted.
@@ -346,20 +282,19 @@ fn by_declaration(params: List<Declared>) -> List<Declared> {
     return sorted;
 }
 
-/// A word the graph names a class with: a `layout` word, or a `dim_param`.
+/// A `dim_param` the graph names a class with.
 pub struct AxisWord {
     pub word: String,
     /// The tensor the word was given at.
     pub tensor: String,
-    pub from_layout: bool,
 }
 
 pub struct Shape {
     pub axes: List<Axis>,
 }
 
-/// Two axes an operation needs to be one axis are not: named apart, or not one
-/// length. Both sides are carried, so the diagnostic names each.
+/// Two axes an operation needs to be one axis are not: classes that cannot be
+/// one, or not one length. Both sides are carried, so the diagnostic names each.
 pub struct AxisConflict {
     pub op: String,
     pub axis: String,
@@ -372,7 +307,7 @@ impl Display for AxisConflict {
     fn fmt(&self, f: &mut Formatter) {
         if self.axis != self.right_axis {
             f.write_str(
-                `${self.op}: axis ${self.axis} on the left meets ${self.right_axis} on the right, and only an axis of 1 takes another's name`,
+                `${self.op}: axis ${self.axis} on the left meets ${self.right_axis} on the right, and the two cannot be one axis`,
             );
             return;
         }
@@ -403,21 +338,9 @@ impl Shape {
         return Result::Ok(extents);
     }
 
-    /// Every extent, for a regrouping, which reads a merged axis's parts as
-    /// well. `Err` names the first one nothing states, and `reader`.
-    pub fn extents(&self, reader: &String, axes: &Axes) -> Result<List<Extent>, String> {
-        let mut extents: List<Extent> = [];
-        for let axis of self.axes {
-            let mut read = [axis] as List<Axis>;
-            read.extend(&axis.parts);
-            for let a of read {
-                if !a.extent.is_stated() {
-                    return Result::Err(`axis ${axes.label(&a)} has no stated extent, and ${*reader} reads it`);
-                }
-            }
-            extents.push(axis.extent);
-        }
-        return Result::Ok(extents);
+    /// Every extent.
+    pub fn extents(&self) -> List<Extent> {
+        return self.axes.into_iter().map(|a| a.extent).collect();
     }
 
     /// The same axes in the order `perm` names, as `Transpose` does.
@@ -626,9 +549,9 @@ impl Shape {
 
     /// Discharge the one condition an operation places on a pair of axes, that
     /// they are one axis: one class, and one length. Meeting joins the two
-    /// classes, which words a `layout` gave apart refuse. What stage 0 cannot
-    /// prove is an error, save what `Extent::agreement` owes and the equality
-    /// of two symbolic lengths, which `owed` gains.
+    /// classes, as `Axes::unify` can. What stage 0 cannot prove is an error,
+    /// save what `Extent::agreement` owes and the equality of two symbolic
+    /// lengths, which `owed` gains.
     pub fn agree(
         left: &Axis,
         right: &Axis,

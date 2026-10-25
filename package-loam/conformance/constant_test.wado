@@ -3,28 +3,10 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Batch, In, Out, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
+use { Axis00, Axis01, Axis11, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Batch", "In"],
-                    },
-                    {
-                        pattern: "1",
-                        axes: ["In", "Out"],
-                    },
-                    {
-                        pattern: "2",
-                        axes: ["Unit"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "a scalar Constant folds into the Gemm bias" {
@@ -40,8 +22,8 @@ test "a scalar Constant folds into the Gemm bias" {
 
     let got = forward(
         &mut Cpu {},
-        &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
-        &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
+        &Tensor::<f32, [Axis00, Axis01]> { data: a, extents: a_extents },
+        &Tensor::<f32, [Axis01, Axis11]> { data: b, extents: b_extents },
         &Weights {}.prepare(&mut Cpu {}),
     );
 

@@ -4,11 +4,6 @@ use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.w
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { BinaryOp, Expr, RowOp, UnaryOp, constant, operand } from "./runtime/tensor.wado";
-use { LayoutRule, Schema } from "./schema.wado";
-
-fn rule(pattern: String, axes: List<String>) -> LayoutRule {
-    return LayoutRule { pattern, axes };
-}
 
 /// The source the generated module spells `e` with.
 fn src(e: Expr) -> String {
@@ -36,13 +31,15 @@ test "an expression is spelled as its steps, a shared step once" {
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
 
-fn generate(source: String, layout: List<LayoutRule>, fuse: bool = true) -> Result<String, EmitError> {
+fn generate(source: String, fuse: bool = true) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    return emit(&graph, &infer(&graph, &Schema { layout }).unwrap(), &RUNTIME, fuse);
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, fuse);
 }
 
 /// The same two-layer graph at any boundary element type, which is the one
-/// thing that changes between the f32 tests and the half precision ones.
+/// thing that changes between the f32 tests and the half precision ones. Its
+/// axes are `N`, the batch; `X1`, the input; `W11`, the hidden layer; and
+/// `Y1`, the output.
 fn mlp(dtype: String) -> String {
     return `
 mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
@@ -59,18 +56,8 @@ mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
 
 global MLP: String = mlp("float");
 
-fn mlp_layout() -> List<LayoutRule> {
-    return [
-        rule("X", ["Batch", "In"]),
-        rule("W1", ["In", "Hidden"]),
-        rule("B1", ["Hidden"]),
-        rule("W2", ["Hidden", "Out"]),
-        rule("B2", ["Out"]),
-    ];
-}
-
 test "the generated module imports the runtime from the spec it is given" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
     assert out.contains("    Tensor,\n");
     assert out.contains("} from \"lib:loam\";\n");
@@ -81,37 +68,36 @@ test "the generated module imports the runtime from the spec it is given" {
 }
 
 test "unfused, the forward pass is one kernel call per operator, each on the backend" {
-    let out = generate(MLP, mlp_layout(), false).unwrap();
+    let out = generate(MLP, false).unwrap();
 
     assert out.contains(
-        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [N, X1]>, weights: &Prepared<Bk>) -> Tensor<f32, [N, Y1]> with _ {",
     );
     assert out.contains("let H = backend.matmul_rhs(X, &weights.W1, null);");
     assert out.contains(
-        `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum(
-        )});`,
+        `let HB = backend.fused::<[N, W11]>([backend.read(&H), backend.read_suffix::<[N], [W11]>(&weights.B1)], &${sum()});`,
     );
-    assert out.contains(`let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
+    assert out.contains(`let A = backend.fused::<[N, W11]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
     assert out.contains("let T = backend.matmul_rhs(&A, &weights.W2, null);");
     // `pass` takes the input and leaves the output on the backend, and
     // `forward` uploads the one and reads the other back.
     assert out.contains(
-        "pub fn pass<affine Bk: Backend>(backend: &mut Bk, X: &Bk::Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
+        "pub fn pass<affine Bk: Backend>(backend: &mut Bk, X: &Bk::Tensor<f32, [N, X1]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [N, Y1]> with _ {",
     );
     assert out.contains("    return Y;\n");
     assert out.contains("    return backend.download(&pass(backend, &X, weights));\n");
 }
 
 test "a product takes the elementwise operators after it as its epilogue" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
     assert out.contains(
-        `let A = backend.matmul_rhs(X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
+        `let A = backend.matmul_rhs(X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[N], [W11]>(&weights.B1)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )} }));`,
     );
     assert out.contains(
-        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum(
+        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[N], [Y1]>(&weights.B2)], op: ${sum(
         )} }));`,
     );
     assert !out.contains("let H ");
@@ -127,17 +113,17 @@ g (float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     Y = Relu(B)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Feat"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Feat]>([backend.read(X), backend.read(Z)], &${src(
+        `let Y = backend.fused::<[N, X1]>([backend.read(X), backend.read(Z)], &${src(
             operand(0).binary(BinaryOp::Mul, &operand(0)).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )});`,
     );
 }
 
 test "each input is uploaded after the checks that read the host's and the pass begins, and no weight is" {
-    let body = generate(MLP, mlp_layout()).unwrap();
+    let body = generate(MLP).unwrap();
 
     let upload = body.find("let X = backend.upload(X);").unwrap();
     let begun = body.find("backend.begin();").unwrap();
@@ -147,10 +133,10 @@ test "each input is uploaded after the checks that read the host's and the pass 
 }
 
 test "the weights become the backend's for every pass where they are prepared" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
     // `W1` is read only as a product's right operand, so it is prepared as one.
-    assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
+    assert out.contains("    pub W1: Bk::Rhs<X1, W11>,\n");
     assert out.contains(
         "    pub fn prepare<affine Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
     );
@@ -158,24 +144,23 @@ test "the weights become the backend's for every pass where they are prepared" {
 }
 
 test "the pass checks each input against the graph before any kernel, and forward its data first" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
-    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap(
-    );
+    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"N\", \"X1\"], [-1, 4]));").unwrap();
     assert held < out.find("matmul_rhs(").unwrap();
     let forward = out.find("pub fn forward").unwrap();
-    let host = out.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    let host = out.find("refuse(input_mismatch(X, \"X\", [\"N\", \"X1\"], [-1, 4]));").unwrap();
     assert forward < host < out.find("backend.upload(X)").unwrap();
 }
 
 test "an axis the boundary and the weights fix to one length carries it as a constant" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
-    assert out.contains("impl In {\n    pub const EXTENT: i32 = 4;\n}");
-    assert out.contains("impl Out {\n    pub const EXTENT: i32 = 2;\n}");
-    // Only the weights name `Hidden`.
-    assert out.contains("impl Hidden {\n    pub const EXTENT: i32 = 3;\n}");
-    assert !out.contains("impl Batch {");
+    assert out.contains("impl X1 {\n    pub const EXTENT: i32 = 4;\n}");
+    assert out.contains("impl Y1 {\n    pub const EXTENT: i32 = 2;\n}");
+    // Only the weights reach the hidden layer.
+    assert out.contains("impl W11 {\n    pub const EXTENT: i32 = 3;\n}");
+    assert !out.contains("impl N {");
 }
 
 test "an axis the boundary gives two lengths carries no constant" {
@@ -185,10 +170,10 @@ g (float[2, 8] X) => (float[2, 1] Y)
     Y = ReduceMean <axes = [-1]> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Row", "Col"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert !out.contains("impl Col {");
-    assert out.contains("impl Row {\n    pub const EXTENT: i32 = 2;\n}");
+    assert !out.contains("impl X1 {");
+    assert out.contains("impl X0 {\n    pub const EXTENT: i32 = 2;\n}");
 }
 
 test "inputs sharing an axis the graph leaves to the run are checked against each other" {
@@ -198,13 +183,10 @@ pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
     Y = Add(A, B)
 }
 `;
-    let out = generate(source, [
-        rule("A", ["Batch", "In"]),
-        rule("B", ["Batch", "In"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        "refuse(axis_mismatch(\"N\", \"B\", \"Batch\", backend.extents_of(B)[0], \"A\", backend.extents_of(A)[0]));",
+        "refuse(axis_mismatch(\"N\", \"B\", \"N\", backend.extents_of(B)[0], \"A\", backend.extents_of(A)[0]));",
     );
     assert !out.contains("axis_mismatch(\"2\"");
 }
@@ -216,9 +198,9 @@ outer (float[S, 4] A, float[4, S] B) => (float[S, S] Y)
     Y = MatMul(A, B)
 }
 `;
-    let out = generate(source, [rule("A", ["Row", "Inner"])]).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains(
-        "refuse(axis_mismatch(\"S\", \"B\", \"Row\", backend.extents_of(B)[1], \"A\", backend.extents_of(A)[0]));",
+        "refuse(axis_mismatch(\"S\", \"B\", \"S\", backend.extents_of(B)[1], \"A\", backend.extents_of(A)[0]));",
     );
 }
 
@@ -229,17 +211,12 @@ cache (float[1, T, 8] P, float[1, 1, 8] N, int64[1, "T + 1"] M) => (float[1, U, 
     Y = Concat<axis = 1>(P, N)
 }
 `;
-    let out = generate(source, [
-        rule("P", ["Batch", "Past", "Dim"]),
-        rule("N", ["Batch", "Seq", "Dim"]),
-        rule("M", ["One", "Total"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("refuse(extents_mismatch(&backend.extents_of(M), \"M\", [\"One\", \"Total\"], [1, -1]));");
+    assert out.contains("refuse(extents_mismatch(&backend.extents_of(M), \"M\", [\"M0\", \"M1\"], [1, -1]));");
     let bound = out.find("let dim_T = backend.extents_of(P)[1] as i64;").unwrap();
-    let check = out.find(
-        "refuse(extent_mismatch(\"M\", \"Total\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));",
-    ).unwrap();
+    let check = out.find("refuse(extent_mismatch(\"M\", \"M1\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));").unwrap(
+    );
     assert bound < check && check < out.find("concat::<").unwrap();
 }
 
@@ -251,16 +228,14 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
     Z = Neg(A)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "In"])]).unwrap();
+    let out = generate(source).unwrap();
 
+    assert out.contains("pub struct Outputs {\n    pub Z: Tensor<f32, [N, A1]>,\n    pub Y: Tensor<f32, [N, A1]>,\n}");
     assert out.contains(
-        "pub struct Outputs {\n    pub Z: Tensor<f32, [Batch, In]>,\n    pub Y: Tensor<f32, [Batch, In]>,\n}",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [N, A1]>, weights: &Prepared<Bk>) -> Outputs with _ {",
     );
     assert out.contains(
-        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Outputs with _ {",
-    );
-    assert out.contains(
-        "pub struct Passed<affine Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [Batch, In]>,\n    pub Y: Bk::Tensor<f32, [Batch, In]>,\n}",
+        "pub struct Passed<affine Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [N, A1]>,\n    pub Y: Bk::Tensor<f32, [N, A1]>,\n}",
     );
     assert out.contains("return Passed { Z: Z, Y: Y };");
     assert out.contains("let Passed { Z, Y } = pass(backend, &A, weights);");
@@ -274,18 +249,18 @@ pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)
     Y = Relu(A)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "In"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("return Passed { A: *A, Y: Y };");
     assert out.contains("return Outputs { A: backend.download(&A), Y: backend.download(&Y) };");
 }
 
 test "the initializers become the weights struct" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
     assert out.contains("pub struct Weights {");
-    assert out.contains("pub W1: Tensor<f32, [In, Hidden]>,");
-    assert out.contains("pub B2: Tensor<f32, [Out]>,");
+    assert out.contains("pub W1: Tensor<f32, [X1, W11]>,");
+    assert out.contains("pub B2: Tensor<f32, [Y1]>,");
 }
 
 test "weights the graph carries become Prepared::embedded" {
@@ -296,22 +271,19 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     Y = Add(X, B)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "In"]),
-        rule("B", ["In"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
         "impl<affine Bk: Backend> Prepared<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Prepared<Bk> with _ {",
     );
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.contains(
-        "B: backend.keep(&Tensor::<f32, [In]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
+        "B: backend.keep(&Tensor::<f32, [X1]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
     );
 }
 
 test "weights the graph lacks are read from a checkpoint by Prepared::load" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
     assert !out.contains("fn embedded");
     assert out.contains(
@@ -319,7 +291,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     );
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "W1: backend.keep_rhs(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
+        "W1: backend.keep_rhs(&Tensor::<f32, [X1, W11]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"X1\", \"W11\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
 }
 
@@ -329,9 +301,7 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
     for let [i, name] of ["W1", "B1", "W2", "B2"].enumerate() {
         placed[name] = if i < 2 { "m-00001-of-00002.safetensors" } else { "m-00002-of-00002.safetensors" };
     }
-    let out = emit(&graph, &infer(&graph, &Schema { layout: mlp_layout() }).unwrap(), &RUNTIME, true, Placement::Shards(
-        placed,
-    )).unwrap();
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, true, Placement::Shards(placed)).unwrap();
 
     assert out.contains("use { HashMap } from \"core:collections\";\n");
     assert out.contains(
@@ -339,12 +309,12 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
     );
     assert out.contains("let header = read_shards(shards)?;");
     assert out.contains(
-        "W2: backend.keep_rhs(&Tensor::<f32, [Hidden, Out]> { data: List::<f32>::from_le_bytes(header.payload(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
+        "W2: backend.keep_rhs(&Tensor::<f32, [W11, Y1]> { data: List::<f32>::from_le_bytes(header.payload(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
     );
 }
 
 test "a single file's module imports no map" {
-    assert !generate(MLP, mlp_layout()).unwrap().contains("core:collections");
+    assert !generate(MLP).unwrap().contains("core:collections");
 }
 
 test "a graph carrying some weights embeds those and loads the rest" {
@@ -356,15 +326,9 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     Y = Add(H, B)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "In"]),
-        rule("W", ["In", "Out"]),
-        rule("B", ["Out"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(
-        "tensor: \"W\", dtype: \"F32\", axes: [\"In\", \"Out\"], extents: [2, 2], elements: 4, width: 4",
-    );
+    assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"X1\", \"Y1\"], extents: [2, 2], elements: 4, width: 4");
     assert out.contains("data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }");
 }
 
@@ -376,22 +340,19 @@ quoted (float[2] X) => (float[2] Y)
     Y = Add(X, "a\\b")
 }
 `;
-    let out = generate(source, [
-        rule("X", ["In"]),
-        rule("a\\b", ["In"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("tensor: \"a\\\\b\",");
 }
 
 test "every axis the graph mentions becomes a marker type" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+    let out = generate(MLP).unwrap();
 
-    assert out.contains("pub struct Batch {}");
-    assert out.contains("pub struct Hidden {}");
+    assert out.contains("pub struct N {}");
+    assert out.contains("pub struct W11 {}");
 }
 
-test "an axis only a graph constant names becomes a marker type" {
+test "an axis only a graph constant reaches becomes a marker type" {
     let source = "
 g (float[N, 2] X) => (float[N, 2] Y)
 <bool[1, 2] M = {1, 0}>
@@ -399,15 +360,10 @@ g (float[N, 2] X) => (float[N, 2] Y)
     Y = Where(M, X, X)
 }
 ";
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "In"]),
-        rule("Y", ["Batch", "In"]),
-        rule("M", ["One", "In"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("Tensor<bool, [One, In]>");
-    assert out.contains("pub struct One {}");
+    assert out.contains("Tensor<bool, [M0, X1]>");
+    assert out.contains("pub struct M0 {}");
 }
 
 test "a name a Wado identifier cannot carry is sanitized" {
@@ -418,11 +374,11 @@ g (float[N, 2] "/model/input.0") => (float[N, 2] out)
     out = Relu("/model/input.0")
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("backend: &mut Bk, _model_input_0: &Tensor<f32, [Batch, Unit]>");
+    assert out.contains("backend: &mut Bk, _model_input_0: &Tensor<f32, [N, ModelInput01]>");
     // `forward` binds no name of its own, so a tensor keeps any it can spell.
-    assert out.contains(`let out = backend.fused::<[Batch, Unit]>([backend.read(_model_input_0)], &${unary(
+    assert out.contains(`let out = backend.fused::<[N, ModelInput01]>([backend.read(_model_input_0)], &${unary(
         UnaryOp::Relu,
     )});`);
 }
@@ -433,7 +389,7 @@ test "a tensor named as a method of a generated struct is renamed" {
         new = Constant<value_floats = [1.0, 2.0]>()
         Y = Add(X, new)
     }`;
-    let out = generate(source, [rule("*", ["Embed"])]).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("new_: kept.new_,");
 }
 
@@ -442,12 +398,7 @@ test "a weight a branch yields stays a tensor, though products read it too" {
         Y = If <then_branch = t () => (float[2, 2] W) { }, else_branch = e () => (float[2, 2] W) { }> (C)
         Z = MatMul(X, W)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("C", ["One"]),
-        rule("X", ["Row", "Col"]),
-        rule("W", ["Col", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("W: backend.keep(&self.W),");
 }
 
@@ -458,7 +409,7 @@ g (float[N, 2] X) => (float[N, 2] X)
 {
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("    return *X;\n");
     assert out.contains("return backend.download(&pass(backend, &X, weights));");
@@ -472,24 +423,17 @@ test "folded tensors of one source keep their own elements, a Cast between them"
         G = Gather(X, D)
         Y = Add(G, C)
     }`;
-    let out = generate(source, [
-        rule("X", ["Pos"]),
-        rule("*", ["Item"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("D: backend.keep(&Tensor::<i64, [Item]> { data: [0, 1, 2]");
-    assert out.contains("C: backend.keep(&Tensor::<f32, [Item]> { data: [0 as f32, 1 as f32, 2 as f32]");
+    assert out.contains("D: backend.keep(&Tensor::<i64, [Y0]> { data: [0, 1, 2]");
+    assert out.contains("C: backend.keep(&Tensor::<f32, [Y0]> { data: [0 as f32, 1 as f32, 2 as f32]");
 }
 
 test "a length the run would compute past i64 for some input stops the build" {
     let source = `g (float[N, M, 3] X) => (float[?] Y) <int64[1] Flat = {-1}> {
         Y = Reshape(X, Flat)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Seq", "Rgb"]),
-        rule("Y", ["All"]),
-    ];
-    let e = generate(source, layout).unwrap_err();
+    let e = generate(source).unwrap_err();
     assert `${e}` == "3 * M * N: the run computes this in i64, and some input carries it past";
 }
 
@@ -501,7 +445,7 @@ g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
     out = Add("a.b", "a/b")
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    let e = generate(source).unwrap_err();
 
     assert `${e}` == "a/b and a.b both name `a_b`";
 }
@@ -514,12 +458,12 @@ g (float[N, 2] X) => (float[N, 2] Y)
     Y = Erf(X)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(`backend.fused::<[Batch, Unit]>([backend.read(X)], &${unary(UnaryOp::Erf)})`);
+    assert out.contains(`backend.fused::<[N, X1]>([backend.read(X)], &${unary(UnaryOp::Erf)})`);
 }
 
-test "an axis of 1 named apart from the one it stretches over is read under the result's axes" {
+test "an axis of 1 apart from the one it stretches over is read under the result's axes" {
     let source = `
 g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
 <>
@@ -527,20 +471,15 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     Y = Add(X, Z)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "One"]),
-        rule("Z", ["Batch", "Wide"]),
-        rule("Y", ["Batch", "Wide"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(X, 2)), backend.read(Z)], &${sum(
+        `let Y = backend.fused::<[N, Z1]>([backend.read(&backend.lift::<f32, [N, X1], [N, Z1]>(X, 2)), backend.read(Z)], &${sum(
         )});`,
     );
 }
 
-test "a Where operand whose axis of 1 is named apart is read under the result's axes" {
+test "a Where operand whose axis of 1 is apart is read under the result's axes" {
     let source = `
 g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
 {
@@ -548,15 +487,10 @@ g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     Y = Where(C, X, Z)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("M", ["Batch", "One"]),
-        rule("C", ["Batch", "One"]),
-        rule("*", ["Batch", "Wide"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(X), backend.read(Z)], &${select(
+        `let Y = backend.fused::<[N, X1]>([backend.read_condition(&backend.lift::<bool, [N, M1], [N, X1]>(&C, 2)), backend.read(X), backend.read(Z)], &${select(
         )});`,
     );
 }
@@ -569,14 +503,12 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
     Y = Reshape(X, S)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(
-        "let Y = backend.reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);",
-    );
-    assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> with _ {");
+    assert out.contains("let Y = backend.reshape::<f32, [X0, X1, X2, X3], [X0, Merged<[X1, X2, X3]>]>(X, [1, 256]);");
+    assert out.contains("-> Tensor<f32, [X0, Merged<[X1, X2, X3]>]> with _ {");
     // A merged axis is spelled with its parts' markers, never declared itself.
-    assert out.contains("pub struct Chan {}");
+    assert out.contains("pub struct X1 {}");
     assert !out.contains("pub struct Merged");
     // The target shape is read at build time, so no weight carries it.
     assert !out.contains("pub S:");
@@ -590,10 +522,7 @@ g (float[1, 16, 4, 4] X, float[1, 256] Z) => (float[1, 256] Y)
     Y = Reshape(X, S)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("Z", ["One", "Flat"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert !out.contains("let S =");
 }
@@ -606,15 +535,10 @@ g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
     Y = Conv <group = 2> (X, W)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("W", ["Out", "Share", "KRow", "KCol"]),
-        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = backend.conv_grouped::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, 2, &Window {",
+        "let Y = backend.conv_grouped::<X0, X1, W1, Y1, [X2, X3], [W2, W3], [Y2, Y3]>(X, &weights.W, 2, &Window {",
     );
 }
 
@@ -626,16 +550,10 @@ g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
     Y = Conv <group = 2> (X, W, B)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("W", ["Out", "Share", "KRow", "KCol"]),
-        rule("B", ["Out"]),
-        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = backend.conv_grouped_bias::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, &weights.B, 2, &Window {",
+        "let Y = backend.conv_grouped_bias::<X0, X1, W1, Y1, [X2, X3], [W2, W3], [Y2, Y3]>(X, &weights.W, &weights.B, 2, &Window {",
     );
 }
 
@@ -648,20 +566,13 @@ g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
     Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (C)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("W", ["Out", "Chan", "KRow", "KCol"]),
-        rule("B", ["Out"]),
-        rule("C", ["Batch", "Out", "ORow", "OCol"]),
-        rule("Y", ["Batch", "Out", "PRow", "PCol"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        "let C = backend.conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] }, null);",
+        "let C = backend.conv_bias::<X0, X1, Y1, [X2, X3], [W2, W3], [C2, C3]>(X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] }, null);",
     );
     assert out.contains(
-        "let Y = backend.max_pool::<Batch, Out, [ORow, OCol], [PRow, PCol]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
+        "let Y = backend.max_pool::<X0, Y1, [C2, C3], [Y2, Y3]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
     );
 }
 
@@ -673,16 +584,10 @@ g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
     Y = Gemm <transB = 1, alpha = 0.5, beta = 2.0> (A, B, C)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("A", ["Batch", "In"]),
-        rule("B", ["Out", "In"]),
-        rule("C", ["Out"]),
-        rule("Y", ["Batch", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.matmul(A, &backend.transpose2(B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(C)], op: ${src(
+        `let Y = backend.matmul(A, &backend.transpose2(B), Option::Some(Epilogue { operands: [backend.read_suffix::<[A0], [B0]>(C)], op: ${src(
             operand(0).binary(BinaryOp::Mul, &constant(0.5)).binary(BinaryOp::Add, &operand(1).binary(
                 BinaryOp::Mul,
                 &constant(2.0),
@@ -699,12 +604,7 @@ g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
     Y = Gemm(A, B)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("A", ["Batch", "In"]),
-        rule("B", ["In", "Out"]),
-        rule("Y", ["Batch", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("let Y = backend.matmul(A, B, null);");
 }
@@ -717,9 +617,9 @@ g (float[2, 3] X) => (float[3, 2] Y)
     Y = Transpose <perm = [1, 0]> (X)
 }
 `;
-    let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("let Y = backend.permute::<f32, [A, B], [B, A]>(X, [1, 0]);");
+    assert out.contains("let Y = backend.permute::<f32, [X0, X1], [X1, X0]>(X, [1, 0]);");
 }
 
 test "a Transpose that moves no axis is its operand" {
@@ -730,7 +630,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
     Y = Transpose <perm = [0, 1]> (X)
 }
 `;
-    let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert !out.contains("permute");
     // Every node result is bound as a value, so the operand is read as one.
@@ -746,14 +646,10 @@ g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
     Y = Where(C, X, S)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("M", ["One", "Unit", "Query", "Key"]),
-        rule("X", ["Batch", "Head", "Query", "Key"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&backend.lift::<bool, [One, Unit, Query, Key], [Batch, Head, Query, Key]>(&C, 4)), backend.read(X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select(
+        `let Y = backend.fused::<[X0, X1, M2, M3]>([backend.read_condition(&backend.lift::<bool, [M0, M1, M2, M3], [X0, X1, M2, M3]>(&C, 4)), backend.read(X), backend.read_suffix::<[X0, X1, M2, M3], []>(&weights.S)], &${select(
         )});`,
     );
 }
@@ -767,16 +663,16 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
     Y = Where(C, S, X)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Key"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("S: backend.keep(&Tensor::<f32, []> { data: [-1 as f32], extents: [] }),");
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&weights.S), backend.read(X)], &${select(
+        `let Y = backend.fused::<[M0, M1]>([backend.read_condition(&C), backend.read_suffix::<[M0, M1], []>(&weights.S), backend.read(X)], &${select(
         )});`,
     );
 }
 
-test "a merged axis the layout writes is spelled with its parts' markers" {
+test "a weight's axis a regrouping meets is spelled with its parts' markers" {
     let source = `
 g (float[4, 2, 8] X) => (float[4, 6] Y)
 <float[16, 6] W, int64[2] S = {4, 16}>
@@ -785,14 +681,10 @@ g (float[4, 2, 8] X) => (float[4, 6] Y)
     Y = MatMul(R, W)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Seq", "Head", "Dim"]),
-        rule("W", ["(Head Dim)", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
-    assert out.contains("pub W: Bk::Rhs<Merged<[Head, Dim]>, Out>,");
+    assert out.contains("pub W: Tensor<f32, [Merged<[X1, X2]>, Y1]>,");
+    assert out.contains("pub W: Bk::Rhs<Merged<[X1, X2]>, Y1>,");
     assert out.contains("let Y = backend.matmul_rhs(&R, &weights.W, null);");
 }
 
@@ -804,12 +696,11 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     Q, K, V = Split<axis = 2>(X, S)
 }
 `;
-    let layout: List<LayoutRule> = [rule("X", ["Batch", "Seq", "Qkv"])];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("let Q = backend.slice_axis::<f32, [Batch, Seq], Qkv, Q2, []>(X, 2, 0, 8, 1);");
-    assert out.contains("let K = backend.slice_axis::<f32, [Batch, Seq], Qkv, K2, []>(X, 2, 8, 8, 1);");
-    assert out.contains("let V = backend.slice_axis::<f32, [Batch, Seq], Qkv, V2, []>(X, 2, 16, 8, 1);");
+    assert out.contains("let Q = backend.slice_axis::<f32, [X0, X1], X2, Q2, []>(X, 2, 0, 8, 1);");
+    assert out.contains("let K = backend.slice_axis::<f32, [X0, X1], X2, K2, []>(X, 2, 8, 8, 1);");
+    assert out.contains("let V = backend.slice_axis::<f32, [X0, X1], X2, V2, []>(X, 2, 16, 8, 1);");
 }
 
 test "Concat joins its operands pairwise, each join naming the output's axis" {
@@ -819,15 +710,10 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     Y = Concat<axis = 1>(P, N, N)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("P", ["Batch", "Past", "Dim"]),
-        rule("N", ["Batch", "Seq", "Dim"]),
-        rule("Y", ["Batch", "Total", "Dim"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        "let Y = backend.concat::<f32, [Batch], Total, Seq, Total, [Dim]>(&backend.concat::<f32, [Batch], Past, Seq, Total, [Dim]>(P, N, 1), N, 1);",
+        "let Y = backend.concat::<f32, [P0], U, N1, U, [P2]>(&backend.concat::<f32, [P0], T, N1, U, [P2]>(P, N, 1), N, 1);",
     );
 }
 
@@ -838,10 +724,10 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     Y = Softmax <axis = -1> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(
+        `let Y = backend.rows::<[X0, X1, X2], [X0, X1, X2]>([backend.read(X)], &${src(
             operand(0).row_softmax(),
         )}, 1, false);`,
     );
@@ -854,7 +740,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     Y = Softmax <axis = 1> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("let Y = backend.softmax(X, 1);");
 }
@@ -867,7 +753,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     Y = Softmax ${attrs} (X)
 }
 `;
-        return generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+        return generate(source).unwrap();
     };
 
     assert lowered("").contains("let Y = backend.softmax_flattened(X, 1);");
@@ -882,14 +768,10 @@ g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
     Y = Add <broadcast = 1, axis = 1> (X, B)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "Seq", "Embed"]),
-        rule("B", ["Seq"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_at::<[Batch], [Seq], [Embed]>(B, 1)], &${sum(
-        )});`,
+        `let Y = backend.fused::<[X0, X1, X2]>([backend.read(X), backend.read_at::<[X0], [X1], [X2]>(B, 1)], &${sum()});`,
     );
 }
 
@@ -900,14 +782,10 @@ g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
     Y = Add <broadcast = 1, axis = 2> (X, B)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "Seq", "Embed"]),
-        rule("B", ["Embed"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_suffix::<[Batch, Seq], [Embed]>(B)], &${sum(
-        )});`,
+        `let Y = backend.fused::<[X0, X1, X2]>([backend.read(X), backend.read_suffix::<[X0, X1], [X2]>(B)], &${sum()});`,
     );
 }
 
@@ -919,10 +797,10 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     Y = Sub(X, M)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(
+        `let Y = backend.rows::<[X0, X1, X2], [X0, X1, X2]>([backend.read(X)], &${src(
             operand(0).binary(BinaryOp::Sub, &operand(0).row_sum(Option::Some(8.0))),
         )}, 1, false);`,
     );
@@ -939,18 +817,11 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
     Y = Relu(R)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "Seq", "In"]),
-        rule("W", ["In", "Out"]),
-        rule("B", ["Out"]),
-        rule("F", ["(Batch Seq)", "In"]),
-        rule("G", ["(Batch Seq)", "Out"]),
-        rule("*", ["Batch", "Seq", "Out"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert !out.contains("let F =") && !out.contains("let R =");
     assert out.contains(
-        `let Y = backend.matmul_shared(X, W, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch, Seq], [Out]>(B)], op: ${src(
+        `let Y = backend.matmul_shared(X, W, Option::Some(Epilogue { operands: [backend.read_suffix::<[X0, X1], [W1]>(B)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )} }));`,
     );
@@ -963,11 +834,11 @@ g (float[2, 4, 8] X) => (float[2, 4, 1] Y)
     Y = ReduceMean <axes = [-1]> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
     // The output keeps the axis it reduced, at extent 1.
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(operand(0).row_sum(
+        `let Y = backend.rows::<[X0, X1, X2], [X0, X1, X2]>([backend.read(X)], &${src(operand(0).row_sum(
             Option::Some(8.0),
         ))}, 1, true);`,
     );
@@ -980,7 +851,7 @@ g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
     Y = ReduceSum <axes = [0, 2]> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("let Y = backend.reduce_sum(X, [0, 2]);");
 }
@@ -992,11 +863,9 @@ g (float[2, 4, 8] X) => (float[2, 4] Y)
     Y = ReduceMean <axes = [-1], keepdims = 0> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(
-        "let Y = backend.reshape::<f32, [Batch, Seq, Embed], [Batch, Seq]>(&backend.reduce_mean(X, [2]), [2, 4]);",
-    );
+    assert out.contains("let Y = backend.reshape::<f32, [X0, X1, X2], [X0, X1]>(&backend.reduce_mean(X, [2]), [2, 4]);");
 }
 
 fn is_error<E: Error>() {
@@ -1016,11 +885,9 @@ g (float[1, 4, 2, 3] X) => (float[1, 2, 3, 4] Y)
     Y = Transpose <perm = [0, 2, 3, 1]> (X)
 }
 `;
-    let out = generate(source, [rule("X", ["Batch", "Seq", "Head", "Dim"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(
-        "let Y = backend.permute::<f32, [Batch, Seq, Head, Dim], [Batch, Head, Dim, Seq]>(X, [0, 2, 3, 1]);",
-    );
+    assert out.contains("let Y = backend.permute::<f32, [X0, X1, X2, X3], [X0, X2, X3, X1]>(X, [0, 2, 3, 1]);");
 }
 
 test "a tensor named as the generated module names something is renamed" {
@@ -1031,10 +898,10 @@ g (float[N, 2] weights, float[N, 2] narrow) => (float[N, 2] Tensor)
     Tensor = Add(weights, narrow)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("backend: &mut Bk, weights_: &Tensor<f32, [Batch, Unit]>, narrow_: ");
-    assert out.contains("let Tensor_ = backend.fused::<[Batch, Unit]>([backend.read(weights_), backend.read(narrow_)],");
+    assert out.contains("backend: &mut Bk, weights_: &Tensor<f32, [N, Weights1]>, narrow_: ");
+    assert out.contains("let Tensor_ = backend.fused::<[N, Weights1]>([backend.read(weights_), backend.read(narrow_)],");
     assert out.contains("    return Tensor_;\n");
 }
 
@@ -1046,13 +913,9 @@ g (float[N, 2] X) => (float[N, 2] Y)
     Y = Add(X, prepare)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["Batch", "Unit"]),
-        rule("Y", ["Batch", "Unit"]),
-        rule("prepare", ["Unit"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("    pub prepare_: Tensor<f32, [Unit]>,\n");
+    assert out.contains("    pub prepare_: Tensor<f32, [X1]>,\n");
     assert out.contains("pub fn prepare<affine Bk: Backend>(&self");
 }
 
@@ -1064,9 +927,9 @@ g (float[N, 2] map) => (float[N, 2] Y)
     Y = Relu(map)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(map)],");
+    assert out.contains("let Y = backend.fused::<[N, Map1]>([backend.read(map)],");
 }
 
 test "a tensor named as the map a sharded load takes keeps its name where the module imports none" {
@@ -1077,7 +940,7 @@ g (float[N, 2] HashMap) => (float[N, 2] Y)
     Y = Relu(HashMap)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("backend.read(HashMap)");
 }
@@ -1091,13 +954,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
 }
 `;
     let graph = read(&source).unwrap();
-    let checked = infer(&graph, &Schema {
-        layout: [
-            rule("X", ["Batch", "In"]),
-            rule("B", ["In"]),
-        ],
-    }).unwrap();
-    let out = emit(&graph, &checked, &RUNTIME, true, Placement::Shards(HashMap::new())).unwrap();
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, true, Placement::Shards(HashMap::new())).unwrap();
 
     assert !out.contains("core:collections");
     assert out.contains("pub fn embedded(");
@@ -1115,59 +972,53 @@ g (float[N, 2] ${first}, float[N, 2] ${second}) => (float[N, 2] Y)
     Y = Add(refuse, refuse_)
 }
 `;
-        let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+        let out = generate(source).unwrap();
 
-        assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(refuse__), backend.read(refuse_)],");
+        assert out.contains("let Y = backend.fused::<[N, Refuse1]>([backend.read(refuse__), backend.read(refuse_)],");
     }
 }
 
 test "two renamed tensors step past each other" {
+    // `n` takes `N_`, as `N` has `N`.
     let source = `
-g (float[1] N, float[2] N_) => (float[2] Y)
+g (float[N] N, float[n] N_) => (float[N] Y, float[n] Z)
 <>
 {
-    Y = Add(N, N_)
+    Y = Relu(N)
+    Z = Relu(N_)
 }
 `;
-    let out = generate(source, [
-        rule("N", ["N"]),
-        rule("N_", ["N_"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("backend: &mut Bk, N__: &Tensor<f32, [N]>, N___: &Tensor<f32, [N_]>,");
 }
 
 test "a tensor named as an axis is renamed too" {
     let source = `
-g (float[N, 2] Batch) => (float[N, 2] Y)
+g (float[N, 2] N) => (float[N, 2] Y)
 <>
 {
-    Y = Relu(Batch)
+    Y = Relu(N)
 }
 `;
-    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("pub struct Batch {}");
-    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(Batch_)],");
+    assert out.contains("pub struct N {}");
+    assert out.contains("let Y = backend.fused::<[N, N1]>([backend.read(N_)],");
 }
 
-test "an axis named as the generated module names something stops the build" {
-    let source = `
-g (float[N, 2] X) => (float[N, 2] Y)
+test "an axis a dim_param would name as the generated module names something takes another" {
+    // Every name the module imports from the runtime is reserved, whether or
+    // not this graph reads it, and so is what `forward` binds.
+    for let name of ["Tensor", "Backend", "UnaryOp", "LoadError", "Bk"] {
+        let source = `
+g (float[${name}, 2] X) => (float[${name}, 2] Y)
 <>
 {
     Y = Relu(X)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "Tensor"])]).unwrap_err();
-
-    assert `${e}` == "Tensor: an axis cannot be named as the generated module names something";
-
-    // Every name the module imports from the runtime is reserved, whether or
-    // not this graph reads it, and so is what `forward` binds.
-    for let name of ["Backend", "UnaryOp", "LoadError", "Bk"] {
-        let t = generate(source, [rule("*", ["Batch", name])]).unwrap_err();
-        assert `${t}` == `${name}: an axis cannot be named as the generated module names something`;
+        assert generate(source).unwrap().contains(`pub struct ${name}_ {}`);
     }
 }
 
@@ -1178,11 +1029,7 @@ g (float[1, 4, 8] X, float[8, 16] W) => (float[1, 4, 16] Y)
     Y = MatMul(X, W)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Seq", "Embed"]),
-        rule("W", ["Embed", "Vocab"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
     assert out.contains("let Y = backend.matmul_shared(X, W, null);");
 }
@@ -1194,15 +1041,9 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     Y = MatMul(X, Z)
 }
 `;
-    let layout: List<LayoutRule> = [
-        rule("X", ["One", "Row", "K"]),
-        rule("Z", ["Batch", "K", "Col"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains(
-        "let Y = backend.matmul_broadcast::<[One, Row, K], [Batch, K, Col], [Batch, Row, Col]>(X, Z, null);",
-    );
+    assert out.contains("let Y = backend.matmul_broadcast::<[X0, X1, X2], [Z0, X2, Z2], [Z0, X1, Z2]>(X, Z, null);");
 }
 
 test "a rank-1 MatMul operand lowers to matmul_broadcast, which drops its axis" {
@@ -1212,12 +1053,9 @@ g (float[3] X, float[3, 5] Z) => (float[5] Y)
     Y = MatMul(X, Z)
 }
 `;
-    let out = generate(source, [
-        rule("X", ["K"]),
-        rule("Z", ["K", "Col"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("let Y = backend.matmul_broadcast::<[K], [K, Col], [Col]>(X, Z, null);");
+    assert out.contains("let Y = backend.matmul_broadcast::<[X0], [X0, Z1], [Z1]>(X, Z, null);");
 }
 
 fn refused_dtype(dtype: String) -> String {
@@ -1228,7 +1066,7 @@ g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
     Y = Relu(X)
 }
 `;
-    return `${generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err()}`;
+    return `${generate(source).unwrap_err()}`;
 }
 
 test "an element type the kernels cannot compute in names itself" {
@@ -1237,19 +1075,19 @@ test "an element type the kernels cannot compute in names itself" {
 }
 
 test "a half precision boundary states its own element type" {
-    let out = generate(mlp("float16"), mlp_layout()).unwrap();
+    let out = generate(mlp("float16")).unwrap();
 
     assert out.contains(
-        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f16, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f16, [Batch, Out]> with _ {",
+        "pub fn forward<affine Bk: Backend>(backend: &mut Bk, X: &Tensor<f16, [N, X1]>, weights: &Prepared<Bk>) -> Tensor<f16, [N, Y1]> with _ {",
     );
-    assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
+    assert out.contains("pub W1: Tensor<f16, [X1, W11]>,");
 }
 
 test "a half precision boundary is prepared into the f32 the kernels compute in" {
-    let out = generate(mlp("float16"), mlp_layout()).unwrap();
+    let out = generate(mlp("float16")).unwrap();
 
     // A weight once, where `Prepared` is built; an input on each call.
-    assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
+    assert out.contains("    pub W1: Bk::Rhs<X1, W11>,\n");
     assert out.contains("W1: backend.prepare_rhs(&self.W1),");
     assert out.contains("let X = backend.prepare(X);");
     assert out.contains("let A = backend.matmul_rhs(X, &weights.W1, Option::Some(Epilogue {");
@@ -1257,9 +1095,9 @@ test "a half precision boundary is prepared into the f32 the kernels compute in"
 }
 
 test "bfloat16 is the same boundary with the other primitive" {
-    let out = generate(mlp("bfloat16"), mlp_layout()).unwrap();
+    let out = generate(mlp("bfloat16")).unwrap();
 
-    assert out.contains("backend: &mut Bk, X: &Tensor<bf16, [Batch, In]>");
+    assert out.contains("backend: &mut Bk, X: &Tensor<bf16, [N, X1]>");
     assert out.contains("let X = backend.prepare(X);");
     assert out.contains("return narrow(&backend.download(&pass(backend, &X, weights)));");
 }
@@ -1314,10 +1152,7 @@ fn node(op: String, output: String, inputs: List<String>) -> Node {
 }
 
 fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
-    let checked = infer(graph, &Schema {
-        layout: [rule("*", ["Batch", "Unit"])],
-    }).unwrap();
-    return emit(graph, &checked, &RUNTIME);
+    return emit(graph, &infer(graph).unwrap(), &RUNTIME);
 }
 
 fn matrix_rank() -> Rank {
@@ -1335,17 +1170,13 @@ test "a symbol is bound from the input axis carrying it, and spelled where an ex
     let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[3] S = {0, 2, 2}> {
         Y = Reshape(X, S)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Seq", "Wide"]),
-        rule("Y", ["Seq", "Row", "Col"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("let dim_N = backend.extents_of(X)[0] as i64;");
-    assert out.contains("let Y = backend.reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [to_extent(dim_N), 2, 2]);");
+    assert out.contains("let Y = backend.reshape::<f32, [N, X1], [N, Y1, Y2]>(X, [to_extent(dim_N), 2, 2]);");
 }
 
 test "a symbol nothing spells is not bound" {
-    let out = generate(mlp("float"), mlp_layout()).unwrap();
+    let out = generate(mlp("float")).unwrap();
     assert !out.contains("dim_");
 }
 
@@ -1357,8 +1188,8 @@ test "a Range over a symbolic length is a kernel call" {
         L = Gather <axis = 0> (S, Z)
         Y = Range(Z, L, O)
     }`;
-    let out = generate(source, [rule("*", ["Seq"])]).unwrap();
-    assert out.contains("let Y = backend.range_i64::<Seq>(0, to_extent(dim_N), 1);");
+    let out = generate(source).unwrap();
+    assert out.contains("let Y = backend.range_i64::<N>(0, to_extent(dim_N), 1);");
 }
 
 test "a clamp the run computes, read as its operand, is checked before any kernel" {
@@ -1367,14 +1198,9 @@ test "a clamp the run computes, read as its operand, is checked before any kerne
         A = Slice(M, Z, S)
         Y = Add(A, X)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Seq"]),
-        rule("M", ["Pos"]),
-        rule("A", ["Seq"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     let check = out.find("refuse(unmet(-dim_N + 8, \"A = Slice: N must be at most 8\"));").unwrap();
-    let call = "let A = backend.slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
+    let call = "let A = backend.slice_axis::<f32, [], M0, N, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
     let slice = out.find(call).unwrap();
     assert check < slice;
 }
@@ -1383,13 +1209,9 @@ test "a Reshape -1 the build rounds is checked to divide before the kernel runs"
     let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
         Y = Reshape(X, T)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Seq"]),
-        rule("Y", ["Pair", "Two"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     let check = out.find("refuse(unmet(-dim_N + 2 * dim_N.div_floor(2), ").unwrap();
-    let call = "let Y = backend.reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(dim_N.div_floor(2)), 2]);";
+    let call = "let Y = backend.reshape::<f32, [N], [Y0, Y1]>(X, [to_extent(dim_N.div_floor(2)), 2]);";
     let reshape = out.find(call).unwrap();
     assert check < reshape;
 }
@@ -1398,12 +1220,8 @@ test "a Slice by a negative step walks back from its start" {
     let source = `g (float[N] X) => (float[?] Y) <int64[1] B = {-1}, int64[1] E = {-4000000000}, int64[1] Z = {0}, int64[1] Back = {-1}> {
         Y = Slice(X, B, E, Z, Back)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Seq"]),
-        rule("Y", ["Rev"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("let Y = backend.slice_axis::<f32, [], Seq, Rev, []>(X, 0, dim_N - 1, to_extent(dim_N), -1);");
+    let out = generate(source).unwrap();
+    assert out.contains("let Y = backend.slice_axis::<f32, [], N, Y0, []>(X, 0, dim_N - 1, to_extent(dim_N), -1);");
 }
 
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
@@ -1412,15 +1230,11 @@ test "an int64 input is held as i64 through the layout kernels and Cast converts
         U = Unsqueeze(M, A)
         Y = Cast<to = 1>(U)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("M", ["Batch", "Key"]),
-        rule("U", ["Batch", "Head", "Key"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("M: &Tensor<i64, [Batch, Key]>");
+    let out = generate(source).unwrap();
+    assert out.contains("M: &Tensor<i64, [M0, M1]>");
     assert !out.contains("widen(");
-    assert out.contains("let U = backend.reshape::<i64, [Batch, Key], [Batch, Head, Key]>(M, [1, 1, 4]);");
-    assert out.contains("let Y = backend.cast::<i64, f32, [Batch, Head, Key]>(&U);");
+    assert out.contains("let U = backend.reshape::<i64, [M0, M1], [M0, Y1, M1]>(M, [1, 1, 4]);");
+    assert out.contains("let Y = backend.cast::<i64, f32, [M0, Y1, M1]>(&U);");
 }
 
 test "an embedding lookup is a row gather, and a folded index tensor is a literal" {
@@ -1429,18 +1243,10 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
         F = Gather(P, Q)
         Y = Add(E, F)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("I", ["Batch", "Seq"]),
-        rule("Q", ["Batch", "Seq"]),
-        rule("W", ["Vocab", "Hidden"]),
-        rule("P", ["Pos", "Hidden"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("W: backend.keep_rhs(&self.W),");
     assert out.contains("let E = backend.gather_rhs_rows(&weights.W, I);");
-    assert out.contains(
-        "Q: backend.keep(&Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] }),",
-    );
+    assert out.contains("Q: backend.keep(&Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] }),");
     assert out.contains("let F = backend.gather_rhs_rows(&weights.P, &weights.Q);");
 }
 
@@ -1451,12 +1257,7 @@ test "a weight read past a product and a gather is kept whole, one read only by 
         Y = MatMul(E, V)
         Z = Relu(W)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("I", ["Batch", "Seq"]),
-        rule("W", ["Vocab", "Hidden"]),
-        rule("V", ["Hidden", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("W: backend.keep(&self.W),");
     assert out.contains("V: backend.keep_rhs(&self.V),");
     assert out.contains("let Y = backend.matmul_rhs(&E, &weights.V, null);");
@@ -1468,11 +1269,7 @@ test "an embedding the head multiplies by its transpose is held once, as rows bo
         T = Transpose<perm = [1, 0]>(W)
         Y = MatMul(E, T)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("I", ["Batch", "Seq"]),
-        rule("W", ["Vocab", "Hidden"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("W: backend.keep_rhs(&self.W),");
     assert out.contains("let E = backend.gather_rhs_rows(&weights.W, I);");
     assert out.contains("let Y = backend.matmul_by_rhs_transposed(&E, &weights.W, null);");
@@ -1482,12 +1279,8 @@ test "a Gemm's transposed weight is prepared transposed, so no pass transposes i
     let source = `g (float[2, 3] A) => (float[2, 4] Y) <float[4, 3] B> {
         Y = Gemm <transB = 1> (A, B)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("A", ["Batch", "In"]),
-        rule("B", ["Out", "In"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("    pub B: Bk::Rhs<In, Out>,\n");
+    let out = generate(source).unwrap();
+    assert out.contains("    pub B: Bk::Rhs<A1, Y1>,\n");
     assert out.contains("B: backend.keep_rhs_transposed(&self.B),");
     assert out.contains("let Y = backend.matmul_rhs(A, &weights.B, null);");
     assert !out.contains("transpose2");
@@ -1498,12 +1291,7 @@ test "a weight two products read in two orientations, or one beside a vector, st
         Y = Gemm <transB = 1> (A, B)
         Z = MatMul(V, B)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("A", ["Batch", "In"]),
-        rule("V", ["Out"]),
-        rule("B", ["Out", "In"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("B: backend.keep(&self.B),");
     assert !out.contains("matmul_rhs");
 }
@@ -1512,25 +1300,17 @@ test "a branch multiplies by a prepared weight as the graph around it holds it" 
     let source = `g (bool[1] C, float[2, 2] X) => (float[2, 2] Y) <float[2, 2] W> {
         Y = If <then_branch = t () => (float[2, 2] A) { A = MatMul(X, W) }, else_branch = e () => (float[2, 2] B) { B = Neg(X) }> (C)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("C", ["One"]),
-        rule("X", ["Row", "Col"]),
-        rule("W", ["Col", "Out"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("    pub W: Bk::Rhs<Col, Out>,\n");
+    let out = generate(source).unwrap();
+    assert out.contains("    pub W: Bk::Rhs<X1, W1>,\n");
     assert out.contains("backend.matmul_rhs(X, &weights.W, null)");
 }
+
 test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
         Y = Gather<axis = 1>(W, I)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("I", ["Pick"]),
-        rule("W", ["Vocab", "Hidden"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("let Y = backend.gather::<f32, [Vocab], Hidden, [], [Pick]>(&weights.W, I, 1);");
+    let out = generate(source).unwrap();
+    assert out.contains("let Y = backend.gather::<f32, [Y0], W1, [], [I0]>(&weights.W, I, 1);");
 }
 
 test "a Cast to the element a tensor already has computes nothing" {
@@ -1538,9 +1318,9 @@ test "a Cast to the element a tensor already has computes nothing" {
         C = Cast<to = 1>(X)
         Y = Relu(C)
     }`;
-    let out = generate(source, [rule("*", ["Feat"])]).unwrap();
+    let out = generate(source).unwrap();
     assert !out.contains("let C");
-    assert out.contains(`let Y = backend.fused::<[Feat]>([backend.read(X)], &${unary(UnaryOp::Relu)});`);
+    assert out.contains(`let Y = backend.fused::<[X0]>([backend.read(X)], &${unary(UnaryOp::Relu)});`);
 }
 
 test "a Cast that truncates is spelled apart from the constant it reads" {
@@ -1551,7 +1331,7 @@ test "a Cast that truncates is spelled apart from the constant it reads" {
         C = Cast<to = 6>(Q)
         Y = Where(B, Q, C)
     }`;
-    let out = generate(source, [rule("*", ["Pick"])]).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("data: [4294967297, 2]");
     assert out.contains("data: [1, 2]");
 }
@@ -1561,10 +1341,8 @@ test "Identity names its operand again and computes nothing" {
         V = Identity(W)
         Y = Add(X, V)
     }`;
-    let out = generate(source, [rule("*", ["Feat"])]).unwrap();
-    assert out.contains(
-        `let Y = backend.fused::<[Feat]>([backend.read(X), backend.read(&weights.W)], &${sum()});`,
-    );
+    let out = generate(source).unwrap();
+    assert out.contains(`let Y = backend.fused::<[X0]>([backend.read(X), backend.read(&weights.W)], &${sum()});`);
     assert !out.contains("let V");
 }
 
@@ -1579,9 +1357,9 @@ test "a scale the graph computes from a shape folds to a literal" {
         R = Pow(F, H)
         Y = Div(X, R)
     }`;
-    let out = generate(source, [rule("X", ["Batch", "Feat"])]).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Feat]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Div, &constant(
+        `let Y = backend.fused::<[X0, X1]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Div, &constant(
             2.0,
         )))});`,
     );
@@ -1596,14 +1374,14 @@ test "a Cast of a length only the run knows converts it at run time" {
         F = Cast<to = 1>(D)
         Y = Div(X, F)
     }`;
-    let out = generate(source, [rule("X", ["Seq", "Feat"])]).unwrap();
+    let out = generate(source).unwrap();
     assert out.contains("let D = backend.upload(&Tensor::<i64, []> { data: [dim_N], extents: [] });");
     assert out.contains("let F = backend.cast::<i64, f32, []>(&D);");
 }
 
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains(
-        `let Y = backend.fused::<[Batch, Unit]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Add, &constant(
+        `let Y = backend.fused::<[N, X1]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Add, &constant(
             0.5,
         )))});`,
     );
@@ -1630,14 +1408,11 @@ test "a one-element constant that raises the output's rank is a tensor, not a fo
         C = ConstantOfShape(S)
         Y = Add(X, C)
     }`;
-    let out = generate(source, [
-        rule("X", ["A"]),
-        rule("C", ["One", "Unit"]),
-    ]).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("C: backend.keep(&Tensor::<f32, [One, Unit]> { data: [0 as f32], extents: [1, 1] }),");
+    assert out.contains("C: backend.keep(&Tensor::<f32, [Y0, C1]> { data: [0 as f32], extents: [1, 1] }),");
     assert out.contains(
-        `let Y = backend.fused::<[One, A]>([backend.read_suffix::<[One], [A]>(X), backend.read(&backend.lift::<f32, [One, Unit], [One, A]>(&weights.C, 2))], &${sum(
+        `let Y = backend.fused::<[Y0, X0]>([backend.read_suffix::<[Y0], [X0]>(X), backend.read(&backend.lift::<f32, [Y0, C1], [Y0, X0]>(&weights.C, 2))], &${sum(
         )});`,
     );
 }
@@ -1663,13 +1438,9 @@ test "a folded output of several elements is returned as its literal" {
     let source = `g (float[2, 3] X) => (int64[2] Y) {
         Y = Shape(X)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Row", "Col"]),
-        rule("Y", ["Dim"]),
-    ];
-    let out = generate(source, layout).unwrap();
+    let out = generate(source).unwrap();
 
-    assert out.contains("Y: backend.keep(&Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] }),");
+    assert out.contains("Y: backend.keep(&Tensor::<i64, [Y0]> { data: [2, 3], extents: [2] }),");
     assert out.contains("    return weights.Y;\n");
 }
 
@@ -1680,13 +1451,8 @@ test "a folded tensor a Cast names again under its own type is spelled once" {
         F = Gather(W, C)
         Y = Add(E, F)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Len"]),
-        rule("Q", ["Seq"]),
-        rule("W", ["Vocab", "Hidden"]),
-    ];
-    let out = generate(source, layout).unwrap();
-    assert out.contains("Q: backend.keep(&Tensor::<i64, [Seq]> { data: [0, 1, 2, 3], extents: [4] }),");
+    let out = generate(source).unwrap();
+    assert out.contains("Q: backend.keep(&Tensor::<i64, [Y0]> { data: [0, 1, 2, 3], extents: [4] }),");
     assert !out.contains("C: backend.keep");
     assert out.contains("let F = backend.gather_rhs_rows(&weights.W, &weights.Q);");
 }
@@ -1696,12 +1462,7 @@ test "a constant both branches read is held once, where the weights are" {
         K = Constant<value_floats = [1.0, 2.0]>()
         Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Sub(X, K) }> (C)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("C", ["One"]),
-        rule("X", ["Embed"]),
-        rule("K", ["Embed"]),
-    ];
-    let body = generate(source, layout).unwrap();
+    let body = generate(source).unwrap();
     // No symbol enters it, so `Prepared` holds it and both branches read it there.
     assert !body.contains("let K = ");
     assert body.split("backend.read(&weights.K)").count() == 3;
@@ -1709,51 +1470,17 @@ test "a constant both branches read is held once, where the weights are" {
 
 test "a name only arithmetic spells is read back from its length, after the names that length reads" {
     let source = `g (float["2 * m + n"] V, float["n + 1"] X) => (float["2 * m + n"] Z) { Z = Add(V, V) }`;
-    let layout: List<LayoutRule> = [
-        rule("V", ["Odd"]),
-        rule("X", ["Seq"]),
-    ];
-    let body = generate(source, layout).unwrap();
+    let body = generate(source).unwrap();
     let n = body.find("let dim_n = to_extent((backend.extents_of(X)[0] as i64 - (1))) as i64;").unwrap();
     let m = body.find("let dim_m = to_extent((backend.extents_of(V)[0] as i64 - (dim_n)) / 2) as i64;").unwrap();
     assert n < m;
-}
-
-test "a branch reads a constant around it under the axes the branch names" {
-    let source = `g (bool[1] C, float[2] X, float[2] H) => (float[2] W) {
-        K = Constant<value_floats = [1.0, 2.0]>()
-        Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { Z = Mul(H, K) B = Neg(X) }> (C)
-        W = Add(Y, K)
-    }`;
-    let layout: List<LayoutRule> = [
-        rule("C", ["One"]),
-        rule("X", ["Embed"]),
-        rule("H", ["Hidden"]),
-        LayoutRule {
-            pattern: "K",
-            axes: ["Hidden"],
-            graph: Option::Some("e"),
-        },
-        rule("K", ["Embed"]),
-    ];
-    let body = generate(source, layout).unwrap();
-    assert body.contains(
-        `let Z = backend.fused::<[Hidden]>([backend.read(H), backend.read(&backend.lift::<f32, [Embed], [Hidden]>(&weights.K, 1))], &${src(
-            operand(0).binary(BinaryOp::Mul, &operand(1)),
-        )});`,
-    );
 }
 
 test "a constant one branch folds is spelled in that branch" {
     let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
         Y = If <then_branch = t () => (float[2] A) { K = Constant<value_floats = [1.0, 2.0]>() A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Neg(X) }> (C)
     }`;
-    let layout: List<LayoutRule> = [
-        rule("C", ["One"]),
-        rule("X", ["Embed"]),
-        rule("K", ["Embed"]),
-    ];
-    let body = generate(source, layout).unwrap();
+    let body = generate(source).unwrap();
     assert body.find("let K = ").unwrap() > body.find("let Y = if backend.download(C).data[0] {").unwrap();
     assert body.find("let K = ").unwrap() < body.find("} else {").unwrap();
 }

@@ -4,7 +4,6 @@ use { TreeMap } from "core:collections";
 use { Graph, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
-use { LayoutRule, Schema } from "./schema.wado";
 use { OptionConflict, bind_dims, keep_last, keep_outputs } from "./specialize.wado";
 
 fn is_error<E: Error>() {
@@ -134,34 +133,14 @@ fn head() -> Graph {
     ).unwrap();
 }
 
-/// `graph` with `last` applied, checked under axes for its inputs, then each
-/// node as its operator over its operands.
+/// `graph` with `last` applied and checked, then each node as its operator
+/// over its operands.
 fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionConflict> {
-    let schema = Schema {
-        layout: [
-            LayoutRule {
-                pattern: "X",
-                axes: ["Batch", "Seq", "Embed"],
-            },
-            LayoutRule {
-                pattern: "G",
-                axes: ["Embed"],
-            },
-            LayoutRule {
-                pattern: "W",
-                axes: ["Embed", "Vocab"],
-            },
-            LayoutRule {
-                pattern: "B",
-                axes: ["Batch", "Embed", "Vocab"],
-            },
-        ],
-    };
-    let mut checked = infer(graph, &schema).unwrap();
+    let mut checked = infer(graph).unwrap();
     for let [output, axis] of last.entries() {
         keep_last(graph, &checked, output, *axis)?;
         assert defined_before_read(graph);
-        checked = infer(graph, &schema).unwrap();
+        checked = infer(graph).unwrap();
     }
     let nodes: List<String> = graph.nodes.into_iter().filter(|n| n.op != "Constant").map(
         |n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`,
@@ -191,7 +170,7 @@ fn defined_before_read(graph: &Graph) -> bool {
 
 test "a cut moves back through a norm and a product's rows" {
     let mut graph = head();
-    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) Q=Mul(X/last-2,X/last-2) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last-2,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) Q=Mul(X/last-2,X/last-2) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last-2,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y N,S,W1";
 }
 
 test "two outputs cut along one axis share the slices of what both read" {
@@ -202,7 +181,7 @@ test "two outputs cut along one axis share the slices of what both read" {
             P = Relu(X)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=MatMul(H,W) P=Relu(X/last-2) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=MatMul(H,W) P=Relu(X/last-2) | Y N,S,W1";
 }
 
 test "a second cut along one axis slices what the first did not after the bounds" {
@@ -212,7 +191,7 @@ test "a second cut along one axis slices what the first did not after the bounds
             P = Relu(U)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "U/last-2=Slice(U,loam.last-2.starts) X/last-2=Slice(X,loam.last-2.starts) Y=MatMul(X/last-2,W) P=Relu(U/last-2) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "U/last-2=Slice(U,loam.last-2.starts) X/last-2=Slice(X,loam.last-2.starts) Y=MatMul(X/last-2,W) P=Relu(U/last-2) | Y N,S,W1";
 }
 
 test "what a product reads as its right operand stays whole" {
@@ -222,7 +201,7 @@ test "what a product reads as its right operand stays whole" {
             Y = MatMul(X, V)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) V=Relu(B) Y=MatMul(X/last-2,V) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) V=Relu(B) Y=MatMul(X/last-2,V) | Y N,S,B2";
 }
 
 test "a reduction's axes stay whole" {
@@ -234,7 +213,7 @@ test "a reduction's axes stay whole" {
             P = ReduceSum <keepdims = 1> (X, A)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { P: 2 }).unwrap() == "X/last-1=Slice(X,loam.last-1.starts) Y=MatMul(X,W) P=ReduceSum(X/last-1,A) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { P: 2 }).unwrap() == "X/last-1=Slice(X,loam.last-1.starts) Y=MatMul(X,W) P=ReduceSum(X/last-1,A) | Y N,S,W1";
 }
 
 test "a product by a vector computes no position of its batch alone" {
@@ -243,7 +222,7 @@ test "a product by a vector computes no position of its batch alone" {
             Y = MatMul(X, G)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 0 }).unwrap() == "Y/whole=MatMul(X,G) Y=Slice(Y/whole,loam.last-2.starts) | Y Batch,Seq";
+    assert cut(&mut graph, { Y: 0 }).unwrap() == "Y/whole=MatMul(X,G) Y=Slice(Y/whole,loam.last-2.starts) | Y N,S";
 }
 
 test "a value stage 0 folds stays whole where a cut node reads it" {
@@ -254,12 +233,12 @@ test "a value stage 0 folds stays whole where a cut node reads it" {
             Y = Add(X, U)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Seq,Embed";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y N,S,X2";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {
     let mut graph = head();
-    assert cut(&mut graph, { P: 1 }).unwrap() == "Q=Mul(X,X) M=ReduceMean(Q) R=Sqrt(M) D=Div(X,R) H=Mul(D,G) Y=MatMul(H,W) P/whole=Softmax(X) P=Slice(P/whole,loam.last-2.starts) | Y Batch,Seq,Vocab";
+    assert cut(&mut graph, { P: 1 }).unwrap() == "Q=Mul(X,X) M=ReduceMean(Q) R=Sqrt(M) D=Div(X,R) H=Mul(D,G) Y=MatMul(H,W) P/whole=Softmax(X) P=Slice(P/whole,loam.last-2.starts) | Y N,S,W1";
 }
 
 test "a cut along the axis a reduction folds stays at the output" {

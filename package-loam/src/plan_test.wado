@@ -1,14 +1,11 @@
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { Decision, Kind, Plan, Reason, plan } from "./plan.wado";
-use { LayoutRule, Schema } from "./schema.wado";
 
-/// The plan for `source`, every tensor's axes named by `layout`.
-fn plan_of(source: String, layout: List<[String, List<String>]>, fuse: bool = true) -> Plan {
+/// The plan for `source`.
+fn plan_of(source: String, fuse: bool = true) -> Plan {
     let graph = read(&source).unwrap();
-    let rules: List<LayoutRule> = layout.into_iter().map(|r| LayoutRule { pattern: r.0, axes: r.1 }).collect();
-    let checked = infer(&graph, &Schema { layout: rules }).unwrap();
-    return plan(&graph, &checked, fuse);
+    return plan(&graph, &infer(&graph).unwrap(), fuse);
 }
 
 fn fused(into: String) -> Decision {
@@ -31,33 +28,8 @@ mlp (float[N, 4] X) => (float[N, 2] Y)
 }
 `;
 
-fn mlp_layout() -> List<[String, List<String>]> {
-    return [
-        [
-            "X",
-            ["Batch", "In"],
-        ],
-        [
-            "W1",
-            ["In", "Hidden"],
-        ],
-        [
-            "B1",
-            ["Hidden"],
-        ],
-        [
-            "W2",
-            ["Hidden", "Out"],
-        ],
-        [
-            "B2",
-            ["Out"],
-        ],
-    ];
-}
-
 test "a contraction and the elementwise chain after it fuse into the last kernel of the chain" {
-    let p = plan_of(MLP, mlp_layout());
+    let p = plan_of(MLP);
     assert p.of(&"H") == fused("A");
     assert p.of(&"HB") == fused("A");
     // A kernel that takes a product in is no prologue of the product reading it.
@@ -67,26 +39,14 @@ test "a contraction and the elementwise chain after it fuse into the last kernel
 }
 
 test "a kernel read only by a Shape is written, its reader making elements from extents alone" {
-    let p = plan_of(
-        `
+    let p = plan_of(`
 shaped (float[N, 4] X) => (int64[2] S, float[N, 4] Y)
 {
     R = Relu(X)
     S = Shape(R)
     Y = Neg(X)
 }
-`,
-        [
-            [
-                "X",
-                ["Batch", "In"],
-            ],
-            [
-                "S",
-                ["Rank"],
-            ],
-        ],
-    );
+`);
     // A Shape reads extents alone, which stage 0 has, so nothing reads R.
     assert p.of(&"R") == written(Reason::ReadTimes(0));
 }
@@ -102,35 +62,8 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
 }
 `;
 
-global LINEAR_LAYOUT: List<[String, List<String>]> = [
-    [
-        "X",
-        ["Batch", "Seq", "In"],
-    ],
-    [
-        "W",
-        ["In", "Out"],
-    ],
-    [
-        "B",
-        ["Out"],
-    ],
-    [
-        "F",
-        ["(Batch Seq)", "In"],
-    ],
-    [
-        "G",
-        ["(Batch Seq)", "Out"],
-    ],
-    [
-        "*",
-        ["Batch", "Seq", "Out"],
-    ],
-];
-
 test "a Gemm between a flattening Reshape and its restoring one is one product over the leading axes" {
-    let p = plan_of(LINEAR, LINEAR_LAYOUT);
+    let p = plan_of(LINEAR);
     assert p.lowering(0) matches { Flattened };
     assert p.lowering(2) matches { Restored };
     assert p.spread_of(&"G") matches { Some(s) && s.operand == "X" && s.restored == "R" };
@@ -141,7 +74,7 @@ test "a Gemm between a flattening Reshape and its restoring one is one product o
 test "a Gemm whose flattened operand or product the scope returns is no spread" {
     for let returned of ["float[8, 8] F", "float[8, 6] G"] {
         let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, ${returned})`);
-        let p = plan_of(source, LINEAR_LAYOUT);
+        let p = plan_of(source);
         assert p.lowering(0) matches { Kernel };
         assert p.spread_of(&"G") matches { None };
     }
@@ -158,17 +91,12 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[8, 6] B) => (float[2, 4, 6] Y)
     Y = Relu(R)
 }
 `;
-    let mut layout = LINEAR_LAYOUT;
-    layout[2] = [
-        "B",
-        ["(Batch Seq)", "Out"],
-    ];
-    assert plan_of(source, layout).spread_of(&"G") matches { None };
+    assert plan_of(source).spread_of(&"G") matches { None };
 }
 
 test "a Reshape merging more than the leading axes is no spread" {
-    // The restored axes lead with X's, yet the product's inner axis is
-    // `(Seq In)`, not X's last.
+    // The restored axes lead with X's, yet the product's inner axis merges
+    // X's last two, not X's last alone.
     let source = `
 lin (float[2, 3, 4] X, float[12, 6] W) => (float[2, 3, 2] Y)
 <int64[2] Flat = {2, 12}, int64[3] Back = {2, 3, 2}>
@@ -178,33 +106,11 @@ lin (float[2, 3, 4] X, float[12, 6] W) => (float[2, 3, 2] Y)
     Y = Reshape(G, Back)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Seq", "In"],
-        ],
-        [
-            "W",
-            ["(Seq In)", "Out"],
-        ],
-        [
-            "F",
-            ["Batch", "(Seq In)"],
-        ],
-        [
-            "G",
-            ["Batch", "Out"],
-        ],
-        [
-            "Y",
-            ["Batch", "Three", "Part"],
-        ],
-    ]);
-    assert p.spread_of(&"G") matches { None };
+    assert plan_of(source).spread_of(&"G") matches { None };
 }
 
 test "with fusion off, nothing is spread" {
-    let p = plan_of(LINEAR, LINEAR_LAYOUT, false);
+    let p = plan_of(LINEAR, false);
     assert p.lowering(0) matches { Kernel };
     assert p.spread_of(&"G") matches { None };
 }
@@ -218,34 +124,13 @@ g (float[N, 4] A, float[4, 8] B, float[N, 1] V) => (float[N, 8] Z)
     Z = Mul(P, S)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "A",
-            ["Batch", "In"],
-        ],
-        [
-            "B",
-            ["In", "Feat"],
-        ],
-        [
-            "V",
-            ["Batch", "One"],
-        ],
-        [
-            "S",
-            ["Batch", "One"],
-        ],
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-    ]);
+    let p = plan_of(source);
     assert p.of(&"P") == fused("Z");
     assert p.rows_of(&"Z") matches { None };
 }
 
 test "with fusion off, every kernel writes its output" {
-    let p = plan_of(MLP, mlp_layout(), false);
+    let p = plan_of(MLP, false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {
         assert p.of(&tensor) == written(Reason::Unfused);
     }
@@ -259,12 +144,7 @@ g (float[N, 4] X) => (float[N, 4] Y)
     Y = Mul(A, A)
 }
 `;
-    assert plan_of(source, [
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-    ]).of(&"A") == fused("Y");
+    assert plan_of(source).of(&"A") == fused("Y");
 }
 
 test "a tensor two kernels read is written, since fusing it would compute it twice" {
@@ -276,32 +156,8 @@ g (float[N, 4] X) => (float[N, 4] Y, float[N, 4] Z)
     Z = Abs(A)
 }
 `;
-    assert plan_of(source, [
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-    ]).of(&"A") == written(Reason::ReadTimes(2));
+    assert plan_of(source).of(&"A") == written(Reason::ReadTimes(2));
 }
-
-global ROW_LAYOUT: List<[String, List<String>]> = [
-    [
-        "X",
-        ["Batch", "Feat"],
-    ],
-    [
-        "A",
-        ["Batch", "Feat"],
-    ],
-    [
-        "S",
-        ["Batch", "One"],
-    ],
-    [
-        "Y",
-        ["Batch", "Feat"],
-    ],
-];
 
 test "a reduction along the last axis joins one row kernel with what it reads and what reads it" {
     let source = `
@@ -313,7 +169,7 @@ g (float[N, 4] X) => (float[N, 4] Y)
     Y = Add(X, S)
 }
 `;
-    let p = plan_of(source, ROW_LAYOUT);
+    let p = plan_of(source);
     assert p.of(&"A") == fused("Y");
     assert p.of(&"S") == fused("Y");
     assert p.rows_of(&"Y") matches { Some(_) };
@@ -329,30 +185,15 @@ g (float[N, 4] X) => (float[N, 1] Y)
     Y = Sqrt(E)
 }
 `;
-    let layout: List<[String, List<String>]> = [
-        [
-            "X",
-            ["Batch", "Feat"],
-        ],
-        [
-            "*",
-            ["Batch", "One"],
-        ],
-    ];
-    let p = plan_of(source, layout);
+    let p = plan_of(source);
     assert p.of(&"S") == fused("Y");
-    assert p.rows_of(&"Y") matches { Some(rows) && rows.axes[1].name == "Feat" };
+    assert p.rows_of(&"Y") matches { Some(rows) && rows.axes[1].name == "X1" };
     let plain = plan_of(`
 g (float[N, 1] X) => (float[N, 1] Y)
 {
     Y = Relu(X)
 }
-`, [
-        [
-            "*",
-            ["Batch", "One"],
-        ],
-    ]);
+`);
     assert plain.rows_of(&"Y") matches { None };
 }
 
@@ -366,24 +207,7 @@ g (float[N, 4] X) => (float[N, 4] Y)
     Y = Add(X, S)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Feat"],
-        ],
-        [
-            "A",
-            ["Batch", "Feat"],
-        ],
-        [
-            "S",
-            ["One", "Feat"],
-        ],
-        [
-            "Y",
-            ["Batch", "Feat"],
-        ],
-    ]);
+    let p = plan_of(source);
     assert p.of(&"A") == written(Reason::Reader(Kind::Reduction));
     assert p.of(&"S") == written(Reason::Computes(Kind::Reduction));
 }
@@ -406,40 +230,7 @@ g (float[N, 4] X, float[4] G, float[4] B) => (float[N, 4] Y)
     Y = Add(R, B)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Feat"],
-        ],
-        [
-            "G",
-            ["Feat"],
-        ],
-        [
-            "B",
-            ["Feat"],
-        ],
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-        [
-            "M",
-            ["Batch", "One"],
-        ],
-        [
-            "V",
-            ["Batch", "One"],
-        ],
-        [
-            "A",
-            ["Batch", "One"],
-        ],
-        [
-            "D",
-            ["Batch", "One"],
-        ],
-    ]);
+    let p = plan_of(source);
     for let tensor of ["M", "C", "P", "V", "A", "D", "Q", "R"] {
         assert p.of(&tensor) == fused("Y");
     }
@@ -458,20 +249,7 @@ g (float[N, 4] X, float[4, 4] W, bool[N, 4] K) => (float[N, 4] Y)
     Y = Softmax <axis = -1> (U)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Feat"],
-        ],
-        [
-            "W",
-            ["Feat", "Out"],
-        ],
-        [
-            "*",
-            ["Batch", "Out"],
-        ],
-    ]);
+    let p = plan_of(source);
     assert p.of(&"T") == fused("Y");
     assert p.of(&"U") == fused("Y");
     assert p.of(&"S") == written(Reason::ContractionAndFold);
@@ -485,21 +263,7 @@ g (float[N, 4] X, float[4] B) => (float[N, 4] Y)
     Y = Add(X, R)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Feat"],
-        ],
-        [
-            "B",
-            ["Feat"],
-        ],
-        [
-            "R",
-            ["Feat"],
-        ],
-    ]);
-    assert p.of(&"R") == written(Reason::Stretched);
+    assert plan_of(source).of(&"R") == written(Reason::Stretched);
 }
 
 /// Two products of one left operand, by initializers where `weights` and by
@@ -510,7 +274,7 @@ fn two_products_plan(weights: bool) -> Plan {
     } else {
         [", float[4, 3] W, float[4, 3] V", ""];
     };
-    let source = `
+    return plan_of(`
 g (float[N, 4] X${inputs}) => (float[N, 3] Y)
 ${initializers}
 {
@@ -518,21 +282,7 @@ ${initializers}
     Q = MatMul(X, V)
     Y = Add(P, Q)
 }
-`;
-    return plan_of(source, [
-        [
-            "X",
-            ["Batch", "In"],
-        ],
-        [
-            "W",
-            ["In", "Out"],
-        ],
-        [
-            "V",
-            ["In", "Out"],
-        ],
-    ]);
+`);
 }
 
 test "two products of one left operand pair in one kernel" {
@@ -560,24 +310,7 @@ g (float[N, 4] X, float[N, 4] Z, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y
     Y = Add(P, Q)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "In"],
-        ],
-        [
-            "Z",
-            ["Batch", "Other"],
-        ],
-        [
-            "W",
-            ["In", "Out"],
-        ],
-        [
-            "V",
-            ["Other", "Out"],
-        ],
-    ]);
+    let p = plan_of(source);
     // The nodes are read last to first, so the later product is the one taken in.
     assert p.of(&"Q") == fused("Y");
     assert p.of(&"P") == written(Reason::SecondContraction);
@@ -591,7 +324,7 @@ fn normalized_plan(weights: bool) -> Plan {
     } else {
         [", float[4, 3] W, float[4, 3] V", ""];
     };
-    let source = `
+    return plan_of(`
 g (float[N, 4] X${inputs}) => (float[N, 3] Y)
 <float[4] G, int64[1] Axes = {1}${initializers}>
 {
@@ -606,38 +339,7 @@ g (float[N, 4] X${inputs}) => (float[N, 3] Y)
     R = MatMul(H, V)
     Y = Add(P, R)
 }
-`;
-    let mut layout: List<[String, List<String>]> = [
-        [
-            "W",
-            ["Feat", "Out"],
-        ],
-        [
-            "V",
-            ["Feat", "Out"],
-        ],
-        [
-            "G",
-            ["Feat"],
-        ],
-    ];
-    for let t of ["P", "R", "Y"] {
-        layout.push([
-            t,
-            ["Batch", "Out"],
-        ]);
-    }
-    for let t of ["M", "A", "D"] {
-        layout.push([
-            t,
-            ["Batch", "One"],
-        ]);
-    }
-    layout.push([
-        "*",
-        ["Batch", "Feat"],
-    ]);
-    return plan_of(source, layout);
+`);
 }
 
 test "a row kernel only products by weights read is their kernel's prologue" {
@@ -667,21 +369,7 @@ g (float[N, 4] X) => (float[N, 3] Y)
     Y = MatMul(M, W)
 }
 `;
-    let layout: List<[String, List<String>]> = [
-        [
-            "W",
-            ["Feat", "Out"],
-        ],
-        [
-            "Y",
-            ["Batch", "Out"],
-        ],
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-    ];
-    let p = plan_of(source, layout);
+    let p = plan_of(source);
     assert p.of(&"S") == fused("M");
     assert p.of(&"M") == written(Reason::Reader(Kind::Contraction));
 }
@@ -689,7 +377,7 @@ g (float[N, 4] X) => (float[N, 3] Y)
 /// The plan of three products of one normalized input by weights of 3, 2 and
 /// 3 columns, each returned, the first read through `first`.
 fn concatenated_plan(first: String) -> Plan {
-    let source = `
+    return plan_of(`
 g (float[N, 4] X) => (float[N, 3] Y, float[N, 2] R, float[N, 3] T)
 <int64[1] Axes = {1}, float[4, 3] W, float[4, 2] V, float[4, 3] U>
 {
@@ -702,44 +390,7 @@ g (float[N, 4] X) => (float[N, 3] Y, float[N, 2] R, float[N, 3] T)
     T = MatMul(H, U)
     Y = ${first}(P)
 }
-`;
-    let mut layout: List<[String, List<String>]> = [
-        [
-            "W",
-            ["Feat", "Out"],
-        ],
-        [
-            "U",
-            ["Feat", "Three"],
-        ],
-        [
-            "V",
-            ["Feat", "Two"],
-        ],
-        [
-            "R",
-            ["Batch", "Two"],
-        ],
-    ];
-    for let t of ["P", "T", "Y"] {
-        layout.push([
-            t,
-            ["Batch", "Out"],
-        ]);
-    }
-    layout.push([
-        "M",
-        ["Batch", "One"],
-    ]);
-    layout.push([
-        "D",
-        ["Batch", "One"],
-    ]);
-    layout.push([
-        "*",
-        ["Batch", "Feat"],
-    ]);
-    return plan_of(source, layout);
+`);
 }
 
 test "products of one input by weights, each a kernel alone, are one product" {
@@ -766,17 +417,7 @@ g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y)
     Y = Relu(P)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "X",
-            ["Batch", "Chan", "Row", "Col"],
-        ],
-        [
-            "*",
-            ["Batch", "Chan", "Row2", "Col2"],
-        ],
-    ]);
-    assert p.of(&"P") == written(Reason::Computes(Kind::Window));
+    assert plan_of(source).of(&"P") == written(Reason::Computes(Kind::Window));
 }
 
 test "a fused chain names the kernel that finally writes it" {
@@ -788,12 +429,7 @@ g (float[N, 4] X) => (float[N, 4] Y)
     Y = Abs(B)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "*",
-            ["Batch", "Feat"],
-        ],
-    ]);
+    let p = plan_of(source);
     assert p.of(&"A") == fused("Y");
     assert p.of(&"B") == fused("Y");
 }
@@ -806,24 +442,14 @@ fn head_plan(input: bool, returned: bool) -> Plan {
     let inputs = if input { `float[1, 2, 4] X, ${embedding}` } else { "float[1, 2, 4] X" };
     let outputs = if returned { "float[1, 2, 6] Y, float[4, 6] T" } else { "float[1, 2, 6] Y" };
     let weights = if input { "" } else { `<${embedding}>` };
-    let source = `
+    return plan_of(`
 head (${inputs}) => (${outputs})
 ${weights}
 {
     T = Transpose(E)
     Y = MatMul(X, T)
 }
-`;
-    return plan_of(source, [
-        [
-            "X",
-            ["Batch", "Seq", "Embed"],
-        ],
-        [
-            "E",
-            ["Vocab", "Embed"],
-        ],
-    ]);
+`);
 }
 
 test "a weight's transpose only a product reads is read as the weight is stored" {
@@ -845,15 +471,5 @@ scores (float[1, 2, 4] Q, float[1, 3, 4] K) => (float[1, 2, 3] Y)
     Y = MatMul(Q, T)
 }
 `;
-    let p = plan_of(source, [
-        [
-            "Q",
-            ["Batch", "Seq", "Embed"],
-        ],
-        [
-            "K",
-            ["Batch", "Past", "Embed"],
-        ],
-    ]);
-    assert p.lowering(0) matches { Kernel };
+    assert plan_of(source).lowering(0) matches { Kernel };
 }

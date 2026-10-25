@@ -4,25 +4,12 @@
 
 use { generated, program_over, ran } from "./oracle.wado";
 use { read } from "lib:loam/src/onnx_text.wado";
-use { LayoutRule, Schema } from "lib:loam/src/schema.wado";
 
 global MLP: String = #include_str("../example/mlp.onnxtext");
 
-fn rule(pattern: String, axes: List<String>) -> LayoutRule {
-    return LayoutRule { pattern, axes };
-}
-
 test "the MLP runs through an opaque backend as it does on the CPU" {
     let graph = read(&MLP).unwrap();
-    let source = generated(&graph, &Schema {
-        layout: [
-            rule("X", ["Batch", "In"]),
-            rule("W1", ["In", "Hidden"]),
-            rule("B1", ["Hidden"]),
-            rule("W2", ["Hidden", "Out"]),
-            rule("B2", ["Out"]),
-        ],
-    }).unwrap();
+    let source = generated(&graph).unwrap();
     let program = `${program_over(&source)}
 fn weight<A>(extents: List<i32>, value: f32) -> Tensor<f32, A> {
     let mut count = 1;
@@ -43,7 +30,7 @@ export fn run() with Stdout {
     for let i of 0..<2 * 128 {
         data.push((i % 7) as f32 - 3.0);
     }
-    let x = Tensor::<f32, [Batch, In]> { data, extents: [2, 128] };
+    let x = Tensor::<f32, [N, X1]> { data, extents: [2, 128] };
     let mut opaque = Opaque::new();
     let through = forward(&mut opaque, &x, &weights.prepare(&mut opaque));
     let direct = forward(&mut Cpu {}, &x, &weights.prepare(&mut Cpu {}));
@@ -58,28 +45,13 @@ global BRANCH: String = #include_str("./branch.onnxtext");
 
 test "an If reads its condition back through the opaque backend" {
     let graph = read(&BRANCH).unwrap();
-    let source = generated(&graph, &Schema {
-        layout: [
-            rule("C", ["One"]),
-            rule("X", ["Seq", "Embed"]),
-            rule("P", ["Past", "Embed"]),
-            rule("V", ["Seq", "Embed"]),
-            rule("K", ["Embed"]),
-            rule("W", ["Embed"]),
-            LayoutRule {
-                pattern: "T",
-                axes: ["Joined", "Embed"],
-                graph: Option::Some("with_past"),
-            },
-            rule("Y", ["Total", "Embed"]),
-        ],
-    }).unwrap();
+    let source = generated(&graph).unwrap();
     let program = `${program_over(&source)}
 export fn run() with Stdout {
     for let taken of [true, false] {
-        let c = Tensor::<bool, [One]> { data: [taken], extents: [1] };
-        let x = Tensor::<f32, [Seq, Embed]> { data: [1.0, 2.0], extents: [1, 2] };
-        let p = Tensor::<f32, [Past, Embed]> { data: [3.0, 4.0], extents: [1, 2] };
+        let c = Tensor::<bool, [C0]> { data: [taken], extents: [1] };
+        let x = Tensor::<f32, [N, X1]> { data: [1.0, 2.0], extents: [1, 2] };
+        let p = Tensor::<f32, [M, X1]> { data: [3.0, 4.0], extents: [1, 2] };
         let mut opaque = Opaque::new();
         let through = forward(&mut opaque, &c, &x, &p, &x, &Prepared::embedded(&mut opaque));
         let direct = forward(&mut Cpu {}, &c, &x, &p, &x, &Prepared::embedded(&mut Cpu {}));
@@ -94,13 +66,7 @@ global HALF: String = #include_str("../example/half.onnxtext");
 
 test "a half-precision model converts its weights once, not per call" {
     let graph = read(&HALF).unwrap();
-    let source = generated(&graph, &Schema {
-        layout: [
-            rule("X", ["Batch", "In"]),
-            rule("W", ["In", "Out"]),
-            rule("B", ["Out"]),
-        ],
-    }).unwrap();
+    let source = generated(&graph).unwrap();
     let program = `${program_over(&source)}
 fn halves<A>(extents: List<i32>, step: f32) -> Tensor<f16, A> {
     let mut count = 1;
@@ -121,7 +87,7 @@ export fn run() with Stdout {
     let before = opaque.prepared;
     let mut same = true;
     for let call of 0..<3 {
-        let x = halves::<[Batch, In]>([1, 4], call as f32 + 1.0);
+        let x = halves::<[N, X1]>([1, 4], call as f32 + 1.0);
         let once = forward(&mut opaque, &x, &prepared);
         let per_call = forward(&mut Cpu {}, &x, &weights.prepare(&mut Cpu {}));
         same = same && once.data == per_call.data;

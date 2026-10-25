@@ -73,9 +73,6 @@ pub struct NameCollision {
 }
 
 pub variant EmitError {
-    /// An axis named as something the generated module declares. Unlike a
-    /// tensor, it is not renamed: the schema's author chose the word.
-    ReservedAxis(String),
     Dtype(UnmappedDtype),
     Collision(NameCollision),
     /// A graph with nothing for `forward` to return.
@@ -101,9 +98,6 @@ impl Display for NameCollision {
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
-            ReservedAxis(axis) => {
-                f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
-            },
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             NoOutput => f.write_str("the graph declares no output for `forward` to return"),
@@ -267,10 +261,7 @@ impl Names {
             reserved.insert(MAP);
         }
         for let axis of *axes {
-            if is_bound(&reserved, &axis) {
-                builtin::cold_path();
-                return Result::Err(EmitError::ReservedAxis(axis));
-            }
+            assert !is_bound(&reserved, &axis), "infer names an axis past every name the module declares";
             reserved.insert(axis);
         }
         let mut tensors: List<String> = [];

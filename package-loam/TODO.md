@@ -100,8 +100,7 @@ leaves this file, and `design.md` states what it built.
 14. [ ] Qwen 3.5 0.8B, a decoder whose layers are mostly recurrent. Finished
     when `example/qwen3.5-0.8b/` continues a prompt with the tokens onnxruntime
     picks, under `wado run-webgpu` from onnx-community's `q4` export of the
-    text model, with no `layout` option and no line that names a layer, and
-    its tokenizer gives the ids Hugging Face's gives.
+    text model, with no line that names a layer, and its tokenizer gives the ids Hugging Face's gives.
 15. [ ] A table stays where it is stored. A weight that only a `Gather` reads,
     as an embedding is, is prepared as a table whose storage the backend
     chooses, and a pass reads only the rows it gathers. Finished when Gemma 4
@@ -109,8 +108,7 @@ leaves this file, and `design.md` states what it built.
     serves its rows with the host holding none of the rest.
 16. [ ] Gemma 4 E2B. Finished when `example/gemma4-e2b/` continues a prompt
     with the tokens onnxruntime picks, under `wado run-webgpu` from
-    onnx-community's `q4` export, with no `layout` option and no line that
-    names a layer.
+    onnx-community's `q4` export, with no line that names a layer.
 17. [ ] A half graph keeps its type. Every kernel stores the element type the
     graph gives its output, `Prepared` holds a half weight as a half, and
     `WebGpuBackend` computes in f16 where the device offers `shader-f16` (see
@@ -142,8 +140,8 @@ leaves this file, and `design.md` states what it built.
     budget of half its experts.
 21. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
     continues a prompt with the tokens onnxruntime picks from onnx-community's
-    `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no
-    `layout` option and no line that names a layer, and `design.md` records how
+    `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no line
+    that names a layer, and `design.md` records how
     often a routed expert was already held, with the eviction order it chose and
     why.
 22. [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
@@ -204,8 +202,8 @@ generated call spells the lists stage 0 computed. A permutation of three or more
 axes is one such kernel, `permute`, since each of the `n!` orders is its own
 type. So is `matmul_broadcast`, which serves every product whose operands drop
 a rank-1 operand's axis or stretch a batch axis of 1. So is `lift`, which reads
-an elementwise operand under the axes it meets where the layout names an axis
-of 1 apart from the one it stretches to.
+an elementwise operand under the axes it meets where it stretches an axis of 1,
+which stays an axis of its own.
 
 Stage 0 evaluates `Shape`, and no kernel computes it, so it stops the build
 where the build does not know its operand. `Concat` has a kernel, and stage 0
@@ -241,12 +239,6 @@ A `dim_param` spells arithmetic only in the whitespace-separated form The Graph
 Is ONNX gives. `past_sequence_length+1` is one opaque name, and so is any
 spelling with parentheses or division.
 
-### Axis names
-
-`layout` can name a merged axis by its parts, as `"(C H W)"`. That gives the
-axis an extent but not its parts, so regrouping such an axis stops the build
-naming the part.
-
 ### Graphs and branches
 
 A model exported as two graphs carries its weights twice. GPT-2's decoder and
@@ -259,9 +251,6 @@ does an attribute holding a list of graphs.
 
 An `If` output whose branches give it two lengths has a length nothing binds.
 A node after the `If` that reads that length stops the build.
-
-A constant that only branch-scoped layout rules name is spelled in each branch
-that reads it.
 
 A condition the build knows still compiles both branches.
 
