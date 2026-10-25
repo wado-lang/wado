@@ -1388,7 +1388,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tt.type_name(self_ty),
             )
         };
-        if is_concrete_value && !is_resource && !self.tysys.carries_resource(self_ty) {
+        if is_concrete_value && !is_resource && !self.tysys.carries_affine(self_ty) {
             let _ = self.emit(TypeError::SelfByValueOnNonResource { type_name, span });
         }
     }

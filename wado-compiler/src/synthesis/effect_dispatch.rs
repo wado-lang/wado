@@ -18,10 +18,10 @@ use crate::name::{
     effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
 use crate::package::Package;
+use crate::synthesis::affine_drop;
 use crate::synthesis::common::{
     alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
-use crate::synthesis::resource_cleanup;
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
@@ -1186,7 +1186,7 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
         // The desugaring marks what it moves for the instances of a template,
         // whose drops are elaborated later; any other body's already are.
         if ctx.desugared && !func.is_template() {
-            resource_cleanup::strip_moves(func);
+            affine_drop::strip_moves(func);
         }
     }
 }
@@ -1778,7 +1778,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // desugared block's tail. Wrapping the entire body — rather than
         // detaching its last statement — preserves the value for every tail
         // kind (a bare expression, an `if`/`else`, a `match`, a labeled block),
-        // matching `synthesis::resource_cleanup::append_block_drops`.
+        // matching `synthesis::affine_drop::append_block_drops`.
         let body_span = body.span;
         let local = ctx.alloc_local(result_type);
         let name = format!("$with_result_{local}");
@@ -2532,7 +2532,7 @@ fn build_wrapper_indexes(
 }
 
 /// The resource half of [`rewrite_call_sites_to_wrappers`] again, for the
-/// drops `resource_cleanup` inserts after it: an installed handler sees a
+/// drops `affine_drop` inserts after it: an installed handler sees a
 /// scope-exit drop as it sees one the user wrote (WEP: Affine Types).
 pub fn rewrite_resource_drops(project: &Package) {
     for module in project.tir_modules.values() {

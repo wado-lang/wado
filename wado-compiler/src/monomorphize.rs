@@ -24,8 +24,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
-use crate::synthesis::resource_cleanup;
-use crate::synthesis::resource_cleanup::Generics;
+use crate::synthesis::affine_drop;
+use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
@@ -188,7 +188,7 @@ impl Monomorphization {
         write_back(flat, temp_module);
         // A generic body's drops are elaborated once its types are known
         // (WEP: Affine Types).
-        resource_cleanup::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
+        affine_drop::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
         self.elaborated_functions = flat.functions.len();
     }
 }

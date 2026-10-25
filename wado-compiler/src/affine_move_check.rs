@@ -22,7 +22,7 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
 #[derive(Debug, Clone)]
-pub struct ResourceMoveError {
+pub struct AffineMoveError {
     kind: MoveError,
     span: Span,
     module: String,
@@ -79,8 +79,8 @@ enum MoveError {
     GlobalHoldsReference { global: String, owner: String },
 }
 
-impl From<ResourceMoveError> for Diagnostic {
-    fn from(e: ResourceMoveError) -> Self {
+impl From<AffineMoveError> for Diagnostic {
+    fn from(e: AffineMoveError) -> Self {
         let (code, message) = match e.kind {
             MoveError::UseAfterMove { name, moved_at } => (
                 Code::TypeMismatch,
@@ -201,7 +201,7 @@ impl From<ResourceMoveError> for Diagnostic {
 }
 
 #[must_use]
-pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
+pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
     let drops = Drops::of(sem);
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
@@ -259,12 +259,12 @@ struct Checker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     drops: &'a Drops,
-    out: &'a mut Vec<ResourceMoveError>,
+    out: &'a mut Vec<AffineMoveError>,
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
-        self.out.push(ResourceMoveError {
+        self.out.push(AffineMoveError {
             kind,
             span,
             module: self.module.source_path(),

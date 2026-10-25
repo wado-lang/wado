@@ -8,13 +8,13 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::affine_holding::{Held, HeldTypes, holds_affine};
 use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
 use crate::type_table::{TypeKey, TypeTable};
@@ -144,15 +144,15 @@ impl TypeSystem {
 
     /// Whether `type_id` is, or holds at any depth, an affine resource: what
     /// makes a binding of it move-only, and a by-value `self` on it legal.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        holds_resource(self, type_id)
+    pub(crate) fn carries_affine(&self, type_id: TypeId) -> bool {
+        holds_affine(self, type_id)
     }
 
     /// Whether a value of `type_id` is move-only in a body whose `affine`
     /// type parameters are `affine_params`: it holds an affine resource, or
     /// one of those parameters, at any depth.
     pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
-        holds_resource(
+        holds_affine(
             &AffineParams {
                 types: self,
                 affine_params,
@@ -170,7 +170,7 @@ impl TypeSystem {
         };
         members
             .into_iter()
-            .position(|member| holds_resource(self, member))
+            .position(|member| holds_affine(self, member))
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
@@ -933,7 +933,7 @@ impl HeldTypes for AffineParams<'_> {
         };
         drop(table);
         if is_affine_param {
-            Held::Resource
+            Held::Affine
         } else {
             self.types.held(type_id)
         }
@@ -955,7 +955,7 @@ impl HeldTypes for TypeSystem {
                 .is_some_and(|def| table.is_affine_decl(def))
         };
         if declared_affine {
-            return Held::Resource;
+            return Held::Affine;
         }
         self.members_held(type_id)
     }
@@ -974,7 +974,7 @@ impl TypeSystem {
                 if self.type_table.borrow().is_unrestricted_resource(def) {
                     Held::Nothing
                 } else {
-                    Held::Resource
+                    Held::Affine
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,

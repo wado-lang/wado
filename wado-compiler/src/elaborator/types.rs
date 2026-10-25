@@ -3332,7 +3332,7 @@ pub(super) struct MethodInfo {
     pub(super) from_concrete_impl: bool,
     /// True when the receiver `self` is taken by value (not `&self` / `&mut
     /// self` / `self: &T`), so a call transfers ownership of the receiver.
-    /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
+    /// Mirrors `affine_drop`'s `owned_self` at the semantic layer; the
     /// move check reads it to flag use-after-move through a consuming method.
     pub(super) consumes_self: bool,
     /// An inherent member's declared rung. `None` where the member does not

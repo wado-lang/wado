@@ -5,6 +5,8 @@
 // to it.
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+mod affine_holding;
+pub mod affine_move_check;
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
@@ -65,8 +67,6 @@ mod prelower_reach;
 pub mod primitive;
 pub mod remarks;
 pub mod resolve;
-mod resource_holding;
-pub mod resource_move_check;
 pub mod self_comparison;
 pub mod semantics;
 pub mod signature_reach;
@@ -138,6 +138,7 @@ pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, semantics, semantics_for_world, semantics_of,
 };
 
+pub use affine_move_check::{AffineMoveError, check_affine_moves_semantic};
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
 pub use effect_check::{
@@ -157,7 +158,6 @@ use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;
@@ -1613,7 +1613,7 @@ fn compile_after_load<H: CompilerHost>(
             .map(|p| p.import_fq.clone())
             .collect();
         let diags = effect_check::check_semantics(&sem, provided_import_fqs);
-        let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
+        let move_errors = affine_move_check::check_affine_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         sem.redirect_effect_vars(&diags.rows);
         for error in diags.effects {

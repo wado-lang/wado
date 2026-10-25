@@ -3363,7 +3363,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
     ) -> (TirExpr, Option<TemplateFormatSpec>) {
         let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
-        let can_be_moved = self.tysys.carries_resource(value.type_id) && {
+        let can_be_moved = self.tysys.carries_affine(value.type_id) && {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(value.type_id);
             tt.nominal_def(head)
