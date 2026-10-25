@@ -2019,15 +2019,21 @@ fn invoke_stage_b_oracle(jar: &Jar) with (Stdout, Stderr, Environment, Preopens,
             let base = fs::join(&category_dir, &name);
             let expected_path = `${base}.expected`;
             let _ = fs::remove_file(&expected_path);
-            let Ok(start) = fs::read_to_string(`${base}.start`) else {
-                eprintln(`  ${label}: missing .start — skipping`);
-                continue;
+            let start = match fs::read_to_string(`${base}.start`) {
+                Ok(start) => start,
+                Err(e) => {
+                    eprintln(`  ${label}: ${e} — skipping`);
+                    continue;
+                },
             };
             let g4_path = fs::join(fs::join(&grammars_root, &category.name), `${name}.g4`);
-            let Ok(grammar) = fs::read_to_string(&g4_path) else {
-                eprintln(`  ${label}: grammar file missing at ${g4_path}`);
-                missing_g4 += 1;
-                continue;
+            let grammar = match fs::read_to_string(&g4_path) {
+                Ok(grammar) => grammar,
+                Err(e) => {
+                    eprintln(`  ${label}: ${e}`);
+                    missing_g4 += 1;
+                    continue;
+                },
             };
             let stripped_path = fs::join(stripped_dir, `${name}.g4`);
             let ran = oracle_on(jar, &stripped_path, &strip_action_bodies(&grammar), start, `${base}.input`);

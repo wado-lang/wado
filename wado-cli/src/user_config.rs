@@ -13,6 +13,8 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use wado_lsp::host::discovery::home_dir;
 
+use crate::cache::xdg_base_dir;
+
 #[derive(Default)]
 pub struct UserConfig {
     /// Where the file was read from, for the warnings about its entries.
@@ -53,10 +55,7 @@ pub fn user_config() -> &'static UserConfig {
 }
 
 fn config_path() -> Option<PathBuf> {
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(xdg).join("wado").join("config.toml"));
-    }
-    home_dir().map(|home| home.join(".config").join("wado").join("config.toml"))
+    xdg_base_dir("XDG_CONFIG_HOME", ".config").map(|dir| dir.join("wado").join("config.toml"))
 }
 
 fn load(path: &Path) -> Result<UserConfig, String> {

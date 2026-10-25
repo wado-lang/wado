@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_manifest::{DependencySource, MANIFEST_FILENAME, registry_url};
+use wado_manifest::{DependencySource, MANIFEST_FILENAME, MetadataSection, registry_url};
 
 use lexopt::Arg::Value;
 use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
@@ -1316,14 +1316,28 @@ fn embed_package_metadata(
     project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
 ) -> Vec<u8> {
-    if !opts.manifest_driven || opts.embed.metadata.resolve(opts.knobs.opt_level).is_none() {
-        return wasm;
+    match project.filter(|_| opts.manifest_driven) {
+        Some(project) => {
+            embed_metadata_sections(wasm, &package_metadata(project, opts.embed, &opts.knobs))
+        }
+        None => wasm,
     }
-    let Some(project) = project else {
-        return wasm;
-    };
+}
+
+/// The `[package]` metadata a build of `project` embeds: none without a
+/// `[package]`, or where `embed` turns it off at this `-O` level. It reads the
+/// git tree and the `license-file`, which no compile records, so a cached
+/// component is compared against it.
+pub(crate) fn package_metadata(
+    project: &manifest::ProjectManifest,
+    embed: EmbedOptions,
+    knobs: &CompileKnobs,
+) -> Vec<MetadataSection> {
+    if embed.metadata.resolve(knobs.opt_level).is_none() {
+        return Vec::new();
+    }
     let Some(pkg) = project.manifest.package.as_ref() else {
-        return wasm;
+        return Vec::new();
     };
     let revision = clean_git_revision(&project.root);
     let license_text = match read_license_text(project, pkg) {
@@ -1333,9 +1347,7 @@ fn embed_package_metadata(
             None
         }
     };
-    let sections =
-        wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref());
-    embed_metadata_sections(wasm, &sections)
+    wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref())
 }
 
 /// Read the `license-file` text to embed, resolving the path against the

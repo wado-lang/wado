@@ -20,8 +20,7 @@ pub fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Path to the freshly-built `wado` binary.
-pub fn wado_bin() -> PathBuf {
+fn wado_bin() -> PathBuf {
     assert_cmd::cargo::cargo_bin!("wado").into()
 }
 
@@ -39,18 +38,21 @@ fn user_config_home() -> &'static Path {
     DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
 }
 
-fn wado_command(dir: &Path) -> assert_cmd::Command {
+/// The freshly built `wado`, run in `dir` and kept off the real user's cache
+/// and config. A test that drives the child itself (a server, a pipe) takes
+/// this rather than [`wado_in`].
+pub fn wado_process(dir: &Path) -> Command {
     let mut cmd = Command::new(wado_bin());
     cmd.current_dir(dir)
         .env("XDG_CACHE_HOME", user_cache())
         .env("XDG_CONFIG_HOME", user_config_home());
-    cmd.into()
+    cmd
 }
 
 /// `wado` invocation rooted at the project root. Use this when the test
 /// drives an example file (e.g. `example/hello.wado`) by relative path.
 pub fn wado() -> assert_cmd::Command {
-    wado_command(&project_root())
+    wado_in(&project_root())
 }
 
 /// `wado test`, reading no cached result: a test of the runner's own output
@@ -64,7 +66,7 @@ pub fn wado_test() -> assert_cmd::Command {
 /// `wado` invocation rooted at `dir`. Use this when the test creates a
 /// self-contained workspace (`wado.toml`, sources) under a tempdir.
 pub fn wado_in(dir: &Path) -> assert_cmd::Command {
-    wado_command(dir)
+    wado_process(dir).into()
 }
 
 /// Single-threaded Tokio runtime for tests that drive async APIs from a

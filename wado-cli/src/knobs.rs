@@ -388,9 +388,8 @@ impl RuntimeKnobs {
                 ProcessGrant::Offered { read } if read.is_empty() => {
                     self.process = ProcessGrant::Denied;
                 }
-                ProcessGrant::Offered { .. } | ProcessGrant::Denied => {
-                    return Err(process_read_with_deny());
-                }
+                ProcessGrant::Offered { .. } => return Err(process_read_with_deny()),
+                ProcessGrant::Denied => {}
             },
             RuntimeKnobOpt::ProcessRead => {
                 let path = args::require_string(parser)?;

@@ -1494,6 +1494,43 @@ fn test_run_reuses_its_component_until_something_it_read_changes() {
     );
 }
 
+/// The package metadata a project's component embeds is read outside the
+/// compile, so the cached component is checked against it too.
+#[test]
+fn test_run_rebuilds_a_cached_component_once_its_license_file_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"lic\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+    std::fs::write(
+        tmp.path().join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n",
+    )
+    .unwrap();
+    let embedded_license = |text: &str| {
+        std::fs::write(tmp.path().join("LICENSE"), text).unwrap();
+        wado_in(tmp.path())
+            .args(["run", "src/main.wado"])
+            .assert()
+            .success();
+        let cached: Vec<_> = std::fs::read_dir(tmp.path().join("build/run"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "wasm"))
+            .collect();
+        assert_eq!(cached.len(), 1);
+        custom_sections(&cached[0])
+            .into_iter()
+            .find(|(name, _)| name == "org.wado-lang.license")
+            .map(|(_, payload)| String::from_utf8(payload).unwrap())
+    };
+    assert_eq!(embedded_license("one").as_deref(), Some("one"));
+    assert_eq!(embedded_license("two").as_deref(), Some("two"));
+}
+
 #[test]
 fn test_clean_global_removes_the_user_cache() {
     let cache = tempfile::tempdir().unwrap();
@@ -1511,6 +1548,22 @@ fn test_clean_global_removes_the_user_cache() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("pass one"));
+}
+
+#[test]
+fn test_clean_global_ignores_a_relative_xdg_cache_home() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join(".cache/wado")).unwrap();
+    std::fs::create_dir_all(cwd.path().join("rel/wado")).unwrap();
+    wado_in(cwd.path())
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", "rel")
+        .args(["clean", "--global"])
+        .assert()
+        .success();
+    assert!(cwd.path().join("rel/wado").exists());
+    assert!(!home.path().join(".cache/wado").exists());
 }
 
 #[test]
@@ -1810,6 +1863,15 @@ fn test_run_process_read_takes_an_existing_path_and_a_spawning_guest() {
             .failure()
             .stderr(predicate::str::contains("which --deny-process forbids"));
     }
+    wado()
+        .args([
+            "run",
+            "--deny-process",
+            "--deny-process",
+            "example/hello.wado",
+        ])
+        .assert()
+        .success();
 }
 
 #[test]

@@ -424,8 +424,8 @@ Options:
 fn read_grammar(path: String, what: String) -> Result<Grammar, String> with Preopens {
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(_) => {
-            return Err(`oracle: cannot find ${what}: ${path}\n`);
+        Err(e) => {
+            return Err(`oracle: cannot read the ${what}: ${e}\n`);
         },
     };
     return Ok(Grammar {
@@ -508,8 +508,8 @@ internal fn parse_request(arguments: List<String>) -> Result<Request, String> wi
     };
     let grammar = read_grammar(positional[0], "grammar file")?;
     for let src of &supers {
-        if !fs::exists(src) {
-            return Err(`oracle: cannot find --super source: ${*src}\n`);
+        if let Err(e) = fs::metadata(src) {
+            return Err(`oracle: cannot read the --super source: ${e}\n`);
         }
     }
     if let Some(super_class) = grammar.super_class && !probe_super && supers.is_empty() {
@@ -558,17 +558,36 @@ internal fn run_request<T: AsByteSlice>(
     input: &T,
     keep: bool,
 ) -> Ran with (Process, Preopens, Random) {
-    let work = fs::join(WORK_ROOT, token_hex(8));
-    if let Err(e) = fs::create_dir_all(&work) {
-        return failed(`oracle: ${e}\n`);
-    }
-    let mut ran = run_in(jar, request, input, &work);
-    if keep {
-        ran.stderr = `oracle: keeping work dir: ${work}\n${ran.stderr}`;
-    } else {
-        let _ = fs::remove_dir_all(&work);
-    }
+    let recognizer = Recognizer::new(jar, request);
+    let mut ran = match compile(&recognizer) {
+        Some(failure) => failure,
+        None => parse(&recognizer, input),
+    };
+    ran.stderr = `${discard(&recognizer, keep)}${ran.stderr}`;
     return ran;
+}
+
+/// One request's recognizer, generated and compiled in a work directory of its
+/// own, so a caller with many inputs builds it once.
+internal struct Recognizer {
+    jar: Jar,
+    request: Request,
+    work: String,
+}
+
+impl Recognizer {
+    internal fn new(jar: &Jar, request: &Request) -> Recognizer with Random {
+        return Recognizer { jar: *jar, request: *request, work: fs::join(WORK_ROOT, token_hex(8)) };
+    }
+}
+
+/// Remove the work directory, or keep it and say where.
+internal fn discard(recognizer: &Recognizer, keep: bool) -> String with Preopens {
+    if keep {
+        return `oracle: keeping work dir: ${recognizer.work}\n`;
+    }
+    let _ = fs::remove_dir_all(&recognizer.work);
+    return "";
 }
 
 fn output_text(out: &Output) -> String {
@@ -579,7 +598,14 @@ fn succeeded(out: &Output) -> bool {
     return out.status matches { Exited(0) };
 }
 
-fn run_in<T: AsByteSlice>(jar: &Jar, request: &Request, input: &T, work: &String) -> Ran with (Process, Preopens) {
+/// Generate and compile the recognizer; the failure, if any.
+internal fn compile(recognizer: &Recognizer) -> Option<Ran> with (Process, Preopens) {
+    let jar = &recognizer.jar;
+    let request = &recognizer.request;
+    let work = &recognizer.work;
+    if let Err(e) = fs::create_dir_all(work) {
+        return Some(failed(`oracle: ${e}\n`));
+    }
     // The lexer goes first, so its `.tokens` exists when the parser's
     // `tokenVocab` asks for it.
     let mut grammars: List<String> = [];
@@ -591,23 +617,19 @@ fn run_in<T: AsByteSlice>(jar: &Jar, request: &Request, input: &T, work: &String
     for let g of &sources {
         let path = fs::join(work, `${g.name}.g4`);
         if let Err(e) = fs::write(&path, &g.text) {
-            return failed(`oracle: ${e}\n`);
+            return Some(failed(`oracle: ${e}\n`));
         }
         grammars.push(path);
-    }
-    let input_path = fs::join(work, "input.txt");
-    if let Err(e) = fs::write(&input_path, input) {
-        return failed(`oracle: ${e}\n`);
     }
     for let src of &request.supers {
         let bytes = match fs::read(src) {
             Ok(bytes) => bytes,
             Err(e) => {
-                return failed(`oracle: ${e}\n`);
+                return Some(failed(`oracle: ${e}\n`));
             },
         };
         if let Err(e) = fs::write(fs::join(work, fs::file_name(src).unwrap()), &bytes) {
-            return failed(`oracle: ${e}\n`);
+            return Some(failed(`oracle: ${e}\n`));
         }
     }
     if request.probe_super {
@@ -615,11 +637,11 @@ fn run_in<T: AsByteSlice>(jar: &Jar, request: &Request, input: &T, work: &String
         let stub = match probe_super_source(&request.grammar.text, super_class) {
             Ok(stub) => stub,
             Err(message) => {
-                return failed(message);
+                return Some(failed(message));
             },
         };
         if let Err(e) = fs::write(fs::join(work, `${super_class}.java`), &stub) {
-            return failed(`oracle: ${e}\n`);
+            return Some(failed(`oracle: ${e}\n`));
         }
     }
 
@@ -632,10 +654,10 @@ fn run_in<T: AsByteSlice>(jar: &Jar, request: &Request, input: &T, work: &String
         Ok(out) && succeeded(&out) => {
         },
         Ok(out) => {
-            return failed(`oracle: antlr4 codegen failed\n${output_text(&out)}`);
+            return Some(failed(`oracle: antlr4 codegen failed\n${output_text(&out)}`));
         },
         Err(e) => {
-            return failed(`oracle: ${e}\n`);
+            return Some(failed(`oracle: ${e}\n`));
         },
     }
 
@@ -643,20 +665,25 @@ fn run_in<T: AsByteSlice>(jar: &Jar, request: &Request, input: &T, work: &String
         Ok(entries) => entries.into_iter().filter(|e| e.name.ends_with(".java")).map(|e| fs::join(work, e.name)).collect(
         ),
         Err(e) => {
-            return failed(`oracle: ${e}\n`);
+            return Some(failed(`oracle: ${e}\n`));
         },
     };
-    match Command::new("javac").args(["-cp", jar.path, "-d", *work]).args(java_files).output() {
-        Ok(out) && succeeded(&out) => {
-        },
-        Ok(out) => {
-            return failed(`oracle: javac failed\n${output_text(&out)}`);
-        },
-        Err(e) => {
-            return failed(`oracle: ${e}\n`);
-        },
-    }
+    return match Command::new("javac").args(["-cp", jar.path, "-d", *work]).args(java_files).output() {
+        Ok(out) && succeeded(&out) => null,
+        Ok(out) => Some(failed(`oracle: javac failed\n${output_text(&out)}`)),
+        Err(e) => Some(failed(`oracle: ${e}\n`)),
+    };
+}
 
+/// What the compiled recognizer answers for `input`.
+internal fn parse<T: AsByteSlice>(recognizer: &Recognizer, input: &T) -> Ran with (Process, Preopens) {
+    let jar = &recognizer.jar;
+    let request = &recognizer.request;
+    let work = &recognizer.work;
+    let input_path = fs::join(work, "input.txt");
+    if let Err(e) = fs::write(&input_path, input) {
+        return failed(`oracle: ${e}\n`);
+    }
     let testrig = |props: List<String>| -> Result<Output, String> {
         let [start, flag] = match request.mode {
             Tree(rule) => [rule, "-tree"],

@@ -55,10 +55,20 @@ pub fn init_root_from_config() {
 /// `~/.cache/wado`. Not the Wado [`root`], which holds dependencies a build
 /// needs rather than what any build can recreate.
 pub fn user_cache_dir() -> Option<PathBuf> {
-    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(xdg).join("wado"));
+    xdg_base_dir("XDG_CACHE_HOME", ".cache").map(|dir| dir.join("wado"))
+}
+
+/// The XDG base directory `var` names, else `~/<default>`. A relative value is
+/// ignored, as the XDG spec requires: it would name a different directory from
+/// every working directory.
+pub fn xdg_base_dir(var: &str, default: &str) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os(var)
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+    {
+        return Some(dir);
     }
-    home_dir().map(|home| home.join(".cache").join("wado"))
+    home_dir().map(|home| home.join(default))
 }
 
 /// The directory for the `kind` cache of a file in the package at

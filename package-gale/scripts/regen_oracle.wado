@@ -25,7 +25,16 @@ use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
-use { jar_or_exit, parse_request, run_request, Jar, PINNED_VERSION } from "./antlr4_oracle.wado";
+use {
+    compile,
+    discard,
+    jar_or_exit,
+    parse,
+    parse_request,
+    Jar,
+    Recognizer,
+    PINNED_VERSION,
+} from "./antlr4_oracle.wado";
 use sqlite from "../tests/grammars/SQLite.g4"
     with {
         generator: {
@@ -130,15 +139,16 @@ fn case_name(line: &String) -> String {
     return name.substr_bytes(0, name.floor_char_boundary(60));
 }
 
-fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preopens, Random, Stderr, Environment) {
-    let cases_path = fs::join("package-gale", target.cases);
-    let cases = match fs::read_to_string(&cases_path) {
-        Ok(text) => text,
-        Err(e) => {
-            return Err(`${e}`);
-        },
-    };
-    let request = parse_request([fs::join(TESTS, `grammars/${target.grammar}`), target.start])?;
+/// The test of each case, how many there are, and how many are `#[TODO]`. A
+/// case the jar does not parse stops the regen: there is no tree to pin.
+fn pinned_cases(
+    recognizer: &Recognizer,
+    target: &Target,
+    cases: &String,
+) -> Result<[String, i32, i32], String> with (Process, Preopens) {
+    if let Some(failure) = compile(recognizer) {
+        return Err(failure.stderr);
+    }
     let mut tests = "";
     let mut count = 0;
     let mut todo = 0;
@@ -148,7 +158,11 @@ fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preope
             continue;
         }
         count += 1;
-        let oracle = normalize(&String::from_utf8_lossy(&run_request(jar, &request, &line, false).stdout));
+        let ran = parse(recognizer, &line);
+        if ran.code != 0 {
+            return Err(`regen_oracle: the jar exited ${ran.code} on: ${line}\n${ran.stderr}`);
+        }
+        let oracle = normalize(&String::from_utf8_lossy(&ran.stdout));
         if oracle != normalize(&gale_tree(&target.key, &line)) {
             todo += 1;
             tests.push_str("#[TODO]\n");
@@ -157,6 +171,22 @@ fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preope
         tests.push_str(`    assert_tree("${escape(&line)}", "${escape(&oracle)}");\n`);
         tests.push_str("}\n\n");
     }
+    return Ok([tests, count, todo]);
+}
+
+fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preopens, Random, Stderr, Environment) {
+    let cases_path = fs::join("package-gale", target.cases);
+    let cases = match fs::read_to_string(&cases_path) {
+        Ok(text) => text,
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    let request = parse_request([fs::join(TESTS, `grammars/${target.grammar}`), target.start])?;
+    let recognizer = Recognizer::new(jar, &request);
+    let tests = pinned_cases(&recognizer, target, &cases);
+    let _ = discard(&recognizer, false);
+    let [tests, count, todo] = tests?;
 
     let module = target.module;
     let out = fs::join(TESTS, `driver_cst_${target.key}_oracle_test.wado`);

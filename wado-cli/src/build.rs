@@ -20,7 +20,7 @@ use tokio::task::JoinSet;
 use crate::args::{self, CliExit};
 use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
 use crate::fingerprint::Input;
-use crate::input_cache::InputCache;
+use crate::input_cache::{InputCache, Slot};
 use crate::kiln_provider::hex32;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{self, openable_dir};
@@ -347,19 +347,27 @@ pub async fn build_world_component(
 /// world. Metadata and WIT embed at their defaults, matching `wado build`, so a
 /// run/serve artifact is identical to a built one.
 ///
-/// A component built before, from sources unchanged since, is taken from the
-/// [`DriverCache`] instead, and nothing is written.
+/// A component built before, from sources unchanged since and with the same
+/// metadata to embed, is taken from the cache instead, and nothing is written.
 pub async fn build_for_driver(
     entry: &str,
     target_world: &str,
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
-    let cache = DriverCache::new(target_world, flags);
     let entry_path = Path::new(entry);
-    if let Some(wasm) = cache.lookup(entry_path) {
+    let project = compile::load_nearest_manifest(entry_path).map_err(CliExit::error)?;
+    let metadata = project.as_ref().map_or_else(String::new, |project| {
+        let sections = compile::package_metadata(project, EmbedOptions::default(), &flags.knobs);
+        sha256_hex(format!("{sections:?}").as_bytes())
+    });
+    let cache = InputCache::new("run", flags, target_world);
+    let slot = cache.slot(entry_path);
+    if let Some(wasm) = slot
+        .as_ref()
+        .and_then(|slot| cached_component(slot, &metadata))
+    {
         return Ok(wasm);
     }
-    let project = compile::load_nearest_manifest(entry_path).map_err(CliExit::error)?;
     let (wasm, reads) = if let Some(project) = project {
         let segment = compile::world_path_segment(target_world);
         let target = BuildTarget {
@@ -375,35 +383,28 @@ pub async fn build_for_driver(
         let (result, reads) = compile::compile_recording_reads(entry, flags).await?;
         (result.wasm, reads)
     };
-    if let Some(reads) = reads {
-        cache.store(entry_path, reads, &wasm);
+    if let (Some(reads), Some(slot)) = (reads, &slot) {
+        cache_component(slot, reads, &wasm, metadata);
     }
     Ok(wasm)
 }
 
-/// The components `run` and `serve` built, each beside an [`InputCache`]
-/// entry naming it by its SHA-256, so a torn or replaced file is a miss.
-struct DriverCache(InputCache);
-
-impl DriverCache {
-    fn new(target_world: &str, flags: &CompileFlags) -> Self {
-        Self(InputCache::new("run", flags, target_world))
+/// A component kept beside its entry, which names it by its SHA-256, so a
+/// torn or replaced file is a miss. Its own copy rather than `build/`'s, which
+/// `wado build` and concurrent drivers overwrite.
+fn cached_component(slot: &Slot<'_>, metadata: &str) -> Option<Vec<u8>> {
+    let (sha256, embedded): (String, String) = slot.lookup()?;
+    if embedded != metadata {
+        return None;
     }
+    let wasm = std::fs::read(slot.path("wasm")).ok()?;
+    (sha256_hex(&wasm) == sha256).then_some(wasm)
+}
 
-    fn lookup(&self, entry: &Path) -> Option<Vec<u8>> {
-        let sha256: String = self.0.lookup(entry)?;
-        let wasm = std::fs::read(self.0.entry_stem(entry)?.with_extension("wasm")).ok()?;
-        (sha256_hex(&wasm) == sha256).then_some(wasm)
-    }
-
-    fn store(&self, entry: &Path, reads: Vec<Input>, wasm: &[u8]) {
-        let Some(stem) = self.0.entry_stem(entry) else {
-            return;
-        };
-        // Losing the cache is never an error: the next run compiles again.
-        if write_atomic(&stem.with_extension("wasm"), wasm).is_ok() {
-            self.0.store(entry, reads, sha256_hex(wasm));
-        }
+fn cache_component(slot: &Slot<'_>, reads: Vec<Input>, wasm: &[u8], metadata: String) {
+    // Losing the cache is never an error: the next run compiles again.
+    if write_atomic(&slot.path("wasm"), wasm).is_ok() {
+        slot.store(reads, (sha256_hex(wasm), metadata));
     }
 }
 
