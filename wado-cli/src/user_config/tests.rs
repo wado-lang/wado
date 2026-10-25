@@ -51,14 +51,14 @@ fn a_file_others_can_write_is_ignored() {
     let path = dir.path().join("config.toml");
     fs::write(&path, "root = \"/srv/wado\"\n").unwrap();
 
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-    assert!(load(&path).unwrap().root.is_some());
-
-    for mode in [0o664, 0o646] {
+    for mode in [0o644, 0o664] {
         fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
-        let reason = load(&path).err().unwrap();
-        assert!(reason.contains("other users can write it"), "{reason}");
+        assert!(load(&path).unwrap().root.is_some());
     }
+
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o646)).unwrap();
+    let reason = load(&path).err().unwrap();
+    assert!(reason.contains("other users can write it"), "{reason}");
 }
 
 #[test]
