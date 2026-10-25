@@ -11,6 +11,7 @@ use crate::compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SpanEmitter,
 };
 use crate::hashmap;
+use crate::loader::PathSite;
 use crate::module_source::ModuleSource;
 
 /// Maximum number of errors before compilation is aborted
@@ -55,10 +56,10 @@ pub struct Logger<'a, H: CompilerHost> {
     /// Which module's parse minted each id space, over the loaded set. What
     /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
     parses: std::cell::RefCell<hashmap::IndexMap<AstIdSpace, ModuleSource>>,
-    /// Each wasm asset's file -> the `use` where a diagnostic in its bindings
-    /// is reported. The bindings are synthesized, so a location in them
-    /// indexes no text.
-    asset_origins: std::cell::RefCell<hashmap::IndexMap<String, DiagnosticSpan>>,
+    /// Each wasm asset's file -> the path of the `use` where a diagnostic in
+    /// its bindings is reported. The bindings are synthesized, so a location in
+    /// them indexes no text.
+    asset_origins: std::cell::RefCell<hashmap::IndexMap<String, PathSite>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -88,10 +89,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Record where each asset's bindings report ([`crate::loader::LoadResult::asset_origins`]).
-    pub fn register_asset_origins(
-        &self,
-        origins: impl IntoIterator<Item = (String, DiagnosticSpan)>,
-    ) {
+    pub fn register_asset_origins(&self, origins: impl IntoIterator<Item = (String, PathSite)>) {
         self.asset_origins.borrow_mut().extend(origins);
     }
 
@@ -204,8 +202,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             return diag;
         };
         if let Some(origin) = self.asset_origins.borrow().get(&span.file) {
-            diag.message = format!("in the bindings of `{}`: {}", span.file, diag.message);
-            *span = origin.clone();
+            diag.message = format!("in the bindings of `{}`: {}", origin.written, diag.message);
+            *span = origin.at.clone();
         }
         diag
     }
@@ -719,19 +717,22 @@ mod tests {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
         logger.register_asset_origins([(
-            "./c.wasm".to_string(),
-            DiagnosticSpan {
-                file: "t.wado".to_string(),
-                line: 3,
-                column: 31,
-                end_line: Some(3),
-                end_column: Some(41),
-                space: AstIdSpace::FRESH,
+            "./sub/c.wasm".to_string(),
+            PathSite {
+                written: "./c.wasm".to_string(),
+                at: DiagnosticSpan {
+                    file: "sub/t.wado".to_string(),
+                    line: 3,
+                    column: 31,
+                    end_line: Some(3),
+                    end_column: Some(41),
+                    space: AstIdSpace::FRESH,
+                },
             },
         )]);
 
         let _ = logger.error_at(
-            "./c.wasm",
+            "./sub/c.wasm",
             Diagnostic {
                 severity: Severity::Error,
                 code: Code::UnknownType,
@@ -749,7 +750,7 @@ mod tests {
 
         let diags = host.diagnostics();
         let span = diags[0].span.as_ref().unwrap();
-        assert_eq!(span.file, "t.wado");
+        assert_eq!(span.file, "sub/t.wado");
         assert_eq!((span.line, span.column), (3, 31));
         assert_eq!(
             diags[0].message,

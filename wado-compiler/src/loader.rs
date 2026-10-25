@@ -252,7 +252,7 @@ fn stdlib_identity_message(path: Option<&str>) -> String {
 impl std::error::Error for LoadError {}
 
 impl LoadError {
-    fn at_path(self, at: DiagnosticSpan) -> Self {
+    pub(crate) fn at_path(self, at: DiagnosticSpan) -> Self {
         LoadError::AtPath {
             at,
             error: Box::new(self),
@@ -261,12 +261,24 @@ impl LoadError {
 
     /// A failure reading the file `written` names, naming it as written: the
     /// host names the file it resolved, absolute or joined onto a `./`.
-    fn reading(err: SourceError, written: &str) -> Self {
+    pub(crate) fn reading(err: SourceError, written: &str) -> Self {
         let path = written.to_string();
         match err {
             SourceError::NotFound { .. } => LoadError::ModuleNotFound { path },
             SourceError::IoError { message, .. } | SourceError::NetworkError { message, .. } => {
                 LoadError::IoError { path, message }
+            }
+        }
+    }
+
+    /// [`Self::reading`] for the file an `#include_*` names.
+    fn reading_include(err: SourceError, written: &str) -> Self {
+        match err {
+            SourceError::NotFound { .. } => LoadError::IncludeNotFound {
+                path: written.to_string(),
+            },
+            err @ (SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
+                Self::reading(err, written)
             }
         }
     }
@@ -518,9 +530,9 @@ pub struct LoadResult {
     /// The Wado modules each module's `use` declarations load, in order.
     pub imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
     /// Each wasm asset's file -> the asset path of the first `use` importing
-    /// it, where an error loading it ([`LoadError::AtPath`]) or a diagnostic in
-    /// its bindings ([`Logger::register_asset_origins`]) is reported.
-    pub asset_origins: IndexMap<String, DiagnosticSpan>,
+    /// it, where a diagnostic in its bindings is reported
+    /// ([`Logger::register_asset_origins`]).
+    pub asset_origins: IndexMap<String, PathSite>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -632,10 +644,21 @@ pub fn resolve_wasm_asset_path(
 
 /// A path as a `use` or an `#include_*` wrote it, and where: an error loading
 /// what it names is reported there, naming the file as written.
-#[derive(Clone)]
-struct PathSite {
-    written: String,
-    at: DiagnosticSpan,
+#[derive(Debug, Clone)]
+pub struct PathSite {
+    pub written: String,
+    pub at: DiagnosticSpan,
+}
+
+/// What an error reading a file names it. A relative path names the file it
+/// reads, so the error says it as written rather than as the host joined it.
+/// A coordinate or a URL names the file it resolved to.
+fn read_name<'a>(written: &'a str, resolved: &'a str) -> &'a str {
+    if is_cwd_relative(written) {
+        written
+    } else {
+        resolved
+    }
 }
 
 fn use_site(from: &ModuleSource, use_decl: &UseDecl) -> PathSite {
@@ -1353,7 +1376,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     skip_generated_bodies: bool,
     skipped_bodies: IndexSet<ModuleSource>,
     imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
-    asset_origins: IndexMap<String, DiagnosticSpan>,
+    asset_origins: IndexMap<String, PathSite>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1733,7 +1756,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<(), LoadError> {
         self.asset_origins
             .entry(source.source_path())
-            .or_insert_with(|| site.at.clone());
+            .or_insert_with(|| site.clone());
         self.load_wasm_source(source, kind, &site.written)
             .await
             .map_err(|error| error.at_path(site.at))
@@ -1912,7 +1935,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.host
             .load_source(path)
             .await
-            .map_err(|e| LoadError::reading(e, written))
+            .map_err(|e| LoadError::reading(e, read_name(written, path)))
     }
 
     /// Load implicit modules required by the compiler
@@ -2097,12 +2120,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         module_source: &ModuleSource,
         written: &str,
     ) -> Result<String, LoadError> {
-        let read = |bytes: Vec<u8>| {
-            String::from_utf8(bytes).map_err(|_| LoadError::IoError {
-                path: written.to_string(),
-                message: "file is not valid UTF-8".to_string(),
-            })
-        };
         match module_source {
             ModuleSource::Local {
                 path: host_path, ..
@@ -2110,12 +2127,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             | ModuleSource::Dependency {
                 path: host_path, ..
             }
-            | ModuleSource::Remote { url: host_path, .. } => read(
-                self.host
-                    .load_source(host_path)
+            | ModuleSource::Remote { url: host_path, .. } => {
+                self.read_text(host_path, read_name(written, host_path))
                     .await
-                    .map_err(|e| LoadError::reading(e, written))?,
-            ),
+            }
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
                 if let Some(source) = stdlib::get_stdlib_module(&import_path) {
@@ -2156,14 +2171,24 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // absolute path. Other schemes are passed through
                 // unchanged so in-memory hosts can use the URI as a key.
                 let host_path = strip_kiln_scheme(uri).unwrap_or_else(|| uri.to_string());
-                read(
-                    self.host
-                        .load_source(&host_path)
-                        .await
-                        .map_err(|e| LoadError::reading(e, written))?,
-                )
+                // The generated module is the file read, not the schema the
+                // `use` names.
+                self.read_text(&host_path, &host_path).await
             }
         }
+    }
+
+    /// Read `host_path` as UTF-8 text, naming it `name` if that fails.
+    async fn read_text(&self, host_path: &str, name: &str) -> Result<String, LoadError> {
+        let bytes = self
+            .host
+            .load_source(host_path)
+            .await
+            .map_err(|e| LoadError::reading(e, name))?;
+        String::from_utf8(bytes).map_err(|_| LoadError::IoError {
+            path: name.to_string(),
+            message: "file is not valid UTF-8".to_string(),
+        })
     }
 
     /// Parse source code into a module AST
@@ -2265,15 +2290,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 .map_or(ms_str.as_str(), String::as_str);
             let resolved =
                 resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
-            let bytes = self.host.load_source(&resolved).await.map_err(|e| {
-                match e {
-                    SourceError::NotFound { .. } => LoadError::IncludeNotFound {
-                        path: raw_path.clone(),
-                    },
-                    e => LoadError::reading(e, raw_path),
-                }
-                .at_path(at)
-            })?;
+            let bytes = self
+                .host
+                .load_source(&resolved)
+                .await
+                .map_err(|e| LoadError::reading_include(e, raw_path).at_path(at))?;
             included.insert(pair, bytes);
         }
         Ok(included)

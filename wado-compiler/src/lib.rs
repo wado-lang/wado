@@ -1415,15 +1415,19 @@ async fn resolve_inline_providers<H: CompilerHost>(
 
     let mut providers = Vec::new();
     for (src, use_decl, prov_path, at) in jobs {
-        let bail = |message: String| {
-            let _ = logger.error(Diagnostic {
-                severity: Severity::Error,
-                code: Code::ModuleNotFound,
-                message,
-                span: Some(at.clone()),
-            });
+        let report = |diagnostic: Diagnostic| {
+            let _ = logger.error(diagnostic);
             Bail
         };
+        let bail = |code: Code, message: String| {
+            report(Diagnostic {
+                severity: Severity::Error,
+                code,
+                message,
+                span: Some(at.clone()),
+            })
+        };
+        let bail_load = |error: LoadError| report(Diagnostic::from(error.at_path(at.clone())));
         // Resolve against the loader's own interner so the `ModuleSource`'s
         // interned strings match the loaded binding module's key (identity, not
         // string, equality).
@@ -1435,10 +1439,13 @@ async fn resolve_inline_providers<H: CompilerHost>(
             &load_result.invocations,
         );
         let Some(dep_module) = dep_source.and_then(|s| load_result.modules.get(&s)) else {
-            return Err(bail(format!(
-                "`provider` on `{}` names an import that is not a component",
-                use_decl.source
-            )));
+            return Err(bail(
+                Code::ImportAttrInvalid,
+                format!(
+                    "`provider` on `{}` names an import that is not a component",
+                    use_decl.source
+                ),
+            ));
         };
         let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
@@ -1447,32 +1454,33 @@ async fn resolve_inline_providers<H: CompilerHost>(
         let fq = match guest_fqs.as_slice() {
             [fq] => fq.clone(),
             [] => {
-                return Err(bail(format!(
-                    "`provider` on `{}`, which imports no guest effect to satisfy",
-                    use_decl.source
-                )));
+                return Err(bail(
+                    Code::ImportAttrInvalid,
+                    format!(
+                        "`provider` on `{}`, which imports no guest effect to satisfy",
+                        use_decl.source
+                    ),
+                ));
             }
             _ => {
-                return Err(bail(format!(
-                    "`provider` on `{}` imports multiple guest effects ({}); a single \
-                     provider file for several interfaces is not yet supported",
-                    use_decl.source,
-                    guest_fqs.join(", ")
-                )));
+                return Err(bail(
+                    Code::ImportAttrInvalid,
+                    format!(
+                        "`provider` on `{}` imports multiple guest effects ({}); a single \
+                         provider file for several interfaces is not yet supported",
+                        use_decl.source,
+                        guest_fqs.join(", ")
+                    ),
+                ));
             }
         };
 
-        let resolved = loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir)
-            .map_err(|_| bail(format!("cannot resolve provider path `{prov_path}`")))?;
-        let bytes = host.load_source(&resolved).await.map_err(|e| {
-            bail(match e {
-                SourceError::NotFound { .. } => format!("provider `{prov_path}` not found"),
-                SourceError::IoError { message, .. }
-                | SourceError::NetworkError { message, .. } => {
-                    format!("cannot read provider `{prov_path}`: {message}")
-                }
-            })
-        })?;
+        let resolved =
+            loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir).map_err(bail_load)?;
+        let bytes = host
+            .load_source(&resolved)
+            .await
+            .map_err(|e| bail_load(LoadError::reading(e, &prov_path)))?;
         let provider_src = String::from_utf8_lossy(&bytes).into_owned();
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
@@ -1495,7 +1503,12 @@ async fn resolve_inline_providers<H: CompilerHost>(
             opts,
         ))
         .await
-        .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
+        .map_err(|e| {
+            bail(
+                Code::EffectHandlerInvalid,
+                format!("provider `{prov_path}` failed to compile: {e}"),
+            )
+        })?;
         providers.push(ProviderComponent {
             source: prov_path,
             import_fq: fq,
