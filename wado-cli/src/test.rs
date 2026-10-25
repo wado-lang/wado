@@ -2334,8 +2334,8 @@ fn store_passes(
 }
 
 /// Build the thread-local stdlib snapshot for compiles measuring `coverage` on
-/// `parallelism` distinct blocking threads at once, rather than ~120 ms on each
-/// worker's first compile.
+/// `parallelism` distinct blocking threads at once, rather than on each worker's
+/// first compile.
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize, coverage: Option<CoverageScope>) {
     assert!(parallelism > 0, "prewarm_workers answers at least one");
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));

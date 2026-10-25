@@ -1,8 +1,8 @@
 //! Per-thread snapshot of the stdlib closure's post-`semantics_with_logger`
 //! state, so each compile seeds from it instead of re-running loader → analyze →
-//! elaborate over the same stdlib AST (~112 ms apiece, ~28 s per `wado test`
-//! run on package-gale). Thread-local because [`Semantics`] is `!Send`, and
-//! built over an empty entry source so the loader yields the real closure.
+//! elaborate over the same stdlib AST. Thread-local because [`Semantics`] is
+//! `!Send`, and built over an empty entry source so the loader yields the real
+//! closure.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::future::Future;
@@ -89,9 +89,9 @@ pub(crate) fn get_or_init_snapshot(coverage: Option<CoverageScope>) -> Option<Rc
 
 /// Build the current thread's snapshot for compiles measuring `coverage` now,
 /// ahead of the first `semantics_with_logger` call.  Intended for parallel
-/// batch drivers (e.g. `wado test`) to amortise the ~120 ms snapshot build
-/// across worker threads before any compile work is scheduled, instead of
-/// paying the cost on each worker's first compile.
+/// batch drivers (e.g. `wado test`) to amortise the snapshot build across
+/// worker threads before any compile work is scheduled, instead of paying the
+/// cost on each worker's first compile.
 ///
 /// No-op if the snapshot is already built on this thread, or if
 /// called re-entrantly from inside `build_snapshot`.

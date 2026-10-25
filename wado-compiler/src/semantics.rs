@@ -1463,8 +1463,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
     // from this snapshot and `build_tir_from_state` copies the
     // pre-lowered stdlib `TirModule`s directly into its result, skipping
-    // the ~28 s of CPU otherwise duplicated across a typical `wado test`
-    // run.  Returns `None` when called from inside the snapshot builder
+    // the work otherwise duplicated across a `wado test` run.  Returns
+    // `None` when called from inside the snapshot builder
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
