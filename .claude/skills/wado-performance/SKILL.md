@@ -352,7 +352,7 @@ wado test -O2 --allocator freelist --report-fuel probe.wado   # ok   probe (…,
 
 `--allocator freelist` measures the allocator a shipped program gets, not the
 test world's `debug` one. Every benchmark carries such a `test "fuel"` block,
-and `mise run fuel-benchmark` compares them all against `benchmark/fuel.json`,
+and `mise run test-fuel` compares them all against `benchmark/fuel.json`,
 which CI holds every pull request to.
 
 ### A/B-ing a compiler change

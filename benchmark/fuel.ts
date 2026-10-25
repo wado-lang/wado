@@ -3,8 +3,8 @@
 // Usage (from the repository root): node benchmark/fuel.ts series|check|write
 //
 //   series  prints the series
-//   check   prints the series, and fails on any difference from
-//           benchmark/fuel.json, naming each row that moved
+//   check   fails on any difference from benchmark/fuel.json, naming each
+//           row that moved
 //   write   rewrites benchmark/fuel.json
 //
 // Each mode first measures, under `wado test --report-fuel` (the dev build,
@@ -87,14 +87,12 @@ function main(): void {
     process.exit(1);
   }
   const current = measureAll();
-  if (mode === "write") {
+  if (mode === "series") {
+    process.stdout.write(render(current));
+  } else if (mode === "write") {
     writeFileSync(BASELINE, render(current));
-    return;
-  }
-  process.stdout.write(render(current));
-  if (mode === "check") {
-    const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as Series[];
-    if (differs(current, baseline)) process.exit(1);
+  } else if (differs(current, JSON.parse(readFileSync(BASELINE, "utf8")) as Series[])) {
+    process.exit(1);
   }
 }
 

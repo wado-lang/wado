@@ -62,11 +62,15 @@ program gets. It names each region `<benchmark directory>/<label> (<level>)`.
 
 ### CI holds fuel exactly and records it
 
-`benchmark/fuel.json` is the baseline, every level included. A pull request
-fails on any difference from it, either way, and names each series that moved.
-Fuel has no noise to tolerate, so every level is held, not only `-O2` as the
-wall-clock gate was. A push to main records the series on gh-pages under
-`benchmarks/fuel`.
+`benchmark/fuel.json` is the baseline, every level included. CI's `test-fuel`
+job, a test like any other, fails on any difference from it, either way, and
+names each series that moved. Fuel has no noise to tolerate, so every level is
+held, not only `-O2` as the wall-clock gate was.
+
+The `Benchmark` workflow only records: a push to main stores the series on
+gh-pages under `benchmarks/fuel`, beside the wasm sizes. It no longer runs on a
+pull request. An exact test leaves a threshold nothing to catch for fuel, and
+the wasm-size threshold, which failed a pull request at 130%, goes with it.
 
 `mise run update-baselines` rewrites it together with the stdlib coverage
 baseline, since a change to the compiler or the stdlib moves either. A change
@@ -78,6 +82,8 @@ The wall-clock series on gh-pages stops. Its history stays where it is.
 
 - Fuel prices every instruction alike, so a branch shape or a cache effect does
   not show.
+- No pull request is held to a wasm size. A growth shows only in the record on
+  gh-pages, after the merge.
 - A region that reads `wasi:random/random`, a clock, or I/O can spend different
   fuel on each run.
 - Two pull requests that each update the baseline can merge into a main whose

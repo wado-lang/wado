@@ -9,7 +9,7 @@ Two measures live here, and they answer different questions:
 - Fuel, through `core:fuel`: whether a change made Wado's own output do more
   work. Each benchmark's `test "fuel"` block measures its phases once, at `-O1`,
   `-O2` and `-O3`. Fuel does not depend on the host, so CI holds every pull
-  request to `benchmark/fuel.json` exactly (`mise run fuel-benchmark`), and
+  request to `benchmark/fuel.json` exactly (`mise run test-fuel`), and
   gh-pages records it per commit. A change that moves it commits the result of
   `mise run update-baselines`. Fuel leaves out GC and other host work by
   design: the wall clock is what shows them.
