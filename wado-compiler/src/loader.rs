@@ -91,8 +91,9 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
-    /// `error` raised loading what a `use` names, reported at the path it names.
-    AtUse {
+    /// `error` raised loading what a `use` or an `#include_*` names, reported
+    /// at the path it names.
+    AtPath {
         at: DiagnosticSpan,
         error: Box<LoadError>,
     },
@@ -217,7 +218,7 @@ impl std::fmt::Display for LoadError {
             } => {
                 write!(f, "wasm import error in {module_source}: {message}")
             }
-            LoadError::AtUse { error, .. } => error.fmt(f),
+            LoadError::AtPath { error, .. } => error.fmt(f),
             LoadError::StdlibIdentity {
                 path,
                 file,
@@ -251,8 +252,8 @@ fn stdlib_identity_message(path: Option<&str>) -> String {
 impl std::error::Error for LoadError {}
 
 impl LoadError {
-    fn at_use(self, at: DiagnosticSpan) -> Self {
-        LoadError::AtUse {
+    fn at_path(self, at: DiagnosticSpan) -> Self {
+        LoadError::AtPath {
             at,
             error: Box::new(self),
         }
@@ -263,7 +264,7 @@ impl LoadError {
         match self {
             LoadError::BindError { .. } => Code::DuplicateDefinition,
             LoadError::WasmImport { .. } => Code::InvalidSyntax,
-            LoadError::AtUse { error, .. } => error.code(),
+            LoadError::AtPath { error, .. } => error.code(),
             LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
             LoadError::IoError { .. } | LoadError::IncludeNotFound { .. } => Code::FileReadError,
             LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
@@ -333,7 +334,7 @@ impl From<LoadError> for Diagnostic {
                     space: AstIdSpace::FRESH,
                 }),
             },
-            LoadError::AtUse { at, error } => Self {
+            LoadError::AtPath { at, error } => Self {
                 span: Some(at),
                 ..Self::from(*error)
             },
@@ -515,7 +516,7 @@ pub struct LoadResult {
     /// The Wado modules each module's `use` declarations load, in order.
     pub imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
     /// Each wasm asset's file -> the asset path of the first `use` importing
-    /// it, where an error loading it ([`LoadError::AtUse`]) or a diagnostic in
+    /// it, where an error loading it ([`LoadError::AtPath`]) or a diagnostic in
     /// its bindings ([`Logger::register_asset_origins`]) is reported.
     pub asset_origins: IndexMap<String, DiagnosticSpan>,
 }
@@ -1517,7 +1518,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let source = self
                 .get_source(&module_source, &from_module_source)
                 .await
-                .map_err(|error| error.at_use(at))?;
+                .map_err(|error| error.at_path(at))?;
             let skip_generated_bodies =
                 self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
@@ -1653,7 +1654,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let at = use_site(from_module_source, use_decl);
                 let resolved = self
                     .resolve_import(from_module_source, &use_decl.source)
-                    .map_err(|error| error.at_use(at.clone()))?;
+                    .map_err(|error| error.at_path(at.clone()))?;
                 // A coordinate resolving to a prebuilt component (registry
                 // dependency) loads across the CM boundary, not as Wado source.
                 if let ModuleSource::Wasm { kind, .. } = &resolved {
@@ -1703,7 +1704,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
         let at = use_site(from_module_source, use_decl);
         let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)
-            .map_err(|error| error.at_use(at.clone()))?;
+            .map_err(|error| error.at_path(at.clone()))?;
         let source = self.interner.wasm(&path, kind);
         self.note_asset_origin(&source, at);
         self.handle_wasm_source(source, kind).await
@@ -1728,7 +1729,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let at = self.asset_origins[&source.source_path()].clone();
         self.load_wasm_source(source, kind)
             .await
-            .map_err(|error| error.at_use(at))
+            .map_err(|error| error.at_path(at))
     }
 
     async fn load_wasm_source(
@@ -2223,15 +2224,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // filename via `source_path`: an entry point's `Display` is its
         // stable base name for symbol identity, which drops the directory a
         // relative include needs.
-        let mut pairs: IndexSet<[String; 2]> = IndexSet::default();
+        let mut pairs: IndexMap<[String; 2], DiagnosticSpan> = IndexMap::default();
         let mut resolve_path: IndexMap<String, String> = IndexMap::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
-            for raw_path in module.include_paths() {
-                resolve_path
+            for (raw_path, span) in module.include_paths() {
+                let module_path = resolve_path
                     .entry(ms_str.clone())
                     .or_insert_with(|| module_source.source_path());
-                pairs.insert([ms_str.clone(), raw_path.clone()]);
+                pairs
+                    .entry([ms_str.clone(), raw_path.clone()])
+                    .or_insert_with(|| DiagnosticSpan::from_span(span, Some(module_path)));
             }
         }
         // Format the entry module source once so the per-include elaborator
@@ -2241,7 +2244,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             .as_ref()
             .map(ModuleSource::source_path);
         let mut included = IndexMap::default();
-        for pair in pairs {
+        for (pair, at) in pairs {
             let [ref ms_str, ref raw_path] = pair;
             // Resolve path relative to the module source's real directory.
             let module_path = resolve_path
@@ -2249,14 +2252,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 .map_or(ms_str.as_str(), String::as_str);
             let resolved =
                 resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
-            let bytes = self
-                .host
-                .load_source(&resolved)
-                .await
-                .map_err(|e| match e {
+            let bytes = self.host.load_source(&resolved).await.map_err(|e| {
+                match e {
                     SourceError::NotFound { path } => LoadError::IncludeNotFound { path },
                     e => LoadError::from(e),
-                })?;
+                }
+                .at_path(at)
+            })?;
             included.insert(pair, bytes);
         }
         Ok(included)

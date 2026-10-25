@@ -221,7 +221,7 @@ pub fn build_bindings(
         inner_attributes,
         None,
         None,
-        hashmap::IndexSet::default(),
+        hashmap::IndexMap::default(),
         b.space,
         b.count,
         false,

@@ -10,7 +10,7 @@ use std::ops::Deref;
 
 use crate::defs::DefId;
 use crate::escape::escape_string;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::name::UNIT_TYPE_NAME;
 use crate::token::Span;
@@ -166,8 +166,9 @@ pub struct Module {
     /// Content of the __DATA__ section, if present in the source file.
     /// This is available after parsing for tooling (test harnesses, IDEs).
     data_section: Option<String>,
-    /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
-    include_paths: IndexSet<String>,
+    /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing,
+    /// each with the span of its first reference.
+    include_paths: IndexMap<String, Span>,
     /// The [`AstIdSpace`] this module's ids were allocated from (the parsing
     /// `Parser`'s space). [`Self::alloc_ast_id`] continues it.
     ast_id_space: AstIdSpace,
@@ -239,7 +240,7 @@ impl Module {
             inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
-            include_paths: IndexSet::default(),
+            include_paths: IndexMap::default(),
             ast_id_space: AstIdSpace::next(),
             ast_id_count: 0,
             has_syntax_errors: false,
@@ -253,7 +254,7 @@ impl Module {
         inner_attributes: Vec<InnerAttribute>,
         shebang: Option<String>,
         data_section: Option<String>,
-        include_paths: IndexSet<String>,
+        include_paths: IndexMap<String, Span>,
         ast_id_space: AstIdSpace,
         ast_id_count: u32,
         has_syntax_errors: bool,
@@ -1353,7 +1354,7 @@ impl Module {
         self.data_section.as_deref()
     }
 
-    pub fn include_paths(&self) -> &IndexSet<String> {
+    pub fn include_paths(&self) -> &IndexMap<String, Span> {
         &self.include_paths
     }
 }
