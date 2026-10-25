@@ -389,10 +389,10 @@ impl Semantics {
     /// assignment's span, which names its module. Gathered from every walk, as
     /// [`Self::inexact_float_patterns`] are, so one that falls back in any walk
     /// of a default body is here, whichever module walked it.
-    pub(crate) fn destructuring_fallbacks(&self) -> IndexMap<Span, FallbackSite> {
+    pub(crate) fn destructuring_fallbacks(&self) -> IndexMap<Span, &FallbackSite> {
         self.walks()
             .flat_map(|types| &types.destructuring_fallbacks)
-            .map(|(site, fallback)| (*site, fallback.clone()))
+            .map(|(site, fallback)| (*site, fallback))
             .collect()
     }
 

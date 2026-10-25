@@ -1652,27 +1652,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .imported_globals = imported;
         }
 
-        state.transpositions = Rc::new(transposition::transpositions(modules.iter().map(
-            |(module_source, module)| {
-                let walked = !is_stdlib_snapshot_hit(snapshot, module_source)
-                    && liveness_scope.walks_bodies_of(module_source);
-                let walked = if walked {
-                    transposition::BodiesWalked::Yes
-                } else {
-                    transposition::BodiesWalked::No
-                };
-                (module, walked)
-            },
-        )));
+        let walks_bodies_of = |module_source: &ModuleSource| {
+            !is_stdlib_snapshot_hit(snapshot, module_source)
+                && liveness_scope.walks_bodies_of(module_source)
+        };
+        state.transpositions = Rc::new(transposition::transpositions(modules, walks_bodies_of));
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
         // module to populate `ModuleSemantics`; reify (Phase 2, below) is the
         // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(snapshot, module_source)
-                || !liveness_scope.walks_bodies_of(module_source)
-            {
+            if !walks_bodies_of(module_source) {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");

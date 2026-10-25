@@ -1171,12 +1171,15 @@ A destructuring assignment `[c[i], c[j]] = [c[j], c[i]]` is the call
 - Each index is a literal, a constant, a local, a field path from a local, or
   arithmetic over them. An index read out of `c` (`c[c[0]]`, `c[c.k]`), or one
   reading a mutable global, does not qualify.
-- No index local, and no `mut` reference local that `c` dereferences, is
-  referenced or captured anywhere in the body.
+- No index local is referenced or captured anywhere in the body.
+- No reference the path to `c` passes through is held where something else may
+  rebind it: in a `mut` local that is referenced or captured, or in a field
+  reached through a reference.
 - `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects.
 
-The call evaluates `c`, `j` and `i` once each, in that order. Otherwise the
-statement keeps its desugaring, which copies each element it reads.
+The call evaluates `j`, then `i`, once each, the order in which the
+desugaring first reads them; neither can change the place `c` names. Otherwise
+the statement keeps its desugaring, which copies each element it reads.
 
 The call moves the two elements rather than copying them, so it exchanges an
 affine element, which no read can copy:

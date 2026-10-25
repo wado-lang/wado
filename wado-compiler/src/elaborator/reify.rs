@@ -5613,8 +5613,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `[c[i], c[j]] = [c[j], c[i]]` as `{ let $da_N = j; c.index_swap(i, $da_N) }`,
-    /// which evaluates `c`, `j` and `i` in the order the desugaring first reads
-    /// them.
+    /// which evaluates `j` and `i` in the order the desugaring first reads
+    /// them. `c` is a path neither can change.
     fn reify_index_swap(
         &mut self,
         transposition: &Transposition<'_>,

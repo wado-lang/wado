@@ -23,7 +23,9 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
-use super::transposition::{Clean, Reading, Transposition, target_reads};
+use super::transposition::{
+    Clean, Path, Reading, Step, Transposition, field_path, target_reads,
+};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -1103,11 +1105,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 match self.transpositions.get(&assign.id).copied() {
                     None => Some(DestructuringFallback::Rebindable),
                     Some(clean) => {
-                        match self.resolve_index_swap(assign.id, &transposition, clean, ctx) {
-                            Ok(type_id) => {
-                                self.resolve_unread_subscripts(assign, ctx);
-                                return type_id;
-                            }
+                        match self.resolve_index_swap(assign, &transposition, clean, ctx) {
+                            Ok(()) => return TypeTable::UNIT,
                             Err(cause) => cause,
                         }
                     }
@@ -1190,24 +1189,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// diagnostic once.
     fn resolve_index_swap(
         &mut self,
-        assign_id: AstId,
+        assign: &ast::AssignExpr,
         transposition: &Transposition<'_>,
         clean: Clean,
         ctx: &mut FunctionContext,
-    ) -> Result<TypeId, Option<DestructuringFallback>> {
+    ) -> Result<(), Option<DestructuringFallback>> {
         let container = transposition.container;
         let Some(root) = ctx.binding(transposition.container_root()) else {
             return Err(Some(DestructuringFallback::ContainerNotLocal));
         };
-        if clean.container_root_referenced
-            && root.is_mut
-            && self.tysys.pointee_of(root.type_id).is_some()
-        {
-            return Err(Some(DestructuringFallback::Rebindable));
-        }
+        let rebindable_root = clean.container_root_referenced && root.is_mut;
+        let root_type = root.type_id;
         let container_type = self.resolve_expr(container, ctx, None);
         if container_type == TypeTable::ERROR {
-            return Ok(TypeTable::ERROR);
+            return Err(None);
+        }
+        if self.holds_rebindable_reference(&transposition.container_path(), root_type, rebindable_root)
+        {
+            return Err(Some(DestructuringFallback::Rebindable));
         }
         if matches!(
             self.tysys.type_table.borrow().get(container_type),
@@ -1242,9 +1241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
-        let key = self
-            .index_key_type(container_type, &key_class)
-            .or_else(|| lookup(self, None).and_then(|(info, _)| info.index_type));
+        let key = self.index_key_type(container_type, &key_class);
         let Some((info, _)) = lookup(self, key) else {
             return no_index_swap(self, key);
         };
@@ -1252,19 +1249,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let i_type = self.resolve_expr(transposition.i, ctx, index_type);
         let j_type = self.resolve_expr(transposition.j, ctx, index_type);
         if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
-            return Ok(TypeTable::ERROR);
+            return Err(None);
         }
         // The desugaring's first write could change a mutable global.
-        if [transposition.i, transposition.j]
-            .into_iter()
-            .any(|index| self.reads_mutable_global(index))
-        {
+        if transposition.index_reads().into_iter().any(|read| {
+            matches!(
+                self.assign_place_of(read.id),
+                Some(AssignPlace::Global { mutable: true, .. })
+            )
+        }) {
             return Err(Some(DestructuringFallback::Rebindable));
         }
         if let Some(index_type) = index_type {
             self.typecheck(i_type, index_type, transposition.i.span());
             self.typecheck(j_type, index_type, transposition.j.span());
         }
+        self.resolve_unread_subscripts(assign, index_type, ctx);
         // Reserve reify's `$da_N` for the second index, so both walks allocate
         // the same frame.
         let ctx = &mut ctx.enter_scope();
@@ -1272,7 +1272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _local_index = ctx.add_local(name, j_type, false, None);
         let function_ref = self.indexing_function_ref(&info, "index_swap");
         self.sem.types.index_swap_dispatch.insert(
-            assign_id,
+            assign.id,
             OperatorDispatch {
                 function_ref,
                 method_def: Some(info.method_def),
@@ -1282,13 +1282,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 needs_deref: false,
             },
         );
-        Ok(TypeTable::UNIT)
+        Ok(())
     }
 
     /// Resolve the parts of a transposition `index_swap` reads none of: the
-    /// second target's container, and the right side. A name there is still a
-    /// reference, and a subscript there is a place, not an element read.
-    fn resolve_unread_subscripts(&mut self, assign: &ast::AssignExpr, ctx: &mut FunctionContext) {
+    /// second target's container, and the right side, its indices at
+    /// `index_type` as the targets'. A name there is still a reference, and a
+    /// subscript there is a place, not an element read.
+    fn resolve_unread_subscripts(
+        &mut self,
+        assign: &ast::AssignExpr,
+        index_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) {
         let (ast::AssignTarget::Destructuring { places, .. }, ast::Expr::TupleLiteral(value)) =
             (&assign.target, &assign.value)
         else {
@@ -1303,36 +1309,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 unreachable!("a transposition reads two subscripts");
             };
             self.resolve_expr(&subscript.expr, ctx, None);
-            self.resolve_expr(&subscript.index, ctx, None);
+            self.resolve_expr(&subscript.index, ctx, index_type);
         }
     }
 
     /// Whether `place` is owned: a local, or a field path from one, reached
     /// through no reference and no subscript.
     fn is_owned_place(&self, place: &ast::Expr, ctx: &FunctionContext) -> bool {
-        match place {
-            ast::Expr::Ident(ident) => ctx
-                .lookup(&ident.name)
-                .is_some_and(|local| self.tysys.pointee_of(local.type_id).is_none()),
-            ast::Expr::FieldAccess(field) => self.is_owned_place(&field.expr, ctx),
-            _ => false,
-        }
+        field_path(place).is_some_and(|path| {
+            ctx.lookup(&path.root.name)
+                .is_some_and(|local| self.tysys.pointee_of(local.type_id).is_none())
+        })
     }
 
-    /// Whether `index`, one [`Transposition`] admits, reads a mutable global.
-    fn reads_mutable_global(&self, index: &ast::Expr) -> bool {
-        match index {
-            ast::Expr::Ident(ident) => matches!(
-                self.assign_place_of(ident.id),
-                Some(AssignPlace::Global { mutable: true, .. })
-            ),
-            ast::Expr::Binary(binary) => {
-                self.reads_mutable_global(&binary.left) || self.reads_mutable_global(&binary.right)
+    /// Whether a place on `path` that something else may write holds a
+    /// reference, so the desugaring's first write could change which container
+    /// the second names. The root is such a place where `root_writable`, and so
+    /// is every place reached through a reference.
+    fn holds_rebindable_reference(
+        &mut self,
+        path: &Path<'_>,
+        root_type: TypeId,
+        root_writable: bool,
+    ) -> bool {
+        let mut writable = root_writable;
+        let mut place_type = root_type;
+        for step in &path.steps {
+            if let Some(pointee) = self.tysys.pointee_of(place_type) {
+                if writable {
+                    return true;
+                }
+                writable = true;
+                place_type = pointee;
             }
-            ast::Expr::Unary(unary) => self.reads_mutable_global(&unary.expr),
-            ast::Expr::FieldAccess(_) => self.reads_mutable_global(index.place_root()),
-            _ => false,
+            if let Step::Field(field) = step {
+                place_type = self.lookup_field_type(place_type, &field.field, field.span).1;
+            }
         }
+        writable && self.tysys.pointee_of(place_type).is_some()
     }
 
     /// The name an indexing trait impl on `base_type_id` is looked up under,

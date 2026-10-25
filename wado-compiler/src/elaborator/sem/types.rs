@@ -469,8 +469,9 @@ impl DestructuringFallback {
                  path from one, or arithmetic over them, or it reads the container"
                 .into(),
             Self::ContainerNotLocal => "the container is not reached from a local".into(),
-            Self::Rebindable => "an index reads a mutable global, or an index local or a \
-                 `mut` reference local the container is reached through is referenced or captured"
+            Self::Rebindable => "an index reads a mutable global, an index local is \
+                 referenced or captured, or a reference the container is reached through is \
+                 held where something else may rebind it"
                 .into(),
             Self::NoIndexSwap {
                 container,

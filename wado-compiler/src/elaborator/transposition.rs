@@ -5,10 +5,11 @@
 //! global, and that the type implements `IndexSwap`.
 
 use crate::ast::{
-    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, Item, Literal, Module,
-    Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
+    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, FieldAccessExpr, Function,
+    IdentExpr, Item, Literal, Module, Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
 };
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::token::Span;
 
 pub(super) enum Reading<'a> {
@@ -43,7 +44,7 @@ impl<'a> Reading<'a> {
         if !same(read_second, &places[1]) {
             return Self::Permutation;
         }
-        if !same(&first.expr, &second.expr) || !is_container_path(&first.expr) {
+        if !same(&first.expr, &second.expr) || path(&first.expr, Derefs::Admitted).is_none() {
             return Self::OtherContainers;
         }
         let transposition = Transposition {
@@ -113,19 +114,27 @@ impl<'a> Transposition<'a> {
         }
     }
 
-    /// The local the container is reached from.
-    pub(super) fn container_root(&self) -> &'a str {
-        root_local(self.container).expect("a container path starts from a local")
+    pub(super) fn container_path(&self) -> Path<'a> {
+        path(self.container, Derefs::Admitted).expect("`Reading::of` admits a container path")
     }
 
-    /// The locals the indices read, each field path by the local it starts
-    /// from.
-    fn index_locals(&self) -> Vec<&'a str> {
-        let mut locals = Vec::new();
+    /// The local the container is reached from.
+    pub(super) fn container_root(&self) -> &'a str {
+        &self.container_path().root.name
+    }
+
+    /// The names the indices read, each path by its root.
+    pub(super) fn index_reads(&self) -> Vec<&'a IdentExpr> {
+        let mut reads = Vec::new();
         for index in [self.i, self.j] {
-            collect_idents(index, &mut locals);
+            collect_idents(index, &mut reads);
         }
-        locals
+        reads
+    }
+
+    fn index_locals(&self) -> Vec<&'a str> {
+        let reads = self.index_reads().into_iter();
+        reads.map(|read| read.name.as_str()).collect()
     }
 }
 
@@ -143,25 +152,21 @@ pub(super) struct Clean {
 /// index local is referenced or captured anywhere in the function holding it:
 /// in every item of a module whose bodies are walked, and in every trait,
 /// since a default body is walked in each module that takes it.
-pub(super) fn transpositions<'m>(
-    modules: impl IntoIterator<Item = (&'m Module, BodiesWalked)>,
+pub(super) fn transpositions(
+    modules: &IndexMap<ModuleSource, Module>,
+    walks_bodies_of: impl Fn(&ModuleSource) -> bool,
 ) -> IndexMap<AstId, Clean> {
     let mut scan = Scan::default();
-    for (module, walked) in modules {
+    for (source, module) in modules {
+        let walked = walks_bodies_of(source);
         for item in &module.items {
-            if walked == BodiesWalked::Yes || matches!(item, Item::Trait(_)) {
+            if walked || matches!(item, Item::Trait(_)) {
                 scan.visit_item(item);
                 scan.settle();
             }
         }
     }
     scan.found
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum BodiesWalked {
-    Yes,
-    No,
 }
 
 #[derive(Default)]
@@ -285,20 +290,55 @@ fn same_literal(a: &Literal, b: &Literal) -> bool {
     }
 }
 
-/// A local, a field path from one, or a dereference of either.
-fn is_container_path(expr: &Expr) -> bool {
+/// A local and the fields and dereferences that reach a place from it.
+pub(super) struct Path<'a> {
+    pub(super) root: &'a IdentExpr,
+    /// Outward from the root.
+    pub(super) steps: Vec<Step<'a>>,
+}
+
+pub(super) enum Step<'a> {
+    Field(&'a FieldAccessExpr),
+    Deref,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Derefs {
+    Admitted,
+    Refused,
+}
+
+/// `expr` as a [`Path`], or `None` where it is none: an index is a path of
+/// fields alone, a container may pass through dereferences too.
+fn path(expr: &Expr, derefs: Derefs) -> Option<Path<'_>> {
     match expr {
-        Expr::Ident(ident) => ident.segments.is_empty(),
-        Expr::FieldAccess(field) => is_container_path(&field.expr),
-        Expr::Unary(unary) => unary.op == UnaryOp::Deref && is_container_path(&unary.expr),
-        _ => false,
+        Expr::Ident(root) if root.segments.is_empty() => Some(Path {
+            root,
+            steps: Vec::new(),
+        }),
+        Expr::FieldAccess(field) => {
+            let mut path = path(&field.expr, derefs)?;
+            path.steps.push(Step::Field(field));
+            Some(path)
+        }
+        Expr::Unary(unary) if unary.op == UnaryOp::Deref && derefs == Derefs::Admitted => {
+            let mut path = path(&unary.expr, derefs)?;
+            path.steps.push(Step::Deref);
+            Some(path)
+        }
+        _ => None,
     }
 }
 
-/// A literal, a name, a field path from a local, or arithmetic over them.
+/// `expr` as a local and the fields that reach a place from it.
+pub(super) fn field_path(expr: &Expr) -> Option<Path<'_>> {
+    path(expr, Derefs::Refused)
+}
+
+/// A literal, a name, a path of fields from a local, or arithmetic over them.
 fn is_index_operand(expr: &Expr) -> bool {
     match expr {
-        Expr::FieldAccess(_) => root_local(expr).is_some(),
+        Expr::FieldAccess(_) => field_path(expr).is_some(),
         Expr::Literal(literal) => matches!(
             literal.value,
             Literal::Number(_)
@@ -331,10 +371,12 @@ fn is_index_operand(expr: &Expr) -> bool {
     }
 }
 
-fn collect_idents<'a>(expr: &'a Expr, out: &mut Vec<&'a str>) {
+/// The names an index operand reads, each path by its root.
+fn collect_idents<'a>(expr: &'a Expr, out: &mut Vec<&'a IdentExpr>) {
     match expr {
-        Expr::Ident(ident) if ident.segments.is_empty() => out.push(&ident.name),
-        Expr::FieldAccess(_) => out.extend(root_local(expr)),
+        Expr::Ident(_) | Expr::FieldAccess(_) => {
+            out.extend(field_path(expr).map(|path| path.root));
+        }
         Expr::Binary(binary) => {
             collect_idents(&binary.left, out);
             collect_idents(&binary.right, out);

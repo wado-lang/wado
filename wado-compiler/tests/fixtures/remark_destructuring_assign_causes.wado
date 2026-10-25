@@ -97,6 +97,13 @@ fn unplain_index() -> i32 {
     return ts[0].len();
 }
 
+struct Holder { p: &mut List<List<i32>> }
+
+fn reference_field(h: &mut Holder) -> i32 {
+    [h.p[0], h.p[1]] = [h.p[1], h.p[0]];
+    return h.p[0].len();
+}
+
 struct Rotator {}
 
 impl Rotate for Rotator {}
@@ -107,22 +114,26 @@ export fn run() with Stdout {
     println(`${not_a_permutation()} ${reference_readable()} ${not_owned(&mut rs, &mut x)}`);
     println(`${other_container()} ${index_referenced()} ${mutable_global_index()} ${no_index_swap()}`);
     println(`${container_not_local()} ${unplain_index()} ${(Rotator {}).rotate()}`);
+    let mut ys = rows();
+    let mut h = Holder { p: &mut ys };
+    println(`${reference_field(&mut h)}`);
 }
 
 __DATA__
 {
-    "stdout": "3 2 2\n4 1 1 2\n1 1 3\n",
+    "stdout": "3 2 2\n4 1 1 2\n1 1 3\n1\n",
     "remarks": {
         "O2": [
             {"contains": [":17:5 remark: a copy of", "\n  note: the right side is not a permutation of the targets"]},
             {"contains": [":26:5 remark: a copy of", "\n  note: a reference to a target is readable after the statement"]},
             {"contains": [":31:5 remark: a copy of", "\n  note: a target is not owned, and the statement is not a transposition within one container"]},
             {"contains": [":38:5 remark: a copy of", "\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same"]},
-            {"contains": [":46:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured"]},
-            {"contains": [":52:5 remark: a copy of", "\n  note: an index reads a mutable global, or an index local or a `mut` reference local the container is reached through is referenced or captured"]},
+            {"contains": [":46:5 remark: a copy of", "\n  note: an index reads a mutable global, an index local is referenced or captured, or a reference the container is reached through is held where something else may rebind it"]},
+            {"contains": [":52:5 remark: a copy of", "\n  note: an index reads a mutable global, an index local is referenced or captured, or a reference the container is reached through is held where something else may rebind it"]},
             {"contains": [":81:5 remark: a copy of", "\n  note: `Shelf` does not implement `IndexSwap<i32>`"]},
             {"contains": [":89:5 remark: a copy of", "\n  note: the container is not reached from a local"]},
             {"contains": [":96:5 remark: a copy of", "\n  note: an index is not a literal, a constant, a local, a field path from one, or arithmetic over them, or it reads the container"]},
+            {"contains": [":103:5 remark: a copy of", "\n  note: an index reads a mutable global, an index local is referenced or captured, or a reference the container is reached through is held where something else may rebind it"]},
             {"contains": ["remark_destructuring_default_body.wado:5:9 remark: a copy of", "\n  note: the right side is not a permutation of the targets"]}
         ]
     }

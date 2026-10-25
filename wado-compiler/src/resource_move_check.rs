@@ -276,7 +276,7 @@ struct Checker<'a> {
     drops: &'a Drops,
     out: &'a mut Vec<ResourceMoveError>,
     /// [`Semantics::destructuring_fallbacks`].
-    fallbacks: &'a IndexMap<Span, FallbackSite>,
+    fallbacks: &'a IndexMap<Span, &'a FallbackSite>,
     /// The falling-back destructuring assignment whose right side is being
     /// walked, where it has a cause to note.
     in_fallback: Option<NotedFallback>,

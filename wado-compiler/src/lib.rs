@@ -1895,8 +1895,12 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     let remarks_logged = logger.would_log(compiler_host::Severity::Info);
+    // Owned: `sem` is taken apart below.
     let destructuring_fallbacks = if remarks_logged {
-        sem.destructuring_fallbacks()
+        let fallbacks = sem.destructuring_fallbacks().into_iter();
+        fallbacks
+            .map(|(site, fallback)| (site, fallback.clone()))
+            .collect()
     } else {
         IndexMap::default()
     };

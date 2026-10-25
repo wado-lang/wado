@@ -134,22 +134,26 @@ It is that call where all of these hold:
   container, falls back.
 - Each index is a literal, a constant, a local, a field path from a local
   (`p.a`), or arithmetic over them. An index read out of `c` (`c[c[0]]`,
-  `c[c.k]`), or one reading a mutable global, falls back.
-- No index local, and no `mut` reference local that `c` dereferences (`r` in
-  `*r`), is referenced or captured anywhere in the body. The desugaring's first
-  `index_assign` could otherwise write through that reference, and its second
-  target would then name another slot, or another container. A closure
-  capturing the local counts, though it writes no `&`. A reference local that
-  is not `mut` cannot be rebound, and a reference to the container itself does
-  not count either: a write through it changes the container's contents, never
-  which container `c` names.
+  `c[c.k]`) or out of any other container (`c[a[k].n]`), or one reading a
+  mutable global, falls back.
+- No index local is referenced or captured anywhere in the body, and no
+  reference the path to `c` passes through is held where something else may
+  rebind it: in a `mut` local that is referenced or captured (`r` in `*r`), or
+  in a field reached through a reference (`h.p` in `h.p[i]`, where `h` is one).
+  The desugaring's first `index_assign` could otherwise write through that
+  reference, and its second target would then name another slot, or another
+  container. A closure capturing the local counts, though it writes no `&`. A
+  reference local that is not `mut` cannot be rebound, and a reference to the
+  container itself does not count either: a write through it changes the
+  container's contents, never which container `c` names.
 - `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects. A
   container indexed by more than one key swaps by that one, and keeps the
   desugaring where it has no `IndexSwap` there.
 
-The call evaluates `c`, `j` and `i` once each, in that order: the order in which
-the desugaring's right side first reads them, so an index that traps (a
-division by zero) fails as it would there. The transposition is recognized
+The call evaluates `j`, then `i`, once each: the order in which the
+desugaring's right side first reads them, so an index that traps (a division by
+zero) fails as it would there. `c` is a path that neither index can change, so
+when the call reads it does not matter. The transposition is recognized
 before the desugared right side is typed. Typing `c[j]` as a read first would
 report a value copy of an affine element, so the order matters.
 
@@ -224,8 +228,9 @@ functions. It anchors to the statement and adds a note that names the cause:
   cannot show to be the same;
 - an index is not one of the operands above, or it reads the container;
 - the container is not reached from a local;
-- an index reads a mutable global, or an index local or a `mut` reference local
-  the container is reached through is referenced or captured;
+- an index reads a mutable global, an index local is referenced or captured, or
+  a reference the container is reached through is held where something else
+  may rebind it;
 - the container's type does not implement `IndexSwap` at the key.
 
 A scalar has no value copy, so a scalar target is never reported.
