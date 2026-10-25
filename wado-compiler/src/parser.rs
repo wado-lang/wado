@@ -2261,10 +2261,8 @@ impl Parser {
         }
 
         let packs = self
-            .enclosing_packs
-            .iter()
-            .cloned()
-            .chain(pack_names(&type_params))
+            .packs_in_scope(&type_params)
+            .map(str::to_string)
             .collect();
         let outer_body_packs = self.body_packs.replace(packs);
         let contracts_and_body = self.parse_contracts_and_body();
@@ -6840,6 +6838,17 @@ impl Parser {
         Ok(TraitHead::Fixed { effects, span })
     }
 
+    /// The packs a member declaring `declared` sees: its own, and the
+    /// enclosing `impl`'s or `trait`'s.
+    fn packs_in_scope<'a>(&'a self, declared: &'a [GenericParam]) -> impl Iterator<Item = &'a str> {
+        self.enclosing_packs.iter().map(String::as_str).chain(
+            declared
+                .iter()
+                .filter(|p| p.is_pack)
+                .map(|p| p.name.as_str()),
+        )
+    }
+
     /// The packs a signature's `[..X]` mints, one per `X` that names no pack in
     /// scope: such a spread repeats `X`, and the minted pack is its length.
     fn repeat_pack_params(
@@ -6851,8 +6860,7 @@ impl Parser {
         let mut repeated: Vec<(String, Span)> = Vec::new();
         for ty in params.iter().map(|p| &p.ty).chain(return_type) {
             for (name, span) in ty.pack_spreads() {
-                let in_scope = self.enclosing_packs.iter().any(|p| p == name)
-                    || declared.iter().any(|p| p.is_pack && p.name == name);
+                let in_scope = self.packs_in_scope(declared).any(|p| p == name);
                 if !in_scope && !repeated.iter().any(|(r, _)| r == name) {
                     repeated.push((name.to_string(), span));
                 }

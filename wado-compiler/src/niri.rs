@@ -119,21 +119,17 @@ pub enum BitCount {
 impl BitCount {
     /// The count over `value`, a `Value::Int` of `prim`, as Wasm answers it.
     fn of(self, value: u64, prim: PrimitiveType) -> u64 {
-        let count = match prim {
-            PrimitiveType::I32 => {
-                let value = value as u32;
-                match self {
-                    Self::LeadingZeros => value.leading_zeros(),
-                    Self::TrailingZeros => value.trailing_zeros(),
-                    Self::Ones => value.count_ones(),
-                }
-            }
-            PrimitiveType::I64 => match self {
-                Self::LeadingZeros => value.leading_zeros(),
-                Self::TrailingZeros => value.trailing_zeros(),
-                Self::Ones => value.count_ones(),
-            },
+        let width = match prim {
+            PrimitiveType::I32 => 32,
+            PrimitiveType::I64 => 64,
             _ => unreachable!("a bit counting builtin takes an i32 or an i64"),
+        };
+        // An i32 is held sign-extended; its count is over its own 32 bits.
+        let bits = value & (u64::MAX >> (64 - width));
+        let count = match self {
+            Self::LeadingZeros => bits.leading_zeros() - (64 - width),
+            Self::TrailingZeros => bits.trailing_zeros().min(width),
+            Self::Ones => bits.count_ones(),
         };
         u64::from(count)
     }
