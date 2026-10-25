@@ -93,7 +93,7 @@ are never one slot. Any other target may be one slot: `*r`, `r.f`,
 and `self.f` under a `&self` or `&mut self` receiver reach through a reference,
 two `&mut` to one value are legal, and two subscripts may name one element.
 
-### A permutation of owned targets makes no value copy
+### A permutation of unreferenced owned targets makes no value copy
 
 A permutation of owned targets with no reference to any of them readable after
 the statement is assigned without a value copy: a transposition

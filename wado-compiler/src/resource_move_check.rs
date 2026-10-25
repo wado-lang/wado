@@ -925,8 +925,12 @@ impl MoveWalker<'_, '_> {
             path,
             instance: self.instance(def),
             disturbed: self.disturbed_count(def),
-            refilled: self.flow.refills.get(&def).copied().unwrap_or(0),
+            refilled: self.refill_count(def),
         }
+    }
+
+    fn refill_count(&self, def: AstId) -> usize {
+        self.flow.refills.get(&def).copied().unwrap_or(0)
     }
 
     /// A by-value use of the place `expr` names, whose value is affine.
@@ -1100,7 +1104,7 @@ impl MoveWalker<'_, '_> {
         let Some(def) = self.sem().referenced_symbol(place.root.id) else {
             return;
         };
-        let refills_before = self.flow.refills.get(&def).copied().unwrap_or(0);
+        let refills_before = self.refill_count(def);
         let mut refilled = Vec::new();
         self.flow.moved.retain(|(moved_def, moved_path), span| {
             let kept = *moved_def != def
