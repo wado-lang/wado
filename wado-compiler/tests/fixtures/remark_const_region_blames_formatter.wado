@@ -1,19 +1,19 @@
-// The store globalization leaves is exempt for the fold, so a region that
+// The store globalization leaves is exempt for the fold, so a constant that
 // carries one and survives anyway is blamed for what actually stopped it: the
-// formatter, not the store. Three interpolations is what it takes to survive;
-// one folds.
+// formatter, not the store. The float formatter stores its `"NaN"` that way,
+// and keeps the template from folding.
 
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let w = 1024;
     let h = 768;
-    println(`mandelbrot ${w}x${h}, max_iter=${256}`);
+    println(`mandelbrot ${w}x${h}, scale=${3.5}`);
 }
 
 __DATA__
 {
-    "stdout": "mandelbrot 1024x768, max_iter=256\n",
+    "stdout": "mandelbrot 1024x768, scale=3.5\n",
     "remarks": {
         "O2": [
             {"contains": ["computes a constant at run time"], "count": 1},
