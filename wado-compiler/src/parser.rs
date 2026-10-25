@@ -31,6 +31,7 @@ use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, l
 use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::ast::MAX_GENERIC_PARAMS;
 use crate::{ast, format_spec, hashmap};
 
 pub struct Parser {
@@ -2231,6 +2232,7 @@ impl Parser {
         let return_type = self.parse_optional_return_type()?;
         let repeats = self.repeat_pack_params(&type_params, &params, return_type.as_ref());
         type_params.extend(repeats);
+        self.bound_generic_params(&type_params, name_span)?;
 
         let pure_override = std::mem::take(&mut self.pure_override_allowed)
             && self.check(&TokenKind::With)
@@ -5915,6 +5917,7 @@ impl Parser {
                 default,
                 span: start_span,
             });
+            self.bound_generic_params(&params, start_span)?;
 
             if !self.eat_angle_list_comma() {
                 break;
@@ -5923,6 +5926,18 @@ impl Parser {
 
         self.expect_gt()?;
         Ok(params)
+    }
+
+    /// Refuse a list past [`MAX_GENERIC_PARAMS`]: unrolling keys a pack's
+    /// element by its parameter's index (`TypeTable::pack_walk_slot`).
+    fn bound_generic_params(&self, params: &[GenericParam], span: Span) -> ParseResult<()> {
+        if params.len() > MAX_GENERIC_PARAMS {
+            return Err(self.error_at_span(
+                span,
+                &format!("a declaration takes at most {MAX_GENERIC_PARAMS} type parameters"),
+            ));
+        }
+        Ok(())
     }
 
     /// Parse a single trait bound:

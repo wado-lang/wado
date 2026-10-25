@@ -53,10 +53,9 @@ impl SeqField {
 
 /// The fields of `core:prelude/format::Formatter`, in declaration order.
 ///
-/// Template expansion builds a `Formatter` literal field by field and the NIR
-/// template-hoist matches one back apart; naming the fields here rather than in
-/// string literals makes a Wado-side rename a one-line change instead of a
-/// silent miscompile.
+/// Template expansion builds a `Formatter` literal field by field; naming the
+/// fields here rather than in string literals makes a Wado-side rename a
+/// one-line change instead of a silent miscompile.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FormatterField {
     Fill,
@@ -519,9 +518,6 @@ pub enum CompilerItem {
     ReflectFlagsFromBits,
     /// `ReflectFlags::members` — the per-bit member list.
     ReflectFlagsMembers,
-    /// `String::with_capacity` — the buffer allocation template expansion
-    /// emits and the NIR template-hoist recognises.
-    StringWithCapacity,
     /// `String::format` — the tag an untagged template is reified as.
     StringFormat,
     /// `String::push_str` — recognised by the WIR optimiser for
@@ -917,7 +913,6 @@ impl CompilerItem {
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
-        Self::StringWithCapacity,
         Self::StringFormat,
         Self::StringPushStr,
         Self::StringPushChar,
@@ -1208,7 +1203,6 @@ impl CompilerItem {
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
-            Self::StringWithCapacity => "string_with_capacity",
             Self::StringFormat => "string_format",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
@@ -1419,7 +1413,6 @@ impl CompilerItem {
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::StringWithCapacity
             | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar
@@ -1735,7 +1728,6 @@ impl CompilerItem {
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::StringWithCapacity
             | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar

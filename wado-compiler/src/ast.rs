@@ -4547,6 +4547,10 @@ impl TraitBound {
     }
 }
 
+/// The most type parameters one list declares, a signature's repeat packs
+/// included.
+pub const MAX_GENERIC_PARAMS: usize = 256;
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]

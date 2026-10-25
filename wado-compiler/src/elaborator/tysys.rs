@@ -903,13 +903,25 @@ impl HeldTypes for AffineParams<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         let table = self.types.type_table.borrow();
+        let declared_affine = |param_id: TypeId| {
+            let key = table.type_key(param_id);
+            self.affine_params
+                .iter()
+                .any(|&param| table.type_key(param) == key)
+        };
         let is_affine_param = match table.get(type_id) {
-            ResolvedType::TypeParam { .. } => {
-                let key = table.type_key(type_id);
-                self.affine_params
-                    .iter()
-                    .any(|&param| table.type_key(param) == key)
+            // A pack mapped through a constructor (`[..TemplateHole<T, V>]`)
+            // holds its element as a parameter of the pack's name and index.
+            ResolvedType::TypeParam { name, index } => {
+                declared_affine(type_id)
+                    || self.affine_params.iter().any(|&param| {
+                        matches!(table.get(param), ResolvedType::TypePack { name: n, index: i, .. }
+                            if n == name && i == index)
+                    })
             }
+            ResolvedType::TypePack { .. } => declared_affine(type_id),
+            // A walk's element is one of its pack's, as affine as the pack.
+            ResolvedType::PackElement { pack, .. } => declared_affine(*pack),
             ResolvedType::AssocTypeProjection {
                 owning_trait,
                 assoc_name,

@@ -2013,6 +2013,10 @@ pub enum TirStmtKind {
         is_enumerate: bool,
         /// The `walk` of the `PackElement` the binding holds
         walk: u32,
+        /// Whether the element is affine, so each unrolled binding moves its
+        /// field out of the tuple. Only reify knows the body's `affine`
+        /// parameters.
+        moves: bool,
     },
 }
 

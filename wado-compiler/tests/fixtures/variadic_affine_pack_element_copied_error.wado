@@ -1,0 +1,20 @@
+// An element of an `affine` pack is affine, so a parameter that may copy it
+// refuses it, as it refuses an `affine` scalar.
+fn copies<V>(v: V) -> i32 {
+    return 0;
+}
+
+fn each<affine ..V>(t: [..V]) -> i32 {
+    let mut n = 0;
+    for let v of t {
+        n += copies(v);
+    }
+    return n;
+}
+
+export fn run() {
+    let _ = each([1]);
+}
+
+__DATA__
+{"compile_error": ":10:14: analysis error: affine type 'V' given for 'V', which may be copied; `affine V` would admit it"}

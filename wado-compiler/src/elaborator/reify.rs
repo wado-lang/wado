@@ -707,9 +707,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `read` marked moved where its value is affine. `read` reads a local
     /// reify bound ahead of its use, in a position that takes the value.
     fn handed_on(&self, read: TirExpr) -> TirExpr {
-        let affine =
-            self.ask_ownership(|_, facts| self.tysys.is_affine(read.type_id, facts.affine_params));
-        if affine { read.moved() } else { read }
+        if self.is_affine_type(read.type_id) {
+            read.moved()
+        } else {
+            read
+        }
+    }
+
+    /// Whether a value of `ty` is move-only in the body being reified.
+    fn is_affine_type(&self, ty: TypeId) -> bool {
+        self.ask_ownership(|_, facts| self.tysys.is_affine(ty, facts.affine_params))
     }
 
     /// The body fact `map` records for `id` in the walk reify is replaying:
@@ -4031,6 +4038,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 by_ref,
                 is_enumerate,
                 walk: ctx.pack_walks,
+                moves: !by_ref && self.is_affine_type(bound_type),
             },
             span,
         )]
@@ -4936,13 +4944,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let serial = ctx.fresh_serial();
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut fields: Vec<TirStructField> = Vec::new();
-        // A place is read where it stands only while nothing between there and
-        // the call can write it. The struct literal is built after every
-        // hoisted hole has run, so a place followed by a hole that is not one
-        // is read too late and must be bound at its own position instead.
-        let last_hoisted = values.iter().rposition(|v| !Self::is_place_hole(v));
+        // The literal evaluates its fields in order, and a hole that computes
+        // its value stays a temporary of the statement, dropped as it ends. The
+        // template shares a place's storage rather than copying it, so a place
+        // a later computed hole may write is copied at its own position. An
+        // affine place cannot be copied, and is read in place.
+        let last_computed = values.iter().rposition(|v| !Self::is_place_hole(v));
         for (k, (mut value, &hole_ty)) in values.into_iter().zip(&hole_types).enumerate() {
-            if last_hoisted.is_some_and(|last| k <= last) {
+            let snapshot = last_computed.is_some_and(|last| k < last)
+                && Self::is_place_hole(&value)
+                && !self.is_affine_type(hole_ty);
+            if snapshot {
                 let name = template_hole_local(serial, k);
                 let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
                 let hole_span = value.span;

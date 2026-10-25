@@ -213,7 +213,7 @@ impl DeserializeError {
     pub fn duplicate_field<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
-            message: `duplicate field: ${key:?}`,
+            message: `duplicate field: ${*key:?}`,
             offset: -1,
         };
     }

@@ -10,7 +10,7 @@ use sha2::Digest;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RangeKind};
+use crate::ast::{AstId, HandleClasses, MAX_GENERIC_PARAMS, RangeKind};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -3370,6 +3370,8 @@ impl TypeTable {
     pub fn pack_walk_slot(pack_index: u32, walk: u32) -> u32 {
         const BASE: u32 = 1 << 30;
         const PACKS_PER_WALK: u32 = 1 << 10;
+        // An impl's list and its method's index one sequence.
+        const _: () = assert!(2 * MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
         assert!(
             pack_index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
             "a declaration's parameters and a body's walk nesting are bounded"

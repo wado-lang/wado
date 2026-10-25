@@ -736,10 +736,9 @@ The items below closed that, in this order.
     a `break` value in `$hole_fmt`, and `inline` rescans every splice it makes,
     not only one at a statement, so the chain reaches `u64::fmt_base` while it
     still fits.
-  - `optimize::tmpl_hoist` lifts the direct lowering's buffer out of a loop.
-    A `String::format` call at a loop site stays a call, so there is nothing to lift,
-    and the benchmark below runs the same with the pass skipped
-    (`WADO_SKIP_PASS=nir/tmpl_hoist`).
+  - The direct lowering's buffer was lifted out of a loop by a pass of its own.
+    A `String::format` call at a loop site stays a call, so there is nothing to
+    lift, and the benchmark below ran the same with that pass skipped.
   - A `String::format` call stays a call, since its body allocates. It runs once per
     iteration of the loop holding its site, so `inline` starts a function only
     loops reach at a loop site, and its callees splice as they would in the

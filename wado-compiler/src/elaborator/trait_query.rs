@@ -2473,6 +2473,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `self_binding` is what a bound's `Self::Assoc` projects off where the
     /// call binds one, and `impl_args` what the receiver binds the enclosing
     /// impl's parameters to, which a method's bound may name.
+    /// Report the first of `subjects` that is affine, given for `param`, which
+    /// may copy it.
+    fn reject_affine_subject(
+        &mut self,
+        subjects: &[TypeId],
+        param: &ast::GenericParam,
+        span: Span,
+    ) {
+        let affine_params = self.annotate_ctx.trait_ctx.affine_params();
+        if let Some(&affine) = subjects
+            .iter()
+            .find(|&&subject| self.tysys.is_affine(subject, &affine_params))
+        {
+            let type_name = self.tysys.type_id_to_string(affine);
+            let _ = self.emit(TypeError::AffineArgument {
+                type_name,
+                param_name: param.name.clone(),
+                span,
+            });
+        }
+    }
+
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
@@ -2487,18 +2509,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            if !self
-                .tysys
-                .solver()
-                .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
-            {
-                // A hole carries its own slot's bounds to finalize; this slot's
-                // go with an answer an enclosing call is still to give.
-                if self.awaits_pending_call(type_arg) {
-                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
-                }
-                continue;
-            }
             // `..T: Foo` binds every element of the pack, not the tuple that
             // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
             // `String: Foo`, never `[i32, String]: Foo` — which would be a
@@ -2508,19 +2518,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            if !param.is_affine {
-                let affine_params = self.annotate_ctx.trait_ctx.affine_params();
-                if let Some(&affine) = subjects
-                    .iter()
-                    .find(|&&subject| self.tysys.is_affine(subject, &affine_params))
-                {
-                    let type_name = self.tysys.type_id_to_string(affine);
-                    let _ = self.emit(TypeError::AffineArgument {
-                        type_name,
-                        param_name: param.name.clone(),
-                        span,
-                    });
+            // An element of an enclosing pack is no one type, yet its kind is
+            // its pack's: only a hole leaves the kind open.
+            let kind_known = !self.tysys.type_table.borrow().contains_infer_var(type_arg);
+            if !self
+                .tysys
+                .solver()
+                .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
+            {
+                if kind_known && !param.is_affine {
+                    self.reject_affine_subject(&subjects, param, span);
                 }
+                // A hole carries its own slot's bounds to finalize; this slot's
+                // go with an answer an enclosing call is still to give.
+                if self.awaits_pending_call(type_arg) {
+                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
+                }
+                continue;
+            }
+            if !param.is_affine {
+                self.reject_affine_subject(&subjects, param, span);
             }
             for bound in &param.real_bounds() {
                 // `Self` where no receiver binds one was rejected where the

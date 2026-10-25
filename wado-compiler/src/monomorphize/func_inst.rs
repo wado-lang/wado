@@ -3135,10 +3135,12 @@ impl Monomorphizer {
             by_ref,
             is_enumerate,
             walk,
+            moves,
         } = &mut stmt.kind
         else {
             unreachable!()
         };
+        let moves = *moves;
         let by_ref = *by_ref;
         let is_enumerate = *is_enumerate;
         let walk = *walk;
@@ -3295,6 +3297,7 @@ impl Monomorphizer {
                 elem_type,
                 span,
             );
+            let field = if moves { field.moved() } else { field };
             // By reference (`for v of &[..T]`), the binding is `&T_k`: a
             // reference to a fresh copy of the field. Otherwise it is `T_k`.
             let (elem_bind_type, elem_bind_value) =

@@ -416,12 +416,12 @@ impl<T> Member for FlagsBit<T> {
 /// and specifier presence are constants of the shape, and `lit` / `raw` /
 /// `get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 #[compiler_item("template_hole")]
-pub struct TemplateHole<T, V> {
+pub struct TemplateHole<T, affine V> {
     index: i32,
     has_spec: bool,
 }
 
-impl<T, V> TemplateHole<T, V> {
+impl<T, affine V> TemplateHole<T, V> {
     /// The hole's position in the template.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -443,16 +443,18 @@ impl<T, V> TemplateHole<T, V> {
         return self.has_spec;
     }
 
-    /// The hole's value in `t`.
-    pub fn get(&self, t: &T) -> V {
-        return builtin::hole_get(t, self.index);
-    }
-
     /// Renders the value through the trait method the specifier's type
     /// selects (`Display::fmt` when it names none), on a `Formatter` carrying
     /// the specifier's settings over `f`'s buffer.
     pub fn fmt(&self, t: &T, f: &mut Formatter) {
         builtin::hole_fmt(t, self.index, f);
+    }
+}
+
+impl<T, V> TemplateHole<T, V> {
+    /// The hole's value in `t`.
+    pub fn get(&self, t: &T) -> V {
+        return builtin::hole_get(t, self.index);
     }
 }
 
