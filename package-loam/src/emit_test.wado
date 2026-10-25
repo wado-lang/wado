@@ -75,14 +75,7 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     );
     assert out.contains("let H = backend.matmul_rhs(X, &weights.W1, null);");
     assert out.contains(
-<<<<<<< HEAD
         `let HB = backend.fused::<[N, W11]>([backend.read(&H), backend.read_suffix::<[N], [W11]>(&weights.B1)], &${sum()});`,
-||||||| 05d638d3aca
-        `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum(
-        )});`,
-=======
-        `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum()});`,
->>>>>>> origin/main
     );
     assert out.contains(`let A = backend.fused::<[N, W11]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
     assert out.contains("let T = backend.matmul_rhs(&A, &weights.W2, null);");
@@ -104,15 +97,7 @@ test "a product takes the elementwise operators after it as its epilogue" {
         )} }));`,
     );
     assert out.contains(
-<<<<<<< HEAD
-        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[N], [Y1]>(&weights.B2)], op: ${sum(
-        )} }));`,
-||||||| 05d638d3aca
-        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum(
-        )} }));`,
-=======
-        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum()} }));`,
->>>>>>> origin/main
+        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[N], [Y1]>(&weights.B2)], op: ${sum()} }));`,
     );
     assert !out.contains("let H ");
     assert !out.contains("let HB ");
@@ -160,14 +145,7 @@ test "the weights become the backend's for every pass where they are prepared" {
 test "the pass checks each input against the graph before any kernel, and forward its data first" {
     let out = generate(MLP).unwrap();
 
-<<<<<<< HEAD
     let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"N\", \"X1\"], [-1, 4]));").unwrap();
-||||||| 05d638d3aca
-    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap(
-    );
-=======
-    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
->>>>>>> origin/main
     assert held < out.find("matmul_rhs(").unwrap();
     let forward = out.find("pub fn forward").unwrap();
     let host = out.find("refuse(input_mismatch(X, \"X\", [\"N\", \"X1\"], [-1, 4]));").unwrap();
@@ -236,8 +214,7 @@ cache (float[1, T, 8] P, float[1, 1, 8] N, int64[1, "T + 1"] M) => (float[1, U, 
 
     assert out.contains("refuse(extents_mismatch(&backend.extents_of(M), \"M\", [\"M0\", \"M1\"], [1, -1]));");
     let bound = out.find("let dim_T = backend.extents_of(P)[1] as i64;").unwrap();
-    let check = out.find("refuse(extent_mismatch(\"M\", \"M1\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));").unwrap(
-    );
+    let check = out.find("refuse(extent_mismatch(\"M\", \"M1\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));").unwrap();
     assert bound < check && check < out.find("concat::<").unwrap();
 }
 
@@ -495,15 +472,7 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-<<<<<<< HEAD
-        `let Y = backend.fused::<[N, Z1]>([backend.read(&backend.lift::<f32, [N, X1], [N, Z1]>(X, 2)), backend.read(Z)], &${sum(
-        )});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(X, 2)), backend.read(Z)], &${sum(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(X, 2)), backend.read(Z)], &${sum()});`,
->>>>>>> origin/main
+        `let Y = backend.fused::<[N, Z1]>([backend.read(&backend.lift::<f32, [N, X1], [N, Z1]>(X, 2)), backend.read(Z)], &${sum()});`,
     );
 }
 
@@ -518,61 +487,10 @@ g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-<<<<<<< HEAD
-        `let Y = backend.fused::<[N, X1]>([backend.read_condition(&backend.lift::<bool, [N, M1], [N, X1]>(&C, 2)), backend.read(X), backend.read(Z)], &${select(
-        )});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(X), backend.read(Z)], &${select(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(X), backend.read(Z)], &${select()});`,
->>>>>>> origin/main
+        `let Y = backend.fused::<[N, X1]>([backend.read_condition(&backend.lift::<bool, [N, M1], [N, X1]>(&C, 2)), backend.read(X), backend.read(Z)], &${select()});`,
     );
 }
 
-<<<<<<< HEAD
-||||||| 05d638d3aca
-test "an extent-1 axis stretches under the name the other operand gives it" {
-    let source = `
-g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
-<float[8, 1, 1] B>
-{
-    Y = Add(X, B)
-}
-`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("B", ["Chan", "Row", "Col"]),
-    ];
-    let out = generate(source, layout).unwrap();
-
-    assert out.contains(
-        `backend.fused::<[Batch, Chan, Row, Col]>([backend.read(X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &${sum(
-        )})`,
-    );
-}
-
-=======
-test "an extent-1 axis stretches under the name the other operand gives it" {
-    let source = `
-g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
-<float[8, 1, 1] B>
-{
-    Y = Add(X, B)
-}
-`;
-    let layout: List<LayoutRule> = [
-        rule("X", ["Batch", "Chan", "Row", "Col"]),
-        rule("B", ["Chan", "Row", "Col"]),
-    ];
-    let out = generate(source, layout).unwrap();
-
-    assert out.contains(
-        `backend.fused::<[Batch, Chan, Row, Col]>([backend.read(X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &${sum()})`,
-    );
-}
-
->>>>>>> origin/main
 test "Reshape relabels the tensor under the merged axis" {
     let source = `
 g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
@@ -727,15 +645,7 @@ g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-<<<<<<< HEAD
-        `let Y = backend.fused::<[X0, X1, M2, M3]>([backend.read_condition(&backend.lift::<bool, [M0, M1, M2, M3], [X0, X1, M2, M3]>(&C, 4)), backend.read(X), backend.read_suffix::<[X0, X1, M2, M3], []>(&weights.S)], &${select(
-        )});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select()});`,
->>>>>>> origin/main
+        `let Y = backend.fused::<[X0, X1, M2, M3]>([backend.read_condition(&backend.lift::<bool, [M0, M1, M2, M3], [X0, X1, M2, M3]>(&C, 4)), backend.read(X), backend.read_suffix::<[X0, X1, M2, M3], []>(&weights.S)], &${select()});`,
     );
 }
 
@@ -752,15 +662,7 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
 
     assert out.contains("S: backend.keep(&Tensor::<f32, []> { data: [-1 as f32], extents: [] }),");
     assert out.contains(
-<<<<<<< HEAD
-        `let Y = backend.fused::<[M0, M1]>([backend.read_condition(&C), backend.read_suffix::<[M0, M1], []>(&weights.S), backend.read(X)], &${select(
-        )});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&weights.S), backend.read(X)], &${select(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&weights.S), backend.read(X)], &${select()});`,
->>>>>>> origin/main
+        `let Y = backend.fused::<[M0, M1]>([backend.read_condition(&C), backend.read_suffix::<[M0, M1], []>(&weights.S), backend.read(X)], &${select()});`,
     );
 }
 
@@ -863,14 +765,7 @@ g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-<<<<<<< HEAD
         `let Y = backend.fused::<[X0, X1, X2]>([backend.read(X), backend.read_at::<[X0], [X1], [X2]>(B, 1)], &${sum()});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_at::<[Batch], [Seq], [Embed]>(B, 1)], &${sum(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_at::<[Batch], [Seq], [Embed]>(B, 1)], &${sum()});`,
->>>>>>> origin/main
     );
 }
 
@@ -884,14 +779,7 @@ g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-<<<<<<< HEAD
         `let Y = backend.fused::<[X0, X1, X2]>([backend.read(X), backend.read_suffix::<[X0, X1], [X2]>(B)], &${sum()});`,
-||||||| 05d638d3aca
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_suffix::<[Batch, Seq], [Embed]>(B)], &${sum(
-        )});`,
-=======
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_suffix::<[Batch, Seq], [Embed]>(B)], &${sum()});`,
->>>>>>> origin/main
     );
 }
 
@@ -1518,8 +1406,7 @@ test "a one-element constant that raises the output's rank is a tensor, not a fo
 
     assert out.contains("C: backend.keep(&Tensor::<f32, [Y0, C1]> { data: [0 as f32], extents: [1, 1] }),");
     assert out.contains(
-        `let Y = backend.fused::<[Y0, X0]>([backend.read_suffix::<[Y0], [X0]>(X), backend.read(&backend.lift::<f32, [Y0, C1], [Y0, X0]>(&weights.C, 2))], &${sum(
-        )});`,
+        `let Y = backend.fused::<[Y0, X0]>([backend.read_suffix::<[Y0], [X0]>(X), backend.read(&backend.lift::<f32, [Y0, C1], [Y0, X0]>(&weights.C, 2))], &${sum()});`,
     );
 }
 
