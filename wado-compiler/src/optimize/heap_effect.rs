@@ -15,7 +15,7 @@ use crate::module_source::ModuleSource;
 use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
     ReturnConvention, TypeId,
@@ -1148,11 +1148,8 @@ impl HeapFrame {
                     return OperandNode::None;
                 }
                 let mut leaves = Vec::new();
-                for_each_value_source(body, v, &mut |source| {
-                    leaves.push(match source {
-                        Some(OpaqueSource::Local(l)) => self.local_node(l),
-                        None => ELSEWHERE,
-                    });
+                for_each_leaf_local(body, v, &mut |local| {
+                    leaves.push(local.map_or(ELSEWHERE, |l| self.local_node(l)));
                 });
                 let Some((&first, rest)) = leaves.split_first() else {
                     return OperandNode::None;
@@ -1634,9 +1631,9 @@ impl HeapFrame {
                 }
                 let mut roots = IndexSet::default();
                 let mut unknown = false;
-                for_each_value_source(body, v, &mut |source| {
-                    let root = match source {
-                        Some(OpaqueSource::Local(l)) => self.local_root(l),
+                for_each_leaf_local(body, v, &mut |local| {
+                    let root = match local {
+                        Some(l) => self.local_root(l),
                         None => Some(self.classes.root(ELSEWHERE)),
                     };
                     match root {
@@ -1887,9 +1884,9 @@ fn builtin_touches(
     )
 }
 
-/// Visit where each opaque leaf of the promoted value `v` came from; `None` is
-/// a leaf with no recorded source.
-fn for_each_value_source(body: &Body, v: ValueId, f: &mut impl FnMut(Option<OpaqueSource>)) {
+/// Visit the local each opaque leaf of the promoted value `v` reads; `None` is
+/// a leaf reading none.
+fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(Option<u32>)) {
     let mut stack = vec![v];
     let mut seen = IndexSet::default();
     while let Some(v) = stack.pop() {
@@ -1897,7 +1894,7 @@ fn for_each_value_source(body: &Body, v: ValueId, f: &mut impl FnMut(Option<Opaq
             continue;
         }
         match body.values.kind(v) {
-            ValueKind::Opaque(oid) => f(body.values.opaque_source(*oid)),
+            ValueKind::Opaque(oid) => f(body.values.opaque_local(*oid)),
             ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 stack.push(*operand);

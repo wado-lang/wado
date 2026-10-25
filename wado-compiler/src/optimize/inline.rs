@@ -41,7 +41,6 @@ use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
-use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
@@ -326,10 +325,11 @@ impl<'a> CostWalk<'a> {
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 self.value_folds(view, *operand)
             }
-            ValueKind::Opaque(oid) => matches!(
-                self.body.values.opaque_source(*oid),
-                Some(OpaqueSource::Local(l)) if view.params.contains(&l)
-            ),
+            ValueKind::Opaque(oid) => self
+                .body
+                .values
+                .opaque_local(*oid)
+                .is_some_and(|l| view.params.contains(&l)),
             ValueKind::Const(..) => true,
             ValueKind::Int(..)
             | ValueKind::Float(..)
@@ -3484,10 +3484,8 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
         ValueKind::Opaque(oid) => {
             // Mint a fresh caller opaque, remapping its source local into the
             // caller frame.
-            let new = match callee.values.opaque_source(oid) {
-                Some(OpaqueSource::Local(idx)) => caller
-                    .values
-                    .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
+            let new = match callee.values.opaque_local(oid) {
+                Some(idx) => caller.values.fresh_opaque_local(ctx.local(idx)),
                 None => caller.values.fresh_opaque(),
             };
             if let Some(t) = recorded_ty {

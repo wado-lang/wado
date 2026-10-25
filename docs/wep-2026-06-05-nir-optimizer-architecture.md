@@ -234,8 +234,8 @@ These are settled by measurement and re-derived at a cost.
   well. The count is scoped to the operands the skeleton still carries, since the
   pool is append-only and also holds reads that folded away.
 - A promoted operand names no skeleton node. Its leaves are constants and local
-  reads, and an opaque with any other origin has no extraction source, so
-  extraction refuses it. The skeleton is therefore all a node walk reaches, and
+  reads, and extraction refuses an opaque that reads no local. The skeleton is
+  therefore all a node walk reaches, and
   `for_each_reachable_node` is `for_each_node_under` from the root block. An
   earlier opaque re-emitted a skeleton expression, so every node walk had to
   follow it out of the skeleton. No promotion ever planted one, and dropping it

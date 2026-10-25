@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirFunction, ParamAbi, aggregate_field_info};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -266,9 +266,9 @@ impl<'a> ParamScope<'_, 'a> {
     /// Fold the value tree at `v` into `reads`.
     fn value(&self, v: ValueId, reads: &mut Reads<'a>, seen: &mut IndexSet<ValueId>) {
         let values = &self.body.values;
-        let source = |id: ValueId| match values.kind(id) {
-            ValueKind::Opaque(oid) => values.opaque_source(*oid),
-            _ => None,
+        let reads_local = |id: ValueId| match values.kind(id) {
+            ValueKind::Opaque(oid) => values.opaque_local(*oid) == Some(self.local),
+            _ => false,
         };
         values.walk_values::<()>(v, seen, |id, kind| {
             let descend = match kind {
@@ -276,14 +276,14 @@ impl<'a> ParamScope<'_, 'a> {
                     receiver,
                     field_index,
                     ..
-                } if source(*receiver) == Some(OpaqueSource::Local(self.local)) => {
+                } if reads_local(*receiver) => {
                     reads
                         .fields
                         .insert(self.field_names[*field_index as usize].as_str());
                     false
                 }
                 ValueKind::Opaque(_) => {
-                    reads.whole |= source(id) == Some(OpaqueSource::Local(self.local));
+                    reads.whole |= reads_local(id);
                     false
                 }
                 ValueKind::FieldAccess { .. }

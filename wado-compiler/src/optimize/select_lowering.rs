@@ -8,7 +8,7 @@ use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::mod_ref::ModRef;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -162,12 +162,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
         return true;
     }
     match kind {
-        ValueKind::Opaque(oid) => {
-            matches!(
-                body.values.opaque_source(*oid),
-                Some(OpaqueSource::Local(_))
-            )
-        }
+        ValueKind::Opaque(oid) => body.values.opaque_local(*oid).is_some(),
         ValueKind::Unary { op, operand, .. } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
                 && is_select_eligible_value(body, *operand, type_table)

@@ -19,7 +19,7 @@ use crate::nir_arena::{
     StmtNode, Tracked,
 };
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
-use crate::nir_value_graph::{HeapVersion, OpaqueSource, ValueId, ValueKind, builder};
+use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder};
 use crate::niri::CtfeBuiltinMap;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
@@ -636,11 +636,10 @@ impl<'a> Engine<'a> {
             else {
                 continue;
             };
-            let source = match scratch.kind(receiver) {
-                ValueKind::Opaque(o) => scratch.opaque_source(*o),
-                _ => None,
+            let ValueKind::Opaque(o) = scratch.kind(receiver) else {
+                continue;
             };
-            let Some(OpaqueSource::Local(i)) = source else {
+            let Some(i) = scratch.opaque_local(*o) else {
                 continue;
             };
             if !self.local_is_struct_typed(i) {

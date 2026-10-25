@@ -15,7 +15,7 @@ use crate::nir_arena::{
 use crate::tir::ObjectTypes;
 use crate::type_table::{TypeKey, TypeTable};
 
-use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
+use super::{HeapVersion, ValueId, ValueKind, ValuePool};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
 use crate::primitive::PrimitiveType;
@@ -833,8 +833,8 @@ impl<'a> Builder<'a> {
     }
 
     /// Name the array `array_new(len)` allocates, and remember its length. The
-    /// name is a fresh opaque with no extraction source, so two allocations
-    /// never share one and no operand can be promoted to it — only
+    /// name is a fresh opaque reading no local, so two allocations never share
+    /// one and extraction refuses it — only
     /// [`Builder::known_array_len`] reads it back.
     fn allocated_array(&mut self, len: Operand) -> Option<ValueId> {
         let len = self.walked_value(len)?;
@@ -1008,15 +1008,15 @@ impl<'a> Builder<'a> {
             if self.seeded_aggregates.contains(&l) {
                 continue;
             }
-            self.invalidate_local_with_source(l, Some(OpaqueSource::Local(l)));
+            self.invalidate_local_with(l, ValuePool::fresh_opaque_local);
         }
     }
 
     fn seed_params(&mut self, param_locals: &[u32]) {
         for &idx in param_locals {
-            // A parameter's value re-emits as `local.get idx` — record the
-            // source so the extractor can materialise a promoted value over it.
-            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
+            // A parameter's value re-emits as `local.get idx`, so the extractor
+            // can materialise a promoted value over it.
+            let opaque = self.pool.fresh_opaque_local(idx);
             self.set_local_value(idx, opaque);
         }
     }
@@ -1045,10 +1045,7 @@ impl<'a> Builder<'a> {
                 let v = self
                     .walk_operand(value)
                     .filter(|_| !declared_without_value)
-                    .unwrap_or_else(|| {
-                        self.pool
-                            .fresh_opaque_with_source(OpaqueSource::Local(local_index))
-                    });
+                    .unwrap_or_else(|| self.pool.fresh_opaque_local(local_index));
                 self.set_local_value(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
@@ -1707,7 +1704,7 @@ impl<'a> Builder<'a> {
         } else {
             // Unbound locals shouldn't occur on well-typed NIR; cache a
             // fresh Opaque so subsequent reads agree.
-            let v = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
+            let v = self.pool.fresh_opaque_local(idx);
             self.set_local_value(idx, v);
             v
         }
@@ -1716,9 +1713,7 @@ impl<'a> Builder<'a> {
     fn bind_pattern_opaque(&mut self, pat: PatId) {
         match self.body.pats[pat].kind.clone() {
             PatKind::Binding { local_index, .. } => {
-                let v = self
-                    .pool
-                    .fresh_opaque_with_source(OpaqueSource::Local(local_index));
+                let v = self.pool.fresh_opaque_local(local_index);
                 self.set_local_value(local_index, v);
             }
             PatKind::Tuple(children, _) => {
@@ -1776,18 +1771,15 @@ impl<'a> Builder<'a> {
         self.current_value.insert(idx, v);
     }
 
-    fn invalidate_local_with_source(&mut self, idx: u32, source: Option<OpaqueSource>) {
+    fn invalidate_local_with(&mut self, idx: u32, mint: fn(&mut ValuePool, u32) -> ValueId) {
         if self.current_value.contains_key(&idx) && self.fresh_invalidations.insert(idx) {
-            let opaque = match source {
-                Some(s) => self.pool.fresh_opaque_with_source(s),
-                None => self.pool.fresh_opaque(),
-            };
+            let opaque = mint(&mut self.pool, idx);
             self.current_value.insert(idx, opaque);
         }
     }
 
     fn invalidate_local(&mut self, idx: u32) {
-        self.invalidate_local_with_source(idx, None);
+        self.invalidate_local_with(idx, |pool, _| pool.fresh_opaque());
     }
 
     /// Join an if-style two-arm endpoint over all three flow components at

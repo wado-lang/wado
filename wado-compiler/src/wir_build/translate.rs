@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
@@ -2745,18 +2745,14 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for a leaf the graph cannot reconstruct. It is
-            // re-emitted from the source the builder/lower recorded for it.
-            ValueKind::Opaque(id) => {
-                match self
-                    .body
+            // An `Opaque` stands for a leaf the graph cannot reconstruct; a
+            // promoted one reads a local.
+            ValueKind::Opaque(id) => self.local_get(
+                self.body
                     .values
-                    .opaque_source(id)
-                    .expect("promoted Opaque has no recorded extraction source")
-                {
-                    OpaqueSource::Local(idx) => self.local_get(idx),
-                }
-            }
+                    .opaque_local(id)
+                    .expect("promoted Opaque reads no local"),
+            ),
             // A `Select` (control-merge of pure values) extracts as a
             // value-producing `if`. Sound because the arms are pure values
             // (the builder constructs `Select` only at merges of pure values);
@@ -2803,7 +2799,7 @@ impl FunctionTranslator<'_, '_> {
                 // materialised), read the split local directly — a `StructGet`
                 // would read an uninitialised slot. Mirrors `translate_expr_inner`.
                 if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
-                    && let Some(OpaqueSource::Local(idx)) = self.body.values.opaque_source(*oid)
+                    && let Some(idx) = self.body.values.opaque_local(*oid)
                     && let Some(splits) = self.multi_value_split_locals.get(&idx)
                     && let Some((name, ty)) = splits.get(&field_name)
                 {

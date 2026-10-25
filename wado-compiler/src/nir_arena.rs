@@ -20,7 +20,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1965,9 +1965,7 @@ impl Body {
                 _ => None,
             },
             Operand::Value(v) => match self.values.kind(v) {
-                ValueKind::Opaque(oid) => match self.values.opaque_source(*oid)? {
-                    OpaqueSource::Local(index) => Some(index),
-                },
+                ValueKind::Opaque(oid) => self.values.opaque_local(*oid),
                 _ => None,
             },
         }

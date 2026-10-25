@@ -19,7 +19,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::tir::{ResolvedType, TypeId};
@@ -383,9 +383,7 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     let ValueKind::Opaque(oid) = body.values.kind(op.as_value()?) else {
         return None;
     };
-    match body.values.opaque_source(*oid)? {
-        OpaqueSource::Local(idx) => Some(idx),
-    }
+    body.values.opaque_local(*oid)
 }
 
 /// The local an operand reads: a bare skeleton `Local`, or the promoted value
