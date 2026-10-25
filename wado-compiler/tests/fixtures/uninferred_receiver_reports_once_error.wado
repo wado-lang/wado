@@ -1,0 +1,16 @@
+// A value whose type parameters nothing answers is reported once, at the call
+// that left them open. A method called on it says nothing more: it would only
+// repeat that one, as "no method found" on the open type.
+
+use { HashMap } from "core:collections";
+
+test {
+    let m = HashMap::new();
+    assert m.len() == 0;
+}
+
+__DATA__
+{
+    "compile_error": ":8:13: analysis error: cannot infer type parameter `K`, `V` of `HashMap::new`",
+    "compile_errors_not_contains": ["no method"]
+}

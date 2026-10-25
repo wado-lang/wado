@@ -103,6 +103,7 @@ impl CalleeSignature {
 
 /// Which static method a call names: the two segments, and the namespace's
 /// receiver key where the spelling has one.
+#[derive(Clone, Copy)]
 pub(super) struct StaticCallee<'a> {
     pub type_name: &'a str,
     pub method_name: &'a str,
@@ -1768,13 +1769,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
+                let callee = StaticCallee {
+                    type_name: prefix,
+                    method_name: suffix,
+                    receiver_key: None,
+                };
                 let (mut impl_type_args_inferred, mut method_type_args) = self
                     .static_call_type_args(
-                        StaticCallee {
-                            type_name: prefix,
-                            method_name: suffix,
-                            receiver_key: None,
-                        },
+                        callee,
                         &call.args,
                         &args,
                         expected_type,
@@ -1788,6 +1790,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !method_type_args.is_empty() {
                     self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
                 }
+                // Before the record, which then holds what stands in for a slot
+                // deferred.
+                self.defer_or_report_uninferred_static_method_type_args(
+                    callee,
+                    &mut impl_type_args_inferred,
+                    &mut method_type_args,
+                    &args,
+                    expected_type,
+                    call.span,
+                );
                 // Record `[impl_args, method_args]` — the same order
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
@@ -1798,14 +1810,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                self.report_uninferred_static_method_type_args(
-                    prefix,
-                    suffix,
-                    &mut impl_type_args_inferred,
-                    &mut method_type_args,
-                    call.span,
-                    None,
-                );
                 // The type prefix is what `Self` means here, so a bound written
                 // `Assoc = Self::Item` projects off it as it does on a method call.
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
@@ -2079,26 +2083,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
+                    let callee = StaticCallee {
+                        type_name,
+                        method_name,
+                        receiver_key: ns_key.as_ref(),
+                    };
                     let (mut impl_type_args_inferred, mut method_type_args) = self
                         .static_call_type_args(
-                            StaticCallee {
-                                type_name,
-                                method_name,
-                                receiver_key: ns_key.as_ref(),
-                            },
+                            callee,
                             &call.args,
                             &args,
                             expected_type,
                             call.span,
                             method_type_args,
                         );
-                    self.report_uninferred_static_method_type_args(
-                        type_name,
-                        method_name,
+                    self.defer_or_report_uninferred_static_method_type_args(
+                        callee,
                         &mut impl_type_args_inferred,
                         &mut method_type_args,
+                        &args,
+                        expected_type,
                         call.span,
-                        ns_key.as_ref(),
                     );
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
@@ -3485,17 +3490,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// A slot it reports is the error type from then on: left as the callee's
-    /// own binder, it reads as whatever the caller declares under that name.
-    fn report_uninferred_static_method_type_args(
+    /// Defer or report the slots a static call left unanswered, as
+    /// [`Self::defer_or_report_uninferred_fn_type_args`] does a free
+    /// function's. A slot it reports is the error type from then on: left as
+    /// the callee's own binder, it reads as whatever the caller declares under
+    /// that name.
+    fn defer_or_report_uninferred_static_method_type_args(
         &mut self,
-        prefix: &str,
-        suffix: &str,
+        callee: StaticCallee,
         impl_type_args: &mut Vec<TypeId>,
         method_type_args: &mut Vec<TypeId>,
+        args: &[TypeId],
+        expected_type: Option<TypeId>,
         span: token::Span,
-        receiver_key: Option<&ImplTargetKey>,
     ) {
+        let StaticCallee {
+            type_name: prefix,
+            method_name: suffix,
+            receiver_key,
+        } = callee;
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
@@ -3531,35 +3544,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if impl_unresolved.is_empty() && method_unresolved.is_empty() {
             return;
         }
-        let type_level_unresolved = !impl_unresolved.is_empty();
-        let names: Vec<String> = impl_unresolved
-            .iter()
-            .chain(&method_unresolved)
-            .map(|(_, name)| name.clone())
-            .collect();
-        for (args, unresolved) in [
+        let turbofish = if impl_unresolved.is_empty() {
+            format!("`{prefix}::{suffix}::<...>()`")
+        } else {
+            format!("`{prefix}::<...>::{suffix}()`")
+        };
+        let owner = format!("`{prefix}::{suffix}`");
+        // As a free function's: nothing here could answer a slot, so a sink
+        // the value reaches may yet, a sibling branch's type among them.
+        let defers = expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a));
+        let blame = format!("of {owner}; add a turbofish ({turbofish}) or a type annotation");
+        for (type_args, unresolved) in [
             (&mut *impl_type_args, &impl_unresolved),
             (&mut *method_type_args, &method_unresolved),
         ] {
-            for &(slot, _) in unresolved {
-                if args.len() <= slot {
-                    args.resize(slot + 1, TypeTable::ERROR);
+            for (slot, name) in unresolved {
+                if type_args.len() <= *slot {
+                    type_args.resize(slot + 1, TypeTable::ERROR);
                 }
-                args[slot] = TypeTable::ERROR;
+                type_args[*slot] = if defers {
+                    let var = self.mint_infer_var_named(name);
+                    self.attach_infer_var_blame(var, span, name.clone(), blame.clone());
+                    var
+                } else {
+                    TypeTable::ERROR
+                };
             }
         }
-
-        let turbofish = if type_level_unresolved {
-            format!("`{prefix}::<...>::{suffix}()`")
-        } else {
-            format!("`{prefix}::{suffix}::<...>()`")
-        };
-        let _ = self.emit(TypeError::cannot_infer(
-            &names,
-            &format!("`{prefix}::{suffix}`"),
-            &turbofish,
-            span,
-        ));
+        if !defers {
+            let names: Vec<String> = impl_unresolved
+                .iter()
+                .chain(&method_unresolved)
+                .map(|(_, name)| name.clone())
+                .collect();
+            let _ = self.emit(TypeError::cannot_infer(&names, &owner, &turbofish, span));
+        }
     }
 
     /// Each of `sig`'s declaring block's parameters whose argument in

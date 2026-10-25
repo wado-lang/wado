@@ -649,6 +649,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_bindings,
         } = if let Some(info) = method_info {
             info
+        } else if self.awaits_reported_hole(base_type_id) {
+            MethodInfo::undeclared(TypeTable::ERROR)
         } else {
             let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
             let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
