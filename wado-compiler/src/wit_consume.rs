@@ -103,14 +103,7 @@ fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&Interfac
     let imports: hashmap::IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
     module.items.iter().filter_map(move |item| match item {
         Item::Interface(decl) => cm_import_of(&decl.attrs)
-            .filter(|cm| {
-                let on = if imports.contains(&cm.interface_path()) {
-                    Side::Import
-                } else {
-                    Side::Export
-                };
-                on == side
-            })
+            .filter(|cm| imports.contains(&cm.interface_path()) == (side == Side::Import))
             .map(|cm| (decl, cm)),
         _ => None,
     })
