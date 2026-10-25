@@ -1,0 +1,40 @@
+#![stdlib("core:fuel")]
+//! The deterministic cost of a region of a test.
+//!
+//! [`measure`] runs a closure and, under `wado test --report-fuel`, reports
+//! the fuel it spent: about one unit per Wasm instruction the guest ran. Fuel
+//! does not depend on the host, so one run gives a figure that only a change to
+//! the program or to wasmtime moves. It leaves out what the host does for the
+//! guest, GC included, and it prices every instruction alike.
+//!
+//! Without `--report-fuel` the closure just runs. Only `wado test` supports
+//! it, and a program for any other world that reaches this module does not
+//! compile.
+
+use { FuelHost } from "core:fuel/fuel_host.wado";
+
+#[synopsis]
+test {
+    let n = builtin::black_box(1_000);
+    let sum = measure("sum", || {
+        let mut s = 0;
+        for let i of 0..<n {
+            s += i;
+        }
+        return s;
+    });
+    assert sum == 499_500;
+}
+
+/// Runs `f` and reports the fuel it spent as region `label` of the running
+/// test. `f`'s result passes through `builtin::black_box`, so the work that
+/// produces it is never optimized out of the region.
+#[benign(FuelHost)]
+pub fn measure<T, effect E>(label: String, f: fn() -> T with E) -> T with E {
+    let Some(start) = FuelHost::spent() else {
+        return f();
+    };
+    let value = builtin::black_box(f());
+    FuelHost::report(label, FuelHost::spent().unwrap() - start);
+    return value;
+}

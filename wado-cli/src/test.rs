@@ -24,6 +24,7 @@ use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
+use crate::fuel_host::{self, FuelRegion};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
@@ -721,6 +722,8 @@ pub(crate) struct TestResult {
     /// Fuel the test's store spent, instantiation included, under
     /// `--report-fuel`.
     pub(crate) fuel: Option<u64>,
+    /// The regions the test measured through `core:fuel`, empty unless metered.
+    pub(crate) fuel_regions: Vec<FuelRegion>,
     /// Captured guest stdout/stderr (see `runtime::create_test_store`).
     /// Empty when nothing was printed, or when the test never got as far
     /// as calling its test function (`fail_result`'s setup-time failures).
@@ -737,13 +740,18 @@ impl TestResult {
             .expect("a resolved TODO carries its advice")
     }
 
-    /// What the test cost: its duration, and its fuel where it was metered.
+    /// What the test cost: its duration, and its fuel and that of each region
+    /// it measured where it was metered.
     pub(crate) fn cost(&self) -> String {
         let duration = format_duration(self.duration);
-        match self.fuel {
-            Some(fuel) => format!("{duration}, fuel {fuel}"),
-            None => duration,
+        let Some(fuel) = self.fuel else {
+            return duration;
+        };
+        let mut cost = format!("{duration}, fuel {fuel}");
+        for region in &self.fuel_regions {
+            cost.push_str(&format!("; {} {}", region.label, region.fuel));
         }
+        cost
     }
 }
 
@@ -1667,6 +1675,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) 
         error: Some(error),
         duration: start.elapsed(),
         fuel,
+        fuel_regions: Vec::new(),
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1798,6 +1807,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         error,
         duration: start.elapsed(),
         fuel: runtime::fuel_spent(&store),
+        fuel_regions: std::mem::take(store.data_mut().fuel_regions()),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
@@ -2206,6 +2216,7 @@ async fn run_one_package(
     coverage_run: Option<Arc<CoverageRun>>,
     test_cache: Option<&TestCache>,
     cached: &[(String, Tally)],
+    metered: Option<&mut Vec<TestResult>>,
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
@@ -2301,6 +2312,9 @@ async fn run_one_package(
         no_run,
     });
 
+    if let Some(metered) = metered {
+        metered.extend(test_results);
+    }
     totals
 }
 
@@ -2498,6 +2512,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
     let mut grand = PackageTotals::default();
+    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
     for (pkg_run, cached) in package_runs.iter().zip(&cached) {
         let totals = run_one_package(
             pkg_run,
@@ -2518,6 +2533,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             coverage_run.clone(),
             test_cache.as_ref(),
             cached,
+            metered.as_mut(),
         )
         .await;
         grand.merge(&totals);
@@ -2525,13 +2541,21 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
-    let reported = write_profile(&profile, profiler_slot.as_ref()).and_then(|()| {
-        coverage_run.map_or(Ok(()), |run| {
-            Arc::into_inner(run)
-                .expect("every stage holding the coverage run has finished")
-                .finish(reporter.as_ref())
+    let reported = write_profile(&profile, profiler_slot.as_ref())
+        .and_then(|()| {
+            coverage_run.map_or(Ok(()), |run| {
+                Arc::into_inner(run)
+                    .expect("every stage holding the coverage run has finished")
+                    .finish(reporter.as_ref())
+            })
         })
-    });
+        .and_then(|()| {
+            metered.map_or(Ok(()), |results| {
+                let root = std::env::current_dir()
+                    .map_err(|e| CliExit::error(format!("cannot read the current directory: {e}")))?;
+                fuel_host::write_report(&root, &results)
+            })
+        });
     reporter.on_recap();
     reported?;
 

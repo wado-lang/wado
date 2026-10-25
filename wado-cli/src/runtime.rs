@@ -23,6 +23,7 @@ use wasmtime_wasi_tls::{
 use crate::args::CliExit;
 use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker};
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
+use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
 use crate::process_host::{
@@ -107,6 +108,8 @@ pub struct WasiState {
     coverage: CoverageHits,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
+    /// `wado test` only: the regions this store measured through `core:fuel`.
+    fuel_regions: Vec<FuelRegion>,
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -240,12 +243,18 @@ impl WasiState {
             eval,
             coverage: CoverageHits::default(),
             fuel_start: None,
+            fuel_regions: Vec::new(),
         }
     }
 
     /// The coverage regions this store reported.
     pub fn coverage_hits(&mut self) -> &mut CoverageHits {
         &mut self.coverage
+    }
+
+    /// The regions this store measured through `core:fuel`.
+    pub fn fuel_regions(&mut self) -> &mut Vec<FuelRegion> {
+        &mut self.fuel_regions
     }
 
     /// The store's handle on `core:process`.
@@ -605,8 +614,8 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// Like [`create_linker`], plus `core:eval` and `core:coverage`, which only a
-/// test may reach.
+/// Like [`create_linker`], plus `core:eval`, `core:coverage` and `core:fuel`,
+/// which only a test may reach.
 ///
 /// # Errors
 ///
@@ -616,6 +625,7 @@ pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker = host_linker(component)?;
     add_eval_to_linker(&mut linker, WasiState::eval_session)?;
     add_coverage_to_linker(&mut linker, WasiState::coverage_hits)?;
+    add_fuel_to_linker(&mut linker)?;
     linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }
