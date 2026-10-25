@@ -69,7 +69,10 @@ still sees dependencies and builds real files; it just never does the resolving.
   It lives in `build/run/` under the package root, or in the user cache,
   `$XDG_CACHE_HOME/wado/run/` (else `~/.cache/wado/run/`), for a file in no
   package, so a script run from a shebang writes nothing beside itself.
-  `--no-cache` compiles anyway.
+  `--no-cache` compiles anyway. The cache holds Wasm and never machine code:
+  wasmtime validates a component each time it loads one, while a precompiled
+  `.cwasm` is run as written, so caching one would trust whatever replaced the
+  file.
 
 | Tier                  | Commands                                                             | Resolves deps                  |
 | --------------------- | -------------------------------------------------------------------- | ------------------------------ |
