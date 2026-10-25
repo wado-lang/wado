@@ -158,7 +158,10 @@ impl Axes {
             return Result::Ok(());
         };
         let earlier = self.find(&first);
-        let [l, r] = [self.label(&Axis { name: earlier, extent: axis.extent }), self.label(axis)];
+        let [l, r] = [
+            self.label(&Axis { name: earlier, extent: axis.extent }),
+            self.label(axis),
+        ];
         if !self.join(&earlier, &root) {
             return Result::Err([l, r]);
         }
@@ -212,7 +215,10 @@ impl Axes {
     /// words a `layout` gave apart, a merge of a different count of parts, or a
     /// merge meeting a class a word names.
     pub fn unify(&mut self, left: &Axis, right: &Axis) -> bool {
-        let [l, r] = [self.read(left), self.read(right)];
+        let [l, r] = [
+            self.read(left),
+            self.read(right),
+        ];
         if l.parts.is_empty() && r.parts.is_empty() {
             if !is_variable(&l.name) || !is_variable(&r.name) {
                 return l.name == r.name;
@@ -512,7 +518,13 @@ impl Shape {
     /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
     /// and a rank-1 operand is a matrix whose missing axis the result drops.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>, classes: &mut Axes) -> Result<Shape, AxisConflict>
+    pub fn matmul(
+        &self,
+        rhs: &Shape,
+        op: String,
+        owed: &mut List<Condition>,
+        classes: &mut Axes,
+    ) -> Result<Shape, AxisConflict>
         contract self.rank() >= 1 && rhs.rank() >= 1
     {
 

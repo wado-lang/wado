@@ -179,7 +179,10 @@ test "a layout word reaching two axes the graph keeps apart stops the build" {
         Y = Relu(A)
         Z = Relu(B)
     }`;
-    let e = y_axes(source, [rule("A", ["P"]), rule("B", ["P"])]).unwrap_err();
+    let e = y_axes(source, [
+        rule("A", ["P"]),
+        rule("B", ["P"]),
+    ]).unwrap_err();
     assert e == "the layout names axis P at A and at B, which the graph keeps apart";
 }
 
@@ -187,20 +190,20 @@ test "a dim_param joining axes the layout names apart stops the build" {
     let source = `g (float[N] A, float[N] B) => (float[N] Y) {
         Y = Relu(A)
     }`;
-    let e = y_axes(source, [rule("A", ["Rows"]), rule("B", ["Cols"])]).unwrap_err();
+    let e = y_axes(source, [
+        rule("A", ["Rows"]),
+        rule("B", ["Cols"]),
+    ]).unwrap_err();
     assert e == "B: dim_param N joins axes the layout names Rows and Cols";
 }
 
 test "each axis's name says where it came from" {
     let graph = read(&mlp(64)).unwrap();
-    let names = infer(&graph, &Schema { layout: [rule("W1", ["In", "Hidden"])] }).unwrap().axis_names;
+    let names = infer(&graph, &Schema {
+        layout: [rule("W1", ["In", "Hidden"])],
+    }).unwrap().axis_names;
     let said: List<String> = names.into_iter().map(|n| `${n.name}: ${n.source}`).collect();
-    assert said == [
-        "N: dim_param N at X",
-        "In: layout In at W1",
-        "Y1: minted from Y[1]",
-        "Hidden: layout Hidden at W1",
-    ] as List<String>;
+    assert said == ["N: dim_param N at X", "In: layout In at W1", "Y1: minted from Y[1]", "Hidden: layout Hidden at W1"] as List<String>;
 }
 
 test "a pattern naming the wrong number of axes stops the build" {

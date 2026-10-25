@@ -95,7 +95,10 @@ fn prefill(input_ids: ByteList) -> [Tensor<f32, [prompt::BatchSize, prompt::Sequ
     let o = prompt::forward(
         &mut Cpu {},
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> { data: ids, extents },
-        &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> { data: List::<i64>::filled(extents[1], 1), extents },
+        &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> {
+            data: List::<i64>::filled(extents[1], 1),
+            extents,
+        },
         &weights,
     );
     let cache: Cache = [

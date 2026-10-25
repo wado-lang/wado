@@ -360,7 +360,11 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     };
     checked_graph(graph, &mut scope, schema)?;
     let axes = scope.axes;
-    let mut naming = Naming { names: HashMap::new(), taken: module_idents(), words: HashMap::new() };
+    let mut naming = Naming {
+        names: HashMap::new(),
+        taken: module_idents(),
+        words: HashMap::new(),
+    };
     // The tensor each `layout` word was first given at, so a second class it
     // reaches is refused.
     let mut authored = HashMap::<String, String>::new();
@@ -465,7 +469,13 @@ fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, naming: &mut Namin
     }
     for let root of axes.roots() {
         if reached.contains(root) {
-            name_class(&axes.read(&Axis { name: root, extent: Extent::Unstated }), axes.origin(&root), axes, &mut sources, naming);
+            name_class(
+                &axes.read(&Axis { name: root, extent: Extent::Unstated }),
+                axes.origin(&root),
+                axes,
+                &mut sources,
+                naming,
+            );
         }
     }
     for let [tensor, shape] of scope.shapes.entries() {
@@ -526,7 +536,10 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
         scope.known[*name] = *k;
         scope.primitives[*name] = known_primitive(k);
     }
-    for let [declares, declared] of [[true, &graph.inputs], [false, &graph.initializers]] {
+    for let [declares, declared] of [
+        [true, &graph.inputs],
+        [false, &graph.initializers],
+    ] {
         for let vi of *declared {
             scope.shapes[vi.name] = shape_of(&vi, &local, &mut scope.axes, declares)?;
             // An element no kernel reaches is left out, for emit to name.
@@ -684,7 +697,10 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
         }
         let mut axes: List<Axis> = [];
         for let j of 0..<t.rank() {
-            let [a, b] = [scope.axes.read(&t.axes[j]), scope.axes.read(&e.axes[j])];
+            let [a, b] = [
+                scope.axes.read(&t.axes[j]),
+                scope.axes.read(&e.axes[j]),
+            ];
             let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
             axes.push(if a.name == b.name {
                 Axis { ..a, extent };
@@ -697,7 +713,10 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
             scope.primitives[output] = p;
         }
     }
-    for let [graph, branch] of [[&then_graph, &then_scope], [&else_graph, &else_scope]] {
+    for let [graph, branch] of [
+        [&then_graph, &then_scope],
+        [&else_graph, &else_scope],
+    ] {
         hoist_constants(scope, branch, &schema.within(&graph.name), local)?;
     }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
@@ -1106,7 +1125,9 @@ fn infer_node(
     }
     if op == "Range" {
         let count = range_count(node, known, owed)?;
-        return Result::Ok(Shape { axes: [new_axis(&node.outputs[0], schema, 0, 1, count, classes)?] });
+        return Result::Ok(Shape {
+            axes: [new_axis(&node.outputs[0], schema, 0, 1, count, classes)?],
+        });
     }
     if op == "Gather" {
         let data = operand_at(node, shapes, 0);
@@ -1681,7 +1702,10 @@ fn attention(
         if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {
             return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
         }
-        let [cos, sin] = [ranked(ROTARY_COS, 2)?, ranked(ROTARY_SIN, 2)?];
+        let [cos, sin] = [
+            ranked(ROTARY_COS, 2)?,
+            ranked(ROTARY_SIN, 2)?,
+        ];
         stated(&cos.axes[1], dim as i64 / 2, owed, classes)?;
         let Some(slack) = cos.axes[0].extent.poly().try_sub(&total) else {
             return Result::Err(refusal(node, "the rotary cache must reach every position"));
@@ -1831,7 +1855,8 @@ pub fn window_of(
             `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
         ));
     }
-    let spatial: List<Poly> = extents_of(node, x, classes)?[2..<x.rank()].to_list().into_iter().map(|e| e.poly()).collect();
+    let extents = extents_of(node, x, classes)?;
+    let spatial: List<Poly> = extents[2..<x.rank()].to_list().into_iter().map(|e| e.poly()).collect();
     let kernel = if node.op == "Conv" {
         let w = operand_at(node, shapes, 1);
         if w.rank() != x.rank() {
