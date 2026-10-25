@@ -254,10 +254,24 @@
           return ordered;
         }
 
-        // Every commit gets a fixed horizontal slot, so the chart grows as wide
-        // as it needs and the container scrolls horizontally. How many points
-        // are visible at once therefore depends on the viewport width.
+        // Every commit gets a horizontal slot, so the chart grows as wide as it
+        // needs and the container scrolls horizontally. How many points are
+        // visible at once therefore depends on the viewport width.
         const PX_PER_POINT = 16;
+
+        // A canvas past a browser's limits stays blank: 32767 device pixels a
+        // side in Chrome, Firefox and Safari, and 16777216 in area on iOS. A
+        // history whose slots would cross either narrows them instead, so the
+        // whole history still draws. 1647 commits at 16px crossed the width
+        // on a 2x display.
+        const MAX_CANVAS_SIDE = 32767;
+        const MAX_CANVAS_AREA = 16777216;
+
+        function chartWidth(points, cssHeight) {
+          const dpr = window.devicePixelRatio || 1;
+          const limit = Math.min(MAX_CANVAS_SIDE / dpr, MAX_CANVAS_AREA / (cssHeight * dpr * dpr));
+          return Math.floor(Math.min(points * PX_PER_POINT, limit));
+        }
 
         function renderCombinedGraph(parent, baseName, optLevelMap) {
           // Column wrapper so the fixed title sits above the scrollable chart.
@@ -321,11 +335,10 @@
             }
           }
 
-          // Give every commit PX_PER_POINT of width. CSS min-width keeps the box
-          // filling the viewport when there are only a few points, so the chart
-          // never looks cramped on the left; once it grows past the viewport the
-          // container scrolls instead.
-          canvasBox.style.width = (commitIds.length * PX_PER_POINT) + 'px';
+          // CSS min-width keeps the box filling the viewport when there are only
+          // a few points, so the chart never looks cramped on the left; once it
+          // grows past the viewport the container scrolls instead.
+          canvasBox.style.width = chartWidth(commitIds.length, canvasBox.clientHeight) + 'px';
 
           // Sort optimization levels
           const sortedOpts = [...optLevelMap.keys()].sort();
