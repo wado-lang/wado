@@ -128,12 +128,6 @@ if [ -f .gitmodules ]; then
     else
         log "Warning: failed to sync vendor/wasmtime submodule"
     fi
-    # Gale's descriptor corpus and oracle pipeline read it (package-gale/AGENTS.md).
-    if git submodule update --init --recommend-shallow vendor/antlr4; then
-        log "vendor/antlr4 initialized"
-    else
-        log "Warning: failed to initialize vendor/antlr4 submodule"
-    fi
 fi
 
 # A program core:process spawns reads only /usr and /etc by default, so the
