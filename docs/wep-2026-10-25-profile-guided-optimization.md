@@ -201,7 +201,6 @@ level.
 
 ## Known gaps
 
-- [ ] `--pgo` and the `pgo/` directory are working names.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker.
 - [ ] A region is measured once for all of a generic function's
