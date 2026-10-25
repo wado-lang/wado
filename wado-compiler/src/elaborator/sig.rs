@@ -424,6 +424,64 @@ impl MethodSig {
         }
         substitution
     }
+
+    /// The signature as a receiver reads it: the declaring block's slots filled
+    /// from `substitution`, the method's own moved past every frame's.
+    ///
+    /// The receiver may bring a caller's own parameter in, and slots are filled
+    /// by index. Left at their indices, the method's own would be filled later
+    /// together with a caller's parameter of the same index.
+    pub(crate) fn instantiate_received(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+        bound: &EffectRows,
+    ) -> ReceivedSig {
+        let renames: IndexMap<u32, u32> = {
+            let table = type_table.borrow();
+            self.own_type_params()
+                .iter()
+                .filter_map(|&(_, id)| table.param_slot(id))
+                .map(|index| {
+                    assert!(
+                        index < MOVED_SLOT_BASE,
+                        "a frame's slots must stay below the moved ones"
+                    );
+                    (index, MOVED_SLOT_BASE + index)
+                })
+                .collect()
+        };
+        let sig =
+            self.decl
+                .instantiate_moving(type_table, substitution, projections, bound, &renames);
+        let mut table = type_table.borrow_mut();
+        let own_slots = self
+            .own_type_params()
+            .iter()
+            .map(|&(_, id)| {
+                table.substitute_type_params_moving(
+                    id,
+                    &IndexMap::default(),
+                    &SlotProjections::default(),
+                    &renames,
+                )
+            })
+            .collect();
+        ReceivedSig { sig, own_slots }
+    }
+}
+
+/// Where [`MethodSig::instantiate_received`] moves a method's own slots: past
+/// any index a declaration frame numbers.
+const MOVED_SLOT_BASE: u32 = 1 << 20;
+
+/// A [`MethodSig`] as [`MethodSig::instantiate_received`] reads it.
+#[derive(Clone, Debug)]
+pub(crate) struct ReceivedSig {
+    pub(crate) sig: InstantiatedSig,
+    /// The method's own slots, moved, in declaration order.
+    pub(crate) own_slots: Vec<TypeId>,
 }
 
 /// What a `trait` declaration says, resolved once in the trait's own frame.
@@ -636,21 +694,43 @@ impl DeclSig {
         projections: &SlotProjections,
         bound: &EffectRows,
     ) -> InstantiatedSig {
+        self.instantiate_moving(
+            type_table,
+            substitution,
+            projections,
+            bound,
+            &IndexMap::default(),
+        )
+    }
+
+    /// [`Self::instantiate_bound`], moving the slots `renames` names to their
+    /// new indices in the same pass.
+    fn instantiate_moving(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+        bound: &EffectRows,
+        renames: &IndexMap<u32, u32>,
+    ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         let mut rows = bound.clone();
         rows.extend(table.fresh_effect_vars(&self.own_effects));
         let return_type =
             table.substitute_effect_rows(self.return_type.unwrap_or(TypeTable::UNIT), &rows);
+        let fill = |table: &mut TypeTable, ty| {
+            table.substitute_type_params_moving(ty, substitution, projections, renames)
+        };
         InstantiatedSig {
             param_types: self
                 .param_types
                 .iter()
                 .map(|&p| {
                     let p = table.substitute_effect_rows(p, bound);
-                    table.substitute_type_params_with(p, substitution, projections)
+                    fill(&mut table, p)
                 })
                 .collect(),
-            return_type: table.substitute_type_params_with(return_type, substitution, projections),
+            return_type: fill(&mut table, return_type),
         }
     }
 }

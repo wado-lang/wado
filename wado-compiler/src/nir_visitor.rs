@@ -32,16 +32,11 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
 /// Every expression id reachable from `node`, in walk order — the region a
 /// pass walks when one region answers its question.
 pub(crate) fn exprs_under(body: &Body, node: NodeRef) -> Vec<ExprId> {
-    struct Collect(Vec<ExprId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Expr(e) = node {
-                self.0.push(e);
-            }
-            self.walk_node(body, node);
+    let mut out = Vec::new();
+    body.for_each_node_under(node, |n| {
+        if let NodeRef::Expr(e) = n {
+            out.push(e);
         }
-    }
-    let mut collect = Collect(Vec::new());
-    collect.visit_node(body, node);
-    collect.0
+    });
+    out
 }

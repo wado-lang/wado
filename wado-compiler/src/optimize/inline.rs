@@ -41,7 +41,6 @@ use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
-use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
@@ -326,10 +325,9 @@ impl<'a> CostWalk<'a> {
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 self.value_folds(view, *operand)
             }
-            ValueKind::Opaque(oid) => matches!(
-                self.body.values.opaque_source(*oid),
-                Some(OpaqueSource::Local(l)) if view.params.contains(&l)
-            ),
+            ValueKind::Opaque(oid) => view
+                .params
+                .contains(&self.body.values.promoted_opaque_local(*oid)),
             ValueKind::Const(..) => true,
             ValueKind::Int(..)
             | ValueKind::Float(..)
@@ -1154,7 +1152,7 @@ fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
             && !covered.contains(&st)
             && let StmtKind::Loop { body: b } = &body.stmts[st].kind
         {
-            body.for_each_live_node_under(NodeRef::Block(*b), |n| match n {
+            body.for_each_node_under(NodeRef::Block(*b), |n| match n {
                 NodeRef::Expr(e) => {
                     out.insert(e);
                 }
@@ -1826,7 +1824,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
 
 /// The callee of every `Call` site under `node`, once per site.
 fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         if let NodeRef::Expr(id) = n
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
@@ -3482,20 +3480,8 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
             heap_ver,
         },
         ValueKind::Opaque(oid) => {
-            // Mint a fresh caller opaque, remapping its source local into the
-            // caller frame (a skeleton-`Expr` source splices that expr).
-            let new = match callee.values.opaque_source(oid) {
-                Some(OpaqueSource::Local(idx)) => caller
-                    .values
-                    .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
-                Some(OpaqueSource::Expr(e)) => {
-                    let spliced = splice_expr(caller, callee, e, ctx);
-                    caller
-                        .values
-                        .fresh_opaque_with_source(OpaqueSource::Expr(spliced))
-                }
-                None => caller.values.fresh_opaque(),
-            };
+            let idx = callee.values.promoted_opaque_local(oid);
+            let new = caller.values.fresh_opaque_local(ctx.local(idx));
             if let Some(t) = recorded_ty {
                 caller.values.set_type(new, t);
             }

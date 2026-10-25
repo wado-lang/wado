@@ -1,0 +1,251 @@
+#!/usr/bin/env wado
+//! Regenerates `tests/driver_cst_<key>_oracle_test.wado` for a real grammar,
+//! pinning Gale's parse trees against the published ANTLR4 jar (Stage B′). For
+//! each input in `tests/oracle/<key>/cases.*` it runs the oracle and Gale's
+//! parser, and emits a test pinning the oracle's tree; a case Gale parses
+//! differently becomes `#[TODO]`. Java runs only here; the trees are committed,
+//! so CI needs none.
+//!
+//! Only clean single combined `WS -> skip` grammars qualify; see "Stage B′ for
+//! real-world grammars" in antlr4-compatibility.md for why Rust and TypeScript
+//! (split lexer/parser) and css3 (whitespace tokens) are out of scope. Their
+//! lexers are oracle-able on their own (`antlr4_oracle.wado --tokens --super`),
+//! which this tree-pinning driver does not cover.
+//!
+//! Run it from the repository root. It formats what it writes with the `wado`
+//! that `WADO` names (default `target/debug/wado`).
+//!
+//! ```sh
+//! wado run package-gale/scripts/regen_oracle.wado [sqlite | json | all]   # default: all
+//! ```
+
+use { args, env, eprint, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Command, Process } from "core:process";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+use {
+    compile,
+    discard,
+    jar_or_exit,
+    parse,
+    parse_request,
+    Jar,
+    Recognizer,
+    PINNED_VERSION,
+} from "./antlr4_oracle.wado";
+use sqlite from "../tests/grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "../tests/generated/cst_sqlite",
+            options: { atn: "verify" },
+        },
+    };
+use json from "../tests/grammars/JSON.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "../tests/generated/cst_json" },
+    };
+
+global TESTS: String = "package-gale/tests";
+/// A plain literal, so the template it emits stays unexpanded here.
+global ASSERT_LINE: String = "    assert actual == norm, `\\ninput:    ${input}\\nexpected: ${norm}\\nactual:   ${actual}`;";
+
+/// One pinned grammar. `generator` is the `generator: { … }` the test file
+/// imports it with, as written there.
+struct Target {
+    key: String,
+    grammar: String,
+    start: String,
+    module: String,
+    cases: String,
+    generator: String,
+}
+
+fn targets() -> List<Target> {
+    return [
+        Target {
+            key: "sqlite",
+            grammar: "SQLite.g4",
+            start: "parse",
+            module: "sqlite",
+            cases: "tests/oracle/sqlite/cases.sql",
+            generator: "{ module: \"../src/generator.wado\", output_dir: \"./generated/cst_sqlite\", options: { atn: \"verify\" } }",
+        },
+        Target {
+            key: "json",
+            grammar: "JSON.g4",
+            start: "json",
+            module: "json",
+            cases: "tests/oracle/json/cases.json",
+            generator: "{ module: \"../src/generator.wado\", output_dir: \"./generated/cst_json\" }",
+        },
+    ];
+}
+
+/// Gale's tree for `input`, by the parser the target's test file imports.
+fn gale_tree(key: &String, input: &String) -> String {
+    if *key == "sqlite" {
+        return sqlite::to_string_tree(&sqlite::parse(input));
+    }
+    assert *key == "json";
+    return json::to_string_tree(&json::parse(input));
+}
+
+/// Drops ANTLR4's `<EOF>` (Gale omits it) and collapses whitespace. That is
+/// safe only for a grammar that skips whitespace, where no tree token carries
+/// a significant space.
+fn normalize(tree: &String) -> String {
+    // The spaces beside each `<EOF>` go with it, so `x) <EOF>)` reads `x))`.
+    let mut without_eof = "";
+    for let part of tree.split("<EOF>") {
+        without_eof.push_str(part.trim());
+    }
+    let mut out = "";
+    for let word of without_eof.split_whitespace() {
+        if !out.is_empty() {
+            out.push_str(" ");
+        }
+        out.push_str(word);
+    }
+    return out;
+}
+
+/// `text` as the inside of a Wado `"…"` literal.
+fn escape(text: &String) -> String {
+    return text.replace("\\", "\\\\").replace("\"", "\\\"");
+}
+
+/// A test name: the case with quotes and backslashes dropped, spaces
+/// collapsed, cut to 60 bytes.
+fn case_name(line: &String) -> String {
+    let mut name = "";
+    let mut space = false;
+    for let c of line.chars() {
+        if c == '"' || c == '\\' {
+            continue;
+        }
+        if c == ' ' {
+            if space {
+                continue;
+            }
+            space = true;
+        } else {
+            space = false;
+        }
+        name.push(c);
+    }
+    return name.substr_bytes(0, name.floor_char_boundary(60));
+}
+
+/// The test of each case, how many there are, and how many are `#[TODO]`. A
+/// case the jar does not parse stops the regen: there is no tree to pin.
+fn pinned_cases(
+    recognizer: &Recognizer,
+    target: &Target,
+    cases: &String,
+) -> Result<[String, i32, i32], String> with (Process, Preopens) {
+    if let Some(failure) = compile(recognizer) {
+        return Err(failure.stderr);
+    }
+    let mut tests = "";
+    let mut count = 0;
+    let mut todo = 0;
+    for let line of cases.lines() {
+        let line = line.to_string();
+        if line.is_empty() {
+            continue;
+        }
+        count += 1;
+        let ran = parse(recognizer, &line);
+        if ran.code != 0 {
+            return Err(`regen_oracle: the jar exited ${ran.code} on: ${line}\n${ran.stderr}`);
+        }
+        let oracle = normalize(&String::from_utf8_lossy(&ran.stdout));
+        if oracle != normalize(&gale_tree(&target.key, &line)) {
+            todo += 1;
+            tests.push_str("#[TODO]\n");
+        }
+        tests.push_str(`test "oracle: ${case_name(&line)}" {\n`);
+        tests.push_str(`    assert_tree("${escape(&line)}", "${escape(&oracle)}");\n`);
+        tests.push_str("}\n\n");
+    }
+    return Ok([tests, count, todo]);
+}
+
+fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preopens, Random, Stderr, Environment) {
+    let cases_path = fs::join("package-gale", target.cases);
+    let cases = match fs::read_to_string(&cases_path) {
+        Ok(text) => text,
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    let request = parse_request([fs::join(TESTS, `grammars/${target.grammar}`), target.start])?;
+    let recognizer = Recognizer::new(jar, &request);
+    let tests = pinned_cases(&recognizer, target, &cases);
+    let _ = discard(&recognizer, false);
+    let [tests, count, todo] = tests?;
+
+    let module = target.module;
+    let out = fs::join(TESTS, `driver_cst_${target.key}_oracle_test.wado`);
+    let text = `#![generated(by = "package-gale/scripts/regen_oracle.wado")]
+// Do not edit by hand — re-run scripts/regen_oracle.wado ${target.key} to regenerate.
+// Generated against ANTLR4 ${jar.version} (the published jar, run as a black box).
+//
+// Stage B' for a real grammar: Gale's ${target.grammar} parse trees pinned
+// against ANTLR4's over ${target.cases}. The expected tree is ANTLR4's; a case
+// Gale parses differently is #[TODO] (resolving it = the divergence closed).
+
+use ${module} from "./grammars/${target.grammar}"
+    with {
+        generator: ${target.generator},
+    };
+use { normalize_tree } from "./support/tree_compare.wado";
+
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
+    let result = ${module}::parse(input);
+    let actual = ${module}::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+${ASSERT_LINE}
+}
+
+${tests}`;
+    if let Err(e) = fs::write(&out, &text) {
+        return Err(`${e}`);
+    }
+    let wado = match env("WADO") {
+        Some(path) => path,
+        None => "target/debug/wado",
+    };
+    if let Err(e) = Command::new(wado).args(["format", "-w", out]).read() {
+        return Err(`${e}`);
+    }
+    eprintln(`// ${target.key}: ${count} cases, ${todo} #[TODO] (Gale diverges from ANTLR4).`);
+    eprintln(`wrote ${out}`);
+    return Ok(());
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, SystemClock, Random) {
+    let arguments = args();
+    let wanted = if arguments.is_empty() { "all" } else { arguments[0] };
+    let mut chosen: List<Target> = [];
+    for let target of targets() {
+        if wanted == "all" || wanted == target.key {
+            chosen.push(target);
+        }
+    }
+    if chosen.is_empty() {
+        eprintln(`regen_oracle: unknown grammar key '${wanted}'`);
+        exit(1);
+    }
+    let jar = jar_or_exit(Some(env("ANTLR4_VERSION").unwrap_or(PINNED_VERSION)));
+    for let target of &chosen {
+        if let Err(message) = regen(&jar, target) {
+            eprint(message);
+            eprintln("");
+            exit(1);
+        }
+    }
+}

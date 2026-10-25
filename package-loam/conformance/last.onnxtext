@@ -1,0 +1,14 @@
+# A decoder's head: a softmax across the positions mixed into each, a
+# root-mean-square norm of each position, scaled, then the product.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+last (float[N, S, 4] X, float[4] G, float[4, 3] W) => (float[N, S, 3] Y)
+{
+    K = Softmax<axis = 1>(X)
+    A = Add(X, K)
+    Q = Mul(A, A)
+    M = ReduceMean<axes = [-1]>(Q)
+    R = Sqrt(M)
+    D = Div(A, R)
+    H = Mul(D, G)
+    Y = MatMul(H, W)
+}

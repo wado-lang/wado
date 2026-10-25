@@ -485,7 +485,7 @@ impl Poly {
                     for let o of &d.operands {
                         o.collect_symbols(names);
                     }
-                } else if !names.contains_str(s.name.as_str_slice()) {
+                } else if !names.contains_str(&s.name) {
                     names.push(s.name);
                 }
             }
@@ -560,7 +560,7 @@ impl Poly {
                 continue;
             }
             for let s of &t.symbols {
-                if Poly::of(*s).symbols().contains_str(name.as_str_slice()) {
+                if Poly::of(*s).symbols().contains_str(name) {
                     return null;
                 }
             }

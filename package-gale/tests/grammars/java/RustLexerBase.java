@@ -1,5 +1,5 @@
 // The Java twin of `impl RustLexerBase for RustBase` in
-// package-gale/tools/rust_corpus.wado, so `antlr4-oracle.sh --super`
+// package-gale/tools/rust_corpus.wado, so `antlr4_oracle.wado --super`
 // runs ANTLR4 against the base class Gale runs against. Edit both or neither.
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;

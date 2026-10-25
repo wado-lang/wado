@@ -1,0 +1,19 @@
+pub trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+pub struct Wrap<T> {
+    pub v: T,
+}
+
+impl<T: Tag> Wrap<T> {
+    pub fn make(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+}

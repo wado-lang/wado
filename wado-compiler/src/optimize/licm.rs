@@ -17,7 +17,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
@@ -2566,10 +2566,7 @@ fn hoist_invariant_value_operands(
         };
         let temp = ctx.alloc_hoist(engine, ARITH_HOIST, ty, /* is_mut */ false);
         let name = engine.local_name(temp);
-        let read = engine
-            .body
-            .values
-            .fresh_opaque_with_source(OpaqueSource::Local(temp));
+        let read = engine.body.values.fresh_opaque_local(temp);
         engine.body.values.set_type(read, ty);
         let let_stmt = engine.alloc_stmt(
             StmtKind::Let {
@@ -2668,10 +2665,9 @@ fn value_is_invariant(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>
         | ValueKind::Char(_)
         | ValueKind::Null
         | ValueKind::Unit => true,
-        ValueKind::Opaque(oid) => match pool.opaque_source(*oid) {
-            Some(OpaqueSource::Local(idx)) => entry_locals.contains(&idx),
-            _ => false,
-        },
+        ValueKind::Opaque(oid) => pool
+            .opaque_local(*oid)
+            .is_some_and(|idx| entry_locals.contains(&idx)),
         ValueKind::Binary { op, lhs, rhs, .. } => {
             is_hoistable_binop(*op)
                 && value_is_invariant(pool, *lhs, entry_locals)

@@ -179,7 +179,14 @@ test "the child sees only the guest's grants" {
     if availability() != Availability::Available {
         return;
     }
-    assert cmd`cat /etc/passwd`.status().unwrap() != ExitStatus::Exited(0);
+    assert cmd`ls /tmp`.status().unwrap() != ExitStatus::Exited(0);
+}
+
+test "the child reads the system configuration" {
+    if availability() != Availability::Available {
+        return;
+    }
+    assert cmd`cat /etc/hosts`.status().unwrap() == ExitStatus::Exited(0);
 }
 
 test "the child gets the env it is given and a private HOME" {

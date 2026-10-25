@@ -911,6 +911,119 @@ pub fn stretched_strides(extents: &List<i32>, rank: i32) -> List<i32> {
 pub struct Merged<Parts> {
 }
 
+/// Two matrices' axis `N` interleaved: position `2j` is the first's `j`, and
+/// `2j + 1` the second's. Two products of one left operand by matrices paired
+/// so are one product, whose columns of each pair are adjacent.
+pub struct Paired<N> {
+}
+
+/// `b` and `c`, of one shape, interleaved along their last axis as `Paired`
+/// says.
+pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Tensor<E, [K, Paired<N>]>
+    contract b.extents == c.extents
+{
+    let [k, n] = [b.extents[0], b.extents[1]];
+    let mut data = List::<E>::with_capacity(2 * k * n);
+    for let i of 0..<k * n {
+        data.push(b.data[i]);
+        data.push(c.data[i]);
+    }
+    return Tensor {
+        data,
+        extents: [k, 2 * n],
+    };
+}
+
+/// Two matrices' columns side by side: `A`'s, then `B`'s. Products of one left
+/// operand by matrices concatenated so are one product, whose columns are each
+/// product's in turn.
+pub struct Concat<A, B> {
+}
+
+/// Matrices of `K` rows to join by their columns, `N` naming the columns as
+/// nested `Concat`s do. They are read only when joined, so each is copied once.
+pub struct Columns<E, K, N> {
+    rows: i32,
+    parts: List<&List<E>>,
+    widths: List<i32>,
+}
+
+impl<E, K, N> Columns<E, K, N> {
+    /// `a`'s columns, for `then` to place others after.
+    pub fn of(a: &Tensor<E, [K, N]>) -> Columns<E, K, N> {
+        return Columns {
+            rows: a.extents[0],
+            parts: [&a.data],
+            widths: [a.extents[1]],
+        };
+    }
+
+    /// These columns, then `b`'s.
+    pub fn then<B>(&self, b: &Tensor<E, [K, B]>) -> Columns<E, K, Concat<N, B>>
+        contract b.extents[0] == self.rows
+    {
+        let mut parts = self.parts;
+        parts.push(&b.data);
+        let mut widths = self.widths;
+        widths.push(b.extents[1]);
+        return Columns { rows: self.rows, parts, widths };
+    }
+
+    /// The matrix whose rows hold each part's row in turn.
+    pub fn joined(&self) -> Tensor<E, [K, N]> {
+        let columns = self.widths.into_iter().fold(0, |sum, w| sum + w);
+        let mut data = List::<E>::with_capacity(self.rows * columns);
+        for let r of 0..<self.rows {
+            for let [p, part] of self.parts.into_iter().enumerate() {
+                let width = self.widths[p];
+                for let j of 0..<width {
+                    data.push(part[r * width + j]);
+                }
+            }
+        }
+        return Tensor {
+            data,
+            extents: [self.rows, columns],
+        };
+    }
+}
+
+/// The left operand `a` computes, as the kernel the plan would otherwise have
+/// written it with: a row kernel where it folds, an elementwise one where not.
+pub fn prologue_tensor<affine Bk: Backend, Axes>(
+    backend: &mut Bk,
+    a: Prologue<Bk::Operand<Axes>>,
+) -> Bk::Tensor<f32, Axes> with _ {
+    if a.op.folds_rows() {
+        return backend.rows::<Axes, Axes>(a.operands, &a.op, 1, false);
+    }
+    return backend.fused(a.operands, &a.op);
+}
+
+/// [`Backend::matmul_rhs_paired`] as two kernels: the product by both
+/// matrices at once, then `then` over its two halves.
+pub fn paired_by_parts<affine Bk: Backend, ..Bs, M, K, N>(
+    backend: &mut Bk,
+    a: &Bk::Tensor<f32, [..Bs, M, K]>,
+    bc: &Bk::Rhs<K, Paired<N>>,
+    then: Epilogue<Bk::Operand<[..Bs, M, N]>>,
+) -> Bk::Tensor<f32, [..Bs, M, N]> with _ {
+    let both = backend.matmul_rhs(a, bc, null);
+    let extents = backend.extents_of(&both);
+    let last = extents.len() - 1;
+    let n = extents[last] / 2;
+    let first = backend.slice_axis::<f32, [..Bs, M], Paired<N>, N, []>(&both, last, 0, n, 2);
+    let second = backend.slice_axis::<f32, [..Bs, M], Paired<N>, N, []>(&both, last, 1, n, 2);
+    let mut operands = [
+        backend.read(&first),
+        backend.read(&second),
+    ] as List<Bk::Operand<[..Bs, M, N]>>;
+    for let o of then.operands {
+        operands.push(o);
+    }
+    return backend.fused(operands, &then.op);
+}
+
 /// The same elements under another axis list. A regrouping keeps row-major
 /// order, so no element moves.
 pub fn reshape<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out>
@@ -1673,7 +1786,12 @@ impl Expr {
 
     /// Whether a step folds along a row, so only a row kernel runs this.
     pub fn folds_rows(&self) -> bool {
-        return self.steps.position(|s| s matches { Fold(_) }) matches { Some(_) };
+        return self.fold_count() > 0;
+    }
+
+    /// The steps that fold along a row.
+    pub fn fold_count(&self) -> i32 {
+        return self.steps.into_iter().filter(|s| s matches { Fold(_) }).count();
     }
 
     fn last(&self) -> i32 {
@@ -2000,6 +2118,15 @@ pub struct Epilogue<O> {
     pub op: Expr,
 }
 
+/// What a product computes its left operand from, each element as it reads
+/// it: `op` over `operands`, `operand(i)` reading the `i`th, row by row along
+/// the product's inner axis as [`Backend::rows`] runs it, so a `Fold` step
+/// folds a row of the left operand.
+pub struct Prologue<O> {
+    pub operands: List<O>,
+    pub op: Expr,
+}
+
 /// An epilogue ready to apply to a contraction's output of `extents`.
 struct Finish {
     op: Expr,
@@ -2189,6 +2316,51 @@ pub affine trait Backend with _ {
         b: &Self::Rhs<K, N>,
         then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    /// [`Self::keep_rhs`] of `b` and `c` paired, for
+    /// [`Self::matmul_rhs_paired`] to read.
+    fn keep_rhs_paired<K, N>(&mut self, b: &Tensor<f32, [K, N]>, c: &Tensor<f32, [K, N]>) -> Self::Rhs<K, Paired<N>> {
+        return self.keep_rhs(&interleaved(b, c));
+    }
+    /// [`Self::keep_rhs_paired`] of weights held in half precision.
+    fn prepare_rhs_paired<E: Held, K, N>(
+        &mut self,
+        b: &Tensor<E, [K, N]>,
+        c: &Tensor<E, [K, N]>,
+    ) -> Self::Rhs<K, Paired<N>> {
+        return self.prepare_rhs(&interleaved(b, c));
+    }
+    /// The products of `a` by both matrices `bc` pairs, joined by `then`: it
+    /// reads the product by the first as `operand(0)`, by the second as
+    /// `operand(1)`, and its own operands from `operand(2)`, as a gated
+    /// layer's two products of one input meet.
+    fn matmul_rhs_paired<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        bc: &Self::Rhs<K, Paired<N>>,
+        then: Epilogue<Self::Operand<[..Bs, M, N]>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]> {
+        return paired_by_parts::<Self, [..Bs], M, K, N>(self, a, bc, then);
+    }
+    /// [`Self::matmul_rhs`] of the left operand `a` computes.
+    fn matmul_rhs_from<..Bs, M, K, N>(
+        &mut self,
+        a: Prologue<Self::Operand<[..Bs, M, K]>>,
+        b: &Self::Rhs<K, N>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]> {
+        let lhs = prologue_tensor::<Self, [..Bs, M, K]>(self, a);
+        return self.matmul_rhs(&lhs, b, then);
+    }
+    /// [`Self::matmul_rhs_paired`] of the left operand `a` computes.
+    fn matmul_rhs_paired_from<..Bs, M, K, N>(
+        &mut self,
+        a: Prologue<Self::Operand<[..Bs, M, K]>>,
+        bc: &Self::Rhs<K, Paired<N>>,
+        then: Epilogue<Self::Operand<[..Bs, M, N]>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]> {
+        let lhs = prologue_tensor::<Self, [..Bs, M, K]>(self, a);
+        return self.matmul_rhs_paired(&lhs, bc, then);
+    }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
         &mut self,
