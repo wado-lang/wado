@@ -660,17 +660,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some(self.tysys.peeled_base(instance))
     }
 
-    /// The base a newtype receiver wraps: the key its impls answer at, and the
-    /// name it answers under. The declaration first, since a namespaced
-    /// `lib::Q::twice()` leaves the caller's frame no `Q` to look one up by.
+    /// The base the newtype `key` declares wraps: the key its impls answer at,
+    /// and the name it answers under.
     pub(super) fn newtype_base_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-        receiver_name: &str,
     ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let (base, base_name) = self
-            .newtype_base_of(key)
-            .or_else(|| self.newtype_base(receiver_name))?;
+        let (base, base_name) = self.newtype_base_of(key)?;
         let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
         Some((base_key, base_name))
     }

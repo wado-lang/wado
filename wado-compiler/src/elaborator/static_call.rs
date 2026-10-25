@@ -389,13 +389,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype and a `flags` reach what they wrap: their impls are looked
         // up on the base, so the spelling resolves there too. Read from the
         // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
-        // caller's frame no `Q` to look one up by; the name answers only where
-        // the key reaches no declaration to read.
+        // caller's frame no `Q` to look one up by.
         //
         // One link at a time: the base answers the arguments as it sees them,
         // its own type where they wrote the newtype, and the answer takes the
         // newtype back.
-        match self.newtype_base_target(&key, receiver_name) {
+        match self.newtype_base_target(&key) {
             Some((base_key, base_name)) => {
                 let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
                 let mut lookup = self.resolve_static_callee(StaticQuery {

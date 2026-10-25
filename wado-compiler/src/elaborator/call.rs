@@ -3412,16 +3412,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // What `Self::infer_through_newtype` solved: the base's.
             None => {
                 let key = self.static_receiver_key(prefix, receiver_key);
-                self.newtype_base_target(&key, prefix)
-                    .and_then(|(base_key, _)| {
-                        self.static_call_sig(
-                            prefix,
-                            suffix,
-                            Some(&base_key),
-                            SigChoice::Unique,
-                            &[],
-                        )
-                    })
+                self.newtype_base_target(&key).and_then(|(base_key, _)| {
+                    self.static_call_sig(prefix, suffix, Some(&base_key), SigChoice::Unique, &[])
+                })
             }
         };
         let Some(sig) = sig else {
@@ -4220,7 +4213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let key = self.static_receiver_key(struct_name, receiver_key);
             let derived = self.derived_impl_args(&key, method_name, args);
             if derived.is_empty()
-                && let Some(base) = self.newtype_base_target(&key, struct_name)
+                && let Some(base) = self.newtype_base_target(&key)
             {
                 return self.infer_through_newtype(&key, base, method_name, raw_args, args, span);
             }
@@ -4470,7 +4463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let entry = match self.static_method_entry(receiver, method_name) {
             Some(entry) => Some(entry),
             None => self
-                .newtype_base_target(receiver, struct_name)
+                .newtype_base_target(receiver)
                 .and_then(|(base_key, _)| self.static_method_entry(&base_key, method_name)),
         };
         let Some(entry) = entry else {

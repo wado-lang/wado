@@ -2968,7 +2968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if survey.candidates.is_empty()
             && survey.blanket_trait.is_none()
             && let key = self.static_receiver_key(struct_name, recv.key)
-            && let Some((base_key, base_name)) = self.newtype_base_target(&key, struct_name)
+            && let Some((base_key, base_name)) = self.newtype_base_target(&key)
         {
             let (base_type, base_arg_types) = self.at_newtype_base(recv.ty, arg_types);
             let base_recv = StaticReceiver {
