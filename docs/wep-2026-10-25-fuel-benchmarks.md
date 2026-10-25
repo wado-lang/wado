@@ -59,6 +59,8 @@ since a test reaches no file.
 `benchmark/fuel.ts` runs the blocks at `-O1`, `-O2` and `-O3`, as the
 wall-clock series did, with `--allocator freelist`, the allocator a shipped
 program gets. It names each region `<benchmark directory>/<label> (<level>)`.
+`cbor/` holds three benchmarks, so their labels carry the dataset
+(`cbor/twitter/ser`).
 
 ### CI holds fuel exactly and records it
 
