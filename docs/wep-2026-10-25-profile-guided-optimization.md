@@ -35,9 +35,9 @@ it is where profile-guided optimization should prove itself first.
 
 A package states its real workload as tests marked `#[workload]`. Running them
 records how often each region ran into a profile, and the package commits it.
-Every later compile reads the profile and marks each region that never ran as
-cold, so the optimizer's existing cold-path machinery acts on measurement
-instead of guesses.
+Every later compile outside the test world reads the profile and marks each
+region that never ran as cold, so the optimizer's existing cold-path machinery
+acts on measurement instead of guesses.
 
 ### A workload is a test marked `#[workload]`
 
@@ -174,14 +174,15 @@ A function whose body region never ran is cold as a whole, with one marker at
 its start. A region inside one already marked gets none: `cold_outline` would
 otherwise outline each branch of a function that never ran into a function of
 its own, and both sides of its `if`s would carry a marker. A region that ran
-any number of times gets no marker.
+any number of times gets no marker. Using the counts beyond zero, to optimize a
+hot path harder than the rest, is left to a later proposal.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
-applied, so a profiled compile seeds from the snapshot as a plain one does. A
-run whose entries carry different `core:` counts builds one snapshot per set of
-counts. Using the counts beyond zero, to optimize a
-hot path harder than the rest, is left to a later proposal.
+applied, so a profiled compile seeds from the snapshot as a plain one does.
+Only a run that compiles several entries, each with a profile of its own, would
+need one snapshot per profile. `wado test` is that run, and the test world
+reads no profile unless asked (below).
 
 ### The source wins over the profile, and says so
 
@@ -191,17 +192,25 @@ exercises often. The compile reports the conflict as an optimizer remark at
 `--log-level info`, naming the marker and the count. The remark audits the
 author's guesses against measurement.
 
-### Two flags switch the marks off
+### Flags switch the marks
 
-| Flag               | Effect                                                      |
-| ------------------ | ----------------------------------------------------------- |
-| `-f no-pgo`        | Ignore the profile.                                         |
-| `-f no-cold-paths` | Ignore every `cold_path()`, the author's and the profile's. |
+`-f pgo` reads the profile and `-f no-pgo` ignores it. The default depends on
+the world:
 
-`-f no-cold-paths` drops the markers before any pass reads them, so
-`cold_outline`, the inliner and the branch hints all see none. With both flags,
-three builds of one program can be compared: no cold paths, the author's only,
-and the author's plus the profile's.
+| Build                        | Default |
+| ---------------------------- | ------- |
+| the test world (`wado test`) | off     |
+| any other world              | on      |
+
+A test checks what a program computes, which a profile never changes, so the
+test world has no use for one by default. `-f pgo` turns it on there, mainly for
+fuzzing the application of profiles.
+
+`-f no-cold-paths` ignores every `cold_path()`, the author's and the profile's.
+It drops the markers before any pass reads them, so `cold_outline`, the inliner
+and the branch hints all see none. With `-f no-pgo` beside it, three builds of
+one program can be compared: no cold paths, the author's only, and the author's
+plus the profile's.
 
 `-f no-cold-paths` leaves alone the hints `infer_branch_hints` derives from
 traps. Those follow from what the program does when it traps, not from a guess.
@@ -233,7 +242,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f no-pgo` and `-f no-cold-paths`.
+5. [ ] `-f pgo`, `-f no-pgo` and `-f no-cold-paths`.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
