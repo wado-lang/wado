@@ -5493,13 +5493,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .tysys
             .index_deref_type(self.ann_expression_types(index_expr.id), &dispatch);
         let recv = self.adjust_receiver(recv.clone(), dispatch.self_kind, false, span, ctx);
-        self.tysys.build_index_read_from_dispatch(
-            recv,
-            idx.clone(),
-            dispatch,
-            deref_type,
-            span,
-        )
+        self.tysys
+            .build_index_read_from_dispatch(recv, idx.clone(), dispatch, deref_type, span)
     }
 
     /// `target = value`. A place's operands evaluate before the value.
