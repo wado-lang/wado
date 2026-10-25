@@ -1530,6 +1530,24 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// A reference an operand takes is held until the form consuming the
+    /// operands runs, so its referent is live while every later operand
+    /// evaluates, and a write one of them makes reaches what the loan reads.
+    fn hold_loans(&self, operands: &[&TirExpr], live: &mut IndexSet<u32>) {
+        for operand in operands {
+            yielded_leaves(operand, self.type_table, &mut |leaf| {
+                let referent = match &strip_casts(leaf).kind {
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                        expr: place,
+                    } => alias_root(place),
+                    _ => reference_escape(leaf, self.type_table).map(|(root, _)| root),
+                };
+                live.extend(referent);
+            });
+        }
+    }
+
     fn mutates_receiver(&self, func: &FunctionRef) -> bool {
         self.mut_receiver_methods
             .contains(&func.module_source, &func.name)
@@ -2927,6 +2945,7 @@ impl<'a> Analyzer<'a> {
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 let call_writes = self.mutations.len();
                 let handed_from = self.handed.len();
+                self.hold_loans(&exprs, live);
                 if record {
                     self.hand(&exprs);
                     if let Some(receiver) = mutated_receiver {
@@ -2975,6 +2994,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
+                self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
                 }
@@ -2984,6 +3004,7 @@ impl<'a> Analyzer<'a> {
                 let call_writes = self.mutations.len();
                 let exprs: Vec<&TirExpr> = args.iter().collect();
                 let handed_from = self.handed.len();
+                self.hold_loans(&exprs, live);
                 let kept = if record {
                     // The closure called hands on what it captured.
                     self.hand(&[&**callee]);
@@ -3020,8 +3041,9 @@ impl<'a> Analyzer<'a> {
             } => self.walk_ref(*op, place, &Kept::Frame, live, record),
             TirExprKind::StructLiteral { fields, .. } => {
                 let kept = self.result_kept.take().unwrap_or(Kept::Frame);
+                let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();
+                self.hold_loans(&children, live);
                 if record {
-                    let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();
                     self.collect_place_moves(&children, live);
                 }
                 for f in fields.iter().rev() {
@@ -3030,8 +3052,9 @@ impl<'a> Analyzer<'a> {
             }
             TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 let kept = self.result_kept.take().unwrap_or(Kept::Frame);
+                let children: Vec<&TirExpr> = elements.iter().collect();
+                self.hold_loans(&children, live);
                 if record {
-                    let children: Vec<&TirExpr> = elements.iter().collect();
                     self.collect_place_moves(&children, live);
                 }
                 for e in elements.iter().rev() {
