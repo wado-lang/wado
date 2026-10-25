@@ -1,8 +1,9 @@
 # Affine Types
 
 An affine type is move-only: a value of it is used by value at most once. An
-affine resource is one, and so is every type that holds one at any depth. The
-rest of this chapter follows from four rules:
+affine resource is one, as is a type that implements [`Drop`](#drop), and so is
+every type that holds one at any depth. The rest of this chapter follows from
+four rules:
 
 - A position that takes a value moves it. Every other position reads the value
   where it stands.
@@ -17,7 +18,8 @@ Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
 ## Declarations
 
 A named `struct` or `variant` that holds an affine value in a field or a case
-is declared `affine`. One that holds none may not be. Either mismatch is an
+is declared `affine`. One that holds none may not be, unless it implements
+`Drop`. Either mismatch is an
 error naming the declaration (`AFFINE_DECLARATION`). A field typed by a type
 parameter holds nothing for this rule, since the parameter is copyable unless
 an instantiation says otherwise. A tuple, an anonymous struct and a newtype have
