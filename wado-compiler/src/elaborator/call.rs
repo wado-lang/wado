@@ -1095,9 +1095,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
         unify(&self.tysys.type_table, base, constructed, &mut bindings);
-        let prefix = unalias_namespace_member(prefix);
-        let args = owner
-            .newtype_holes
+        let holes = owner.newtype_holes.clone();
+        self.newtype_instance_answering(
+            newtype_def,
+            &holes,
+            &bindings,
+            &unalias_namespace_member(prefix),
+            span,
+        )
+    }
+
+    /// The instance of the generic newtype `def` its `holes` make, each as it
+    /// was solved, else as `bindings` answers it, else left to a sink the value
+    /// reaches. Built afresh rather than substituted, so the base it carries is
+    /// written in the answers.
+    fn newtype_instance_answering(
+        &mut self,
+        def: DefId,
+        holes: &[TypeId],
+        bindings: &IndexMap<TypeId, TypeId>,
+        prefix: &str,
+        span: Span,
+    ) -> TypeId {
+        let args = holes
             .iter()
             .map(|&hole| {
                 let solved = self.apply_infer_holes(hole);
@@ -1107,11 +1127,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(&bound) = bindings.get(&hole) {
                     return bound;
                 }
-                self.attach_infer_var_diag(hole, span, uninferable_type_param("newtype", &prefix));
+                self.attach_infer_var_diag(hole, span, uninferable_type_param("newtype", prefix));
                 hole
             })
             .collect();
-        self.generic_newtype_instance(newtype_def, args)
+        self.generic_newtype_instance(def, args)
     }
 
     /// `expected` as the base of the newtype `def` reads it: the base, where it
@@ -4268,10 +4288,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Answer `receiver`'s variables with what `impl_args`, the arguments the
-    /// call settled for its base's impl, make of the base, and the instance
-    /// they then make. A parameter the base does not mention is left to a
-    /// sink the call's value reaches.
+    /// The instance `receiver`'s variables make, answered by what `impl_args`,
+    /// the arguments the call settled for its base's impl, make of the base.
     fn answer_newtype_receiver(
         &mut self,
         receiver: &NewtypeReceiver,
@@ -4289,24 +4307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (&written, &answered) in written.iter().zip(impl_args) {
             unify(&self.tysys.type_table, written, answered, &mut bindings);
         }
-        let args = receiver
-            .holes
-            .iter()
-            .map(|&hole| match bindings.get(&hole) {
-                Some(&answer) => answer,
-                None => {
-                    self.attach_infer_var_diag(
-                        hole,
-                        span,
-                        uninferable_type_param("newtype", prefix),
-                    );
-                    hole
-                }
-            })
-            .collect();
-        // Built afresh rather than substituted, so the base the instance
-        // carries is the one the call's return type is written in.
-        self.generic_newtype_instance(receiver.def, args)
+        self.newtype_instance_answering(receiver.def, &receiver.holes, &bindings, prefix, span)
     }
 
     /// Whether `struct_name::method_name` is declared, but by no block reaching

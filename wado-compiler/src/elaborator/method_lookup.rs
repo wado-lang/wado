@@ -994,7 +994,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// awaiting their report against what answers them, as
     /// [`Self::inherent_impl_applies`] let them meet every bound.
     pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
-        // As the block sees them: a newtype's base carries a base's block.
+        // As the block reads them, which for a newtype is at its base where
+        // the block is the base's.
         let Some(type_args) = self
             .tysys
             .receiver_args_at_impl(Some(receiver), &[], Some(def))
