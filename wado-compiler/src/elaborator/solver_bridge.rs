@@ -1715,15 +1715,11 @@ impl SolverBridge {
                     .member_channel()
                     .and_then(|name| lowering.known_assoc(trait_, name));
                 program.member_channels.extend(member_assoc);
-                let assoc = member_assoc.zip(members.clone()).into_iter().collect();
-                let visible_from = visible_from.clone();
-                program.facts.insert(
-                    (head, trait_),
-                    Fact {
-                        visible_from,
-                        assoc,
-                    },
-                );
+                let fact = Fact {
+                    visible_from: visible_from.clone(),
+                    assoc: member_assoc.zip(members.clone()).into_iter().collect(),
+                };
+                program.facts.insert((head, trait_), fact);
             }
         };
         for (&def, info) in &data.struct_fields {
