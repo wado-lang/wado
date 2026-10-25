@@ -496,6 +496,10 @@ pub struct LoadResult {
     pub skipped_bodies: IndexSet<ModuleSource>,
     /// The Wado modules each module's `use` declarations load, in order.
     pub imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
+    /// Each wasm asset's file -> the asset path of the first `use` importing
+    /// it, where a diagnostic in its bindings is reported
+    /// ([`Logger::register_bindings_origins`]).
+    pub bindings_origins: IndexMap<String, DiagnosticSpan>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -1313,6 +1317,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     skip_generated_bodies: bool,
     skipped_bodies: IndexSet<ModuleSource>,
     imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
+    bindings_origins: IndexMap<String, DiagnosticSpan>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1342,6 +1347,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             skip_generated_bodies: false,
             skipped_bodies: IndexSet::default(),
             imports: IndexMap::default(),
+            bindings_origins: IndexMap::default(),
         }
     }
 
@@ -1586,6 +1592,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             interner: self.interner,
             skipped_bodies: self.skipped_bodies,
             imports: self.imports,
+            bindings_origins: self.bindings_origins,
         })
     }
 
@@ -1622,6 +1629,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // dependency) loads across the CM boundary, not as Wado source.
                 if let ModuleSource::Wasm { kind, .. } = &resolved {
                     let kind = *kind;
+                    self.note_bindings_origin(from_module_source, use_decl, &resolved);
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
@@ -1666,7 +1674,23 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
         let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)?;
         let source = self.interner.wasm(&path, kind);
+        self.note_bindings_origin(from_module_source, use_decl, &source);
         self.handle_wasm_source(source, kind).await
+    }
+
+    /// Report a diagnostic in `asset`'s bindings at the path `use_decl` names,
+    /// unless an earlier `use` imported it.
+    fn note_bindings_origin(
+        &mut self,
+        from: &ModuleSource,
+        use_decl: &UseDecl,
+        asset: &ModuleSource,
+    ) {
+        self.bindings_origins
+            .entry(asset.source_path())
+            .or_insert_with(|| {
+                DiagnosticSpan::from_span(&use_decl.source_span, Some(&from.source_path()))
+            });
     }
 
     /// Load a wasm asset from an already-resolved [`ModuleSource::Wasm`] — the

@@ -55,6 +55,10 @@ pub struct Logger<'a, H: CompilerHost> {
     /// Which module's parse minted each id space, over the loaded set. What
     /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
     parses: std::cell::RefCell<hashmap::IndexMap<AstIdSpace, ModuleSource>>,
+    /// Each wasm asset's file -> the `use` where a diagnostic in its bindings
+    /// is reported. The bindings are synthesized, so a location in them
+    /// indexes no text anyone wrote.
+    bindings_origins: std::cell::RefCell<hashmap::IndexMap<String, DiagnosticSpan>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -79,7 +83,17 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
             parses: std::cell::RefCell::default(),
+            bindings_origins: std::cell::RefCell::default(),
         }
+    }
+
+    /// Record, for each wasm asset's file, the asset path of the `use` where a
+    /// diagnostic in the asset's bindings is reported.
+    pub fn register_bindings_origins(
+        &self,
+        origins: impl IntoIterator<Item = (String, DiagnosticSpan)>,
+    ) {
+        self.bindings_origins.borrow_mut().extend(origins);
     }
 
     /// Record which module each loaded parse belongs to, so a diagnostic's span
@@ -180,6 +194,19 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             && let Some(file) = self.file_of_parse(span.space)
         {
             span.file = file;
+        }
+        self.at_bindings_origin(diag)
+    }
+
+    /// A diagnostic in an asset's bindings, moved to the `use` that imported
+    /// the asset.
+    fn at_bindings_origin(&self, mut diag: Diagnostic) -> Diagnostic {
+        let Some(span) = diag.span.as_mut() else {
+            return diag;
+        };
+        if let Some(origin) = self.bindings_origins.borrow().get(&span.file) {
+            diag.message = format!("in the bindings of `{}`: {}", span.file, diag.message);
+            *span = origin.clone();
         }
         diag
     }
@@ -686,6 +713,49 @@ mod tests {
 
         let diags = host.diagnostics();
         assert_eq!(diags[0].span.as_ref().unwrap().file, "inner.wado");
+    }
+
+    #[test]
+    fn test_a_bindings_diagnostic_lands_on_the_use_that_imported_them() {
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Error);
+        logger.register_bindings_origins([(
+            "./c.wasm".to_string(),
+            DiagnosticSpan {
+                file: "t.wado".to_string(),
+                line: 3,
+                column: 31,
+                end_line: Some(3),
+                end_column: Some(41),
+                space: AstIdSpace::FRESH,
+            },
+        )]);
+
+        let _ = logger.error_at(
+            "./c.wasm",
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::UnknownType,
+                message: "unknown type 'Inner'".to_string(),
+                span: Some(DiagnosticSpan {
+                    file: String::new(),
+                    line: 1,
+                    column: 1,
+                    end_line: None,
+                    end_column: None,
+                    space: AstIdSpace::FRESH,
+                }),
+            },
+        );
+
+        let diags = host.diagnostics();
+        let span = diags[0].span.as_ref().unwrap();
+        assert_eq!(span.file, "t.wado");
+        assert_eq!((span.line, span.column), (3, 31));
+        assert_eq!(
+            diags[0].message,
+            "in the bindings of `./c.wasm`: unknown type 'Inner'"
+        );
     }
 
     #[test]
