@@ -269,8 +269,8 @@ impl<'a> Resources<'a> {
     }
 
     /// Whether `type_id` is a template, whose fields alias its holes: a hole
-    /// that is a place keeps owning what the template reads, and reify binds
-    /// any other hole to a local that owns it.
+    /// that is a place keeps owning what the template reads, and any other is a
+    /// temporary of the statement holding the template.
     fn is_template(&self, type_id: TypeId) -> bool {
         self.tt.borrow().template_shape_of_type(type_id).is_some()
     }

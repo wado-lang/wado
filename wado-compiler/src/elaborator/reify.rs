@@ -4910,8 +4910,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// The literal of `template_ty` over the reified holes and each segment's
     /// cooked and raw text, and the statements binding the holes it cannot
-    /// read where it stands. A hole that is a place is read or referenced
-    /// there; any other is evaluated once, in source order, into a local.
+    /// read where it stands: a place that a later computed hole may write.
     fn reify_template_literal(
         &mut self,
         template_ty: TypeId,

@@ -210,17 +210,23 @@ pub fn diagnostic_function_name(name: &str) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name.to_string();
     }
+    let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
     for c in name.chars() {
         match c {
             '/' => {
-                let path_start = out.rfind(['<', ',']).map_or(0, |i| i + 1);
+                let path_start = out
+                    .char_indices()
+                    .rev()
+                    .find(|&(_, c)| !is_module_path(c))
+                    .map_or(0, |(i, c)| i + c.len_utf8());
                 out.truncate(path_start);
                 continue;
             }
-            '<' => depth += 1,
-            '>' => depth -= 1,
+            '<' | '(' | '[' => depth += 1,
+            '>' if !out.ends_with('-') => depth -= 1,
+            ')' | ']' => depth -= 1,
             '$' if depth == 0 && !out.is_empty() => break,
             _ => {}
         }
@@ -750,6 +756,15 @@ pub fn inline_block_label(callee: &str, serial: u32) -> String {
         .map(|c| if is_ident_continue(c) { c } else { '_' })
         .collect();
     format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
+}
+
+/// The `ordinal`th temporary the splice labelled `label` binds for a `&mut`
+/// argument, unique because the label is.
+pub fn inline_temp_name(label: &str, ordinal: usize) -> String {
+    let splice = label
+        .strip_prefix(INTERNAL_PREFIX)
+        .expect("an inline label is minted");
+    minted_name(&minted_what("temp", splice), ordinal)
 }
 
 /// What the block binding a template's holes before its tag's call is minted
@@ -2808,6 +2823,15 @@ mod tests {
                 "core:prelude/traits.wado/TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"
+        );
+        assert_eq!(diagnostic_function_name("f1.wado/id<&f1.wado/P>"), "id<&P>");
+        assert_eq!(
+            diagnostic_function_name("f1.wado/id<[f1.wado/P,i32]>"),
+            "id<[P,i32]>"
+        );
+        assert_eq!(
+            diagnostic_function_name("f1.wado/id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
+            "id<fn(P)->i32with($e263)>"
         );
     }
 

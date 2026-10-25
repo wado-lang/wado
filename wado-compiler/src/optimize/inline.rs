@@ -20,7 +20,7 @@
 use std::cell::{Cell, RefCell};
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{inline_block_label, minted_name};
+use crate::name::{inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -2925,7 +2925,7 @@ pub(super) struct InlineRevalInfo {
 }
 
 /// For an argument `&mut <temporary>`, the `let mut` binding the temporary
-/// to local `index`, which the argument then references instead. A reference
+/// to local `index` under `name`, which the argument then references instead. A reference
 /// to a local is one `ref_elim` folds away and a compile-time frame can write
 /// through; one to an rvalue is neither, so a `Formatter` built for one call
 /// would stay an object whose fields no pass can read.
@@ -2933,6 +2933,7 @@ fn bind_mut_ref_temporary(
     caller: &mut Body,
     value: Operand,
     index: u32,
+    name: String,
     span: Span,
 ) -> Option<(StmtId, NirLocal)> {
     let reference = value.as_expr()?;
@@ -2953,7 +2954,6 @@ fn bind_mut_ref_temporary(
         return None;
     }
     let type_id = caller.exprs[temporary].type_id;
-    let name = minted_name("temp", index);
     let read = caller.exprs.push(ExprNode {
         kind: ExprKind::Local {
             index,
@@ -3018,8 +3018,9 @@ fn build_inlined_labeled_block(
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         let temp_index = temp_base + temps.len() as u32;
+        let temp_name = inline_temp_name(&label, temps.len());
         if let Some((let_id, temp)) =
-            bind_mut_ref_temporary(caller, binding.value, temp_index, call_span)
+            bind_mut_ref_temporary(caller, binding.value, temp_index, temp_name, call_span)
         {
             block_stmts.push(let_id);
             temps.push(temp);
@@ -3046,13 +3047,15 @@ fn build_inlined_labeled_block(
     }
 
     let param_offset = local_offset + callee_param_count;
-    for i in callee_param_count..callee_local_count {
-        if let Some(callee_local) = candidate.locals.get(i as usize) {
-            frame.locals.push(callee_local.clone());
-        }
-    }
+    frame.locals.extend(
+        candidate
+            .locals
+            .iter()
+            .skip(callee_param_count as usize)
+            .cloned(),
+    );
     frame.local_count += new_locals_needed;
-    debug_assert_eq!(frame.local_count, temp_base);
+    assert_eq!(frame.local_count, temp_base);
     for temp in temps {
         frame.address_taken.insert(frame.local_count);
         frame.locals.push(temp);
