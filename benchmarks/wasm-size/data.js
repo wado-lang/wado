@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792909674912,
+  "lastUpdate": 1792919946233,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70633,6 +70633,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c74372993f9cd9e63cc11448565c3e1900dad252"
         },
         "date": 1792909673978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "70c033cc63372fa34467d71ca0b550f2571ccd8c",
+          "message": "Merge pull request #2453 from wado-lang/claude/upbeat-knuth-rwam10\n\nfeat(cli): cache the component wado run builds, and open toolchains to spawned children",
+          "timestamp": "2026-10-25T18:00:04+09:00",
+          "tree_id": "4281c7442e077e44578985fccae821da5919d29c",
+          "url": "https://github.com/wado-lang/wado/commit/70c033cc63372fa34467d71ca0b550f2571ccd8c"
+        },
+        "date": 1792919945484,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
