@@ -135,16 +135,21 @@ impl Rule for RefElimRule {
                 }
                 let referent_e = self.refs[&index].referent_e;
                 let resolved = resolve_via_engine(engine, referent_e, &self.refs);
-                // Replace `r` (the inner Local) with the resolved referent,
-                // keeping `inner`'s type_id / span — the surrounding code was
-                // sized to the ref-type tag `r` had at this position. `resolved`
-                // is a fresh subtree; *move* its kind out (leaving `Dead`) rather
+                // Replace `r` (the inner Local) with the resolved referent, typed
+                // as the referent is: a field reads through a reference as it
+                // reads the value, and a pass that matches the receiver's type
+                // to its constant must see the place's own. `resolved` is a
+                // fresh subtree; *move* its kind out (leaving `Dead`) rather
                 // than cloning it, so its child exprs are not shared between the
                 // orphaned `resolved` node and `inner_e`. A shared child would let
                 // a later single-parent rewrite (SROA scalarization, copy-prop
                 // redirect) corrupt one parent while leaving the other dangling.
-                let kind = std::mem::replace(&mut engine.body.exprs[resolved].kind, ExprKind::Dead);
-                engine.replace_expr_kind(inner_e, kind);
+                let referent = std::mem::replace(
+                    &mut engine.body.exprs[resolved].kind,
+                    ExprKind::Dead,
+                );
+                engine.body.exprs[inner_e].type_id = engine.body.exprs[resolved].type_id;
+                engine.replace_expr_kind(inner_e, referent);
                 true
             }
             // `*r` for a single-use deref-only ref `r` → inline the literal.
