@@ -209,6 +209,7 @@
 - [Destructuring Assignment and a Swap Without Value Copies](./wep-2026-10-21-destructuring-assignment.md)
 - [A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
+- [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
 
 ## Standard Library
 
