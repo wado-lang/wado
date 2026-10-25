@@ -1,0 +1,68 @@
+// A pack bound over a recursive type's members reaches the type again through
+// a field, and holds there: the type meets the blanket's bound exactly when
+// each of its members does.
+
+use { HashSet } from "core:collections";
+
+trait Depth with () {
+    fn depth(&self) -> i32;
+}
+
+impl Depth for i32 {
+    fn depth(&self) -> i32 {
+        return 0;
+    }
+}
+
+impl Depth for () {
+    fn depth(&self) -> i32 {
+        return 0;
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Depth> Depth for T {
+    fn depth(&self) -> i32 {
+        let mut d = 0;
+        for let f of ReflectStruct::<T>::members() {
+            d = i32::max(d, f.get_ref(self).depth());
+        }
+        return d + 1;
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Depth> Depth for V {
+    fn depth(&self) -> i32 {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                return case.extract(self).depth();
+            }
+        }
+        unreachable();
+    }
+}
+
+struct Node {
+    value: i32,
+    next: Chain,
+}
+
+variant Chain {
+    Link(Node),
+    End,
+}
+
+fn depth_of<T: Depth>(t: &T) -> i32 {
+    return t.depth();
+}
+
+test "a recursive type meets a pack bound" {
+    let n = Node { value: 1, next: Chain::Link(Node { value: 2, next: Chain::End }) };
+    assert depth_of(&n) == 2;
+}
+
+test "a recursive type derives Hash" {
+    let mut seen = HashSet::<Node>::new();
+    assert seen.insert(Node { value: 1, next: Chain::End });
+    assert !seen.insert(Node { value: 1, next: Chain::End });
+    assert seen.insert(Node { value: 1, next: Chain::Link(Node { value: 2, next: Chain::End }) });
+}

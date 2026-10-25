@@ -1361,8 +1361,7 @@ pub enum TypeError {
     },
 
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
-    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
-    /// `Ord` are synthesizable through the bodyless-impl form.
+    /// cannot generate.
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
@@ -2927,7 +2926,7 @@ impl TypeError {
                 (
                     Code::TraitDeclInvalid,
                     format!(
-                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Hash`, `Default`, and `Inspect`.{hint}"
                     ),
                     *span,
                 )
