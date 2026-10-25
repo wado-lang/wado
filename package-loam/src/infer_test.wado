@@ -153,6 +153,42 @@ test "a class two dim_params reach takes the one the graph declares first" {
     assert y_axes(source, []).unwrap() == "S=S,A1=2";
 }
 
+test "a dim_param on a merged axis names nothing, since a merge takes its parts' names" {
+    let source = `g (float[2, 3, 4] X) => (float[rows, 4] Y) <int64[2] S = {6, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source, []).unwrap() == "Merged<[X0, X1]>=6,X2=4";
+}
+
+test "a dim_param joining axes of two lengths stops the build" {
+    let source = `g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, T, 8] Y) {
+        Y = Concat<axis = -2>(P, N)
+    }`;
+    assert y_axes(source, []).unwrap_err() == "Y: axis T is declared T and produced T + 1";
+}
+
+test "a dim_param minted into a name the module may import takes another" {
+    let source = `g (float[hash_map, 2] X) => (float[hash_map, 2] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source, []).unwrap() == "HashMap_=hash_map,X1=2";
+}
+
+test "an outer constant both branches read is one tensor, under one name" {
+    let source = `g (bool[1] C, float[2] X, float[2] Z) => (float[2] Y) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Mul(K, Z) }> (C)
+    }`;
+    assert y_axes(source, [rule("C", ["One"]), rule("K", ["Embed"])]).unwrap() == "Embed=2";
+}
+
+test "a class a branch output and a graph output declare takes the graph output's dim_param" {
+    let source = `g (bool[1] C, float[N, 2] X, float[M, 2] Z) => (float[total, 2] Y) {
+        Y = If <then_branch = t () => (float[part, 2] A) { A = Concat<axis = 0>(X, Z) }, else_branch = e () => (float[part, 2] B) { B = Concat<axis = 0>(X, Z) }> (C)
+    }`;
+    assert y_axes(source, []).unwrap() == "Total=M + N,X1=2";
+}
+
 test "a dim_param names its axis in PascalCase" {
     let source = `g (float[batch_size, 2] X) => (float[batch_size, 2] Y) {
         Y = Relu(X)

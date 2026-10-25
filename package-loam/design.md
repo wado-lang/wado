@@ -56,10 +56,10 @@ in. Its output is byte for byte the checkpoint `fetch.sh` writes.
 
 Every axis takes its name as
 [WEP: Loam § Axis Names Are Inferred From the Graph](../docs/wep-2026-09-20-loam.md#axis-names-are-inferred-from-the-graph)
-says, which also settles which name a class takes where several reach it. No
-example and no conformance model carries a `layout` option: MNIST-12, the tiny
-GPT-2's three graphs, GPT-2 (124M) and Gemma 3 (270M) all build from the graph
-alone. `loam dump` opens with the axes, each beside where it took its name: a
+says, which also settles which name a class takes where several reach it.
+MNIST-12, the tiny GPT-2's three graphs, GPT-2 (124M) and Gemma 3 (270M) all
+build from the graph alone. A `layout` option remains where a test or an
+example gives axes words of its own. `loam dump` opens with the axes, each beside where it took its name: a
 `layout` word, a `dim_param`, or the tensor and position it was minted from.
 
 A caller names the inferred types, so a cache the examples carry between passes

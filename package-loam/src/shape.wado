@@ -103,10 +103,12 @@ pub struct Axes {
     /// Each joined key's class, toward its root.
     parent: HashMap<String, String> = HashMap::new(),
     classes: HashMap<String, Class> = HashMap::new(),
-    /// The class each `dim_param` word was first declared on.
-    declared: HashMap<String, String> = HashMap::new(),
+    /// The axis each `dim_param` word was first declared on.
+    declared: HashMap<String, Axis> = HashMap::new(),
     /// How many `dim_param`s the graph has declared so far.
     declarations: i32 = 0,
+    /// How many branches deep the graph being checked is.
+    pub depth: i32 = 0,
     /// The next variable's serial.
     next: i32 = 0,
 }
@@ -147,25 +149,24 @@ impl Axes {
     }
 
     /// Record that `axis` was declared with the `dim_param` `word` at `tensor`,
-    /// which joins it with every axis declared so. The graph declares in the
-    /// order of the calls. `Err` holds the two words a `layout` gave them apart.
-    pub fn declare(&mut self, axis: &Axis, word: &String, tensor: &String) -> Result<(), [String, String]> {
-        let root = self.find(&axis.name);
-        self.classes[root].params.push(Declared { order: self.declarations, word: *word, tensor: *tensor });
+    /// and return the axis `word` was first declared on, which `axis` must now
+    /// meet. A merge takes its parts' names, so a `dim_param` names none. The
+    /// graph declares in the order of the calls, each branch after the graph
+    /// around it.
+    pub fn declare(&mut self, axis: &Axis, word: &String, tensor: &String) -> Option<Axis> {
+        let read = self.read(axis);
+        if !read.parts.is_empty() {
+            return null;
+        }
+        let mut params = self.classes[read.name].params;
+        params.push(Declared { depth: self.depth, order: self.declarations, word: *word, tensor: *tensor });
+        self.classes[read.name].params = by_declaration(params);
         self.declarations += 1;
         let Some(first) = self.declared.get(*word) else {
-            self.declared[*word] = root;
-            return Result::Ok(());
+            self.declared[*word] = *axis;
+            return null;
         };
-        let earlier = self.find(&first);
-        let [l, r] = [
-            self.label(&Axis { name: earlier, extent: axis.extent }),
-            self.label(axis),
-        ];
-        if !self.join(&earlier, &root) {
-            return Result::Err([l, r]);
-        }
-        return Result::Ok(());
+        return Option::Some(first);
     }
 
     /// The root of `name`'s class.
@@ -248,17 +249,17 @@ impl Axes {
             return true;
         }
         let [ca, cb] = [self.classes[*a], self.classes[*b]];
+        assert ca.parts.is_empty() && cb.parts.is_empty(), "a merge meets through its parts";
         if let Some(wa) = ca.author && let Some(wb) = cb.author && wa.0 != wb.0 {
             return false;
         }
         let [root, child, kept, joined] = if ca.serial < cb.serial { [*a, *b, ca, cb] } else { [*b, *a, cb, ca] };
         let mut params = kept.params;
         params.extend(&joined.params);
-        params.sort_by(|x, y| x.order.cmp(&y.order));
         self.classes[root] = Class {
             ..kept,
             author: if kept.author matches { Some(_) } { kept.author } else { joined.author },
-            params,
+            params: by_declaration(params),
         };
         self.classes.remove(child);
         self.parent[child] = root;
@@ -329,10 +330,20 @@ impl Axes {
 
 /// A `dim_param` an axis was declared with.
 struct Declared {
-    /// Where the graph declares it: its inputs in order, then its outputs.
+    /// How many branches deep the graph declaring it is.
+    depth: i32,
+    /// Where that graph declares it: its inputs in order, then its outputs.
     order: i32,
     word: String,
     tensor: String,
+}
+
+/// `params` in the order the graph declares them, each branch's after the
+/// graph around it.
+fn by_declaration(params: List<Declared>) -> List<Declared> {
+    let mut sorted = params;
+    sorted.sort_by(|x, y| if x.depth != y.depth { x.depth.cmp(&y.depth) } else { x.order.cmp(&y.order) });
+    return sorted;
 }
 
 /// A word the graph names a class with: a `layout` word, or a `dim_param`.

@@ -3,7 +3,7 @@
 
 use { HashMap, HashSet, TreeSet } from "core:collections";
 use { Extent, solved } from "./extent.wado";
-use { is_bound, module_idents } from "./idents.wado";
+use { MAP, is_bound, module_idents } from "./idents.wado";
 use { Axes, Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
@@ -365,6 +365,9 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         taken: module_idents(),
         words: HashMap::new(),
     };
+    // Whether the module imports the map is emit's to decide, so no axis
+    // takes its name.
+    naming.taken.insert(MAP);
     // The tensor each `layout` word was first given at, so a second class it
     // reaches is refused.
     let mut authored = HashMap::<String, String>::new();
@@ -536,17 +539,17 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
         scope.known[*name] = *k;
         scope.primitives[*name] = known_primitive(k);
     }
-    for let [declares, declared] of [
-        [true, &graph.inputs],
-        [false, &graph.initializers],
-    ] {
+    for let declared of [&graph.inputs, &graph.initializers] {
         for let vi of *declared {
-            scope.shapes[vi.name] = shape_of(&vi, &local, &mut scope.axes, declares)?;
+            scope.shapes[vi.name] = shape_of(&vi, &local, &mut scope.axes)?;
             // An element no kernel reaches is left out, for emit to name.
             if let Some(element) = element_of(&vi.dtype) {
                 scope.primitives[vi.name] = element.computed;
             }
         }
+    }
+    for let vi of &graph.inputs {
+        declare_dims(vi, &scope.shapes[vi.name], &mut scope.owed, &mut scope.axes)?;
     }
     unspell_unbound(graph, &mut scope.shapes);
     for let node of &graph.nodes {
@@ -678,6 +681,12 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
     scope.axes = then_scope.axes;
     let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
     scope.axes = else_scope.axes;
+    for let [graph, branch] of [
+        [&then_graph, &then_scope],
+        [&else_graph, &else_scope],
+    ] {
+        hoist_constants(scope, branch, &schema.within(&graph.name), local)?;
+    }
     for let [i, output] of node.outputs.into_iter().enumerate() {
         let t = then_scope.shapes[then_graph.outputs[i].name];
         let e = else_scope.shapes[else_graph.outputs[i].name];
@@ -713,12 +722,6 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
             scope.primitives[output] = p;
         }
     }
-    for let [graph, branch] of [
-        [&then_graph, &then_scope],
-        [&else_graph, &else_scope],
-    ] {
-        hoist_constants(scope, branch, &schema.within(&graph.name), local)?;
-    }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
 }
@@ -726,16 +729,26 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
 /// Give `scope` a shape for each of its constants `branch` read, so the
 /// constant is spelled once around the branches and each branch relabels it to
 /// the axes it read it under. Where `local`, `scope`'s layout, names it as
-/// `own`, the branch's, does, the branch's shape is `scope`'s too.
+/// `own`, the branch's, does, the branch's shape is `scope`'s too: one tensor,
+/// so where the other branch holds it already, its axes are those.
 fn hoist_constants(scope: &mut Checked, branch: &Checked, own: &Schema, local: &Schema) -> Result<(), InferError> {
     for let [name, shape] of branch.shapes.entries() {
-        if !scope.known.contains_key(*name) || scope.shapes.contains_key(*name) {
+        if !scope.known.contains_key(*name) {
             continue;
         }
-        if local.axes_for(name) == own.axes_for(name) {
-            scope.shapes[*name] = *shape;
-        } else {
-            materialize(name, &scope.known, &mut scope.shapes, local, &mut scope.axes)?;
+        let shared = local.axes_for(name) == own.axes_for(name);
+        let Some(held) = scope.shapes.get(*name) else {
+            if shared {
+                scope.shapes[*name] = *shape;
+            } else {
+                materialize(name, &scope.known, &mut scope.shapes, local, &mut scope.axes)?;
+            }
+            continue;
+        };
+        if shared {
+            for let i of 0..<held.rank() {
+                assert scope.axes.unify(&held.axes[i], &shape.axes[i]), "one tensor's axes are one";
+            }
         }
     }
     return Result::Ok(());
@@ -794,7 +807,9 @@ fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -
         ));
     }
     let mut inner = Checked { ..*scope, owed: [], branches: HashMap::new() };
+    inner.axes.depth += 1;
     checked_graph(&graph, &mut inner, schema)?;
+    inner.axes.depth -= 1;
     return Result::Ok([graph, inner]);
 }
 
@@ -942,14 +957,14 @@ fn materialize(
     for let e of k.extents {
         dims.push(Dim::Static(e));
     }
-    shapes[*tensor] = shape_of(&ValueInfo { name: *tensor, dtype: "", rank: Rank::Dims(dims) }, schema, axes, false)?;
+    shapes[*tensor] = shape_of(&ValueInfo { name: *tensor, dtype: "", rank: Rank::Dims(dims) }, schema, axes)?;
     return Result::Ok(());
 }
 
 /// The graph's output declaration merged into what the nodes produced, as ONNX's
 /// `mergeInDimensionInfo` does: a declared static extent settles a symbolic
-/// one, and the inputs owe that the two are equal. A `dim_param` names the
-/// output's axis, as one on an input does.
+/// one, and the inputs owe that the two are equal. A `dim_param` is declared as
+/// one on an input is.
 fn merge_declared(
     vi: &ValueInfo,
     produced: &Shape,
@@ -967,15 +982,10 @@ fn merge_declared(
             produced: produced.rank(),
         }));
     }
+    declare_dims(vi, produced, owed, axes)?;
     let mut merged = *produced;
     for let mut i = 0; i < dims.len(); i += 1 {
         let axis = &merged.axes[i];
-        // `?` names nothing, and a `dim_param` claims nothing of the length
-        // until `dims` binds it: it names the axis, which a word the layout
-        // gave it overrides.
-        if let Some(text) = param_of(&dims[i]) {
-            declared_name(vi, axis, &text, axes)?;
-        }
         let Some(declared) = dims[i].as_static() else {
             continue;
         };
@@ -1003,24 +1013,50 @@ fn merge_declared(
     return Result::Ok(merged);
 }
 
-/// Record that `axis` of boundary tensor `vi` was declared with the
-/// `dim_param` `text`, where that is one name rather than arithmetic.
-fn declared_name(vi: &ValueInfo, axis: &Axis, text: &String, axes: &mut Axes) -> Result<(), InferError> {
-    if text.chars().any(|c| c.is_whitespace()) {
+/// Record each `dim_param` boundary tensor `vi` declares on `shape`'s axes,
+/// where it is one name rather than arithmetic. ONNX reads one `dim_param` as
+/// one length, so each axis meets the one its word was first declared on, and
+/// `owed` gains what the inputs owe for the two lengths to agree.
+fn declare_dims(vi: &ValueInfo, shape: &Shape, owed: &mut List<Condition>, axes: &mut Axes) -> Result<(), InferError> {
+    let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(());
+    };
+    for let [i, dim] of dims.into_iter().enumerate() {
+        let Some(word) = param_of(&dim) else {
+            continue;
+        };
+        if word.chars().any(|c| c.is_whitespace()) {
+            continue;
+        }
+        let axis = &shape.axes[i];
+        let Some(first) = axes.declare(axis, &word, &vi.name) else {
+            continue;
+        };
+        if !axes.unify(&first, axis) {
+            builtin::cold_path();
+            return Result::Err(InferError::DeclaredApart(DeclaredApart {
+                tensor: vi.name,
+                param: word,
+                left: axes.label(&first),
+                right: axes.label(axis),
+            }));
+        }
+        if Shape::agree(&first, axis, &vi.name, owed, axes).is_err() {
+            builtin::cold_path();
+            return Result::Err(InferError::Declared(DeclaredConflict {
+                tensor: vi.name,
+                axis: axes.label(axis),
+                declared: first.extent,
+                produced: axis.extent,
+            }));
+        }
     }
-    return axes.declare(axis, text, &vi.name).map_err(|words| InferError::DeclaredApart(DeclaredApart {
-        tensor: vi.name,
-        param: *text,
-        left: words.0,
-        right: words.1,
-    }));
+    return Result::Ok(());
 }
 
 /// The axes a value info declares, each a class of its own: under the word a
-/// layout rule gives it, and given its extent by the graph. A graph input's
-/// `dim_param` names its axis.
-fn shape_of(vi: &ValueInfo, schema: &Schema, axes: &mut Axes, declares: bool) -> Result<Shape, InferError> {
+/// layout rule gives it, and given its extent by the graph.
+fn shape_of(vi: &ValueInfo, schema: &Schema, axes: &mut Axes) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         builtin::cold_path();
         return Result::Err(InferError::UnrankedTensor(vi.name));
@@ -1042,14 +1078,10 @@ fn shape_of(vi: &ValueInfo, schema: &Schema, axes: &mut Axes, declares: bool) ->
     for let mut i = 0; i < dims.len(); i += 1 {
         let origin = `${vi.name}[${i}]`;
         let extent = extent_of(&dims[i], &origin);
-        let axis = match words {
+        shape.push(match words {
             Some(w) => axes.authored(&w[i], &vi.name, origin, extent),
             None => axes.mint(origin, extent),
-        };
-        if declares && let Some(text) = param_of(&dims[i]) {
-            declared_name(vi, &axis, &text, axes)?;
-        }
-        shape.push(axis);
+        });
     }
     return held(&vi.name, Shape { axes: shape });
 }
