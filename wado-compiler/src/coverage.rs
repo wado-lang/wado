@@ -217,25 +217,21 @@ pub struct CoverageMap {
 }
 
 impl CoverageMap {
-    /// Plan `modules` in the order given, which fixes the global ids. A module
-    /// `seed` planned keeps its plan and ids instead: it comes from the stdlib
-    /// snapshot with its probes already in place. The rest number past the
-    /// seed's last id.
+    /// Plan `modules` in the order given, which fixes the global ids. The
+    /// stdlib modules `seed` planned keep its plans, ids and probe sites
+    /// instead: they come from the stdlib snapshot with their probes already in
+    /// place, and reify still reads their sites where it replays a default body
+    /// of theirs in another module. The rest number past the seed's last id.
     pub fn build<'a>(
         seed: Option<&CoverageMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
-        let mut map = Self::default();
-        let mut next = seed.map_or(0, CoverageMap::end);
+        let mut map = seed.map_or_else(Self::default, Self::without_entry);
+        let seeded: IndexSet<ModuleSource> = map.sources.iter().cloned().collect();
+        let mut next = map.end();
         for (source, module) in modules {
-            // The snapshot serves the stdlib only. Its entry is its own empty
-            // one, which every entry compares equal to.
-            if let ModuleSource::Core { .. } = source
-                && let Some(seed) = seed
-                && let Some(seeded) = seed.sources.iter().position(|s| s == source)
-            {
-                map.push(source, seed.modules[seeded].clone(), seed.bases[seeded]);
+            if seeded.contains(source) {
                 continue;
             }
             let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
@@ -256,6 +252,26 @@ impl CoverageMap {
                     .insert(id, base + regions.start..base + regions.end);
             }
             map.push(source, plan, base);
+        }
+        map
+    }
+
+    /// This map less its entry: the stdlib snapshot's, an empty one that every
+    /// entry compares equal to.
+    fn without_entry(&self) -> Self {
+        let mut map = Self {
+            probes: self.probes.clone(),
+            probe_function: self.probe_function.clone(),
+            function_probes: self.function_probes.clone(),
+            for_of_bodies: self.for_of_bodies.clone(),
+            ..Self::default()
+        };
+        for ((source, plan), &base) in self.sources.iter().zip(&self.modules).zip(&self.bases) {
+            if let ModuleSource::EntryPoint { .. } = source {
+                assert!(plan.regions.is_empty(), "the snapshot's entry is empty");
+            } else {
+                map.push(source, plan.clone(), base);
+            }
         }
         map
     }

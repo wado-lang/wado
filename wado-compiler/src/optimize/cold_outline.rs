@@ -33,25 +33,21 @@ use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{cold_path_id, is_cold_marker};
-use super::dce::DescriptorCache;
+use super::arena_query::is_cold_marker;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
-use crate::name::cold_region_helper_name;
+use crate::name::{COLD_PATH_INTRINSIC, cold_region_helper_name};
 use crate::optimize::inline::{call_site_size, region_size};
 
 /// Split every cold region the preconditions admit, in every function —
 /// including the ones this pass itself creates, so a region nested inside a
 /// region is reached on a later round.
-pub fn outline_cold_regions(
-    project: &mut NirPackage,
-    descriptor_cache: &mut DescriptorCache,
-) -> bool {
+pub fn outline_cold_regions(project: &mut NirPackage) -> bool {
     // The marker's own id, so recognising one is an integer compare rather than
     // a descriptor lookup per call node. A program that never names it has no
     // region to find at all.
-    let Some(cold) = cold_path_id(descriptor_cache.descriptors(project)) else {
+    let Some(cold) = project.builtin_func_id(COLD_PATH_INTRINSIC) else {
         return false;
     };
     // Interned once: the table is borrowed immutably while a region is being

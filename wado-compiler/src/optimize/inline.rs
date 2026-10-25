@@ -20,7 +20,7 @@
 use std::cell::{Cell, RefCell};
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::inline_block_label;
+use crate::name::{COLD_PATH_INTRINSIC, inline_block_label};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -35,7 +35,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, cold_path_id, is_cold_marker, unreached_through};
+use super::arena_query::{self, cold_exprs, is_cold_marker, unreached_through};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -2115,7 +2115,7 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let cold = cold_path_id(descriptors);
+    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
     let InlineScans { bodies, read } = scans;
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold));
     let sites = argument_sites(scans, &live);

@@ -2272,12 +2272,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(
-            &mut wir_package,
-            options.opt_level,
-            nir.codegen_flags,
-            logger,
-        );
+        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
     }
 
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
@@ -2629,7 +2624,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
                 let mut wir = wir_build::build_wir_package(&nir);
-                wir_optimize::optimize_wir(&mut wir, opt_level, nir.codegen_flags, &logger);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
                 wir
             });
 

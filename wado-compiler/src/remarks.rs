@@ -12,7 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::diagnostic_function_name;
+use crate::name::{COLD_PATH_INTRINSIC, diagnostic_function_name};
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
@@ -20,7 +20,7 @@ use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-use crate::optimize::arena_query::{cold_exprs, cold_path_id};
+use crate::optimize::arena_query::cold_exprs;
 use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -429,8 +429,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
     let ctfe_builtins = build_ctfe_builtin_map(package);
     let materializing = materializing_globals(package, &in_order);
     let names = ctfe_runnable_names(package);
-    let descriptors: Vec<FunctionRef> = package.callee_descriptors_from(0).collect();
-    let cold_path = cold_path_id(&descriptors);
+    let cold_path = package.builtin_func_id(COLD_PATH_INTRINSIC);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
 
@@ -443,14 +442,17 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
-        let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+        let mut cold = None;
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // Reading an outer local means no constant to miss; writing one
             // means an inner block of a template, reported through its parent.
             if region.reads_outer || region.writes_outer {
                 continue;
             }
-            let surviving = surviving_calls(body, region.expr, &names, &cold);
+            let cold = cold.get_or_insert_with(|| {
+                cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default()
+            });
+            let surviving = surviving_calls(body, region.expr, &names, cold);
             let cause = match (region.refusal, surviving.is_empty()) {
                 (Some(refusal), _) => refusal.describe().to_string(),
                 (None, false) => format!(

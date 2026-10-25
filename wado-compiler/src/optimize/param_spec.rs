@@ -23,7 +23,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
-use super::arena_query::{cold_exprs, cold_path_id};
+use super::arena_query::cold_exprs;
 use super::body_memo::BodyMemo;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::ConstFoldRule;
@@ -35,7 +35,7 @@ use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
-use crate::name::param_spec_name;
+use crate::name::{COLD_PATH_INTRINSIC, param_spec_name};
 use crate::nir::NirLocal;
 use crate::parallel::Executor;
 
@@ -1254,7 +1254,7 @@ pub(super) fn specialize_const_params(
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;
-    while specialize_round(project, state, gate, descriptors, &mut reachable) {
+    while specialize_round(project, state, gate, &mut reachable) {
         changed = true;
     }
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
@@ -1267,7 +1267,6 @@ fn specialize_round(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
-    descriptors: &mut DescriptorCache,
     reachable: &mut IndexSet<usize>,
 ) -> bool {
     let constants = collect_call_constants(project, reachable, gate.exec());
@@ -1279,7 +1278,7 @@ fn specialize_round(
         Signatures::build(project, &types, &recursive, gate.exec())
     };
     let facts = summarize_params(project, &signatures, gate.exec());
-    let cold = cold_path_id(descriptors.descriptors(project));
+    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
     let per_caller = collect_sites(
         project,
         state,

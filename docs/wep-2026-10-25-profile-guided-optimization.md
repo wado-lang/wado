@@ -217,7 +217,7 @@ from traps stay, since they read no marker. The two flags give three builds of
 one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
 and the compiler's, and the default adds the profile's.
 
-Reify and lowering write the compiler's marker as `builtin::known_cold_path()`,
+Reify and lowering write the compiler's marker as `builtin::$known_cold_path()`,
 so the conflict remark can tell it from the author's until NIR, which has one
 marker: a global's once-guard runs once, and its marker states no guess to
 audit. The marker on a `?` propagating a failure is a guess and is written as

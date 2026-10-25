@@ -13,8 +13,7 @@ use cranelift_entity::EntityRef;
 use super::value_copy::mutation::{Witness, expr_witnesses};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
-use crate::name::COLD_PATH_INTRINSIC;
-use crate::nir::{FuncId, FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -496,14 +495,6 @@ pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
             .then_some(())
     })
     .is_some()
-}
-
-/// The `FuncId` of `builtin::cold_path`, if the package resolved one.
-pub(crate) fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
-    descriptors
-        .iter()
-        .position(|d| d.is_builtin_named(COLD_PATH_INTRINSIC))
-        .map(FuncId::new)
 }
 
 /// Whether `stmt` is a bare `cold_path()` call.

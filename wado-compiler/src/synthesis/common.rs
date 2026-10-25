@@ -51,7 +51,7 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
     )
 }
 
-/// `builtin::known_cold_path();`, the marker the compiler places where the
+/// `builtin::$known_cold_path();`, the marker the compiler places where the
 /// program itself makes the path rare.
 pub fn known_cold_path_stmt(span: Span) -> TirStmt {
     marker_stmt(KNOWN_COLD_PATH_INTRINSIC, span)

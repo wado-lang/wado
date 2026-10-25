@@ -23,12 +23,13 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{
     bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,
-    cold_path_id, collect_reads, expr_mentions_local, is_cold_marker, is_local,
-    promoted_local_reads, reachable_nodes, strip_refs,
+    collect_reads, expr_mentions_local, is_cold_marker, is_local, promoted_local_reads,
+    reachable_nodes, strip_refs,
 };
-use super::dce::DescriptorCache;
 use crate::ast::Visibility;
-use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::name::{
+    COLD_PATH_INTRINSIC, CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION,
+};
 use crate::nir::aggregate_field_info;
 use crate::nir::{FuncId, NirParam, NirStruct};
 use crate::nir_arena::ArenaCallArg;
@@ -127,15 +128,11 @@ impl CandidateKind {
     }
 }
 
-pub fn globalize_const_objects(
-    project: &mut NirPackage,
-    descriptors: &mut DescriptorCache,
-    exec: &Executor,
-) -> bool {
+pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> bool {
     // A global is built at instantiation by the start function, which wasmtime
     // compiles as one body whose cost grows faster than its length. A cold
     // object is built when its path runs, rarely, so it stays where it is.
-    let cold_path = cold_path_id(descriptors.descriptors(project));
+    let cold_path = project.builtin_func_id(COLD_PATH_INTRINSIC);
     let cold_functions = cold_functions_of(project, cold_path);
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
