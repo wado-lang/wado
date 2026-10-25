@@ -965,21 +965,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        // An argument awaiting its report meets every bound here, as the error
-        // type a report leaves does; the call committing to the impl checks
-        // the bounds against its answer (`Self::defer_awaited_impl_bounds`).
-        let bounded: Option<Vec<TypeId>> = receiver_type_args.map(|args| {
-            let tt = self.tysys.type_table.borrow();
-            args.iter()
-                .map(|&arg| {
-                    if self.awaits_report(&tt, arg) {
-                        TypeTable::ERROR
-                    } else {
-                        arg
-                    }
-                })
-                .collect()
-        });
+        // The call committing to the impl checks the bounds against the
+        // answer (`Self::defer_awaited_impl_bounds`).
+        let bounded = receiver_type_args.map(|args| self.bounded_at_answer(args));
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
@@ -990,7 +978,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
-<<<<<<< HEAD
+    /// `args` with each awaiting its report standing as the error type a
+    /// report leaves, which meets every bound: the variable carries its bounds
+    /// to its answer.
+    fn bounded_at_answer(&self, args: &[TypeId]) -> Vec<TypeId> {
+        let tt = self.tysys.type_table.borrow();
+        args.iter()
+            .map(|&arg| {
+                if self.awaits_report(&tt, arg) {
+                    TypeTable::ERROR
+                } else {
+                    arg
+                }
+            })
+            .collect()
+    }
+
     /// Check the bounds impl `def` places on `receiver`'s arguments still
     /// awaiting their report against what answers them, as
     /// [`Self::inherent_impl_applies`] let them meet every bound.
@@ -1014,8 +1017,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(binding) = binding {
             self.defer_open_impl_bounds(def, &binding.slots, span);
         }
-||||||| e22eab94d30
-=======
+    }
+
     /// Whether impl block `def` offers `method_name` to a call: an inherent
     /// block declaring it, or a trait block whose trait declares it and is in
     /// scope, as the lookup order has it. A trait-qualified call is offered
@@ -1123,13 +1126,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_args: &[TypeId],
         span: Span,
     ) {
+        let receiver_args = self.bounded_at_answer(receiver_args);
         if let Some(block) = block
             && let Some(unmet) = self.tysys.unmet_impl_bound(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 block,
                 None,
-                Some(receiver_args),
+                Some(&receiver_args),
             )
         {
             self.report_unmet(unmet, span);
@@ -1194,7 +1198,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 })
         })
->>>>>>> origin/main
     }
 
     /// Whether a call of `method_name` on `receiver` may wait for the
