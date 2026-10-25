@@ -3590,9 +3590,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether a call nothing at the call site answers a slot of leaves it to
-    /// a sink its value reaches, a sibling branch's type among them: where no
-    /// type is expected of it and its arguments hold no variable of their own.
+    /// Whether a slot nothing at the call site answers waits for a sink the
+    /// call's value reaches, a sibling branch's type among them. It does where
+    /// no type is expected of the call and its arguments hold no variable.
     fn defers_uninferred(&self, args: &[TypeId], expected_type: Option<TypeId>) -> bool {
         expected_type.is_none() && args.iter().all(|&a| !self.type_has_infer_hole(a))
     }

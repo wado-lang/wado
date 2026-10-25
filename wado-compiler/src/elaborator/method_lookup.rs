@@ -971,7 +971,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bounded: Option<Vec<TypeId>> = receiver_type_args.map(|args| {
             let tt = self.tysys.type_table.borrow();
             args.iter()
-                .map(|&arg| if self.awaits_report(&tt, arg) { TypeTable::ERROR } else { arg })
+                .map(|&arg| {
+                    if self.awaits_report(&tt, arg) {
+                        TypeTable::ERROR
+                    } else {
+                        arg
+                    }
+                })
                 .collect()
         });
         self.tysys.impl_reaches(def, receiver_type_args)

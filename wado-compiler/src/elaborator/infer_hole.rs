@@ -216,9 +216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether every variable `ty` names is still unanswered and reports
-    /// itself if it stays so. A bound on such a type holds where an inherent
-    /// method is looked up, as one on the error type a report leaves does:
-    /// it is checked against the answer instead.
+    /// itself if it stays so.
     pub(super) fn awaits_report(&self, tt: &TypeTable, ty: TypeId) -> bool {
         let vars = tt.infer_vars_in(ty);
         !vars.is_empty()
