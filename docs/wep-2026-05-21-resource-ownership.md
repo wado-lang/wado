@@ -506,7 +506,7 @@ Verified against the tree.
   loop-carried, rebind clears).
 - [x] By-value `self` consumption via the `consumes_self` dispatch fact.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
-  kept in step with cleanup's `carries_resource` (variant / `Option` /
+  kept in step with cleanup's `carries_affine` (variant / `Option` /
   `List` deferred with their destructors); whole-aggregate move only.
 - [x] No-move-out-of-reference: a `&self` / `&T`-param return rooted in the
   reference whose concrete type carries a resource is rejected.

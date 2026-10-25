@@ -3269,16 +3269,16 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
 }
 
 /// The span start of the call whose `)` ends `expr`'s rendering, if a call
-/// does. That call is the only one whose wrapping shortens the line `expr`
-/// ends on, so it is the one a caller short of room forces. Follows the right
-/// spine, where the rendering's last token is, and stops at an operand the
-/// unparser would parenthesize: there the last token is the paren, not the
-/// call.
+/// with arguments does. That call is the only one whose wrapping shortens the
+/// line `expr` ends on, so it is the one a caller short of room forces. Follows
+/// the right spine, where the rendering's last token is, and stops at an
+/// operand the unparser would parenthesize: there the last token is the paren,
+/// not the call.
 fn tail_call_span_start(expr: &Expr) -> Option<usize> {
     match expr {
-        Expr::Call(c) => Some(c.span.start),
-        Expr::MethodCall(m) => Some(m.span.start),
-        Expr::StaticMethodCall(s) => Some(s.span.start),
+        Expr::Call(c) if !c.args.is_empty() => Some(c.span.start),
+        Expr::MethodCall(m) if !m.args.is_empty() => Some(m.span.start),
+        Expr::StaticMethodCall(s) if !s.args.is_empty() => Some(s.span.start),
         Expr::Binary(b) if !needs_parens(&b.right, b.op, false) => tail_call_span_start(&b.right),
         Expr::ComparisonChain(chain) => tail_call_span_start(&chain.comparisons.last()?.right),
         _ => None,

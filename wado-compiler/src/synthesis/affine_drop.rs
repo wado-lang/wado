@@ -1,4 +1,4 @@
-//! Resource drop elaboration (WEP: Affine Types). An affine value is an
+//! Affine drop elaboration (WEP: Affine Types). An affine value is an
 //! object, and a place holding one is a nullable reference to it. A move writes
 //! null into the place it moved out of, and scope exit drops every affine local
 //! that is not null, innermost scope first and in reverse declaration order
@@ -71,7 +71,7 @@ struct BreakTarget {
 }
 
 struct Cx<'a> {
-    resources: Resources<'a>,
+    affine_types: AffineTypes<'a>,
     /// The frame's local slots after its first `local_base`: a closure's
     /// parameters precede its body locals and are not listed.
     locals: &'a mut Vec<TirLocal>,
@@ -123,13 +123,13 @@ impl Cx<'_> {
     }
 
     fn carries_affine(&self, type_id: TypeId) -> bool {
-        self.resources.carried_by(type_id)
+        self.affine_types.carried_by(type_id)
     }
 
     /// Where the value of a block producing `type_id` goes when it is
     /// consumed: nowhere when it is `()`, or a value no path produces.
     fn yields(&self, type_id: TypeId) -> Tail {
-        if type_id == TypeTable::UNIT || self.resources.tt.borrow().is_never(type_id) {
+        if type_id == TypeTable::UNIT || self.affine_types.tt.borrow().is_never(type_id) {
             Tail::Discarded
         } else {
             Tail::Consumed
@@ -235,9 +235,9 @@ impl Parts {
     }
 }
 
-/// The tables that tell which types carry a resource this pass drops.
+/// The tables that tell which types carry an affine value this pass drops.
 #[derive(Clone, Copy)]
-struct Resources<'a> {
+struct AffineTypes<'a> {
     tt: &'a RefCell<TypeTable>,
     reg: &'a CmInterfaceRegistry,
     struct_fields: &'a StructFields,
@@ -247,10 +247,8 @@ struct Resources<'a> {
     answers: &'a TypeMemo<bool>,
 }
 
-impl<'a> Resources<'a> {
-    /// Whether `type_id` owns, or structurally carries, a Component Model
-    /// resource that this pass knows how to drop: a bare resource, or a struct
-    /// / tuple / variant that transitively contains one.
+impl<'a> AffineTypes<'a> {
+    /// Whether `type_id` is, or holds at any depth, an affine value.
     fn carried_by(&self, type_id: TypeId) -> bool {
         let key = self.tt.borrow().type_key(type_id);
         self.answers
@@ -387,11 +385,11 @@ impl<'a> Resources<'a> {
         }
     }
 
-    /// The resource-carrying values `pattern` binds (e.g. `response` in
+    /// The affine values `pattern` binds (e.g. `response` in
     /// `let [response, _tx] = Response::new(...)`).
     fn pattern_bindings(&self, pattern: &TirPattern) -> Vec<Live> {
         let mut collector = PatternBindings {
-            resources: *self,
+            affine_types: *self,
             found: Vec::new(),
         };
         collector.visit_pattern(pattern);
@@ -399,7 +397,7 @@ impl<'a> Resources<'a> {
     }
 }
 
-impl HeldTypes for Resources<'_> {
+impl HeldTypes for AffineTypes<'_> {
     fn key(&self, type_id: TypeId) -> TypeKey {
         self.tt.borrow().type_key(type_id)
     }
@@ -434,7 +432,7 @@ impl HeldTypes for Resources<'_> {
 }
 
 struct PatternBindings<'a> {
-    resources: Resources<'a>,
+    affine_types: AffineTypes<'a>,
     found: Vec<Live>,
 }
 
@@ -446,7 +444,7 @@ impl TirRefVisitor for PatternBindings<'_> {
                 local_index,
                 type_id,
             } => {
-                if self.resources.carried_by(*type_id) {
+                if self.affine_types.carried_by(*type_id) {
                     self.found.push(Live {
                         local: *local_index,
                         name: name.clone(),
@@ -473,7 +471,7 @@ impl TirRefVisitor for PatternBindings<'_> {
     }
 }
 
-/// Entry point: elaborate resource drops for every function in the project.
+/// Elaborate the drops of every function in the project.
 pub fn elaborate_affine_drops(project: &mut Package) {
     let Some(type_table) = project
         .tir_modules
@@ -495,7 +493,7 @@ pub fn elaborate_affine_drops(project: &mut Package) {
         &type_table.borrow(),
     );
     let answers = TypeMemo::default();
-    let resources = Resources {
+    let affine_types = AffineTypes {
         tt: &type_table,
         reg: &project.cm_interface_registry,
         struct_fields: &struct_fields,
@@ -515,10 +513,10 @@ pub fn elaborate_affine_drops(project: &mut Package) {
             if func_rc.borrow().is_template() {
                 continue;
             }
-            elaborate_function(&mut func_rc.borrow_mut(), resources, &mut glue);
+            elaborate_function(&mut func_rc.borrow_mut(), affine_types, &mut glue);
         }
     }
-    let glue_functions = build_called_glue(resources, &mut glue);
+    let glue_functions = build_called_glue(affine_types, &mut glue);
     let entry = project
         .tir_modules
         .get_mut(&project.entry_module_source)
@@ -558,16 +556,16 @@ impl Generics {
     }
 }
 
-/// Run `f` with the [`Resources`] of `flat`.
-fn with_flat_resources<R>(
+/// Run `f` with the [`AffineTypes`] of `flat`.
+fn with_flat_affine_types<R>(
     flat: &FlatPackage,
     generics: &Generics,
-    f: impl FnOnce(Resources) -> R,
+    f: impl FnOnce(AffineTypes) -> R,
 ) -> R {
     let mut struct_fields = generics.struct_fields.clone();
     struct_fields.extend(tir::struct_fields(&flat.structs));
     let answers = TypeMemo::default();
-    f(Resources {
+    f(AffineTypes {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
         struct_fields: &struct_fields,
@@ -579,8 +577,8 @@ fn with_flat_resources<R>(
 /// Elaborate the drops of every instance among `flat.functions` from `first`
 /// on, a generic body whose types are now known (WEP: Affine Types).
 pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, generics: &Generics) {
-    let glue_functions = with_flat_resources(flat, generics, |resources| {
-        elaborate_instances(flat, first, resources)
+    let glue_functions = with_flat_affine_types(flat, generics, |affine_types| {
+        elaborate_instances(flat, first, affine_types)
     });
     flat.functions
         .extend(glue_functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
@@ -588,7 +586,7 @@ pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, generics: 
 
 /// Elaborate the instances `elaborate_instance_drops` names, returning the
 /// glue they call that does not exist yet.
-fn elaborate_instances(flat: &FlatPackage, first: usize, resources: Resources) -> Vec<TirFunction> {
+fn elaborate_instances(flat: &FlatPackage, first: usize, affine_types: AffineTypes) -> Vec<TirFunction> {
     let mut glue = DropGlue {
         entry: flat.entry_module_source.clone(),
         called: IndexMap::default(),
@@ -603,14 +601,14 @@ fn elaborate_instances(flat: &FlatPackage, first: usize, resources: Resources) -
         if func_rc.borrow().monomorph_info.is_none() {
             continue;
         }
-        elaborate_function(&mut func_rc.borrow_mut(), resources, &mut glue);
+        elaborate_function(&mut func_rc.borrow_mut(), affine_types, &mut glue);
     }
-    build_called_glue(resources, &mut glue)
+    build_called_glue(affine_types, &mut glue)
 }
 
 /// Build the glue called so far and not built already. A glue body can call
 /// glue of its own, so the list grows while it is built.
-fn build_called_glue(resources: Resources, glue: &mut DropGlue) -> Vec<TirFunction> {
+fn build_called_glue(affine_types: AffineTypes, glue: &mut DropGlue) -> Vec<TirFunction> {
     let mut glue_functions = Vec::new();
     let mut next = 0;
     while let Some((name, type_id)) = glue
@@ -622,7 +620,7 @@ fn build_called_glue(resources: Resources, glue: &mut DropGlue) -> Vec<TirFuncti
         if glue.prebuilt.contains(&name) {
             continue;
         }
-        glue_functions.push(build_drop_glue(name, type_id, resources, glue));
+        glue_functions.push(build_drop_glue(name, type_id, affine_types, glue));
     }
     glue_functions
 }
@@ -632,7 +630,7 @@ fn build_called_glue(resources: Resources, glue: &mut DropGlue) -> Vec<TirFuncti
 fn build_drop_glue(
     name: String,
     type_id: TypeId,
-    resources: Resources,
+    affine_types: AffineTypes,
     glue: &mut DropGlue,
 ) -> TirFunction {
     let entry = glue.entry.clone();
@@ -647,7 +645,7 @@ fn build_drop_glue(
     let mut locals = common::locals_from_params(&params);
     let mut local_count = locals.len() as u32;
     let mut cx = Cx {
-        resources,
+        affine_types,
         locals: &mut locals,
         local_base: 0,
         local_count: Some(&mut local_count),
@@ -660,7 +658,7 @@ fn build_drop_glue(
         drop_self: None,
     };
     let value = local_ref(0, "value", type_id);
-    let stmts = match cx.resources.layout(type_id) {
+    let stmts = match cx.affine_types.layout(type_id) {
         Layout::List { slots, elem, .. } => drop_list_slots(value, slots, elem, &mut cx),
         Layout::Array { elem } => drop_array_slots(value, elem, &mut cx),
         Layout::Holder {
@@ -680,13 +678,12 @@ fn build_drop_glue(
     function
 }
 
-/// Elaborate resource drops for a single function body.
-fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut DropGlue) {
+fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &mut DropGlue) {
     if copied_to_callers(func) {
         strip_moves(func);
         return;
     }
-    let implements_drop = drop_impl_of(func, &resources.tt.borrow()).is_some();
+    let implements_drop = drop_impl_of(func, &affine_types.tt.borrow()).is_some();
     let TirFunction {
         body: Some(body),
         params,
@@ -701,12 +698,12 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut D
     };
     let drop_self = implements_drop.then(|| params[0].local_index);
 
-    // A parameter that owns a resource is a local of the body's scope, so it
+    // A parameter that owns an affine value is a local of the body's scope, so it
     // drops at the body's end unless the body moves it. A by-value `self` is
     // one.
     let owned: Vec<Live> = params
         .iter()
-        .filter(|param| resources.carried_by(param.type_id))
+        .filter(|param| affine_types.carried_by(param.type_id))
         .map(|param| Live {
             local: param.local_index,
             name: param.name.clone(),
@@ -714,13 +711,13 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut D
             temporary: false,
         })
         .collect();
-    if owned.is_empty() && !body_has_resource(body, resources) {
+    if owned.is_empty() && !body_has_affine(body, affine_types) {
         StripMoves.visit_block(body);
         return;
     }
 
     let mut cx = Cx {
-        resources,
+        affine_types,
         locals,
         local_base: 0,
         local_count: Some(local_count),
@@ -790,33 +787,33 @@ fn copied_to_callers(func: &TirFunction) -> bool {
         if callee.name != func.name && checked_name(&callee.name) == func.name)
 }
 
-/// Cheap pre-check: does the body produce or bind any resource-carrying
+/// Cheap pre-check: does the body produce or bind any affine
 /// value? Lets the pass skip the (vast majority of) functions that touch no
-/// resources.
-fn body_has_resource(block: &TirBlock, resources: Resources) -> bool {
-    let mut probe = ResourceProbe {
-        resources,
+/// affine_types.
+fn body_has_affine(block: &TirBlock, affine_types: AffineTypes) -> bool {
+    let mut probe = AffineProbe {
+        affine_types,
         found: false,
     };
     probe.visit_block(block);
     probe.found
 }
 
-struct ResourceProbe<'a> {
-    resources: Resources<'a>,
+struct AffineProbe<'a> {
+    affine_types: AffineTypes<'a>,
     found: bool,
 }
 
-impl TirRefVisitor for ResourceProbe<'_> {
+impl TirRefVisitor for AffineProbe<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found {
             return;
         }
         let moves = matches!(&expr.kind, TirExprKind::Call { func, args, .. }
         if func.intrinsic().is_some_and(|name| {
-            MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), self.resources).is_some()
+            MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), self.affine_types).is_some()
         }));
-        if moves || self.resources.carried_by(expr.type_id) {
+        if moves || self.affine_types.carried_by(expr.type_id) {
             self.found = true;
             return;
         }
@@ -826,7 +823,7 @@ impl TirRefVisitor for ResourceProbe<'_> {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if !self.resources.pattern_bindings(pattern).is_empty() {
+        if !self.affine_types.pattern_bindings(pattern).is_empty() {
             self.found = true;
         }
     }
@@ -844,7 +841,7 @@ fn drop_lives(lives: &[Live], cx: &mut Cx) -> Vec<TirStmt> {
             if cx.drop_self != Some(live.local) {
                 return drop_if_held(live.place(), live.type_id, cx);
             }
-            let Layout::Holder { parts, .. } = cx.resources.layout(live.type_id) else {
+            let Layout::Holder { parts, .. } = cx.affine_types.layout(live.type_id) else {
                 unreachable!("only a holder implements `Drop`");
             };
             let drops = drop_parts(live.place(), live.type_id, parts, cx);
@@ -891,17 +888,17 @@ fn drop_discarded(value: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
 /// from `scrutinee`, a value of type `type_id` that is not null. A part a move
 /// emptied is skipped.
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
-    match cx.resources.layout(type_id) {
+    match cx.affine_types.layout(type_id) {
         Layout::Resource => vec![expr_stmt(resource_drop_call(
             scrutinee,
             type_id,
-            &cx.resources.tt.borrow(),
+            &cx.affine_types.tt.borrow(),
         ))],
         Layout::End if is_future_writable(type_id, cx) => vec![unwritten_future_trap(type_id, cx)],
         Layout::End => vec![expr_stmt(end_drop_call(
             scrutinee,
             type_id,
-            &cx.resources.tt.borrow(),
+            &cx.affine_types.tt.borrow(),
         ))],
         Layout::List { .. } | Layout::Array { .. } => drop_through_glue(scrutinee, type_id, cx),
         // A generic impl's instance is monomorphization's to make. It scans
@@ -930,7 +927,7 @@ fn call_drop_impl(scrutinee: TirExpr, drop_impl: &FunctionRef) -> TirStmt {
 }
 
 fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
-    let tt = cx.resources.tt.borrow();
+    let tt = cx.affine_types.tt.borrow();
     tt.is_compiler_item_type(
         tt.representation_head(type_id),
         CompilerItem::FutureWritable,
@@ -942,7 +939,7 @@ fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
 /// could write stands in for the value the reader waits for, so the trap names
 /// the end (WEP: Affine Types).
 fn unwritten_future_trap(type_id: TypeId, cx: &Cx) -> TirStmt {
-    let type_name = cx.resources.tt.borrow().type_name(type_id);
+    let type_name = cx.affine_types.tt.borrow().type_name(type_id);
     expr_stmt(panic_with(
         format!("`{type_name}` dropped before its write: its reader would wait forever"),
         cx,
@@ -953,7 +950,7 @@ fn unwritten_future_trap(type_id: TypeId, cx: &Cx) -> TirStmt {
 fn panic_with(message: String, cx: &Cx) -> TirExpr {
     let span = synth_span();
     let string_ty = {
-        let tt = cx.resources.tt.borrow();
+        let tt = cx.affine_types.tt.borrow();
         let def = tt.require_compiler_item_def(CompilerItem::String);
         tt.find_struct_type(StructDef::Decl(def))
             .expect("`String` is in the type table")
@@ -964,7 +961,7 @@ fn panic_with(message: String, cx: &Cx) -> TirExpr {
 /// Drop each part of `scrutinee`, a holder of type `type_id`, and not the
 /// holder as a whole.
 fn drop_parts(scrutinee: TirExpr, type_id: TypeId, parts: Parts, cx: &mut Cx) -> Vec<TirStmt> {
-    let key = cx.resources.tt.borrow().type_key(type_id);
+    let key = cx.affine_types.tt.borrow().type_key(type_id);
     if cx.expanding.contains(&key) {
         return drop_through_glue(scrutinee, type_id, cx);
     }
@@ -982,7 +979,7 @@ fn drop_parts(scrutinee: TirExpr, type_id: TypeId, parts: Parts, cx: &mut Cx) ->
 /// monomorphization, which would have to instantiate it.
 fn drop_through_glue(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let name = {
-        let tt = cx.resources.tt.borrow();
+        let tt = cx.affine_types.tt.borrow();
         if tt.contains_type_param(type_id) {
             return Vec::new();
         }
@@ -997,7 +994,7 @@ fn drop_through_glue(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<Ti
     ))]
 }
 
-/// Drop each resource-carrying field / tuple element of `scrutinee` in
+/// Drop each affine field / tuple element of `scrutinee` in
 /// declaration order, projecting it with a `FieldAccess`, where a move has not
 /// emptied it, and leave it null. `scrutinee` is a place expression (a local
 /// reference), so cloning it per field is cheap.
@@ -1015,7 +1012,7 @@ fn drop_projected(
     stmts
 }
 
-/// The resource-carrying fields of `scrutinee`, each projected.
+/// The affine fields of `scrutinee`, each projected.
 fn affine_fields(scrutinee: &TirExpr, fields: &[(u32, String, TypeId)], cx: &Cx) -> Vec<TirExpr> {
     fields
         .iter()
@@ -1052,7 +1049,7 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         )
     };
     let (slots, slots_name) = cx.alloc_local(slots_ty, "slots");
-    let slots_ref_ty = cx.resources.tt.borrow_mut().make_ref(slots_ty);
+    let slots_ref_ty = cx.affine_types.tt.borrow_mut().make_ref(slots_ty);
     let array = common::ref_expr(local_ref(slots, &slots_name, slots_ty), slots_ref_ty, span);
     let mut stmts = vec![let_stmt(
         &slots_name,
@@ -1073,7 +1070,7 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
 /// Drop each slot of `array`, where a move has not emptied it.
 fn drop_array_slots(array: TirExpr, elem: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let span = synth_span();
-    let array_ref_ty = cx.resources.tt.borrow_mut().make_ref(array.type_id);
+    let array_ref_ty = cx.affine_types.tt.borrow_mut().make_ref(array.type_id);
     let array = common::ref_expr(array, array_ref_ty, span);
     let len = builtin_call("array_len", vec![array.clone()], TypeTable::I32);
     drop_slots(&array, common::i32_const(0), len, elem, cx)
@@ -1149,7 +1146,7 @@ fn drop_variant(
 }
 
 /// Build one arm of a variant's structural-drop `match`: the case's payload,
-/// where it carries a resource, bound to a fresh local and dropped; an empty
+/// where it is affine, bound to a fresh local and dropped; an empty
 /// body otherwise.
 fn variant_drop_arm(
     variant_ty: TypeId,
@@ -1245,7 +1242,7 @@ fn elab_scope(
         let first_declared = cx.scopes.last().expect("pushed above").lives.len();
         let first_out = out.len();
         let first_declaration = cx.declarations.len();
-        diverged = divergence::tir_stmt_always_exits(&cx.resources.tt.borrow(), &stmt);
+        diverged = divergence::tir_stmt_always_exits(&cx.affine_types.tt.borrow(), &stmt);
         elab_stmt(stmt, cx, stmt_tail, &mut out);
         if temporaries == TemporaryScope::Statement {
             if !diverged {
@@ -1304,7 +1301,7 @@ fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> 
     }
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = tir::block_result_type(&cx.resources.tt.borrow(), &inner);
+    let result_ty = tir::block_result_type(&cx.affine_types.tt.borrow(), &inner);
     if cx.yields(result_ty) == Tail::Discarded {
         // The drops can simply run last.
         let mut out = inner.stmts;
@@ -1403,7 +1400,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
         // The pattern consumes its value as an arm's does: the parts no
         // binding takes drop once the bindings hold theirs.
         TirStmtKind::LetDestructure { pattern, mut value } => {
-            let bindings = cx.resources.pattern_bindings(&pattern);
+            let bindings = cx.affine_types.pattern_bindings(&pattern);
             let extracts = !bindings.is_empty();
             let entry = consumed_scrutinee(&mut value, &[(&pattern, true)], extracts, cx)
                 .map_or_else(Vec::new, |place| consume_matched(&pattern, place, cx));
@@ -1505,7 +1502,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
 
         TirStmtKind::VariadicForOf { .. } => {
             // Type-pack `for` expansion is resolved post-monomorphize; leave its
-            // body untouched (it holds no resources in practice).
+            // body untouched (it holds no affine value in practice).
             let mut stmt = stmt;
             if let TirStmtKind::VariadicForOf { iterable, .. } = &mut stmt.kind {
                 elab_expr(iterable, true, cx);
@@ -1516,8 +1513,8 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
 }
 
 /// Emit `drops`, then the statement `leave` builds around `value`. With drops
-/// to run, `value` is spilled ahead of them: it may refer to a resource they
-/// release.
+/// to run, `value` is spilled ahead of them: it may refer to a value they
+/// drop.
 fn leave_after_drops(
     value: Option<TirExpr>,
     drops: Vec<TirStmt>,
@@ -1553,8 +1550,8 @@ fn elab_value_expr(mut expr: TirExpr, cx: &mut Cx) -> TirExpr {
     expr
 }
 
-/// Elaborate `expr` in place, in evaluation order: empty every place a
-/// resource moves out of, spill every temporary it only references (see
+/// Elaborate `expr` in place, in evaluation order: empty every place an
+/// affine value moves out of, spill every temporary it only references (see
 /// [`spill_temporary`]), and elaborate each nested scope.
 ///
 /// `consuming` is `true` when the position transfers ownership of the value
@@ -1586,7 +1583,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::Local { .. } => {
             assert!(
                 !consuming || !cx.carries_affine(type_id),
-                "a place a resource moves out of is marked `Move`: {span:?}"
+                "a place an affine value moves out of is marked `Move`: {span:?}"
             );
         }
 
@@ -1613,7 +1610,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::VariantPayload { expr: inner, .. } => {
             assert!(
                 !consuming || !cx.carries_affine(type_id) || !is_place(inner, cx),
-                "a payload a resource moves out of is marked `Move`: {span:?}"
+                "a payload an affine value moves out of is marked `Move`: {span:?}"
             );
             elab_expr(inner, consuming, cx);
         }
@@ -1621,7 +1618,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             if consuming && cx.carries_affine(type_id) {
                 assert!(
                     !is_place(inner, cx),
-                    "a field a resource moves out of is marked `Move`: {span:?}"
+                    "a field an affine value moves out of is marked `Move`: {span:?}"
                 );
                 take_field(expr, cx);
             } else {
@@ -1653,7 +1650,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 elab_expr(&mut arg.expr, consumes_args, cx);
             }
             moving = func.intrinsic().and_then(|name| {
-                MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.resources)
+                MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.affine_types)
             });
             if func.is_builtin_named("drop") {
                 let (_, [arg]) = args.split_mut() else {
@@ -1723,16 +1720,8 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             expr: scrutinee,
             arms,
         } => elab_match(scrutinee, arms, cx),
-        // A handler installed by value is owned by the `with`, so it drops as
-        // the statement holding the `with` ends, as a referenced temporary does.
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                elab_expr(&mut binding.handler, true, cx);
-                if cx.carries_affine(binding.handler.type_id) {
-                    spill_temporary(&mut binding.handler, cx);
-                }
-            }
-            elab_block(body, cx.yields(type_id), cx);
+        TirExprKind::WithHandler { .. } => {
+            unreachable!("effect dispatch desugars `with` ahead of drop elaboration")
         }
 
         TirExprKind::StructLiteral { fields, .. } => {
@@ -1825,7 +1814,7 @@ enum MovingBuiltin {
 impl MovingBuiltin {
     /// The moving builtin `name` names, given its first argument `first`; an
     /// array builtin over an element that is not affine moves nothing.
-    fn named(name: &str, first: Option<&TirExpr>, resources: Resources) -> Option<MovingBuiltin> {
+    fn named(name: &str, first: Option<&TirExpr>, affine_types: AffineTypes) -> Option<MovingBuiltin> {
         match name {
             "replace" => return Some(MovingBuiltin::Replace),
             "array_take" | "array_set" | "array_move" | "array_release" => {}
@@ -1833,13 +1822,13 @@ impl MovingBuiltin {
         }
         let array = first.expect("an array builtin takes its array first");
         let elem = {
-            let tt = resources.tt.borrow();
+            let tt = affine_types.tt.borrow();
             match tt.get(tt.peel_refs(array.type_id)) {
                 ResolvedType::BuiltinArray(elem) => *elem,
                 other => unreachable!("an array builtin takes an array, not {other:?}"),
             }
         };
-        let affine = resources.carried_by(elem);
+        let affine = affine_types.carried_by(elem);
         Some(match name {
             "array_take" => MovingBuiltin::Take { elem, affine },
             _ if !affine => return None,
@@ -1896,7 +1885,7 @@ fn elab_moving_builtin(expr: &mut TirExpr, builtin: MovingBuiltin, cx: &mut Cx) 
                 read_slot(&args[0], args[1].clone(), elem),
             ));
             let held = local_ref(local, &local_name, elem);
-            if cx.resources.is_object(elem) {
+            if cx.affine_types.is_object(elem) {
                 let repoint = expr_stmt(raw(&args));
                 stmts.push(store_into_object(held, args[2].clone(), repoint, cx));
             } else {
@@ -1954,7 +1943,7 @@ fn vacate_moved(args: &[TirExpr], cx: &Cx) -> Vec<TirStmt> {
         unreachable!("`array_move` takes five arguments");
     };
     let array = |reference: &TirExpr| {
-        let tt = cx.resources.tt.borrow();
+        let tt = cx.affine_types.tt.borrow();
         let (ResolvedType::Ref(array) | ResolvedType::MutRef(array)) = *tt.get(reference.type_id)
         else {
             unreachable!("`array_move` takes its arrays by reference");
@@ -2029,7 +2018,7 @@ fn replace_through(
     let span = synth_span();
     let place = common::deref_expr(reference.clone(), type_id, span);
     let layout = if cx.carries_affine(type_id) {
-        cx.resources.layout(type_id)
+        cx.affine_types.layout(type_id)
     } else {
         Layout::Opaque
     };
@@ -2089,8 +2078,8 @@ fn elab_closure(
             temporary: false,
         })
         .collect();
-    let mut probe = ResourceProbe {
-        resources: cx.resources,
+    let mut probe = AffineProbe {
+        affine_types: cx.affine_types,
         found: false,
     };
     probe.visit_expr(body);
@@ -2099,7 +2088,7 @@ fn elab_closure(
         return;
     }
     let mut inner = Cx {
-        resources: cx.resources,
+        affine_types: cx.affine_types,
         locals: body_locals,
         local_base: params.len() as u32,
         local_count: None,
@@ -2123,8 +2112,8 @@ fn elab_closure(
     body.kind = TirExprKind::Block(block);
 }
 
-/// Whether `expr` names a place a move can empty: a local owning a resource,
-/// or a field of one. A field read through a reference owns nothing.
+/// Whether `expr` names a place a move can empty: a local owning an affine
+/// value, or a field of one. A field read through a reference owns nothing.
 fn is_place(expr: &TirExpr, cx: &Cx) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => cx.carries_affine(expr.type_id),
@@ -2170,7 +2159,7 @@ pub fn strip_moves(function: &mut TirFunction) {
 }
 
 /// Remove the moves of a body drop elaboration leaves as it is, one owning no
-/// resource: a move there takes nothing.
+/// affine value: a move there takes nothing.
 struct StripMoves;
 
 impl TirMutVisitor for StripMoves {
@@ -2186,8 +2175,8 @@ impl TirMutVisitor for StripMoves {
 /// place. A payload cannot be emptied on its own, so taking it empties the
 /// variant it is read from.
 fn take_moved(expr: &mut TirExpr, cx: &mut Cx) {
-    // An instance whose `affine` parameter is bound to a type holding no
-    // resource has nothing to take.
+    // An instance whose `affine` parameter is bound to a copyable type
+    // has nothing to take.
     if !cx.carries_affine(expr.type_id) {
         elab_expr(expr, false, cx);
         return;
@@ -2258,7 +2247,6 @@ fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
             | TirExprKind::LabeledBlock { .. }
             | TirExprKind::If { .. }
             | TirExprKind::Match { .. }
-            | TirExprKind::WithHandler { .. }
     )
 }
 
@@ -2322,7 +2310,7 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
     let (local, name) = cx.alloc_local(type_id, "stored");
     let stored = local_ref(local, &name, type_id);
     let mut stmts = vec![let_stmt(&name, local, type_id, value)];
-    let is_object = cx.resources.is_object(type_id);
+    let is_object = cx.affine_types.is_object(type_id);
     match through {
         Some(reference) => {
             // Read the reference once: dropping a struct reads it per field.
@@ -2367,7 +2355,7 @@ fn store_into_object(place: TirExpr, stored: TirExpr, repoint: TirStmt, cx: &mut
     let span = place.span;
     let type_id = place.type_id;
     let mut write = drop_value(place.clone(), type_id, cx);
-    let ref_ty = cx.resources.tt.borrow_mut().make_mut_ref(type_id);
+    let ref_ty = cx.affine_types.tt.borrow_mut().make_mut_ref(type_id);
     let into = common::deref_expr(
         common::mut_ref_expr(place.clone(), ref_ty, span),
         type_id,
@@ -2387,7 +2375,7 @@ fn store_into_object(place: TirExpr, stored: TirExpr, repoint: TirStmt, cx: &mut
 /// it already is, `place`: the move into `stored` nulled the only place that
 /// owned it, and a reference owns nothing (WEP: Affine Types).
 fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
-    let type_name = cx.resources.tt.borrow().type_name(stored.type_id);
+    let type_name = cx.affine_types.tt.borrow().type_name(stored.type_id);
     let trap = panic_with(
         format!(
             "a store through a reference moves `{type_name}` into the object it was moved out \
@@ -2405,7 +2393,7 @@ fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
 /// Zero `value`'s object, whose content moved into another: a box's handle
 /// becomes 0 and a struct's affine fields null.
 fn zero_object(value: TirExpr, cx: &Cx) -> Vec<TirStmt> {
-    match cx.resources.layout(value.type_id) {
+    match cx.affine_types.layout(value.type_id) {
         Layout::Resource | Layout::End => vec![expr_stmt(builtin_call(
             "zero_handle",
             vec![value],
@@ -2471,7 +2459,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         .iter()
         .map(|arm| {
             if arm.consumes {
-                cx.resources.pattern_bindings(&arm.pattern)
+                cx.affine_types.pattern_bindings(&arm.pattern)
             } else {
                 Vec::new()
             }
@@ -2512,9 +2500,10 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
 /// Elaborate the scrutinee of `patterns`, each paired with whether it
 /// consumes, answering the place a consuming pattern empties: the place a move
 /// names, or the local a value no place holds spills into. A place read without
-/// a move is only borrowed, so no consuming pattern may bind a resource out of
-/// it. A temporary every pattern consumes whole, binding all it holds, needs no
-/// local. `extracts`: whether a consuming pattern binds a resource out of it.
+/// a move is only borrowed, so no consuming pattern may bind an affine value out
+/// of it. A temporary every pattern consumes whole, binding all it holds, needs
+/// no local. `extracts`: whether a consuming pattern binds an affine value out
+/// of it.
 fn consumed_scrutinee(
     scrutinee: &mut TirExpr,
     patterns: &[(&TirPattern, bool)],
@@ -2533,7 +2522,7 @@ fn consumed_scrutinee(
     if is_place(scrutinee, cx) {
         assert!(
             moved || !extracts,
-            "a scrutinee a resource moves out of is marked `Move`: {:?}",
+            "a scrutinee an affine value moves out of is marked `Move`: {:?}",
             scrutinee.span
         );
         elab_expr(scrutinee, false, cx);
@@ -2572,7 +2561,7 @@ fn drop_unbound(pattern: &TirPattern, place: TirExpr, cx: &mut Cx) -> Vec<TirStm
         return Vec::new();
     }
     // The `self` of a `Drop::drop` body gives up its fields one by one.
-    let destructures = match cx.resources.layout(type_id) {
+    let destructures = match cx.affine_types.layout(type_id) {
         Layout::Holder {
             drop_impl: None, ..
         } => true,
@@ -2621,13 +2610,13 @@ fn drop_unbound(pattern: &TirPattern, place: TirExpr, cx: &mut Cx) -> Vec<TirStm
                 None => Vec::new(),
             }
         }
-        TirPattern::Or(alternatives) if !cx.resources.pattern_bindings(pattern).is_empty() => {
+        TirPattern::Or(alternatives) if !cx.affine_types.pattern_bindings(pattern).is_empty() => {
             drop_unbound_alternatives(alternatives, place, cx)
         }
         // What implements `Drop` gives up no part, which the move check holds.
         TirPattern::Struct { .. } | TirPattern::Variant { .. } | TirPattern::Or(_) => {
             assert!(
-                cx.resources.pattern_bindings(pattern).is_empty(),
+                cx.affine_types.pattern_bindings(pattern).is_empty(),
                 "nothing moves out of a type that implements `Drop`: {pattern:?}"
             );
             drop_if_held(place, type_id, cx)
@@ -2642,7 +2631,7 @@ fn drop_unbound(pattern: &TirPattern, place: TirExpr, cx: &mut Cx) -> Vec<TirStm
     }
 }
 
-/// Drop each resource-carrying field of `place` that its pattern, which
+/// Drop each affine field of `place` that its pattern, which
 /// `listed` answers by field index, binds nothing of. A field the pattern
 /// leaves out binds nothing.
 fn drop_unbound_fields<'p>(
@@ -2653,7 +2642,7 @@ fn drop_unbound_fields<'p>(
     let Layout::Holder {
         parts: Parts::Fields(fields),
         ..
-    } = cx.resources.layout(place.type_id)
+    } = cx.affine_types.layout(place.type_id)
     else {
         unreachable!("a struct or tuple pattern matches a holder of fields");
     };

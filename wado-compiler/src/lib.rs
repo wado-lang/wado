@@ -2066,17 +2066,6 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::synthesize(package).map_err(|error| bail_with_synthesis(logger, error))?
     };
 
-    // === Phase 8c: Effect Dispatch Synthesis ===
-    // Lowers `WithHandler` / `Resume` and generates per-effect dispatch
-    // infrastructure (struct, mut global, dispatch wrappers). Runs after
-    // effect-check so that handler-skip semantics are validated against
-    // the original `WithHandler` shape.
-    let package = {
-        let _span = logger.span("effect-dispatch");
-        synthesis::effect_dispatch::synthesize_post_check(package)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
-    };
-
     // === Phase 8d: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
@@ -2562,14 +2551,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package)
                     .map_err(|error| bail_with_synthesis(&logger, error))?
-            };
-
-            // Effect dispatch synthesis (lowers WithHandler / Resume).
-            // Dump path mirrors the main compile pipeline (Phase 8c).
-            let package = {
-                let _span = logger.span("effect-dispatch");
-                synthesis::effect_dispatch::synthesize_post_check(package)
-                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
             };
 
             // Link

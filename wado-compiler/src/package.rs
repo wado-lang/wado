@@ -12,8 +12,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::synthesis::effect_dispatch;
-use crate::synthesis::effect_dispatch::{DispatchPlan, ResourceWrapperIndex};
+use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::TirModule;
 use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
 use std::sync::Arc;
@@ -99,15 +98,6 @@ pub struct Package {
     /// asset's exports.
     pub wasm_assets: IndexMap<String, WasmAsset>,
 
-    /// Per-instantiation effect-dispatch plans, populated by the early
-    /// `synthesis::effect_dispatch::synthesize_pre_cm_binding` half and
-    /// consumed by the late `synthesize_post_check` half (which lowers
-    /// `WithHandler` against them). Carrying the plans through the
-    /// `Package` avoids re-deriving the same `(struct_type_id,
-    /// global_name, wrapper_names, …)` triple from existing TIR
-    /// declarations between the two halves.
-    pub dispatch_plans: IndexMap<effect_dispatch::InstantiationKey, DispatchPlan>,
-
     /// The resource half of the wrapper index the same early pass built, kept
     /// past link for the calls monomorphize has yet to make concrete.
     pub resource_wrappers: ResourceWrapperIndex,
@@ -180,8 +170,6 @@ impl Package {
             callback_exports: Vec::new(),
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
-            // Effect-dispatch plans flow from pre-cm_binding to post-check
-            dispatch_plans: IndexMap::default(),
             resource_wrappers: IndexMap::default(),
         }
     }

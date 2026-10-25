@@ -1,0 +1,92 @@
+// A handler installed by value drops after the `with` restores the handler it
+// shadowed, on every path out. `Holder` handles the stream it holds, so the
+// drop of that stream reaches `Holder` only if `Holder` is still installed.
+
+use { println, Stdout } from "core:cli";
+
+global mut INNER: i32 = 0;
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+affine struct Holder {
+    rx: Stream<u8>,
+}
+
+impl Ask for Holder {
+    fn ask(&mut self) -> i32 {
+        resume 1
+    }
+}
+
+impl Stream<u8> for Holder {
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        INNER += 1;
+        resume ()
+    }
+    ..forward
+}
+
+struct Outer {
+    drops: i32,
+}
+
+impl Stream<u8> for Outer {
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        self.drops += 1;
+        resume ()
+    }
+    ..forward
+}
+
+fn falls_through(rx: Stream<u8>) {
+    with Holder { rx } do {
+        let _ = Ask::ask();
+    }
+}
+
+fn returns_early(rx: Stream<u8>) {
+    with Holder { rx } do {
+        let _ = Ask::ask();
+        return;
+    }
+}
+
+fn breaks_out(rx: Stream<u8>) {
+    out: {
+        with Holder { rx } do {
+            let _ = Ask::ask();
+            break out;
+        }
+    }
+}
+
+fn generic<T>(rx: Stream<u8>, _: T) {
+    with Holder { rx } do {
+        let _ = Ask::ask();
+        return;
+    }
+}
+
+fn closed_stream() -> Stream<u8> {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    return rx;
+}
+
+export fn run() with Stdout {
+    let mut o = Outer { drops: 0 };
+    with &mut o do {
+        falls_through(closed_stream());
+        returns_early(closed_stream());
+        breaks_out(closed_stream());
+        generic(closed_stream(), 0);
+    }
+    println(`inner=${INNER} outer=${o.drops}`);
+}
+
+__DATA__
+{"stdout": "inner=0 outer=4\n"}

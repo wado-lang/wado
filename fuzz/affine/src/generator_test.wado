@@ -46,10 +46,10 @@ fn assert_rejected_unless(case: &Case, result: Result<Output, EvalError>, accept
 }
 
 // One program per case: a rejection stops the whole program, so cases cannot
-// share one.
+// share one. `flag` is only read at run time, so one value of it suffices.
 test "a read after a move is rejected, and only there" {
     for let case of Case::all() {
-        if case.is_plain() {
+        if case.is_plain() && case.flag {
             let result = eval(read_after_program(&case));
             assert_rejected_unless(&case, result, case.readable_after(), "affine value `t` used after it was moved");
         }

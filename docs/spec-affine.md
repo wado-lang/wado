@@ -120,6 +120,31 @@ test {
 }
 ```
 
+<!-- {"fixture":"spec_components_copy_out_of_reference.wado"} -->
+
+```wado
+fn first(list: List<Fields>) -> Fields {
+    return list[0];      // ERROR: cannot move affine type `Fields` out of a reference
+}
+```
+
+A value a call returns belongs to the caller, even when the call took it out of
+what a reference reaches.
+
+<!-- {"fixture":"spec_components_extract_through_mut.wado"} -->
+
+```wado
+fn take_last(list: &mut List<Fields>) -> Option<Fields> {
+    return list.pop();   // OK: `pop` takes the element out
+}
+
+test {
+    let mut list: List<Fields> = [];
+    take_last(&mut list);    // the result nothing binds is dropped
+    assert list.is_empty();
+}
+```
+
 ## Generic Code
 
 A type parameter written `affine T` admits an affine type argument, and its

@@ -124,7 +124,8 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     // cm_binding, so a user resource call is intercepted at its pre-cm_binding
     // `cm_name`-tagged shape and routed to the dispatch wrapper, whose fallback
     // emits that same shape for cm_binding to rewrite uniformly. `WithHandler`
-    // desugaring stays late: effect-check reads the original shape.
+    // desugars ahead of drop elaboration, so a handler held by value drops
+    // after the `with` restores the handler it shadowed, on every path out.
     let project =
         effect_dispatch::synthesize_pre_cm_binding(project).map_err(SynthesisError::from)?;
 

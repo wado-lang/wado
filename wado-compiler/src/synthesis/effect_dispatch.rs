@@ -18,7 +18,6 @@ use crate::name::{
     effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
 use crate::package::Package;
-use crate::synthesis::affine_drop;
 use crate::synthesis::common::{
     alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
@@ -1095,8 +1094,6 @@ struct LowerCtx {
     /// Stack of local-allocation scopes — one entry per active function
     /// or closure body. Top of stack is the innermost scope.
     scopes: Vec<LocalScope>,
-    /// Whether a `WithHandler` was desugared.
-    desugared: bool,
 }
 
 /// One frame on `LowerCtx.scopes`. The outermost is always `Function` and owns
@@ -1171,7 +1168,6 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
                 next_local: func.local_count,
                 locals,
             }],
-            desugared: false,
         };
         lower_dispatch_in_block(body, env, &mut ctx);
         match ctx.scopes.pop().expect("function scope") {
@@ -1182,11 +1178,6 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
             LocalScope::Closure { .. } => {
                 unreachable!("outermost scope must be a function frame")
             }
-        }
-        // The desugaring marks what it moves for the instances of a template,
-        // whose drops are elaborated later; any other body's already are.
-        if ctx.desugared && !func.is_template() {
-            affine_drop::strip_moves(func);
         }
     }
 }
@@ -1485,7 +1476,6 @@ impl TirRefVisitor for MaxLocalIndex {
 /// order after the body. A binding with no matching plan panics: annotate and
 /// this pass are out of sync.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
-    ctx.desugared = true;
     let span = expr.span;
     let result_type = expr.type_id;
 
@@ -2916,11 +2906,10 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     }
 }
 
-/// **Early phase** — synthesise the dispatch infrastructure and rewrite call
-/// sites to route through it, before `cm_binding::generate_adapters`. That
-/// ordering catches resource calls at their pre-adapter `cm_name`-tagged shape
-/// and lets the wrapper fallbacks emit that same shape. `WithHandler`
-/// desugaring waits for [`synthesize_post_check`].
+/// Synthesise the dispatch infrastructure, rewrite call sites to route through
+/// it, and desugar `WithHandler` into it, before `cm_binding::generate_adapters`.
+/// That ordering catches resource calls at their pre-adapter `cm_name`-tagged
+/// shape and lets the wrapper fallbacks emit that same shape.
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
@@ -2949,10 +2938,7 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
         &open_effects,
     );
     rewrite_call_sites_to_wrappers(&mut project, &plans);
-    // Hand the plans off to `synthesize_post_check` via the project so
-    // the late half doesn't re-derive the same struct / global / wrapper
-    // triple from existing declarations.
-    project.dispatch_plans = plans;
+    lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
     Ok(project)
 }
 
@@ -2974,21 +2960,6 @@ fn open_boundary_effects(project: &Package) -> IndexSet<DeclaredHead> {
         }
     }
     out
-}
-
-/// **Late phase** — desugar `WithHandler` into the dispatch protocol, after
-/// `effect_check`, which reads the original shape to say whether effects are
-/// satisfied locally. Takes the `dispatch_plans`
-/// [`synthesize_pre_cm_binding`] left on the `Package`.
-pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
-    let plans = std::mem::take(&mut project.dispatch_plans);
-    if plans.is_empty() {
-        return Ok(project);
-    }
-    let effect_index = build_effect_index(&project);
-    let impl_index = build_handler_impl_index(&project, &effect_index);
-    lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
-    Ok(project)
 }
 
 /// Synthesise one dispatch struct + global + per-op wrapper triple per entry in

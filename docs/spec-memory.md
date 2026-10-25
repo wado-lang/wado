@@ -267,7 +267,7 @@ test {
 }
 ```
 
-`Point` holds no resource, so `self` by value on it is an error:
+`Point` is not affine, so `self` by value on it is an error:
 
 <!-- {"fixture":"spec_memory_self_by_value.wado"} -->
 
