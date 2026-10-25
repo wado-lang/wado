@@ -31,11 +31,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct ./sub/wasm_import_cm_trip_two.wat//Pt {  // TypeId(6)
+struct ./sub/wasm_import_cm_trip_two.wat//Trip::Pt {  // TypeId(6)
     mut n: u32,
 }
 
-struct ./sub/wasm_import_cm_trip_one.wat//Pt {  // TypeId(7)
+struct ./sub/wasm_import_cm_trip_one.wat//Trip::Pt {  // TypeId(7)
     mut n: u32,
 }
 
@@ -57,9 +57,9 @@ type "functype//wasi/$a:x-dependencyf6dddb4865d6f080/trip@0.1.0#make" = fn() -> 
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependency82e82212d7f16741/trip@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_trip_one.wat//Pt";  // TypeId(17)
+type "functype//cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependency82e82212d7f16741/trip@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_trip_one.wat//Trip::Pt";  // TypeId(17)
 
-type "functype//cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependencyf6dddb4865d6f080/trip@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_trip_two.wat//Pt";  // TypeId(18)
+type "functype//cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependencyf6dddb4865d6f080/trip@0.1.0#make" = fn() -> ref "./sub/wasm_import_cm_trip_two.wat//Trip::Pt";  // TypeId(18)
 
 type "functype//cm_component_import_same_interface_two_components.wado/$cm_export__$test_0" = fn();  // TypeId(19)
 
@@ -155,10 +155,10 @@ global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/strin
 fn "cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependency82e82212d7f16741/trip@0.1.0#make"() with Trip {
     let $flat: i32;
     let $flat_buf: i32;
-    let $struct_result: ref "./sub/wasm_import_cm_trip_one.wat//Pt";
+    let $struct_result: ref "./sub/wasm_import_cm_trip_one.wat//Trip::Pt";
     $flat = "wasi/$a:x-dependency82e82212d7f16741/trip@0.1.0#make"();
     builtin::store_i32(local.tee $flat_buf("mem/realloc"(0, 0, 4, 4)), $flat);
-    $struct_result = struct.new "./sub/wasm_import_cm_trip_one.wat//Pt" { n: builtin::load_i32($flat_buf) };
+    $struct_result = struct.new "./sub/wasm_import_cm_trip_one.wat//Trip::Pt" { n: builtin::load_i32($flat_buf) };
     drop("mem/realloc"($flat_buf, 4, 4, 0));
     return $struct_result;
 }
@@ -166,10 +166,10 @@ fn "cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-depe
 fn "cm_component_import_same_interface_two_components.wado/$cm_binding__a:x-dependencyf6dddb4865d6f080/trip@0.1.0#make"() with Trip {
     let $flat: i32;
     let $flat_buf: i32;
-    let $struct_result: ref "./sub/wasm_import_cm_trip_two.wat//Pt";
+    let $struct_result: ref "./sub/wasm_import_cm_trip_two.wat//Trip::Pt";
     $flat = "wasi/$a:x-dependencyf6dddb4865d6f080/trip@0.1.0#make"();
     builtin::store_i32(local.tee $flat_buf("mem/realloc"(0, 0, 4, 4)), $flat);
-    $struct_result = struct.new "./sub/wasm_import_cm_trip_two.wat//Pt" { n: builtin::load_i32($flat_buf) };
+    $struct_result = struct.new "./sub/wasm_import_cm_trip_two.wat//Trip::Pt" { n: builtin::load_i32($flat_buf) };
     drop("mem/realloc"($flat_buf, 4, 4, 0));
     return $struct_result;
 }
