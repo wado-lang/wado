@@ -341,7 +341,7 @@ impl RuntimeKnobOpt {
                 long: Some("process-read"),
                 short: None,
                 value: Some("<path>"),
-                desc: "Let a child the guest spawns read and execute <path>, beyond\nthe guest's grants and the system baseline (a toolchain under\nHOME, say). Repeatable; the guest itself gains nothing",
+                desc: "Let a child the guest spawns read and execute <path>, beyond\nthe guest's grants and the system baseline (a toolchain under\nHOME, say). Repeatable; the guest itself gains nothing.\n`[process] read` in ~/.config/wado/config.toml adds the same",
             },
         }
     }

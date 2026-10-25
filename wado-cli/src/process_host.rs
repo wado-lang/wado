@@ -57,7 +57,8 @@ struct Grants {
     /// The guest's directories in preopen order: the first is where a child
     /// starts unless the guest names another.
     dirs: Vec<Grant>,
-    /// Read and execute only, from `--process-read`.
+    /// Read and execute only, from `--process-read`. The user config's
+    /// `[process] read` joins them at the spawn.
     read: Vec<PathBuf>,
 }
 

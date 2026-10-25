@@ -227,13 +227,23 @@ child may read more than the guest. It is defined, not open-ended:
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
-  outside the grants runs only from a path the user adds with
-  `--process-read <path>` (`run`, `serve`, `test`), such as `~/.cargo`. It is
-  read and execute only, opened to every child and never to the guest, and
-  resolved through its symlinks when `wado` starts, so a path that names no
-  file fails there. It is a command-line flag alone: a manifest is the
-  project's content, and a grant the project could widen would reach past
-  what its own code is given.
+  outside the grants runs only from a path the user adds, such as `~/.cargo`.
+  Such a path is read and execute only, and it is opened to every child and
+  never to the guest. The user adds one in two places:
+  - `--process-read <path>` (`run`, `serve`, `test`). It is resolved through
+    its symlinks when `wado` starts, so a path that names no file fails there.
+  - `read` under `[process]` in the user config (`$XDG_CONFIG_HOME/wado/config.toml`,
+    else `~/.config/wado/config.toml`), for a toolchain every run needs, such
+    as `~/.local/share/mise/installs`. An entry is absolute or starts with
+    `~/`, and is resolved at the first spawn. An entry that names no file on
+    this machine warns and is skipped, so one file can serve several machines.
+    The file is ignored whole, with a warning, when another user could have
+    written it: it is owned by someone other than the user or root, or it is
+    writable by group or others. `ssh` treats its config the same way.
+
+  A manifest never adds one: it is the project's content, and a grant the
+  project could widen would reach past what its own code is given. The user
+  config is the user's own file, so no project reaches it.
 - The real `HOME` is never in the baseline. A child sees it only through an
   explicit grant, so `~/.ssh` stays out of reach by default.
 - No UNIX socket named by a path is open, except mDNSResponder's on macOS, where

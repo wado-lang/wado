@@ -50,6 +50,7 @@ pub mod test;
 mod test_cache;
 mod test_report;
 pub mod update;
+mod user_config;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;

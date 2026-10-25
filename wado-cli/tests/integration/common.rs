@@ -32,9 +32,18 @@ pub fn user_cache() -> &'static Path {
     DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
 }
 
+/// The `XDG_CONFIG_HOME` every `wado` this binary runs is given: it holds no
+/// `wado/config.toml`, so the real user's config never reaches a test.
+fn user_config_home() -> &'static Path {
+    static DIR: OnceLock<TempDir> = OnceLock::new();
+    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+}
+
 fn wado_command(dir: &Path) -> assert_cmd::Command {
     let mut cmd = Command::new(wado_bin());
-    cmd.current_dir(dir).env("XDG_CACHE_HOME", user_cache());
+    cmd.current_dir(dir)
+        .env("XDG_CACHE_HOME", user_cache())
+        .env("XDG_CONFIG_HOME", user_config_home());
     cmd.into()
 }
 

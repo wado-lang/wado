@@ -400,6 +400,10 @@ existing ghq root to share checkouts with `ghq`:
 root = "~/ghq"
 ```
 
+The same file's `[process] read` opens a toolchain to every child a guest
+spawns; see [WEP: `core:process`](./wep-2026-10-21-core-process.md). A file that
+another user could have written is ignored whole, with a warning.
+
 ### `wado list`
 
 List packages in the local dependency cache.

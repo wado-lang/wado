@@ -20,6 +20,7 @@
 
 use crate::build_dep::GENERATOR_WORLD_SEGMENT;
 use crate::compile::build_dir;
+use crate::user_config::user_config;
 use std::path::{Path, PathBuf};
 use wado_lsp::host::discovery::home_dir;
 
@@ -30,57 +31,24 @@ pub fn root() -> Result<PathBuf, String> {
         .ok_or_else(|| "cannot locate the home directory; set WADO_ROOT".to_string())
 }
 
-/// Resolve the Wado root from `$XDG_CONFIG_HOME/wado/config.toml`'s `root` key
-/// and export it as `$WADO_ROOT` when that env var is unset, so the shared
-/// [`wado_lsp::host::discovery::cache_root`] resolver (and the embedded LSP server) observe
-/// the configured root. Config parsing lives here — the single native host — so
-/// the crates below it (`wado-manifest`, `wado-lsp`) never pull
-/// a TOML parser. Precedence: an existing `$WADO_ROOT` wins; else the
-/// config's `root`; else the built-in `~/wado` default applies downstream.
+/// Export the user config's `root` as `$WADO_ROOT` when that env var is unset,
+/// so the shared [`wado_lsp::host::discovery::cache_root`] resolver (and the
+/// embedded LSP server) observe the configured root. Config parsing lives in
+/// the single native host, so the crates below it (`wado-manifest`, `wado-lsp`)
+/// never pull a TOML parser. Precedence: an existing `$WADO_ROOT` wins; else
+/// the config's `root`; else the built-in `~/wado` default applies downstream.
 ///
-/// Must run before any threads start (call it at the top of `main`); a missing
-/// or malformed config is ignored.
+/// Must run before any threads start (call it at the top of `main`).
 pub fn init_root_from_config() {
     if std::env::var_os("WADO_ROOT").is_some_and(|v| !v.is_empty()) {
         return;
     }
-    let Some(text) = config_path().and_then(|p| std::fs::read_to_string(p).ok()) else {
-        return;
-    };
-    let Some(root) = config_root_value(&text).map(|r| expand_tilde(&r)) else {
+    let Some(root) = &user_config().root else {
         return;
     };
     // SAFETY: called at the start of `main`, before the tokio runtime (and any
     // other threads) are created, so there is no concurrent environment access.
     unsafe { std::env::set_var("WADO_ROOT", root) };
-}
-
-/// `$XDG_CONFIG_HOME/wado/config.toml`, defaulting to `~/.config/wado/config.toml`.
-fn config_path() -> Option<PathBuf> {
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(xdg).join("wado").join("config.toml"));
-    }
-    home_dir().map(|home| home.join(".config").join("wado").join("config.toml"))
-}
-
-/// The `root` string from config TOML text. Pure, so it is unit-testable without
-/// touching process-global environment variables. Unknown keys are ignored so
-/// the file can carry other settings later; a non-string `root` yields `None`.
-fn config_root_value(text: &str) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    struct RootConfig {
-        root: Option<String>,
-    }
-    toml::from_str::<RootConfig>(text).ok()?.root
-}
-
-fn expand_tilde(path: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/")
-        && let Some(home) = home_dir()
-    {
-        return home.join(rest);
-    }
-    PathBuf::from(path)
 }
 
 /// Where derived files outside any package go: `$XDG_CACHE_HOME/wado`, else
@@ -148,19 +116,8 @@ fn relative_under_root(
 
 #[cfg(test)]
 mod tests {
-    use crate::cache::{component_path, config_root_value, generator_path};
+    use crate::cache::{component_path, generator_path};
     use std::path::Path;
-
-    #[test]
-    fn config_root_value_reads_the_root_string() {
-        assert_eq!(
-            config_root_value("root = \"~/ghq\"\n").as_deref(),
-            Some("~/ghq")
-        );
-        assert_eq!(config_root_value("# empty\n"), None);
-        assert_eq!(config_root_value("root = 42\n"), None);
-        assert_eq!(config_root_value("not valid ["), None);
-    }
 
     // SAFETY: single-threaded test, env restored before returning.
     #[test]

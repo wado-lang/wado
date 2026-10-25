@@ -32,6 +32,7 @@ use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
 use super::types::{ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned};
 use crate::external::find_program;
+use crate::user_config::user_config;
 
 /// How long a child has between `SIGTERM` at its timeout and `SIGKILL`.
 const TIMEOUT_GRACE: Duration = Duration::from_secs(3);
@@ -190,7 +191,7 @@ fn start(
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
         }
-        for path in &grants.read {
+        for path in grants.read.iter().chain(user_config().process_read()) {
             policy.grant_path(path.clone(), Reach::ReadExecute);
         }
         policy.grant_path(scratch.0.path(), Reach::ReadWrite);

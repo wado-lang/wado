@@ -1720,6 +1720,8 @@ fn test_test_times_out_a_guest_blocked_on_the_host() {
 #[cfg(unix)]
 #[test]
 fn test_run_process_read_opens_a_path_to_the_child() {
+    use std::os::unix::fs::PermissionsExt;
+
     if sandbox::availability() != sandbox::Availability::Available {
         return;
     }
@@ -1745,6 +1747,36 @@ fn test_run_process_read_opens_a_path_to_the_child() {
     run(&["--process-read".as_ref(), tool.path().as_os_str()])
         .success()
         .stdout("from the tool");
+
+    // `[process] read` in the user config opens it the same way, unless
+    // another user can write the file.
+    let config_home = tempfile::tempdir().unwrap();
+    let config = config_home.path().join("wado").join("config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(
+        &config,
+        format!(
+            "[process]\nread = [{:?}]\n",
+            tool.path().display().to_string()
+        ),
+    )
+    .unwrap();
+    let run_configured = || {
+        wado_in(work.path())
+            .env("XDG_CONFIG_HOME", config_home.path())
+            .args(["run", "main.wado"])
+            .arg(&data)
+            .assert()
+    };
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+    run_configured().success().stdout("from the tool");
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o666)).unwrap();
+    run_configured()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "warning: ignoring {}: other users can write it",
+            config.display()
+        )));
 }
 
 #[test]
