@@ -2,6 +2,7 @@
 //! order, solving which axes are one as it goes, then name each axis.
 
 use { HashMap, HashSet, TreeSet } from "core:collections";
+use { apply_case } from "core:serde";
 use { Extent, solved } from "./extent.wado";
 use { MAP, is_bound, module_idents } from "./idents.wado";
 use { Axes, Axis, AxisConflict, Shape } from "./shape.wado";
@@ -416,20 +417,15 @@ impl Naming {
     }
 }
 
-/// `text` in PascalCase: each run of ASCII letters and digits starts upper
-/// case, and the rest of the text is dropped. A name a digit would start, or
-/// none at all, starts with `Axis`.
+/// `text` in PascalCase, as `serde` spells a `name_policy`, with every run of
+/// characters but ASCII letters and digits a word boundary. A name a digit
+/// would start, or none at all, starts with `Axis`.
 fn pascal(text: &String) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut upper = true;
+    let mut words = String::with_capacity(text.len());
     for let c of text.chars() {
-        if !c.is_ascii_alphanumeric() {
-            upper = true;
-            continue;
-        }
-        out.push(if upper { c.to_ascii_uppercase() } else { c });
-        upper = false;
+        words.push(if c.is_ascii_alphanumeric() { c } else { '_' });
     }
+    let out = apply_case(CaseStyle::Pascal, words);
     if out.is_empty() || out.chars().next().unwrap().is_ascii_digit() {
         return `Axis${out}`;
     }

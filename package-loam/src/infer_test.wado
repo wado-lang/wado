@@ -192,6 +192,13 @@ test "a class a branch output and a graph output declare takes the graph output'
     assert y_axes(source, []).unwrap() == "Total=M + N,X1=2";
 }
 
+test "a name reads a run of capitals as one word, as serde's PascalCase does" {
+    let source = `g (float[num_KV_heads, 2] X) => (float[num_KV_heads, 2] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source, []).unwrap() == "NumKvHeads=num_KV_heads,X1=2";
+}
+
 test "a dim_param names its axis in PascalCase" {
     let source = `g (float[batch_size, 2] X) => (float[batch_size, 2] Y) {
         Y = Relu(X)
