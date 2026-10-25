@@ -1361,8 +1361,7 @@ pub enum TypeError {
     },
 
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
-    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
-    /// `Ord` are synthesizable through the bodyless-impl form.
+    /// cannot generate.
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
@@ -1667,18 +1666,24 @@ impl TypeError {
         turbofish: &str,
         span: Span,
     ) -> TypeError {
+        TypeError::CannotInferType {
+            message: Self::cannot_infer_message(names, owner, turbofish),
+            span,
+        }
+    }
+
+    /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
+    /// never answered.
+    pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
         let named = names
             .iter()
             .map(|n| format!("`{n}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {named} of {owner}; \
-                 add a turbofish ({turbofish}) or a type annotation"
-            ),
-            span,
-        }
+        format!(
+            "cannot infer type parameter {named} of {owner}; \
+             add a turbofish ({turbofish}) or a type annotation"
+        )
     }
 
     /// This error as its `(code, message, span)` triple, which is what
@@ -2921,7 +2926,7 @@ impl TypeError {
                 (
                     Code::TraitDeclInvalid,
                     format!(
-                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Hash`, `Default`, and `Inspect`.{hint}"
                     ),
                     *span,
                 )

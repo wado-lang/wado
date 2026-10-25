@@ -438,7 +438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
             ) && self.tysys.ord_withheld_by(left).is_some()
             {
-                return self.operator_not_implemented(op, left, span);
+                return self.operator_not_implemented(op, left, right, span);
             }
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
@@ -515,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Some(&ArgClass::Exact(right)),
                     ) else {
-                        return self.operator_not_implemented(op, left, span);
+                        return self.operator_not_implemented(op, left, right, span);
                     };
                     // Reify rebuilds the `!` wrapper for `!=`.
                     return self.dispatch_trait_op_method(
@@ -539,7 +539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         None,
                     ) else {
-                        return self.operator_not_implemented(op, left, span);
+                        return self.operator_not_implemented(op, left, right, span);
                     };
                     let call = self.dispatch_trait_op_method(
                         left,
@@ -782,7 +782,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
                     // trait impl (e.g. `Point - Point` with no `Sub`).
-                    return self.operator_not_implemented(op, left, span);
+                    return self.operator_not_implemented(op, left, right, span);
+                }
+                if let Some(item) = operator_compiler_item(&op)
+                    && self.report_unmet_trait_impl_bound(left, &[item], Some(right), span)
+                {
+                    return TypeTable::ERROR;
                 }
                 // Mixed operand types that cannot combine under this
                 // operator (e.g. `i32 - List<i32>`). Reported the same
@@ -1049,6 +1054,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // No impl answered, and the WIR lowering has no opcode for this
         // operand, so reject here: `scalar_kind` would panic instead.
         if expr_type != TypeTable::ERROR && self.tysys.unary_operand_requires_trait(op, expr_type) {
+            if self.report_unmet_trait_impl_bound(expr_type, &[item], None, span) {
+                return Some(TypeTable::ERROR);
+            }
             let operand = self.tysys.type_table.borrow().type_name(expr_type);
             let _ = self.emit(TypeError::OperatorNotApplicable {
                 op: op_symbol.to_string(),
@@ -1370,6 +1378,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         return Ok(WritePlace::IndexAssign { output_type });
                     }
+                    // Where no `IndexRefMut` writes through instead, an
+                    // `IndexAssign` impl missing only its bound says why.
+                    if self
+                        .index_lookup_or_newtype_base(
+                            &struct_name,
+                            base_type_id,
+                            &lookup_name,
+                            lookup_type_id,
+                            Elaborator::find_index_mut_trait_impl,
+                        )
+                        .is_none()
+                        && self.report_unmet_trait_impl_bound(
+                            base_type_id,
+                            &[CompilerItem::IndexAssign],
+                            Some(index_type),
+                            target_ast.span(),
+                        )
+                    {
+                        return Err(());
+                    }
                 }
             }
         }
@@ -1473,6 +1501,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Reify rebuilds the `Assign` from the AST and the recorded types.
             Lvalue::Place => return TypeTable::UNIT,
             Lvalue::Reported => return TypeTable::ERROR,
+            // An `ERROR` target was diagnosed where it was resolved.
+            Lvalue::NotAPlace if place.value_type() == TypeTable::ERROR => {
+                return TypeTable::ERROR;
+            }
             Lvalue::ThroughImmutableRef => "cannot assign through immutable reference",
             Lvalue::NotAPlace => "cannot assign to an expression that is not a place",
         };
@@ -1664,8 +1696,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report that `left` does not implement the trait `op` dispatches to, with
     /// the reason chain saying why. Under `#![no_prelude]` the trait is absent,
     /// and no chain explains its absence.
-    fn operator_not_implemented(&mut self, op: BinaryOp, left: TypeId, span: Span) -> TypeId {
+    fn operator_not_implemented(
+        &mut self,
+        op: BinaryOp,
+        left: TypeId,
+        right: TypeId,
+        span: Span,
+    ) -> TypeId {
         let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+        if self.report_unmet_trait_impl_bound(left, &[item], Some(right), span) {
+            return TypeTable::ERROR;
+        }
         let trait_name = self
             .tysys
             .type_table

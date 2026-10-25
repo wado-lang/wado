@@ -380,7 +380,7 @@ fn loop_sites(body: &Body) -> IndexMap<BlockId, IndexSet<NodeRef>> {
         .into_iter()
         .map(|lb| {
             let mut sites = IndexSet::default();
-            body.for_each_live_node_under(NodeRef::Block(lb), |n| {
+            body.for_each_node_under(NodeRef::Block(lb), |n| {
                 sites.insert(n);
             });
             (lb, sites)

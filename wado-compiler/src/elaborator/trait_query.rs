@@ -45,7 +45,10 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::synthesis::traits::{
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
+};
+use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -74,6 +77,7 @@ pub(super) enum DerivedAt {
 pub(super) enum OnBoundTrait {
     Eq,
     Ord,
+    Hash,
     Serialize,
     Deserialize,
     Default,
@@ -97,6 +101,7 @@ impl OnBoundTrait {
         match self {
             Self::Eq => CompilerItem::Eq,
             Self::Ord => CompilerItem::Ord,
+            Self::Hash => CompilerItem::Hash,
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
             Self::Default => CompilerItem::Default,
@@ -119,6 +124,7 @@ impl OnBoundTrait {
         let found = match item {
             CompilerItem::Eq => Self::Eq,
             CompilerItem::Ord => Self::Ord,
+            CompilerItem::Hash => Self::Hash,
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
             CompilerItem::Default => Self::Default,
@@ -146,7 +152,7 @@ impl OnBoundTrait {
     pub(super) fn is_field_recursive(self) -> bool {
         matches!(
             self,
-            Self::Eq | Self::Ord | Self::Serialize | Self::Deserialize
+            Self::Eq | Self::Ord | Self::Hash | Self::Serialize | Self::Deserialize
         )
     }
 
@@ -161,6 +167,29 @@ impl OnBoundTrait {
                 | Self::ReflectNewtype
                 | Self::ReflectTemplate
         )
+    }
+
+    /// The associated type listing a reflection kind's member types, which a
+    /// derivation pins to bind its pack: `ReflectStruct<FieldTypes = [..F]>`.
+    pub(super) fn member_channel(self) -> Option<&'static str> {
+        match self {
+            Self::ReflectStruct => Some(REFLECT_FIELD_TYPES_ASSOC),
+            Self::ReflectVariant => Some(REFLECT_CASE_PAYLOADS_ASSOC),
+            Self::ReflectTemplate => Some(REFLECT_HOLES_ASSOC),
+            Self::Eq
+            | Self::Ord
+            | Self::Hash
+            | Self::Serialize
+            | Self::Deserialize
+            | Self::Default
+            | Self::Reflect
+            | Self::ReflectEnum
+            | Self::ReflectFlags
+            | Self::ReflectNewtype
+            | Self::Ref
+            | Self::RefMut
+            | Self::Inspect => None,
+        }
     }
 }
 
@@ -967,20 +996,22 @@ impl TypeSystem {
         )
     }
 
-    /// Whether `type_id` answers every one of `bounds`, each at the arguments it
-    /// writes. One naming only variables a pending call is still to answer may
-    /// become a type that does, and is checked once it is answered.
-    fn bounds_hold(
+    /// The first of `bounds` that `type_id` does not answer, each at the
+    /// arguments it writes. One naming only variables a pending call is still to
+    /// answer may become a type that does, and is checked once it is answered.
+    fn unmet_bound<'b>(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        bounds: &[FqTraitName],
-    ) -> bool {
-        ctx.awaits_pending_call(&self.type_table.borrow(), type_id)
-            || bounds
-                .iter()
-                .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
+        bounds: &'b [FqTraitName],
+    ) -> Option<&'b FqTraitName> {
+        if ctx.awaits_pending_call(&self.type_table.borrow(), type_id) {
+            return None;
+        }
+        bounds
+            .iter()
+            .find(|trait_| !self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
     /// `answer` under the recursion guard. A question already open does not
@@ -1103,7 +1134,6 @@ impl TypeSystem {
         // an unbounded chain.
         while chain.len() < 8 {
             let written_instead = match tr {
-                OnBoundTrait::Ord => self.ord_withheld_note(type_id),
                 OnBoundTrait::Eq
                     if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
                 {
@@ -1112,7 +1142,7 @@ impl TypeSystem {
                         self.type_id_to_string(type_id)
                     ))
                 }
-                _ => None,
+                _ => self.comparison_withheld_note(tr, type_id),
             };
             if let Some(why) = written_instead {
                 chain.push(why);
@@ -1238,6 +1268,7 @@ impl TypeSystem {
                 return true;
             }
             OnBoundTrait::Ord if self.ord_withheld_by(type_id).is_some() => return false,
+            OnBoundTrait::Hash if self.hash_withheld_by(type_id).is_some() => return false,
             _ => {}
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1479,6 +1510,70 @@ impl TypeSystem {
         Some(format!(
             "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
             self.type_id_to_string(link)
+        ))
+    }
+
+    /// The link of `type_id`'s newtype chain, itself included, that leaves it
+    /// no `Hash`, with the comparison it writes: the first writing `eq` or
+    /// `cmp`, below every link writing `Hash`. That comparison may equate
+    /// values whose members differ, which a derived `hash` would tell apart. A
+    /// primitive's `Hash` is written or absent, never withheld.
+    fn hash_withheld_by(&self, type_id: TypeId) -> Option<(TypeId, CompilerItem)> {
+        let hash = self.compiler_trait_def(CompilerItem::Hash)?;
+        let tt = self.type_table.borrow();
+        let solver = self.solver();
+        let mut link = type_id;
+        loop {
+            if matches!(tt.get(link), ResolvedType::Primitive(_))
+                || written_impl_reaches(&self.trait_env, hash, link, &tt)
+            {
+                return None;
+            }
+            if let Some(written) = solver.hash_withheld_by(&tt, link) {
+                return Some((link, written));
+            }
+            link = tt.get_newtype_base(link)?;
+        }
+    }
+
+    /// Why `type_id` has no `tr`, where a written comparison withholds it.
+    pub(super) fn comparison_withheld_note(
+        &self,
+        tr: OnBoundTrait,
+        type_id: TypeId,
+    ) -> Option<String> {
+        match tr {
+            OnBoundTrait::Ord => self.ord_withheld_note(type_id),
+            OnBoundTrait::Hash => self.hash_withheld_note(type_id),
+            OnBoundTrait::Eq
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::Default
+            | OnBoundTrait::Reflect
+            | OnBoundTrait::ReflectStruct
+            | OnBoundTrait::ReflectVariant
+            | OnBoundTrait::ReflectEnum
+            | OnBoundTrait::ReflectFlags
+            | OnBoundTrait::ReflectNewtype
+            | OnBoundTrait::ReflectTemplate
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect => None,
+        }
+    }
+
+    /// Why `type_id` has no `Hash`, where a written comparison is the cause.
+    fn hash_withheld_note(&self, type_id: TypeId) -> Option<String> {
+        let (link, written) = self.hash_withheld_by(type_id)?;
+        let method = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_method_name(written)
+            .to_string();
+        Some(format!(
+            "`{}` writes `{method}`, so no `Hash` is derived for it; write `hash` beside it",
+            self.type_id_to_string(link),
         ))
     }
 
@@ -1796,6 +1891,7 @@ impl TypeSystem {
             OnBoundTrait::ReflectTemplate => None,
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default
@@ -1839,6 +1935,7 @@ fn declaring_module_of_kind(
         | OnBoundTrait::ReflectTemplate
         | OnBoundTrait::Eq
         | OnBoundTrait::Ord
+        | OnBoundTrait::Hash
         | OnBoundTrait::Serialize
         | OnBoundTrait::Deserialize
         | OnBoundTrait::Default
@@ -2262,10 +2359,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fq_trait_name = self
             .tysys
             .trait_named_from_slots(fq_trait_name, &bound, &slots);
-        let instantiated = sig.decl.instantiate_slots_with(
+        let instantiated = sig.instantiate_received(
             &self.tysys.type_table,
             &slots,
             &SlotProjections::from_iter([(0, answers)]),
+            &EffectRows::default(),
         );
         // A bare bound dispatches on the parameter itself, off no `impl` block.
         Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
@@ -2311,6 +2409,21 @@ impl TypeSystem {
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
+        self.unmet_impl_bound(ctx, scope, def, receiver, type_args)
+            .is_none()
+    }
+
+    /// The first bound or kind of an `impl` block's parameters that what the
+    /// receiver substitutes for them misses, which is why the block does not
+    /// apply to it.
+    pub(super) fn unmet_impl_bound(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        def: DefId,
+        receiver: Option<TypeId>,
+        type_args: Option<&[TypeId]>,
+    ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
         let type_params = &header.type_params;
@@ -2318,7 +2431,7 @@ impl TypeSystem {
             .iter()
             .all(|p| p.bounds.is_empty() && p.is_affine)
         {
-            return true;
+            return None;
         }
 
         // The bound's own site says which trait it names and what it writes for
@@ -2340,9 +2453,18 @@ impl TypeSystem {
             })
             .collect();
         let affine_params = ctx.trait_ctx.affine_params();
-        let holds = |(is_affine, bounds): &(bool, Vec<FqTraitName>), type_arg: TypeId| {
-            (*is_affine || !self.is_affine(type_arg, &affine_params))
-                && self.bounds_hold(ctx, scope, type_arg, bounds)
+        let unmet = |param: &str, type_arg: TypeId| {
+            let (is_affine, bounds) = bounds_map.get(param)?;
+            let missing = if !*is_affine && self.is_affine(type_arg, &affine_params) {
+                UnmetKind::Affine
+            } else {
+                UnmetKind::Trait(self.unmet_bound(ctx, scope, type_arg, bounds)?.clone())
+            };
+            Some(UnmetImplBound {
+                param: param.to_string(),
+                type_arg,
+                missing,
+            })
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2350,48 +2472,52 @@ impl TypeSystem {
         if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &header.ty
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
-            let Some(param) = bounds_map.get(inner.name.as_str()) else {
-                return true;
-            };
-            let Some(pointee) = receiver.and_then(|id| self.pointee_of(id)) else {
-                return true;
-            };
-            return holds(param, pointee);
+            let pointee = receiver.and_then(|id| self.pointee_of(id))?;
+            return unmet(inner.name.as_str(), pointee);
         }
-        let Some(type_args) = type_args else {
-            // An existence or bounds check that threaded no positions has
-            // nothing to compare against.
-            return true;
-        };
+        // An existence or bounds check that threaded no positions has nothing
+        // to compare against.
+        let type_args = type_args?;
 
         // `&Container<T>` reads the pointee's arguments, as its positions do.
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
             let names = ImplParamSlots::of(&header.ty, type_params);
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
-            return slots.iter().all(|(&slot, &type_arg)| {
-                names
-                    .name_of(slot)
-                    .and_then(|name| bounds_map.get(name))
-                    .is_none_or(|param| holds(param, type_arg))
-            });
+            return slots
+                .iter()
+                .find_map(|(&slot, &type_arg)| unmet(names.name_of(slot)?, type_arg));
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
         // `type_args` instantiates the same variadic parameter, so each is
         // checked against its bounds.
         if let ast::Type::Tuple(elements) = impl_ty {
-            return elements.iter().all(|elem| {
+            return elements.iter().find_map(|elem| {
                 let ast::Type::TypePackSpread(name, _) = elem else {
-                    return true;
+                    return None;
                 };
-                bounds_map
-                    .get(name.as_str())
-                    .is_none_or(|param| type_args.iter().all(|&type_arg| holds(param, type_arg)))
+                type_args
+                    .iter()
+                    .find_map(|&type_arg| unmet(name.as_str(), type_arg))
             });
         }
-        true
+        None
     }
+}
+
+/// A bound or kind an `impl` block places on one of its parameters that the
+/// receiver's argument there misses.
+pub(super) struct UnmetImplBound {
+    pub(super) param: String,
+    pub(super) type_arg: TypeId,
+    pub(super) missing: UnmetKind,
+}
+
+pub(super) enum UnmetKind {
+    Trait(FqTraitName),
+    /// The parameter is not declared `affine`, and the argument is.
+    Affine,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

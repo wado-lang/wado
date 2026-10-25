@@ -1,0 +1,56 @@
+// A reference taken before an assignment to an affine local stops being
+// readable where the assignment leaves it naming an object the local no longer
+// holds (WEP: Affine Types): one the local moved before the refill, and one
+// inside the old value the assignment replaced, moved part or not.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine struct Pair {
+    x: Tok,
+    y: Tok,
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+export fn run() {
+    let mut a = Tok { id: 1 };
+    let r = &a;
+    eat(a);
+    a = Tok { id: 2 };
+    let n = r.id;
+
+    let mut b = Tok { id: 3 };
+    let mut c = Tok { id: 4 };
+    let s = &b;
+    [b, c] = [c, b];
+    let m = s.id;
+
+    let mut p = Pair { x: Tok { id: 5 }, y: Tok { id: 6 } };
+    let q = &p.y;
+    p = Pair { x: Tok { id: 7 }, y: Tok { id: 8 } };
+    let k = q.id;
+
+    let mut o = Pair { x: Tok { id: 9 }, y: Tok { id: 10 } };
+    let u = &o.y;
+    eat(o.x);
+    o = Pair { x: Tok { id: 11 }, y: Tok { id: 12 } };
+    let j = u.id;
+}
+
+__DATA__
+{
+    "compile_error": ":28:13: analysis error: `r` refers into `a`, which moved at 26:9",
+    "compile_errors_contains": [
+        "`s` refers into `b`, which moved at 33:18",
+        "`q` refers into `p`, which the assignment at 38:5 replaced",
+        "`u` refers into `o`, which the assignment at 44:5 replaced"
+    ]
+}

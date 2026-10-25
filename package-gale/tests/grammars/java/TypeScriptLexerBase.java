@@ -1,5 +1,5 @@
 // The Java twin of `impl TypeScriptLexerBase for TsBase` in
-// package-gale/tools/typescript_recognizer.wado, so `antlr4-oracle.sh --super`
+// package-gale/tools/typescript_recognizer.wado, so `antlr4_oracle.wado --super`
 // runs ANTLR4 against the base class Gale runs against. Edit both or neither.
 import java.util.ArrayList;
 import org.antlr.v4.runtime.CharStream;

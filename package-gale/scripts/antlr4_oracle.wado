@@ -1,0 +1,1007 @@
+#!/usr/bin/env wado
+//! Runs the published ANTLR4 jar as a clean-room oracle on a `.g4` grammar and
+//! an input, and prints the parse tree TestRig prints (`--tokens`: the token
+//! stream). It validates descriptor-level expectations for the ATN-class cases
+//! Gale's static prediction cannot resolve. License hygiene
+//! (`package-gale/AGENTS.md`): we may run the published jar to observe its
+//! black-box behavior, but we may not read ANTLR4's implementation source.
+//!
+//! Run it from the repository root, with `java` and `javac` on `PATH` and
+//! their JDK readable by a spawned child (`[process] read` in the user config,
+//! or `--process-read`):
+//!
+//! ```sh
+//! wado run package-gale/scripts/antlr4_oracle.wado [options] <grammar.g4> <start_rule> < input
+//! wado run package-gale/scripts/antlr4_oracle.wado [options] --tokens <grammar.g4> < input
+//! ```
+//!
+//! Options:
+//!
+//! - `--tokens`: print the token stream instead of the parse tree (lexer
+//!   oracle; `<start_rule>` is omitted).
+//! - `--super <file>`: compile `<file>` alongside the generated recognizer.
+//!   Repeatable. Supplies the hand-written base class an
+//!   `options { superClass = X }` grammar extends.
+//! - `--probe-super`: report on stderr what the input does against a
+//!   synthesized base class, and always exit 3.
+//! - `--lexer <file>`: the lexer grammar a split `parser grammar <N>Parser`
+//!   reads its tokens from. It must be named `<N>Lexer`, as TestRig loads the
+//!   pair by the shared `<N>`.
+//!
+//! A grammar with `options { superClass = X }` has no behaviour without X, so
+//! `--super` is the only way to oracle one, and `--probe-super` is a
+//! diagnostic that never yields pinnable output. Why the probe cannot be
+//! promoted to an oracle: "Oracling a superClass grammar" in
+//! antlr4-compatibility.md.
+//!
+//! Exit codes: 0, the oracle ran and printed output; 1, an invocation error;
+//! 2, ANTLR4 reported a parse error on the input; 3, `--probe-super` ran, its
+//! report is on stderr and stdout is empty.
+//!
+//! The ANTLR4 version is deliberately not pinned. Each run resolves the latest
+//! release from Maven Central (the answer is kept for a day), unless
+//! `ANTLR4_VERSION` pins one, and a caller stamps the version it used into
+//! what it generates. Drift in the oracle's answer from an ANTLR4 patch
+//! release then surfaces as a diff in the regenerated output. The jar is
+//! cached under `package-gale/build/antlr4/`. Each run's Java sources and
+//! classes go to a directory under `package-gale/build/oracle/`, removed on
+//! exit unless `ORACLE_KEEP=1`.
+
+use { args, env, eprint, eprintln, exit, print_bytes, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { availability, Availability, Command, Output, Process } from "core:process";
+use { from_string } from "core:json";
+use { token_hex } from "core:secure_random";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+use { Stdin } from "wasi:cli";
+
+global CACHE_DIR: String = "package-gale/build/antlr4";
+global WORK_ROOT: String = "package-gale/build/oracle";
+global MAVEN_SEARCH_URL: String = "https://search.maven.org/solrsearch/select?q=g:%22org.antlr%22+AND+a:%22antlr4%22&rows=1&wt=json";
+global LATEST_VERSION_TTL_SECONDS: i64 = 86400;
+/// A TestRig tree of a whole source file passes the default capture limit.
+global TREE_CAPTURE_LIMIT: i32 = 1 << 30;
+
+// ===== The jar =====
+
+/// The published jar, downloaded and verified.
+internal struct Jar {
+    internal version: String,
+    path: String,
+}
+
+/// Why the oracle cannot run Java here.
+internal variant JdkProblem {
+    /// No JDK: a caller with something to do without one may go on.
+    Missing(String),
+    /// A JDK the sandbox does not reach, or one that would not start.
+    Unreachable(String),
+}
+
+impl Display for JdkProblem {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self {
+            Missing(m) => *m,
+            Unreachable(m) => *m,
+        };
+        f.write_str(message);
+    }
+}
+
+internal fn find_jdk() -> Result<(), JdkProblem> with Process {
+    if availability() != Availability::Available {
+        return Err(JdkProblem::Missing("this host does not run programs (core:process is unavailable)"));
+    }
+    for let tool of ["java", "javac"] {
+        if let Err(e) = Command::new(tool).arg("-version").output() {
+            return Err(
+                match e.kind {
+                    NotFound => JdkProblem::Missing(
+                        if tool == "javac" {
+                            "'javac' not on PATH (need a JDK, not just a JRE)";
+                        } else {
+                            "'java' not on PATH";
+                        },
+                    ),
+                    NotPermitted => JdkProblem::Unreachable(
+                        `'${tool}' lies outside what a spawned child may read: add its JDK to \`[process] read\` in ~/.config/wado/config.toml, or pass --process-read`,
+                    ),
+                    _ => JdkProblem::Unreachable(`${e}`),
+                },
+            );
+        }
+    }
+    return Ok(());
+}
+
+/// The jar `pinned` names, else the latest release, downloaded on first use.
+internal fn ensure_jar(pinned: Option<String>) -> Result<Jar, String> with (Process, Preopens, SystemClock, Stderr) {
+    if let Err(e) = fs::create_dir_all(CACHE_DIR) {
+        return Err(`${e}`);
+    }
+    let version = match pinned {
+        Some(v) && !v.is_empty() => v,
+        _ => match resolve_latest_version() {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(
+                    `cannot resolve the latest ANTLR4 version from Maven Central: ${e}\noracle: set ANTLR4_VERSION in the environment to pin a known version`,
+                );
+            },
+        },
+    };
+    let path = fs::join(CACHE_DIR, `antlr-${version}-complete.jar`);
+    if !fs::exists(&path) {
+        let url = `https://www.antlr.org/download/antlr-${version}-complete.jar`;
+        eprintln(`oracle: downloading ${url} → ${path}`);
+        let partial = `${path}.tmp`;
+        if let Err(e) = Command::new("curl").args(["-fsSL", "-o", partial, url]).read() {
+            return Err(`${e}`);
+        }
+        if let Err(e) = verify_jar_checksum(partial, version) {
+            let _ = fs::remove_file(&partial);
+            return Err(e);
+        }
+        if let Err(e) = fs::rename(&partial, &path) {
+            return Err(`${e}`);
+        }
+    }
+    return Ok(Jar { version, path });
+}
+
+/// The version the committed oracle trees were taken from, which a run that
+/// reproduces them pins unless `ANTLR4_VERSION` says otherwise.
+internal global PINNED_VERSION: String = "4.13.2";
+
+/// A JDK and `ensure_jar`'s jar, or a report of what is missing and exit 1.
+internal fn jar_or_exit(pinned: Option<String>) -> Jar with (Process, Preopens, SystemClock, Stderr, Exit) {
+    if let Err(e) = find_jdk() {
+        eprintln(`oracle: ${e}`);
+        exit(1);
+    }
+    return match ensure_jar(pinned) {
+        Ok(jar) => jar,
+        Err(message) => {
+            eprintln(`oracle: ${message}`);
+            exit(1);
+        },
+    };
+}
+
+struct MavenSearch {
+    response: MavenResponse,
+}
+
+struct MavenResponse {
+    docs: List<MavenDoc>,
+}
+
+struct MavenDoc {
+    #[wire(name = "latestVersion")]
+    latest_version: String,
+}
+
+fn resolve_latest_version() -> Result<String, String> with (Process, Preopens, SystemClock) {
+    let cache = fs::join(CACHE_DIR, "antlr4-latest-version");
+    if let Ok(meta) = fs::metadata(&cache)
+        && let Some(modified) = meta.modified
+        && SystemClock::now().seconds - modified.seconds < LATEST_VERSION_TTL_SECONDS
+        && let Ok(version) = fs::read_to_string(
+            &cache,
+        ) {
+        return Ok(version);
+    }
+    let body = match Command::new("curl").args(["-fsSL", MAVEN_SEARCH_URL]).read() {
+        Ok(body) => String::from_utf8_lossy(&body),
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    let search = match from_string::<MavenSearch>(&body) {
+        Ok(search) => search,
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    if search.response.docs.is_empty() {
+        return Err("no antlr4 artifact in the answer");
+    }
+    let version = search.response.docs[0].latest_version;
+    if let Err(e) = fs::write(&cache, &version) {
+        return Err(`${e}`);
+    }
+    return Ok(version);
+}
+
+/// Check a freshly downloaded jar against the SHA-1 Maven Central publishes
+/// for the same version. The jar comes from antlr.org and the digest from an
+/// independent host, so a corrupted or tampered download fails here. The
+/// version is resolved, not pinned, so the digest is the publisher's own
+/// rather than one held here. A jar that cannot be checked is refused, since
+/// it would run unverified.
+fn verify_jar_checksum(jar: String, version: String) -> Result<(), String> with (Process, Stderr) {
+    let actual = match sha1_of(jar)? {
+        Some(digest) => digest,
+        None => {
+            return Err("no sha1 tool (sha1sum/shasum) on PATH to verify the jar with");
+        },
+    };
+    let sha_url = `https://repo1.maven.org/maven2/org/antlr/antlr4/${version}/antlr4-${version}-complete.jar.sha1`;
+    // A `.sha1` file holds the bare hex digest.
+    let expected = match Command::new("curl").args(["-fsSL", sha_url]).read() {
+        Ok(body) => first_field_lowercase(String::from_utf8_lossy(&body)),
+        Err(e) => {
+            return Err(`cannot fetch the published SHA-1 for ${version} to verify the jar with: ${e}`);
+        },
+    };
+    if actual != expected {
+        return Err(`SHA-1 mismatch for the downloaded jar (expected ${expected}, got ${actual})`);
+    }
+    eprintln(`oracle: verified SHA-1 ${actual}`);
+    return Ok(());
+}
+
+/// `Ok(None)` when neither `sha1sum` nor `shasum` is on `PATH`.
+fn sha1_of(path: String) -> Result<Option<String>, String> with Process {
+    let tools: List<[String, List<String>]> = [
+        ["sha1sum", []],
+        [
+            "shasum",
+            ["-a", "1"],
+        ],
+    ];
+    for let [program, flags] of tools {
+        match Command::new(program).args(flags).arg(path).read() {
+            Ok(out) => {
+                return Ok(Some(first_field_lowercase(String::from_utf8_lossy(&out))));
+            },
+            Err(e) && e.kind matches { NotFound } => {
+                continue;
+            },
+            Err(e) => {
+                return Err(`${e}`);
+            },
+        }
+    }
+    return Ok(null);
+}
+
+fn first_field_lowercase(text: String) -> String {
+    return match text.split_whitespace().next() {
+        Some(field) => field.to_string().to_ascii_lowercase(),
+        None => "",
+    };
+}
+
+// ===== Reading a grammar =====
+
+fn is_ident_start(b: u8) -> bool {
+    return b == b'_' || b.is_ascii_alphabetic();
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    return b == b'_' || b.is_ascii_alphanumeric();
+}
+
+fn skip_spaces(s: &String, from: i32) -> i32 {
+    let mut i = from;
+    while i < s.len() && s.byte_at(i).is_ascii_whitespace() {
+        i += 1;
+    }
+    return i;
+}
+
+/// The identifier starting at byte `from`, or `""`.
+fn ident_at(s: &String, from: i32) -> String {
+    if from >= s.len() || !is_ident_start(s.byte_at(from)) {
+        return "";
+    }
+    let mut end = from + 1;
+    while end < s.len() && is_ident_byte(s.byte_at(end)) {
+        end += 1;
+    }
+    return s.substr_bytes(from, end);
+}
+
+/// Where `word` ends when it starts at `from` and at least one space follows.
+fn word_then_space(s: &String, from: i32, word: String) -> Option<i32> {
+    let end = from + word.len();
+    if end < s.len() && s.substr_bytes(from, end) == word && s.byte_at(end).is_ascii_whitespace() {
+        return Some(end);
+    }
+    return null;
+}
+
+fn find_from(s: &String, pattern: String, from: i32) -> Option<i32> {
+    if from > s.len() {
+        return null;
+    }
+    return match s.substr_bytes(from, s.len()).find(pattern) {
+        Some(at) => Some(from + at),
+        None => null,
+    };
+}
+
+/// The name a `grammar Name;` line declares, which ANTLR4 requires the file to
+/// carry, so a descriptor-derived file named otherwise still works. The `;`
+/// may sit on a later line. A file declaring none falls back to its stem.
+fn declared_grammar_name(path: String, text: &String) -> String {
+    for let line of text.lines() {
+        let line = line.to_string();
+        let mut i = skip_spaces(&line, 0);
+        let kinds: List<String> = ["lexer", "parser"];
+        for let kind of kinds {
+            if let Some(end) = word_then_space(&line, i, kind) {
+                i = skip_spaces(&line, end);
+                break;
+            }
+        }
+        let Some(end) = word_then_space(&line, i, "grammar") else {
+            continue;
+        };
+        let name = ident_at(&line, skip_spaces(&line, end));
+        if !name.is_empty() {
+            return name;
+        }
+    }
+    return fs::file_stem(path).unwrap().to_string();
+}
+
+/// The `superClass` an `options` block names: the generated recognizer
+/// `extends` it, so it has to be on the compile path.
+fn declared_super_class(text: &String) -> Option<String> {
+    let flat = text.replace("\n", " ");
+    let mut from = 0;
+    while let Some(at) = find_from(&flat, "superClass", from) {
+        from = at + 1;
+        let eq = skip_spaces(&flat, at + "superClass".len());
+        if eq < flat.len() && flat.byte_at(eq) == b'=' {
+            let name = ident_at(&flat, skip_spaces(&flat, eq + 1));
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    return null;
+}
+
+fn declares_lexer_grammar(text: &String) -> bool {
+    for let line of text.lines() {
+        let line = line.to_string();
+        if let Some(end) = word_then_space(&line, skip_spaces(&line, 0), "lexer")
+            && word_then_space(&line, skip_spaces(
+                &line,
+                end,
+            ), "grammar") matches { Some(_) } {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ===== The command line =====
+
+internal variant Mode {
+    Tree(String),
+    Tokens,
+}
+
+struct Grammar {
+    path: String,
+    name: String,
+    text: String,
+    super_class: Option<String>,
+}
+
+/// One oracle run, validated.
+internal struct Request {
+    mode: Mode,
+    probe_super: bool,
+    grammar: Grammar,
+    lexer: Option<Grammar>,
+    supers: List<String>,
+    /// The name TestRig loads the recognizer by: a split pair's shared `<N>`.
+    testrig_name: String,
+}
+
+fn usage() -> String {
+    return "Usage: antlr4_oracle.wado [options] <grammar.g4> <start_rule> < input
+       antlr4_oracle.wado [options] --tokens <grammar.g4> < input
+
+Options:
+  --tokens          print the token stream instead of the parse tree
+  --super <file>    compile <file> alongside the recognizer (repeatable)
+  --probe-super     report what the input does against a synthesized base
+                    class; diagnostic only, always exits 3
+  --lexer <file>    the lexer grammar of a split parser grammar
+";
+}
+
+fn read_grammar(path: String, what: String) -> Result<Grammar, String> with Preopens {
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) => {
+            return Err(`oracle: cannot read the ${what}: ${e}\n`);
+        },
+    };
+    return Ok(Grammar {
+        path,
+        name: declared_grammar_name(path, &text),
+        super_class: declared_super_class(&text),
+        text,
+    });
+}
+
+fn refuse_unsupplied_super(name: String, super_class: String) -> String {
+    return `oracle: ${name} declares 'options { superClass = ${super_class}; }' but no
+oracle: base class was supplied, so the generated recognizer has nothing to
+oracle: extend and javac would fail. Either:
+oracle:   --super <path/to/${super_class}.java>  the real base class — the oracle
+oracle:       then runs the specification the Gale side models, so a diff is
+oracle:       a Gale bug and not two different grammars disagreeing
+oracle:   --probe-super  report what the input does against a synthesized
+oracle:       base — a diagnostic to size that work, never an oracle
+`;
+}
+
+/// The run `arguments` ask for, or the text to report and exit 1 with.
+internal fn parse_request(arguments: List<String>) -> Result<Request, String> with Preopens {
+    let mut tokens = false;
+    let mut probe_super = false;
+    let mut lexer_path: Option<String> = null;
+    let mut supers: List<String> = [];
+    let mut i = 0;
+    while i < arguments.len() {
+        let a = arguments[i];
+        let value: Option<String> = if i + 1 < arguments.len() { Some(arguments[i + 1]) } else { null };
+        if a == "--tokens" {
+            tokens = true;
+        } else if a == "--probe-super" {
+            probe_super = true;
+        } else if a == "--super" || a == "--lexer" {
+            let Some(v) = value else {
+                return Err(usage());
+            };
+            if a == "--super" {
+                supers.push(v);
+            } else {
+                lexer_path = Some(v);
+            }
+            i += 1;
+        } else if let Some(v) = a.strip_prefix("--super=") {
+            supers.push(v.to_string());
+        } else if let Some(v) = a.strip_prefix("--lexer=") {
+            lexer_path = Some(v.to_string());
+        } else if a == "--" {
+            i += 1;
+            break;
+        } else if a.starts_with("-") {
+            return Err(`oracle: unknown option: ${a}\n${usage()}`);
+        } else {
+            break;
+        }
+        i += 1;
+    }
+    let positional = arguments.slice(i, arguments.len()).to_list();
+
+    if probe_super && !supers.is_empty() {
+        return Err("oracle: --probe-super and --super are mutually exclusive\n");
+    }
+    // The probe stubs one base from one grammar; a split pair declares two.
+    if lexer_path matches { Some(_) } && (tokens || probe_super) {
+        return Err("oracle: --lexer takes neither --tokens (pass the lexer grammar itself) nor --probe-super\n");
+    }
+    let mode = if tokens {
+        if positional.len() != 1 {
+            return Err(usage());
+        }
+        Mode::Tokens;
+    } else {
+        if positional.len() != 2 {
+            return Err(usage());
+        }
+        Mode::Tree(positional[1]);
+    };
+    let grammar = read_grammar(positional[0], "grammar file")?;
+    for let src of &supers {
+        if let Err(e) = fs::metadata(src) {
+            return Err(`oracle: cannot read the --super source: ${e}\n`);
+        }
+    }
+    if let Some(super_class) = grammar.super_class && !probe_super && supers.is_empty() {
+        return Err(refuse_unsupplied_super(grammar.name, super_class));
+    }
+    let mut testrig_name = grammar.name;
+    let mut lexer: Option<Grammar> = null;
+    if let Some(path) = lexer_path {
+        let lex = read_grammar(path, "lexer grammar")?;
+        let shared = grammar.name.strip_suffix("Parser");
+        if !shared matches { Some(n) && lex.name == `${n}Lexer` } {
+            return Err(
+                `oracle: a split pair must be named <N>Parser and <N>Lexer; got ${grammar.name} and ${lex.name}\n`,
+            );
+        }
+        testrig_name = shared.unwrap().to_string();
+        if let Some(super_class) = lex.super_class && supers.is_empty() {
+            return Err(refuse_unsupplied_super(lex.name, super_class));
+        }
+        lexer = Some(lex);
+    }
+    if probe_super && grammar.super_class matches { None } {
+        return Err(`oracle: --probe-super given but ${grammar.name} declares no superClass\n`);
+    }
+    return Ok(Request { mode, probe_super, grammar, lexer, supers, testrig_name });
+}
+
+// ===== Running the jar =====
+
+/// What one oracle run printed, and its exit code.
+internal struct Ran {
+    internal code: u8,
+    internal stdout: ByteList,
+    internal stderr: String,
+}
+
+fn failed(stderr: String) -> Ran {
+    return Ran { code: 1, stdout: [], stderr };
+}
+
+/// Run `request` on `input` in a fresh work directory, removed afterwards
+/// unless `keep`.
+internal fn run_request<T: AsByteSlice>(
+    jar: &Jar,
+    request: &Request,
+    input: &T,
+    keep: bool,
+) -> Ran with (Process, Preopens, Random) {
+    let recognizer = Recognizer::new(jar, request);
+    let mut ran = match compile(&recognizer) {
+        Some(failure) => failure,
+        None => parse(&recognizer, input),
+    };
+    ran.stderr = `${discard(&recognizer, keep)}${ran.stderr}`;
+    return ran;
+}
+
+/// One request's recognizer, generated and compiled in a work directory of its
+/// own, so a caller with many inputs builds it once.
+internal struct Recognizer {
+    jar: Jar,
+    request: Request,
+    work: String,
+}
+
+impl Recognizer {
+    internal fn new(jar: &Jar, request: &Request) -> Recognizer with Random {
+        return Recognizer { jar: *jar, request: *request, work: fs::join(WORK_ROOT, token_hex(8)) };
+    }
+}
+
+/// Remove the work directory, or keep it and say where.
+internal fn discard(recognizer: &Recognizer, keep: bool) -> String with Preopens {
+    if keep {
+        return `oracle: keeping work dir: ${recognizer.work}\n`;
+    }
+    let _ = fs::remove_dir_all(&recognizer.work);
+    return "";
+}
+
+fn output_text(out: &Output) -> String {
+    return `${String::from_utf8_lossy(&out.stdout)}${String::from_utf8_lossy(&out.stderr)}`;
+}
+
+fn succeeded(out: &Output) -> bool {
+    return out.status matches { Exited(0) };
+}
+
+/// Generate and compile the recognizer; the failure, if any.
+internal fn compile(recognizer: &Recognizer) -> Option<Ran> with (Process, Preopens) {
+    let jar = &recognizer.jar;
+    let request = &recognizer.request;
+    let work = &recognizer.work;
+    if let Err(e) = fs::create_dir_all(work) {
+        return Some(failed(`oracle: ${e}\n`));
+    }
+    // The lexer goes first, so its `.tokens` exists when the parser's
+    // `tokenVocab` asks for it.
+    let mut grammars: List<String> = [];
+    let mut sources: List<Grammar> = [];
+    if let Some(lex) = request.lexer {
+        sources.push(lex);
+    }
+    sources.push(request.grammar);
+    for let g of &sources {
+        let path = fs::join(work, `${g.name}.g4`);
+        if let Err(e) = fs::write(&path, &g.text) {
+            return Some(failed(`oracle: ${e}\n`));
+        }
+        grammars.push(path);
+    }
+    for let src of &request.supers {
+        let bytes = match fs::read(src) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                return Some(failed(`oracle: ${e}\n`));
+            },
+        };
+        if let Err(e) = fs::write(fs::join(work, fs::file_name(src).unwrap()), &bytes) {
+            return Some(failed(`oracle: ${e}\n`));
+        }
+    }
+    if request.probe_super {
+        let super_class = request.grammar.super_class.unwrap();
+        let stub = match probe_super_source(&request.grammar.text, super_class) {
+            Ok(stub) => stub,
+            Err(message) => {
+                return Some(failed(message));
+            },
+        };
+        if let Err(e) = fs::write(fs::join(work, `${super_class}.java`), &stub) {
+            return Some(failed(`oracle: ${e}\n`));
+        }
+    }
+
+    // `-Xexact-output-dir` keeps every output in `work` whatever the grammar's
+    // own path, and `-lib` is where the parser finds its lexer's `.tokens`.
+    let codegen = Command::new("java").args([
+        "-jar", jar.path, "-Dlanguage=Java", "-no-listener", "-Xexact-output-dir", "-o", *work, "-lib", *work,
+    ]).args(grammars).output();
+    match codegen {
+        Ok(out) && succeeded(&out) => {
+        },
+        Ok(out) => {
+            return Some(failed(`oracle: antlr4 codegen failed\n${output_text(&out)}`));
+        },
+        Err(e) => {
+            return Some(failed(`oracle: ${e}\n`));
+        },
+    }
+
+    let java_files = match fs::read_dir(work) {
+        Ok(entries) => entries.into_iter().filter(|e| e.name.ends_with(".java")).map(|e| fs::join(work, e.name)).collect(
+        ),
+        Err(e) => {
+            return Some(failed(`oracle: ${e}\n`));
+        },
+    };
+    return match Command::new("javac").args(["-cp", jar.path, "-d", *work]).args(java_files).output() {
+        Ok(out) && succeeded(&out) => null,
+        Ok(out) => Some(failed(`oracle: javac failed\n${output_text(&out)}`)),
+        Err(e) => Some(failed(`oracle: ${e}\n`)),
+    };
+}
+
+/// What the compiled recognizer answers for `input`.
+internal fn parse<T: AsByteSlice>(recognizer: &Recognizer, input: &T) -> Ran with (Process, Preopens) {
+    let jar = &recognizer.jar;
+    let request = &recognizer.request;
+    let work = &recognizer.work;
+    let input_path = fs::join(work, "input.txt");
+    if let Err(e) = fs::write(&input_path, input) {
+        return failed(`oracle: ${e}\n`);
+    }
+    let testrig = |props: List<String>| -> Result<Output, String> {
+        let [start, flag] = match request.mode {
+            Tree(rule) => [rule, "-tree"],
+            Tokens => ["tokens", "-tokens"],
+        };
+        let classpath = `${jar.path}:${*work}`;
+        return match Command::new("java").args(props).args([
+            "-cp", classpath, "org.antlr.v4.gui.TestRig", request.testrig_name, start, flag, input_path,
+        ]).capture_limit(TREE_CAPTURE_LIMIT).output() {
+            Ok(out) => Ok(out),
+            Err(e) => Err(`oracle: ${e}\n`),
+        };
+    };
+
+    if request.probe_super {
+        return probe_report(request, work, testrig);
+    }
+    let out = match testrig([]) {
+        Ok(out) => out,
+        Err(message) => {
+            return failed(message);
+        },
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let code: u8 = if !succeeded(&out) {
+        1;
+    } else if has_recognizer_error(&stderr) {
+        // Only a recognizer error means the input failed to parse. Other
+        // stderr output (JVM warnings, ANTLR4 advisory notices) is benign, and
+        // reading it as a parse error would drop the descriptor from Stage B′.
+        2;
+    } else {
+        0;
+    };
+    return Ran { code, stdout: out.stdout, stderr };
+}
+
+/// ANTLR4's console listener reports a recognizer error as
+/// `line <l>:<c> <message>`; anything else on stderr is JVM or tool chatter.
+fn has_recognizer_error(stderr: &String) -> bool {
+    for let line of stderr.lines() {
+        let line = line.to_string();
+        let Some(rest) = line.strip_prefix("line ") else {
+            continue;
+        };
+        let rest = rest.to_string();
+        let colon = digits_end(&rest, 0);
+        if colon == 0 || colon >= rest.len() || rest.byte_at(colon) != b':' {
+            continue;
+        }
+        let space = digits_end(&rest, colon + 1);
+        if space > colon + 1 && space < rest.len() && rest.byte_at(space) == b' ' {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn digits_end(s: &String, from: i32) -> i32 {
+    let mut i = from;
+    while i < s.len() && s.byte_at(i).is_ascii_digit() {
+        i += 1;
+    }
+    return i;
+}
+
+// ===== --probe-super =====
+
+fn prefixed(text: &String, prefix: String) -> String {
+    let mut out = String::with_capacity(text.len());
+    for let line of text.lines() {
+        out.push_str(`${prefix}${line}\n`);
+    }
+    return out;
+}
+
+fn probe_report<F: fn(List<String>) -> Result<Output, String> with Process>(
+    request: &Request,
+    work: &String,
+    testrig: F,
+) -> Ran with (Process, Preopens) {
+    let reached = fs::join(work, "reached.txt");
+    let nothing = "";
+    if let Err(e) = fs::write(&reached, &nothing) {
+        return failed(`oracle: ${e}\n`);
+    }
+    let log = `-Dgale.probe.log=${reached}`;
+    let mut outs: List<ByteList> = [];
+    for let polarity of ["true", "false"] {
+        // A failed run still reports what it printed.
+        let out: ByteList = match testrig([`-Dgale.probe.predicate=${polarity}`, log]) {
+            Ok(out) => out.stdout,
+            Err(_) => [],
+        };
+        outs.push(out);
+    }
+    let name = request.grammar.name;
+    let super_class = request.grammar.super_class.unwrap();
+    let mut report = `oracle: --probe-super report for ${name} against a synthesized ${super_class}.
+oracle: NOT an oracle — ${super_class} may also override inherited methods
+oracle: the grammar never names, which this stub does not have.
+`;
+    let members = sorted_unique(match fs::read_to_string(&reached) {
+        Ok(text) => text.lines().map(|l| l.to_string()).collect(),
+        Err(_) => [],
+    });
+    if members.is_empty() {
+        report.push_str("oracle: base-class members this input reached: none\n");
+    } else {
+        report.push_str("oracle: base-class members this input reached:\n");
+        for let m of members {
+            report.push_str(`oracle:   ${m}\n`);
+        }
+    }
+    let when_true = String::from_utf8_lossy(&outs[0]);
+    if outs[0] == outs[1] {
+        report.push_str("oracle: same answer under both predicate polarities:\n");
+        report.push_str(prefixed(&when_true, "oracle:   "));
+    } else {
+        report.push_str("oracle: with every predicate true:\n");
+        report.push_str(prefixed(&when_true, "oracle:   "));
+        report.push_str("oracle: with every predicate false:\n");
+        report.push_str(prefixed(&String::from_utf8_lossy(&outs[1]), "oracle:   "));
+    }
+    report.push_str(`oracle: to pin any of this, write ${super_class}.java and pass --super.\n`);
+    return Ran { code: 3, stdout: [], stderr: report };
+}
+
+fn sorted_unique(items: List<String>) -> List<String> {
+    let mut out: List<String> = [];
+    for let item of items.sorted() {
+        if out.is_empty() || out[out.len() - 1] != item {
+            out.push(item);
+        }
+    }
+    return out;
+}
+
+/// Where each `this.<name>(` in `text` starts, and where its `(` is.
+fn member_call_sites(text: &String) -> List<[i32, i32]> {
+    let mut out: List<[i32, i32]> = [];
+    let mut from = 0;
+    while let Some(at) = find_from(text, "this.", from) {
+        from = at + 1;
+        let name = ident_at(text, at + 5);
+        let open = at + 5 + name.len();
+        if !name.is_empty() && open < text.len() && text.byte_at(open) == b'(' {
+            out.push([at, open]);
+        }
+    }
+    return out;
+}
+
+/// Every `this.<name>(` in `text`, as written.
+fn member_refs(text: &String) -> List<String> {
+    return member_call_sites(text).into_iter().map(|site| text.substr_bytes(site.0, site.1 + 1)).collect();
+}
+
+/// Every `this.<name>(<args>)` whose argument list holds no parenthesis.
+fn member_calls(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    for let [at, open] of member_call_sites(text) {
+        let mut close = open + 1;
+        while close < text.len() && text.byte_at(close) != b'(' && text.byte_at(close) != b')' {
+            close += 1;
+        }
+        if close < text.len() && text.byte_at(close) == b')' {
+            out.push(text.substr_bytes(at, close + 1));
+        }
+    }
+    return out;
+}
+
+/// The members a `{ ... }?` predicate with no nested braces names. A
+/// predicate whose Java spans braces is missed and lands among the actions,
+/// where javac rejects it as a void expression: visibly wrong beats silently
+/// boolean.
+fn predicate_refs(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    let mut from = 0;
+    while let Some(open) = find_from(text, "{", from) {
+        from = open + 1;
+        let mut close = open + 1;
+        while close < text.len() && text.byte_at(close) != b'{' && text.byte_at(close) != b'}' {
+            close += 1;
+        }
+        if close >= text.len() || text.byte_at(close) != b'}' {
+            continue;
+        }
+        let question = skip_spaces(text, close + 1);
+        if question < text.len() && text.byte_at(question) == b'?' {
+            for let name of member_refs(&text.substr_bytes(open, close + 1)) {
+                out.push(name);
+            }
+            from = question + 1;
+        }
+    }
+    return out;
+}
+
+/// The Java type of a literal at a call site. Only literals occur in the
+/// corpus; anything else stays `Object` and surfaces as a javac error rather
+/// than a silently wrong signature.
+fn literal_type(arg: String) -> String {
+    if arg.starts_with("\"") {
+        return "String";
+    }
+    if arg.starts_with("'") {
+        return "char";
+    }
+    if arg == "true" || arg == "false" {
+        return "boolean";
+    }
+    let digits = match arg.strip_prefix("-") {
+        Some(rest) => rest.to_string(),
+        None => arg,
+    };
+    if !digits.is_empty() && digits.byte_at(0).is_ascii_digit() {
+        return "int";
+    }
+    return "Object";
+}
+
+/// `name|params` for a `this.name(args)` call. Two calls differing only in
+/// their literals (`n("get")`, `n("set")`) give one signature, since emitting
+/// both would be a duplicate method.
+fn probe_signature(call: String) -> String {
+    let open = call.find("(").unwrap();
+    let name = call.substr_bytes(5, open);
+    let arguments = call.substr_bytes(open + 1, call.len() - 1).trim().to_string();
+    let mut params = "";
+    if !arguments.is_empty() {
+        let mut n = 0;
+        for let part of arguments.split(",") {
+            n += 1;
+            if n > 1 {
+                params.push_str(", ");
+            }
+            params.push_str(`${literal_type(part.trim().to_string())} a${n}`);
+        }
+    }
+    return `${name}|${params}`;
+}
+
+/// A stub base class: predicates answer a constant and actions do nothing.
+/// Predicates and actions alike record to `-Dgale.probe.log`: a name used in
+/// both roles is stubbed boolean, so without that its action side would run
+/// unrecorded.
+fn probe_super_source(grammar: &String, super_class: String) -> Result<String, String> {
+    let flat = grammar.replace("\n", " ");
+    let calls = sorted_unique(member_calls(&flat));
+    let predicates = sorted_unique(predicate_refs(&flat));
+    // `member_calls` takes no argument list with nested parentheses, so a call
+    // like `this.f(getText())` has a name and no signature. Say so here rather
+    // than let javac report a missing symbol.
+    for let name of sorted_unique(member_refs(&flat)) {
+        if !calls.into_iter().any(|c: String| c.starts_with(&name)) {
+            return Err(
+                `oracle: cannot infer a signature for ${name}...) — its argument\noracle: list is not a plain literal. Supply the base class with --super.\n`,
+            );
+        }
+    }
+    let [super_type, ctor_param] = if declares_lexer_grammar(grammar) {
+        ["Lexer", "CharStream"];
+    } else {
+        ["Parser", "TokenStream"];
+    };
+    let mut out = `// Generated by antlr4_oracle.wado --probe-super. NOT a port of any real
+// base class: predicates answer a constant and actions do nothing.
+import org.antlr.v4.runtime.*;
+
+public abstract class ${super_class} extends ${super_type} {
+    private static final boolean PRED =
+        Boolean.parseBoolean(System.getProperty("gale.probe.predicate", "true"));
+
+    public ${super_class}(${ctor_param} input) { super(input); }
+
+    private static void mark(String name) {
+        String path = System.getProperty("gale.probe.log");
+        if (path == null) return;
+        try (java.io.Writer w = new java.io.FileWriter(path, true)) {
+            w.write(name);
+            w.write('\\n');
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+`;
+    for let signature of sorted_unique(calls.into_iter().map(|c| probe_signature(c)).collect()) {
+        let [name, params] = signature.split_once("|").unwrap();
+        out.push_str("\n");
+        if predicates.contains(&`this.${name}(`) {
+            out.push_str(`    public boolean ${name}(${params}) { mark("${name}"); return PRED; }\n`);
+        } else {
+            out.push_str(`    public void ${name}(${params}) { mark("${name}"); }\n`);
+        }
+    }
+    out.push_str("}\n");
+    return Ok(out);
+}
+
+fn read_stdin() -> ByteList with Stdin {
+    let [rx, done] = Stdin::read_via_stream();
+    let bytes = rx.read_to_end_bytes();
+    rx.drop();
+    done.drop();
+    return bytes;
+}
+
+export fn run() with (Stdout, Stderr, Stdin, Environment, Preopens, Exit, Process, SystemClock, Random) {
+    let request = match parse_request(args()) {
+        Ok(request) => request,
+        Err(message) => {
+            eprint(message);
+            exit(1);
+        },
+    };
+    let jar = jar_or_exit(env("ANTLR4_VERSION"));
+    let ran = run_request(&jar, &request, &read_stdin(), env("ORACLE_KEEP") == Some("1"));
+    eprint(ran.stderr);
+    print_bytes(ran.stdout as List<u8>);
+    exit(ran.code);
+}

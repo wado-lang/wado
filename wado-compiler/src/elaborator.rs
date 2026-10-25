@@ -636,13 +636,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        if let Some(alias) = self.lookup_newtype_of_decl(*def) {
-            return Some(self.tysys.peeled_base(alias));
+        let newtype = self.newtype_self_type(*def)?;
+        Some(self.tysys.peeled_base(newtype))
+    }
+
+    /// The type the newtype or alias `def` declares, a generic one applied to
+    /// its own parameters.
+    pub(super) fn newtype_self_type(&mut self, def: DefId) -> Option<tir::TypeId> {
+        if let Some(alias) = self.lookup_newtype_of_decl(def) {
+            return Some(alias);
         }
-        // A generic newtype declares no one type. Its instance over its own
-        // parameters reaches the base's head, which is all a key reads.
         let names: Vec<String> = self
-            .lookup_generic_newtype_of_decl(*def)?
+            .lookup_generic_newtype_of_decl(def)?
             .type_params
             .iter()
             .map(|p| p.name.clone())
@@ -657,21 +662,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .make_type_param(name, index)
             })
             .collect();
-        let instance = self.generic_newtype_instance(*def, params);
-        Some(self.tysys.peeled_base(instance))
+        Some(self.generic_newtype_instance(def, params))
     }
 
-    /// The base a newtype receiver wraps: the key its impls answer at, and the
-    /// name it answers under. The declaration first, since a namespaced
-    /// `lib::Q::twice()` leaves the caller's frame no `Q` to look one up by.
+    /// The base the newtype `key` declares wraps: the key its impls answer at,
+    /// and the name it answers under.
     pub(super) fn newtype_base_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-        receiver_name: &str,
     ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let (base, base_name) = self
-            .newtype_base_of(key)
-            .or_else(|| self.newtype_base(receiver_name))?;
+        let (base, base_name) = self.newtype_base_of(key)?;
         let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
         Some((base_key, base_name))
     }
@@ -1256,15 +1256,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
-        let withheld = if on_bound == OnBoundTrait::Ord {
-            self.tysys.ord_withheld_note(target_type_id)
-        } else if on_bound == OnBoundTrait::Default {
+        let withheld = if on_bound == OnBoundTrait::Default {
             Some(
                 self.tysys
                     .default_withheld_note(&self.type_lookup(), target_type_id),
             )
         } else {
-            None
+            self.tysys
+                .comparison_withheld_note(on_bound, target_type_id)
         };
         if let Some(why) = withheld {
             let _ = self.emit(types::TypeError::MarkerWithheld {

@@ -1,0 +1,65 @@
+// A written `eq` or `cmp` withholds the derived `Hash`, and a newtype's base
+// lends none: the comparison may equate values whose members differ, which a
+// hash fed from the members would tell apart. `hash` must be written beside it.
+
+use { HashSet } from "core:collections";
+
+struct Tagged {
+    id: i32,
+    note: String,
+}
+
+impl Eq for Tagged {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
+    }
+}
+
+impl Hash for Tagged;
+
+struct Ranked {
+    score: i32,
+    name: String,
+}
+
+impl Ord for Ranked {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.score.cmp(&other.score);
+    }
+}
+
+type Name = String;
+
+impl Eq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        return self.len() == other.len();
+    }
+}
+
+type Relabeled = Name;
+
+struct Sink {}
+
+impl Hasher for Sink {
+    fn write_u64(&mut self, x: u64) {}
+
+    fn write_bytes(&mut self, bytes: ByteSlice) {}
+}
+
+test {
+    let a = HashSet::<Ranked>::new();
+    let b = HashSet::<Name>::new();
+    let c = HashSet::<Relabeled>::new();
+    ("ab" as Name).hash(&mut Sink {});
+}
+
+__DATA__
+{
+    "compile_error": ":18:1: analysis error: cannot derive `Hash` for `Tagged`: `Tagged` writes `eq`, so no `Hash` is derived for it; write `hash` beside it",
+    "compile_errors_contains": [
+        "type 'Ranked' does not implement trait 'Hash' required by bound on 'T'\n  note: `Ranked` writes `cmp`, so no `Hash` is derived for it; write `hash` beside it",
+        "type 'Name' does not implement trait 'Hash' required by bound on 'T'\n  note: `Name` writes `eq`",
+        "type 'Relabeled' does not implement trait 'Hash' required by bound on 'T'\n  note: `Name` writes `eq`",
+        "no method 'hash' found on type 'Name'; `Name` writes `eq`"
+    ]
+}

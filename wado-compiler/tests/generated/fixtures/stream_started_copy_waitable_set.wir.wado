@@ -3409,8 +3409,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
 fn "core:prelude/array.wado/Array<core:prelude/types.wado/Ready<core:prelude/types.wado/ReadCopy<u8>>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self, index, value) {
     let $load_0: ref null "core:prelude/types.wado//ReadCopy<u8>";
     let $moved_3: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>";
-    let $leaf_10: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>";
-    let $leaf_11: ref "core:prelude/types.wado//ReadyEvent";
     $moved_3 = value;
     value = ref.null none;
     if ref.is_null(local.tee value(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/ReadCopy<u8>>">(self, index))) {
@@ -3420,19 +3418,8 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Ready<core:prelude/typ
             "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($load_0);
         }
         value.member = ref.null none;
-        let $slot_box_1: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>";
-        $leaf_10 = (if ref.is_null(local.tee $slot_box_1($moved_3.member.copy)) -> ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>" {
-            ref.null none;
-        } else {
-            $slot_box_1.value;
-        });
-        $leaf_11 = $moved_3.event;
-        if ref.is_null(local.tee $slot_box_1(local.tee $load_0(value.member).copy)) {
-            $load_0.copy = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>" { value: $leaf_10 };
-        } else {
-            $slot_box_1.value = $leaf_10;
-        }
-        value.event = $leaf_11;
+        value.member = $moved_3.member;
+        value.event = $moved_3.event;
         $moved_3.member = ref.null none;
     }
 }
@@ -3477,9 +3464,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     self.used = $load_1 - 1;
     $arg_14 = local.tee $load_1(self.used) + 1;
     $arg_13 = $load_1;
-    b357: block {
-        l358: loop {
-            break_if b357 $arg_13 >= $arg_14;
+    b355: block {
+        l356: loop {
+            break_if b355 $arg_13 >= $arg_14;
             if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<stream_started_copy_waitable_set.wado/Pipe>">($load_0, $arg_13))) == 0 {
                 if ref.is_null((if ref.is_null(local.tee $load_3($slot_20.member)) -> ref null "stream_started_copy_waitable_set.wado//Pipe" {
                     ref.null none;
@@ -3505,7 +3492,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
                 }
             }
             $arg_13 = $arg_13 + 1;
-            continue l358;
+            continue l356;
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//Ready<stream_started_copy_waitable_set.wado/Pipe>">($load_0, $load_1, ref.null none);
@@ -3638,9 +3625,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<stream_started_copy_waita
     self.used = $load_2 - 1;
     $arg_14 = local.tee $load_2(self.used) + 1;
     $arg_13 = $load_2;
-    b380: block {
-        l381: loop {
-            break_if b380 $arg_13 >= $arg_14;
+    b378: block {
+        l379: loop {
+            break_if b378 $arg_13 >= $arg_14;
             if ref.is_null(local.tee $slot_20((if ref.is_null(local.tee $slot_box_1(builtin::array_get_value<ref null "core:prelude/types.wado//Box<stream_started_copy_waitable_set.wado/Pipe>">($load_0, $arg_13))) -> ref null "stream_started_copy_waitable_set.wado//Pipe" {
                 ref.null none;
             } else {
@@ -3653,7 +3640,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<stream_started_copy_waita
                 }
             }
             $arg_13 = $arg_13 + 1;
-            continue l381;
+            continue l379;
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//Box<stream_started_copy_waitable_set.wado/Pipe>">($load_0, $load_2, ref.null none);
@@ -3699,12 +3686,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b387: block {
-        l388: loop {
-            break_if b387 i >= n;
+    b385: block {
+        l386: loop {
+            break_if b385 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l388;
+            continue l386;
         };
     };
 }
@@ -3881,16 +3868,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
     arr = f.buf.repr;
     self = is_negative + self;
-    b422: block {
-        l423: loop {
-            break_if b422 (self - is_negative) < 2;
+    b420: block {
+        l421: loop {
+            break_if b420 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
             self = self - 2;
             x = q;
-            continue l423;
+            continue l421;
         };
     };
     if self > is_negative {
@@ -4139,9 +4126,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_20 = self.buf;
         $load_2 = 0;
-        b465: block {
-            l466: loop {
-                break_if b465 $load_2 >= sign_len;
+        b463: block {
+            l464: loop {
+                break_if b463 $load_2 >= sign_len;
                 if @unlikely(local.tee start_26(self_20.used + 1) > builtin::array_len(self_20.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_20, start_26);
@@ -4150,7 +4137,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_20.used = start_26;
                 builtin::array_set_u8(self_20.repr, new_used_25, 48);
                 $load_2 = $load_2 + 1;
-                continue l466;
+                continue l464;
             };
         };
         if @unlikely(local.tee $load_2(local.tee self_20(self.buf).used + digit_count) > builtin::array_len(self_20.repr)) {
@@ -4193,12 +4180,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         $load_2 = self.fill;
         i_220 = 0;
-        b476: block {
-            l477: loop {
-                break_if b476 i_220 >= sign_len;
+        b474: block {
+            l475: loop {
+                break_if b474 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, $load_2);
                 i_220 = i_220 + 1;
-                continue l477;
+                continue l475;
             };
         };
         return start_26;
@@ -4208,12 +4195,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b479: block {
-            l480: loop {
-                break_if b479 $load_2 >= new_used_25;
+        b477: block {
+            l478: loop {
+                break_if b477 $load_2 >= new_used_25;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, i_220);
                 $load_2 = $load_2 + 1;
-                continue l480;
+                continue l478;
             };
         };
         if is_negative {
@@ -4247,12 +4234,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         i_220 = self.fill;
         $load_2 = 0;
-        b487: block {
-            l488: loop {
-                break_if b487 $load_2 >= start_26;
+        b485: block {
+            l486: loop {
+                break_if b485 $load_2 >= start_26;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, i_220);
                 $load_2 = $load_2 + 1;
-                continue l488;
+                continue l486;
             };
         };
         return new_used_25;
@@ -4260,12 +4247,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_20 = self.buf;
         new_used_25 = self.fill;
         i_220 = 0;
-        b489: block {
-            l490: loop {
-                break_if b489 i_220 >= sign_len;
+        b487: block {
+            l488: loop {
+                break_if b487 i_220 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_20, new_used_25);
                 i_220 = i_220 + 1;
-                continue l490;
+                continue l488;
             };
         };
         if is_negative {
@@ -4342,9 +4329,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<stream_started_c
         end = self.used;
         $sroa_$iter_0_repr_24 = self.repr;
         $sroa_$iter_0_index_25 = 0;
-        b498: block {
-            l499: loop {
-                break_if b498 $sroa_$iter_0_index_25 >= end;
+        b496: block {
+            l497: loop {
+                break_if b496 $sroa_$iter_0_index_25 >= end;
                 ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//Box<stream_started_copy_waitable_set.wado/Pipe>">($sroa_$iter_0_repr_24, $sroa_$iter_0_index_25);
                 $sroa_$iter_0_index_25 = $sroa_$iter_0_index_25 + 1;
                 $vr_7 = (if ref.test "stream_started_copy_waitable_set.wado//Pipe::Bytes"(local.tee self_42(ref_val.value)) -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>, core:prelude/types.wado/Option<core:prelude/types.wado/ReadyEvent>]" {
@@ -4404,7 +4391,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<stream_started_c
                     break $inline_core_prelude_types_wado_WaitableSet_stream_started_copy_waitable_set_wado_Pipe___member_at_sroa_self_members__0: at_29;
                 }
                 at_29 = at_29 + 1;
-                continue l499;
+                continue l497;
             };
         };
         cold_path;

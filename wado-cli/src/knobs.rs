@@ -298,6 +298,7 @@ pub enum RuntimeKnobOpt {
     GcHeapInitial,
     ReportFuel,
     DenyProcess,
+    ProcessRead,
 }
 
 impl RuntimeKnobOpt {
@@ -306,6 +307,7 @@ impl RuntimeKnobOpt {
         Self::GcHeapInitial,
         Self::ReportFuel,
         Self::DenyProcess,
+        Self::ProcessRead,
     ];
 
     #[must_use]
@@ -335,19 +337,26 @@ impl RuntimeKnobOpt {
                 value: None,
                 desc: "Turn off core:process: the guest may not spawn a host program,\neven one confined to its own grants",
             },
+            Self::ProcessRead => OptSpec {
+                long: Some("process-read"),
+                short: None,
+                value: Some("<path>"),
+                desc: "Let a child the guest spawns read and execute <path>, beyond\nthe guest's grants and the system baseline (a toolchain under\nHOME, say). Repeatable; the guest itself gains nothing.\n`[process] read` in ~/.config/wado/config.toml adds the same",
+            },
         }
     }
 }
 
 /// Every knob a guest-hosting subcommand parses and forwards to the wasmtime
 /// engine.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct RuntimeKnobs {
     pub collector: wasmtime::Collector,
     pub gc_heap_initial_size: u64,
     /// `--report-fuel`: meter the guest in fuel and report what it spent.
     pub report_fuel: bool,
-    /// `--deny-process`: whether a guest may spawn.
+    /// `--deny-process` / `--process-read`: whether a guest may spawn, and
+    /// what its children may read beyond its grants.
     pub process: ProcessGrant,
 }
 
@@ -357,7 +366,7 @@ impl Default for RuntimeKnobs {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
             report_fuel: false,
-            process: ProcessGrant::Offered,
+            process: ProcessGrant::Offered { read: Vec::new() },
         }
     }
 }
@@ -375,10 +384,32 @@ impl RuntimeKnobs {
                     parse_gc_heap_size(&args::require_string(parser)?).map_err(CliExit::error)?;
             }
             RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
-            RuntimeKnobOpt::DenyProcess => self.process = ProcessGrant::Denied,
+            RuntimeKnobOpt::DenyProcess => match &self.process {
+                ProcessGrant::Offered { read } if read.is_empty() => {
+                    self.process = ProcessGrant::Denied;
+                }
+                ProcessGrant::Offered { .. } => return Err(process_read_with_deny()),
+                ProcessGrant::Denied => {}
+            },
+            RuntimeKnobOpt::ProcessRead => {
+                let path = args::require_string(parser)?;
+                let ProcessGrant::Offered { read } = &mut self.process else {
+                    return Err(process_read_with_deny());
+                };
+                // Resolved here, so a symlink the child would follow names the
+                // tree the rule opens, and a typo fails before the guest runs.
+                read.push(
+                    std::fs::canonicalize(&path)
+                        .map_err(|e| CliExit::error(format!("--process-read {path}: {e}")))?,
+                );
+            }
         }
         Ok(())
     }
+}
+
+fn process_read_with_deny() -> CliExit {
+    CliExit::error("--process-read opens a path to a spawned child, which --deny-process forbids")
 }
 
 /// Whether a custom section is embedded in the output component. `Auto` follows

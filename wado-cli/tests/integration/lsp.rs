@@ -1,7 +1,7 @@
 //! Integration tests for `wado lsp` and `wado query` subcommands.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -10,7 +10,7 @@ use std::time::Duration;
 use predicates::prelude::*;
 use serde_json::{Value, json};
 
-use crate::common::{project_root, wado, wado_bin, wado_in};
+use crate::common::{project_root, wado, wado_in, wado_process};
 
 /// Cap on `read_message` so a regression that stops the LSP from
 /// responding fails the test in seconds rather than hanging until the
@@ -81,9 +81,8 @@ impl LspSession {
     }
 
     fn start_with_env(env: &[(&str, &std::path::Path)]) -> Self {
-        let mut child = Command::new(wado_bin())
+        let mut child = wado_process(&project_root())
             .args(["lsp"])
-            .current_dir(project_root())
             .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

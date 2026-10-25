@@ -5,6 +5,7 @@
 
 use { generated, program_over, ran, tensor_of } from "./oracle.wado";
 use { read } from "lib:loam/src/onnx_proto.wado";
+use text from "lib:loam/src/onnx_text.wado";
 use { LayoutRule, Schema } from "lib:loam/src/schema.wado";
 
 fn rule(pattern: String, axes: List<String>) -> LayoutRule {
@@ -50,4 +51,86 @@ test "MNIST-12 fused computes what it computes unfused, bit for bit" {
     let fused = mnist_logits(true);
     assert fused.split(",").count() == 10;
     assert fused == mnist_logits(false);
+}
+
+/// The source `gated.onnxtext` generates with `fuse` as given.
+fn gated_source(fuse: bool) -> String {
+    let graph = text::read(#include_str("./gated.onnxtext")).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("X", ["Batch", "Seq", "Embed"]),
+            rule("W", ["Embed"]),
+            rule("G", ["Embed", "Inner"]),
+            rule("U", ["Embed", "Inner"]),
+            rule("D", ["Inner", "Embed"]),
+        ],
+    };
+    return generated(&graph, &schema, fuse).unwrap();
+}
+
+/// The bits of what `gated.onnxtext` computes, built with `fuse` as given.
+fn gated_bits(fuse: bool) -> String {
+    return ran(`${program_over(&gated_source(fuse))}
+export fn run() with Stdout {
+    let mut cpu = Cpu {};
+    let weights = Prepared::embedded(&mut cpu);
+    let got = forward(&mut cpu, &Tensor { data: [0.5, -1.0, 2.0, 0.25, -0.75, 1.5], extents: [1, 3, 2] }, &weights);
+    let data: List<String> = got.data.into_iter().map(|v| \`\${v.to_bits()}\`).collect();
+    println(data.join(","));
+}
+`);
+}
+
+test "a gated layer's two products of one normalized input pair, its normalization their prologue, and compute what they compute apart, bit for bit" {
+    let source = gated_source(true);
+    assert source.contains("backend.keep_rhs_paired(");
+    assert source.contains("backend.matmul_rhs_paired_from(Prologue {");
+    let fused = gated_bits(true);
+    assert fused.split(",").count() == 6;
+    assert fused == gated_bits(false);
+}
+
+/// The source `projected.onnxtext` generates with `fuse` as given.
+fn projected_source(fuse: bool) -> String {
+    let graph = text::read(#include_str("./projected.onnxtext")).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("X", ["Batch", "Seq", "Embed"]),
+            rule("W", ["Embed"]),
+            rule("A", ["Embed", "Query"]),
+            rule("B", ["Embed", "Key"]),
+            rule("C", ["Embed", "Value"]),
+        ],
+    };
+    return generated(&graph, &schema, fuse).unwrap();
+}
+
+/// The bits of what `projected.onnxtext` computes, built with `fuse` as given.
+fn projected_bits(fuse: bool) -> String {
+    return ran(`${program_over(&projected_source(fuse))}
+export fn run() with Stdout {
+    let mut cpu = Cpu {};
+    let weights = Prepared::embedded(&mut cpu);
+    let got = forward(&mut cpu, &Tensor { data: [0.5, -1.0, 2.0, 0.25, -0.75, 1.5], extents: [1, 3, 2] }, &weights);
+    let mut data: List<String> = [];
+    for let t of [got.Y.data, got.K.data, got.Z.data] {
+        for let v of t {
+            data.push(\`\${v.to_bits()}\`);
+        }
+    }
+    println(data.join(","));
+}
+`);
+}
+
+test "three products of one normalized input are one product, its normalization their prologue, and compute what they compute apart, bit for bit" {
+    let source = projected_source(true);
+    assert source.contains("backend.keep_rhs(&Columns::of(");
+    // Two parts after the first, in `Weights::prepare` and `Prepared::embedded`.
+    assert source.split(".then(").count() == 5;
+    assert source.contains("backend.matmul_rhs_from(Prologue {");
+    assert source.split("matmul_rhs").count() == 2;
+    let fused = projected_bits(true);
+    assert fused.split(",").count() == 21;
+    assert fused == projected_bits(false);
 }

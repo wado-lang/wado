@@ -20,7 +20,7 @@ use wado_compiler::hashmap::IndexMap;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 use wado_lsp::host::read_prefix;
 
-use crate::fingerprint::Input;
+use crate::fingerprint::{Input, InputKey};
 use wado_host::kiln::component_cache::ComponentCache;
 use wado_host::kiln::driver::ResolvedGenerator;
 use wado_host::sync::lock;
@@ -127,8 +127,16 @@ impl RunCache {
         self.record(path, None, Some(hash));
     }
 
-    /// Record a read no file describes, such as an environment variable, so
-    /// the scope's reads cannot vouch for its outcome.
+    /// Record that the environment variable `name` held `value`.
+    pub fn observe_env(&self, name: &str, value: Option<&str>) {
+        self.record_input(Input::Env {
+            env: name.to_owned(),
+            value: value.map(str::to_owned),
+        });
+    }
+
+    /// Record a read no input describes, such as a source that failed to load,
+    /// so the scope's reads cannot vouch for its outcome.
     pub fn observe_untracked(&self) {
         if let Some(log) = &self.reads {
             log.untracked.store(true, Ordering::Relaxed);
@@ -147,14 +155,12 @@ impl RunCache {
 
     fn record_input(&self, input: Input) {
         if let Some(log) = &self.reads {
-            lock(&log.inputs)
-                .entry((input.path.clone(), input.prefix))
-                .or_insert(input);
+            lock(&log.inputs).entry(input.key()).or_insert(input);
         }
     }
 
     /// What was read through this view, or `None` where something it read is
-    /// not a file, or the view is not [`Self::scoped`].
+    /// untracked, or the view is not [`Self::scoped`].
     #[must_use]
     pub(crate) fn reads(&self) -> Option<Vec<Input>> {
         let log = self.reads.as_ref()?;
@@ -182,7 +188,7 @@ impl RunCache {
 /// The reads of one [`RunCache::scoped`] view.
 #[derive(Default)]
 struct ReadLog {
-    inputs: Mutex<IndexMap<(PathBuf, Option<u64>), Input>>,
+    inputs: Mutex<IndexMap<InputKey, Input>>,
     untracked: AtomicBool,
 }
 

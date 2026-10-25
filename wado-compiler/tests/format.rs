@@ -232,6 +232,24 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// A path through a namespace import to an interface's type prints back whole,
+/// in a type, a literal and a pattern.
+#[test]
+fn test_format_keeps_interface_type_paths() {
+    let source = concat!(
+        "fn x_of(p: comp::Geo::Point) -> u32 {\n",
+        "    let comp::Geo::Point { x } = comp::Geo::Point { x: 1 };\n",
+        "    return match comp::Geo::Shape::Dot {\n",
+        "        comp::Geo::Shape::Circle(r) => r,\n",
+        "        comp::Geo::Shape::Dot => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A string outside an expression keeps its escapes as written, as an
 /// expression's string literal does, though the compiler reads its value.
 #[test]
@@ -3153,6 +3171,30 @@ fn run() {
     // Should be idempotent
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_let_chain_multiline() {
+    let source = r"
+fn run() {
+    if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    let expected = r"fn run() {
+    if let Some(transposed) = uses.right.get(vi.name)
+        && !uses.elsewhere.contains(vi.name)
+        && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
 }
 
 // ============================================================

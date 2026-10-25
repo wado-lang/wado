@@ -694,14 +694,47 @@ impl TypeSystem {
         base_type: TypeId,
         newtype: TypeId,
     ) -> TypeId {
+        self.substitute_in_type(type_id, &|t| (t == base_type).then_some(newtype))
+    }
+
+    /// `type_id` with every instance of the newtype `def` replaced by the base
+    /// that instance wraps, so `Same<i32>` reads as `Wrap<i32>` whatever
+    /// arguments the newtype was resolved at elsewhere.
+    pub(crate) fn unwrap_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
+        self.substitute_in_type(type_id, &|t| match self.type_table.borrow().get(t) {
+            ResolvedType::Newtype {
+                def: of, base_type, ..
+            } if *of == def => Some(*base_type),
+            _ => None,
+        })
+    }
+
+    /// [`Self::unwrap_newtype_in_type`] down to the end of each instance's
+    /// newtype chain, which a chain's first base is not.
+    pub(crate) fn represent_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
+        self.substitute_in_type(type_id, &|t| {
+            let table = self.type_table.borrow();
+            match table.get(t) {
+                ResolvedType::Newtype { def: of, .. } if *of == def => {
+                    Some(table.representation_head(t))
+                }
+                _ => None,
+            }
+        })
+    }
+
+    fn substitute_in_type(
+        &self,
+        type_id: TypeId,
+        replace: &impl Fn(TypeId) -> Option<TypeId>,
+    ) -> TypeId {
+        if let Some(replaced) = replace(type_id) {
+            return replaced;
+        }
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
-            // Direct match: base type -> newtype
-            _ if type_id == base_type => newtype,
-
-            // Reference: substitute the inner type
             ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                let new_inner = self.substitute_in_type(inner, replace);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -711,7 +744,7 @@ impl TypeSystem {
                 }
             }
             ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                let new_inner = self.substitute_in_type(inner, replace);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -725,7 +758,7 @@ impl TypeSystem {
             ResolvedType::GenericInstance { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
+                    .map(|&arg| self.substitute_in_type(arg, replace))
                     .collect();
                 if new_args == type_args {
                     type_id

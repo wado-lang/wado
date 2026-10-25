@@ -121,7 +121,8 @@ lock. Each backend fits the confinement into that rule without re-executing
 - macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`,
   which does not fork. `sandbox_init` compiles the profile and allocates, so it
   runs in `sandbox-exec`, a single-threaded process of its own, which then execs
-  the program.
+  the program. Its manual page marks it deprecated, but macOS still ships it,
+  much software depends on it, and nothing public does what it does.
 
 Landlock takes each rule as a descriptor rather than a path. The rules for the
 guest's grants come from the descriptors of its preopens, which the host already
@@ -212,30 +213,51 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                         | Linux                                                    | macOS                                 |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries     | `/lib*`, `/etc/ld.so.cache`                              | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs              | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`             | `/private/etc/…`, mDNSResponder       |
-| TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                   | `/private/etc/ssl`, the keychain      |
-| Locale and time zones           | `/usr/share/zoneinfo`, locale data                       | the same                              |
-| Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
-| Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
+| Purpose                        | Linux                                                    | macOS                                 |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
+| Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
+| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
+| System configuration           | `/etc`, name resolution and TLS certificates among it    | `/private/etc`, the keychain          |
+| Name resolution (network only) | nothing beyond `/etc`                                    | mDNSResponder                         |
+| Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
+| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
+| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
-  outside the grants runs only from a path the user adds to the baseline, such
-  as `~/.cargo/bin`.
+  outside the grants runs only from a path the user adds, such as `~/.cargo`.
+  Such a path is read and execute only, and it is opened to every child and
+  never to the guest. The user adds one in two places:
+  - `--process-read <path>` (`run`, `serve`, `test`). It is resolved through
+    its symlinks when `wado` starts, so a path that names no file fails there.
+  - `read` under `[process]` in the user config (`$XDG_CONFIG_HOME/wado/config.toml`,
+    else `~/.config/wado/config.toml`), for a toolchain every run needs, such
+    as `~/.local/share/mise/installs`. An entry is absolute or starts with
+    `~/`, and is resolved at the first spawn. An entry that names no file on
+    this machine warns and is skipped, so one file can serve several machines.
+    The file is ignored whole, with a warning, when another user could have
+    written it: it is owned by someone other than the user or root, or every
+    user can write it. Group write is allowed, since under the user private
+    groups most Linux distributions use, a file the user writes is `664` and
+    the group holds the user alone.
+
+  A manifest never adds one: it is the project's content, and a grant the
+  project could widen would reach past what its own code is given. The user
+  config is the user's own file, so no project reaches it.
 - The real `HOME` is never in the baseline. A child sees it only through an
   explicit grant, so `~/.ssh` stays out of reach by default.
 - No UNIX socket named by a path is open, except mDNSResponder's on macOS, where
   name resolution goes through it. A socket such as D-Bus is a path to a
   privileged service. On Linux, glibc resolves through `resolv.conf` without
   one.
-- With the network not granted, the name resolution and TLS rows drop out.
+- `/etc` is open whole. A toolchain reads its settings there (a JDK's
+  `java.security` lives in `/etc/java-*`), and what it holds is the system's,
+  readable by every user. A secret under it, such as `/etc/shadow` or an SSH
+  host key, is readable by root alone, which the guest's user is not.
+- With the network not granted, mDNSResponder's socket drops out.
 
 ### Grants
 
@@ -447,38 +469,48 @@ cannot be taken back.
   path.
 - [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
   `status` and `read`, with its stdlib reference and a cheatsheet entry.
+- [ ] Bounded resources. A child can run many children, use memory and CPU
+  without bound, and fork without limit. Done when a child that tries any of
+  these is stopped at a limit the host sets.
+- [ ] A compile-time answer for a world that cannot spawn. A component that
+  spawns imports `core:process`, which no WASI world defines, so only the
+  `wado` host instantiates it, and nothing at compile time says so: an effect
+  the selected world does not import is imported all the same
+  ([Worlds](./spec-worlds.md)). Done when compiling such a component reports
+  it.
+- [ ] The remaining CLI surface: a flag that grants the real `HOME`, and the
+  option that sets the grace period, which stays at 3 seconds until it is.
+  Done when both are named and documented.
+- [ ] `core:process` in the compiler's e2e harness. It does not link the
+  interface, so a fixture cannot spawn; the stdlib's own tests cover it under
+  `wado test`. Done when a fixture can spawn.
+- [ ] Spawning under a guest directory granted at a different host path, which
+  turns spawning off. Done when the child sees the guest's view of it.
 - [ ] Filtering the network per host through a proxy, for the guest and the
   child together.
-- [ ] WSL2: confirm the Landlock ABI its kernel offers. Done when the escape
-  tests pass under WSL2.
 
 ## Known gaps
 
-- The CLI surface is not named: a flag that adds read paths to the baseline (a
-  toolchain under `~/.cargo`, say), a flag that grants the real `HOME`, and the
-  option that sets the grace period, which stays at 3 seconds until it is.
-- The compiler's e2e harness does not link `core:process`, so a fixture cannot
-  spawn; the stdlib's own tests cover it under `wado test`.
-- A component that spawns imports `core:process`, which no WASI world defines,
-  so only the `wado` host instantiates it. Nothing at compile time says so: an
-  effect the selected world does not import is imported all the same
-  ([Worlds](./spec-worlds.md)).
-- Resources are unlimited. A child can run many children, use memory and CPU
-  without bound, and fork without limit. How many children may run at once,
-  rlimits and cgroups are all open.
+- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
+  inherited terminal or none.
+- On macOS, whether a child can change the mode of an inherited terminal is
+  untested. The profile allows no `file-ioctl`, and `tcsetattr` is an `ioctl`,
+  so a full-screen editor under `inherit_stdio` may fail there.
+
+- WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
+  tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:
+  availability answers `unsupported`, and nothing spawns.
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
   outside its grants exists, and its metadata. Seatbelt hides it but for the
   directories above a grant, which resolving a path stats, and the `/var` link,
   which dyld stats.
-- A guest directory granted under a different host path turns spawning off, even
-  where a mount namespace could present the guest's view to the child.
 - Seatbelt cannot stop a descendant from calling `setsid`. On macOS such a
   descendant survives its group's kill and keeps the child's grants after the
   guest exits.
-- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
-  inherited terminal or none.
-- `sandbox-exec` is marked deprecated in its manual page. macOS still ships it,
-  and nothing public replaces it.
+- Darwin's `killpg` answers `EPERM` both for a group holding only zombies and
+  for a live member the guest's user cannot signal (a setuid program). The
+  macOS backend reads `EPERM` as the first, so a group kill that missed such a
+  member reports success.
 - On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.

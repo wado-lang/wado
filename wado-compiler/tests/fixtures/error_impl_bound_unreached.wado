@@ -1,0 +1,72 @@
+// An impl dispatch never reaches says nothing about its bound: a call
+// qualified by another trait does not reach `Named`'s block, and neither a
+// `&mut Shelf` operand nor a `&mut Shelf` iterable reaches the blocks for
+// `&Shelf`. Each reports the trait as absent.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+trait Titled with () {
+    fn name(&self) -> String;
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Tag> Named for Wrap<T> {
+    fn name(&self) -> String {
+        return "wrap";
+    }
+}
+
+struct Empty {}
+
+impl Iterator for Empty {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        return null;
+    }
+}
+
+struct Shelf<T> {
+    v: T,
+    f: fn(),
+}
+
+impl<T: Tag> Eq for &Shelf<T> {
+    fn eq(&self, other: &&Shelf<T>) -> bool {
+        return true;
+    }
+}
+
+impl<T: Tag> IntoIterator for &Shelf<T> {
+    type Item = i32;
+    type Iter = Empty;
+
+    fn into_iter(&self) -> Empty {
+        return Empty {};
+    }
+}
+
+test {
+    let w = Wrap { v: "s" };
+    let n = Titled::name(&w);
+    let mut shelf = Shelf { v: "s", f: || {} };
+    let r = &shelf;
+    let m = &mut shelf;
+    let e = m == r;
+    for let x of m {}
+}
+
+__DATA__
+{
+    "compile_error": ":60:13: analysis error: no method 'name' found on type 'Wrap<String>'; 64:13: operator `==` cannot be applied to type `&mut Shelf<String>`; 65:5: type '&mut Shelf<String>' does not implement IntoIterator",
+    "compile_errors_not_contains": ["Tag"]
+}

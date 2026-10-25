@@ -19,6 +19,8 @@ use gpt2 from "./gpt2.onnxtext"
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
+                // Only the last position ranks the next token.
+                last: { logits: 1 },
                 layout: [
                     {
                         pattern: "input_ids",
@@ -185,19 +187,8 @@ impl<affine Bk: Backend> Model<Bk> {
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
         );
         let logits = gpt2::pass(&mut self.backend, &input_ids, &mask, &self.weights);
-        // Only the last position ranks the next token, and the backend ranks
-        // it, so one index is read back rather than the vocabulary's logits.
-        let last = self.backend.slice_axis::<f32, [gpt2::Batch], gpt2::Seq, Last, [gpt2::Vocab]>(
-            &logits,
-            1,
-            (ids.len() - 1) as i64,
-            1,
-            1,
-        );
-        return self.backend.download(&self.backend.arg_max(&last, 2)).data[0] as i32;
+        // The backend ranks the last position, so one index is read back
+        // rather than the vocabulary's logits.
+        return self.backend.download(&self.backend.arg_max(&logits, 2)).data[0] as i32;
     }
-}
-
-/// The one position of the logits [`Model::next_token`] reads back.
-struct Last {
 }

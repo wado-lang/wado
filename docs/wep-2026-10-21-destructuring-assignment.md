@@ -93,29 +93,18 @@ are never one slot. Any other target may be one slot: `*r`, `r.f`,
 and `self.f` under a `&self` or `&mut self` receiver reach through a reference,
 two `&mut` to one value are legal, and two subscripts may name one element.
 
-### A permutation of owned targets makes no value copy
+### A permutation of unreferenced owned targets makes no value copy
 
-Any permutation of owned targets is assigned without a value copy: a
-transposition (`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one
-over fields (`[s.x, s.y] = [s.y, s.x]`). A permutation is a product of
-transpositions, and each transposition is lowered one of two ways.
+A permutation of owned targets with no reference to any of them readable after
+the statement is assigned without a value copy: a transposition
+(`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one over fields
+(`[s.x, s.y] = [s.y, s.x]`).
 
-Where no reference to either target is readable after the statement, the
-ownership analysis moves the values. The temporaries the desugaring introduces
-are dead after their one read, and each source is overwritten before it is read
-again. A field's liveness is its own: a read of `s.y` or of `s` after `s.x` is
-overwritten reads no value `s.x` held, so `s.x` moves while `s` stays live.
-
-Where one is readable, an assignment to that target writes in place
-([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
-The desugaring would then make a value copy of the target before writing over
-it. The transposition exchanges the two storages' leaves instead. The leaves are
-the ones that in-place write would write, and each is a scalar or a handle, so
-exchanging one copies no value. Each storage keeps its identity, so a reference
-to either target reads the new value, as the in-place write guarantees. Where
-only one target is referenced, the other is given a new object holding the
-referenced target's old leaves: one allocation per in-place level, and no value
-copy.
+The ownership analysis moves the values. The temporaries the desugaring
+introduces are dead after their one read, and each source is overwritten before
+it is read again. A field's liveness is its own: a read of `s.y` or of `s` after
+`s.x` is overwritten reads no value `s.x` held, so `s.x` moves while `s` stays
+live.
 
 ### A transposition within one container is `IndexSwap`
 
@@ -212,6 +201,7 @@ functions. It anchors to the statement and adds a note that names the cause:
 
 - the right side is not a permutation of the targets (`[a, b] = [b, b]`,
   `[a, b] = [c, a]`);
+- a reference to a copyable owned target is readable after the statement;
 - a target is not owned, and the statement is not a transposition within one
   container;
 - the two subscripts name different containers, or a container the compiler
@@ -242,9 +232,6 @@ well.
   `spec-expressions.md` and the cheatsheet.
 - [x] Show that a permutation of owned targets with no readable reference
   moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
-- [ ] Lower a transposition of owned targets with a readable reference as a
-  leaf exchange. Fixtures show a reference to each target, and to one of the
-  two, reading the new value, with no value copy in `wir_expect`.
 - [ ] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
   `HashMap` and `TreeMap`.
 - [ ] Recognize the transposition before typing the desugared form and lower
@@ -271,12 +258,14 @@ compound assignment to a tuple (`[a, b] += [1, 2]`).
 `unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
 always checks both indices.
 
-### A leaf exchange touches every leaf an in-place write would
+### A permutation of owned targets with a readable reference copies
 
-A transposition with a readable reference exchanges the leaves that an in-place
-write of either target would write. That inherits the in-place write's
-imprecision
-([WEP: Reference Liveness § An in-place write writes every leaf](./wep-2026-10-13-referenced-places.md#an-in-place-write-writes-every-leaf)):
-a reference that names no field counts as one to every field, so the exchange
-walks the whole in-place structure where the referenced part would do. The
-exchange makes no value copy either way. The cost is the number of leaves.
+Where a reference to an owned target is readable after the statement, an
+assignment to that target writes in place
+([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
+The desugaring then makes a value copy of the target's old value before writing
+over it. The reference reads the new value, so the result is correct. The cost
+is that one value copy. An affine target is not copied but moved, so the move
+check refuses a read of a reference taken before the statement, as it refuses
+one after any move
+([WEP: Affine Types § A reference is read only while its local holds the value](./wep-2026-10-17-affine-types.md#a-reference-is-read-only-while-its-local-holds-the-value)).

@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -581,7 +580,7 @@ struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
     is_todo_module: bool,
-    /// What the compile read, where it read nothing but files.
+    /// What the compile read, where none of it is untracked.
     reads: Option<Vec<Input>>,
 }
 
@@ -993,7 +992,7 @@ fn load_module(
         &artifact.wasm,
         opt_level,
         profile,
-        runtime_knobs,
+        runtime_knobs.clone(),
         profiler_slot,
     );
     let load_duration = load_start.elapsed();
@@ -1242,6 +1241,7 @@ async fn run_load_stage(
             let slot_for_load = profiler_slot.clone();
             let coverage_for_load = coverage_run.clone();
             let testing = artifact.path.clone();
+            let runtime_knobs = runtime_knobs.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             let task = tokio::spawn(async move {
@@ -1697,7 +1697,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             cpu_permit,
             Arc::clone(&clock),
         ),
-        module.process,
+        module.process.clone(),
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
@@ -2422,17 +2422,6 @@ fn write_profile(
     Ok(())
 }
 
-/// The `WADO_*` environment, sorted. The compiler reads these itself
-/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
-/// and they change what it emits.
-fn wado_env() -> Vec<(OsString, OsString)> {
-    let mut vars: Vec<_> = std::env::vars_os()
-        .filter(|(name, _)| name.as_encoded_bytes().starts_with(b"WADO_"))
-        .collect();
-    vars.sort();
-    vars
-}
-
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
@@ -2474,15 +2463,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let measures = coverage_run.is_some()
         || !matches!(profile, ProfileMode::None)
         || runtime_knobs.report_fuel;
-    let test_cache = (!no_run && !measures).then(|| {
-        let mut keyed = (*flags).clone();
-        // `--no-cache` only skips reading, so it is no part of the key.
-        keyed.knobs.no_cache = false;
-        TestCache::new(
-            &format!("{keyed:?} {runtime_knobs:?} {:?}", wado_env()),
-            !flags.knobs.no_cache,
-        )
-    });
+    let test_cache = (!no_run && !measures).then(|| TestCache::new(&flags, runtime_knobs.clone()));
     // Settled before anything is sized by the work, which the hits are not.
     let cached: Vec<Vec<(String, Tally)>> = package_runs
         .iter_mut()
@@ -2526,7 +2507,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             profile.clone(),
-            runtime_knobs,
+            runtime_knobs.clone(),
             profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),

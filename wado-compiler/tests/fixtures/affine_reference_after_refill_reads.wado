@@ -1,0 +1,67 @@
+// A reference taken after an affine local was refilled names the new object,
+// and so does one to a place an assignment writes in place, a field of it
+// moved or not. One path's moves and refills leave a reference taken on
+// another readable.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine struct Pair {
+    x: Tok,
+    y: Tok,
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let mut a = Tok { id: 1 };
+    eat(a);
+    a = Tok { id: 2 };
+    let r = &a;
+    assert r.id == 2;
+
+    let mut b = Tok { id: 3 };
+    let s = &b;
+    if builtin::black_box(false) {
+        eat(b);
+        b = Tok { id: 4 };
+    } else {
+        assert s.id == 3;
+    }
+
+    let z = Tok { id: 5 };
+    let mut c = Tok { id: 6 };
+    let mut t = &z;
+    if builtin::black_box(true) {
+        eat(c);
+        c = Tok { id: 7 };
+        eat(c);
+        c = Tok { id: 8 };
+    } else {
+        eat(c);
+        c = Tok { id: 9 };
+        t = &c;
+    }
+    assert t.id == 5;
+
+    let mut p = Pair { x: Tok { id: 10 }, y: Tok { id: 11 } };
+    let q = &p.y;
+    p.y = Tok { id: 12 };
+    assert q.id == 12;
+
+    let mut o = Pair { x: Tok { id: 13 }, y: Tok { id: 14 } };
+    let w = &o;
+    eat(o.x);
+    o = Pair { x: Tok { id: 15 }, y: Tok { id: 16 } };
+    assert w.x.id == 15;
+}
+
+__DATA__
+{"test": {}}

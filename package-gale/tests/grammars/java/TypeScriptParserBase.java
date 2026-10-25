@@ -1,5 +1,5 @@
 // The Java twin of `impl TypeScriptParserBase for TsParserBase` in
-// package-gale/tools/typescript_recognizer.wado, so `antlr4-oracle.sh --super`
+// package-gale/tools/typescript_recognizer.wado, so `antlr4_oracle.wado --super`
 // runs ANTLR4 against the base class Gale runs against. Edit both or neither.
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.TokenStream;

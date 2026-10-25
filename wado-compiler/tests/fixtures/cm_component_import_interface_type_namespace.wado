@@ -1,0 +1,41 @@
+// A namespace import adds its prefix to the path naming an interface's type,
+// in a type, a literal, a pattern and a case alike.
+use comp from "./sub/wasm_import_cm_geo_use_other.wat" with { type: "wat" };
+
+struct Quiet {}
+
+impl comp::Log for Quiet {
+    fn emit(&mut self, e: comp::Log::Entry) {
+        resume ();
+    }
+}
+
+fn x_of(p: comp::Other::Point) -> u32 {
+    let comp::Other::Point { x } = p;
+    return x;
+}
+
+test "a record" {
+    let mut quiet = Quiet {};
+    with comp::Log => &mut quiet do {
+        let p: comp::Other::Point = comp::Other::make(5);
+        assert x_of(p) == 5;
+        assert x_of(comp::Other::Point { x: 6 }) == 6;
+        let m: comp::Geo::Meters = comp::Geo::norm(p);
+        assert m as u32 == 105;
+    }
+}
+
+test "a variant and a flags" {
+    let mut quiet = Quiet {};
+    with comp::Log => &mut quiet do {
+        let shape = comp::Geo::Shape::Circle(7);
+        assert comp::Geo::size(shape) == 7;
+        let radius = match shape {
+            comp::Geo::Shape::Circle(r) => r,
+            comp::Geo::Shape::Dot => 0,
+        };
+        assert radius == 7;
+        assert comp::Geo::bits(comp::Geo::Perms::Read | comp::Geo::Perms::Write) == 3;
+    }
+}

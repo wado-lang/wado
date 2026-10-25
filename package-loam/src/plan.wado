@@ -3,7 +3,7 @@
 //! See WEP 2026-09-20 § "Fusion Is Decided by Operator Kind" and
 //! `package-loam/webgpu.md`.
 
-use { HashMap } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use {
     GROUP_QUERY_ATTENTION,
     Graph,
@@ -12,9 +12,20 @@ use {
     data_type,
     is_binary_elementwise,
     is_unary_operator,
+    read_at,
+    read_counts,
     settled,
 } from "./graph.wado";
-use { Checked, gemm_options, has_bias, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
+use {
+    Checked,
+    gather_axis,
+    gemm_options,
+    has_bias,
+    is_reduction,
+    reduced_axes,
+    softmax_lane,
+    transpose_perm,
+} from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// What `forward` does for one node.
@@ -158,13 +169,6 @@ fn same_axis(a: &Shape, i: i32, b: &Shape, j: i32) -> bool {
     return a.axes[i].name == b.axes[j].name && a.axes[i].extent.agrees(&b.axes[j].extent);
 }
 
-/// Records that the node at `at` reads `tensor`.
-fn read_at(readers: &mut HashMap<String, List<i32>>, tensor: &String, at: i32) {
-    let mut by = readers.get(*tensor).unwrap_or([]);
-    by.push(at);
-    readers[*tensor] = by;
-}
-
 /// Whether a `Gemm`'s bias, if it has one, is one value per column, so it
 /// reads the same under the leading axes as under the flattened rows.
 fn bias_per_column(node: &Node, checked: &Checked) -> bool {
@@ -286,6 +290,13 @@ pub variant Decision {
     /// Computed inside the kernel that writes the tensor named, and never
     /// written itself.
     Fused(String),
+    /// Computed inside the product kernel that writes the tensor named, as
+    /// that product reads its left operand: the kernel's prologue.
+    Prologue(String),
+    /// A product computed by the product kernel that writes the tensor named,
+    /// whose weight's columns that kernel's weight holds after its own, and
+    /// read as a view of what it writes.
+    Concatenated(String),
     /// Written as a tensor, for the reason given.
     Written(Reason),
 }
@@ -308,7 +319,8 @@ pub variant Reason {
     /// Its readers' kernel covers other elements than it does, so it would be
     /// computed once per element read.
     Stretched,
-    /// Its readers' kernel already follows another contraction.
+    /// Its readers' kernel already follows another contraction, which it does
+    /// not pair with.
     SecondContraction,
     /// It and its readers' kernel would put a contraction and a fold along a
     /// row in one kernel, which runs neither.
@@ -325,6 +337,15 @@ pub struct Plan {
     /// How `forward` lowers each node, by position.
     lowered: List<Lowering>,
     spreads: HashMap<String, Spread>,
+    /// The products that pair in one kernel, by weights a backend holds
+    /// together, by the tensors they compute, in the graph's order.
+    pub pairs: List<[String, String]>,
+    /// The weights a backend holds as a product's right operand, as
+    /// `rhs_weights` finds them.
+    pub rhs: HashMap<String, bool>,
+    /// The products each product kernel computes by weights concatenated
+    /// along their columns, by the first of them, in the graph's order.
+    pub concats: HashMap<String, List<String>>,
 }
 
 impl Plan {
@@ -351,6 +372,12 @@ impl Plan {
     /// Whether `tensor` is computed inside a later kernel rather than written.
     pub fn is_fused(&self, tensor: &String) -> bool {
         return self.decisions.get(*tensor) matches { Some(Fused(_)) };
+    }
+
+    /// Whether `tensor` is computed inside the product reading it, as its
+    /// left operand.
+    pub fn is_prologue(&self, tensor: &String) -> bool {
+        return self.decisions.get(*tensor) matches { Some(Prologue(_)) };
     }
 
     /// The whole rows the kernel writing `tensor` folds along, or `None` where
@@ -432,17 +459,56 @@ fn join_of(node: &Node, checked: &Checked, opset: Option<i64>) -> Option<Join> {
 /// what the nodes fused into it ask of it.
 struct Group {
     out: Shape,
-    contraction: bool,
+    contracted: Contracted,
     /// The whole rows a fold among its nodes reads, where one does.
     rows: Option<Shape>,
 }
 
-/// The decisions for `graph`'s kernels, checked as `checked`. With `fuse`
-/// false, every kernel writes its output.
-///
+/// The products a kernel computes: two only where they pair.
+variant Contracted {
+    None,
+    One(FirstProduct),
+    Two,
+}
+
+/// A kernel's one product: the tensor it computes, and what a second pairs on
+/// where one could.
+struct FirstProduct {
+    tensor: String,
+    pairable: Option<Pairable>,
+}
+
+/// A matrix product a second could pair with: its left operand, and its
+/// weight, held as stored for it alone, of element `dtype`.
+struct Pairable {
+    lhs: String,
+    weight: String,
+    dtype: String,
+}
+
+impl Pairable {
+    /// Whether `other` pairs with this: of one left operand, by weights of one
+    /// axis list and element, which a backend then holds together.
+    fn pairs(&self, other: &Pairable, checked: &Checked) -> bool {
+        let [a, b] = [checked.shapes[self.weight], checked.shapes[other.weight]];
+        return self.lhs == other.lhs && self.dtype == other.dtype && same_axis(&a, 0, &b, 0) && same_axis(&a, 1, &b, 1);
+    }
+}
+
+/// The decisions for the outermost `graph`'s kernels, checked as `checked`.
+/// With `fuse` false, every kernel writes its output.
+pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
+    return planned(graph, checked, fuse, true);
+}
+
+/// `plan` for a branch's `graph`: only the outermost graph declares weights.
+pub fn branch_plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
+    return planned(graph, checked, fuse, false);
+}
+
 /// The nodes are read last to first, so each node's readers have their
 /// kernels already. A node joins its readers' kernel where they all share one.
-pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
+fn planned(graph: &Graph, checked: &Checked, fuse: bool, outermost: bool) -> Plan {
     let [lowered, spreads] = lowerings(graph, checked, fuse);
     // An alias's output is its operand under another name, so what reads the
     // alias reads the operand, and so it is for a restored product and a
@@ -470,6 +536,22 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
     let mut heads = HashMap::<String, String>::new();
     let mut groups = HashMap::<String, Group>::new();
     let mut decisions = HashMap::<String, Decision>::new();
+    let mut pairs: List<[String, String]> = [];
+    let rhs = if outermost { rhs_weights(graph, checked, &lowered, fuse) } else { HashMap::<String, bool>::new() };
+    let lone = lone_weights(graph, &rhs);
+    // Each matrix product's left operand where that product is by a weight
+    // held for products, what a prologue of it computes, and what it pairs on.
+    let mut by_rhs: List<Option<String>> = [];
+    let mut pairable_of: List<Option<Pairable>> = [];
+    for let node of &graph.nodes {
+        let lhs = product_lhs(node, checked, &spreads, &aliased);
+        by_rhs.push(if lhs matches { Some(_) } && rhs.contains_key(node.inputs[1]) { lhs } else { null });
+        pairable_of.push(if let Some(lhs) = lhs && let Some(dtype) = lone.get(node.inputs[1]) {
+            Option::Some(Pairable { lhs, weight: node.inputs[1], dtype });
+        } else {
+            null;
+        });
+    }
     for let mut at = graph.nodes.len() - 1; at >= 0; at -= 1 {
         let node = &graph.nodes[at];
         if !lowered[at] matches { Kernel } {
@@ -478,30 +560,165 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         let tensor = node.outputs[0];
         let out = space_of(checked, &spreads, &tensor);
         let join = join_of(node, checked, graph.opset);
+        let pairable = pairable_of[at];
         let decision = if fuse {
-            decided(graph, checked, &lowered, node, &out, &join, &readers, &returned, &heads, &groups);
+            decided(graph, checked, &lowered, node, &out, &join, &pairable, &readers, &returned, &heads, &groups);
         } else {
             Decision::Written(Reason::Unfused);
         };
         match decision {
             Fused(head) => {
+                if join matches { Some(Contraction) } && let One(first) = groups[head].contracted {
+                    pairs.push([tensor, first.tensor]);
+                }
                 heads[tensor] = head;
-                groups[head] = joined(&groups[head], node, &join, checked);
+                groups[head] = joined(&groups[head], node, &join, &pairable, checked);
             },
-            Written(_) => {
+            _ => {
                 heads[tensor] = tensor;
-                groups[tensor] = joined(&Group { out, contraction: false, rows: null }, node, &join, checked);
+                let alone = Group { out, contracted: Contracted::None, rows: null };
+                groups[tensor] = joined(&alone, node, &join, &pairable, checked);
             },
         }
         decisions[tensor] = decision;
+    }
+    let concats = if fuse {
+        concatenated(graph, checked, &heads, &by_rhs, &lone);
+    } else {
+        HashMap::<String, List<String>>::new();
+    };
+    for let [first, parts] of concats.entries() {
+        for let part of parts[1..<parts.len()].to_list() {
+            decisions[part] = Decision::Concatenated(*first);
+            heads[part] = *first;
+            groups.remove(part);
+        }
     }
     let mut rows = HashMap::<String, Shape>::new();
     for let [head, group] of groups.entries() {
         if let Some(space) = group.rows {
             rows[*head] = space;
         }
+        // Only a whole kernel shows whether it takes a contraction in, which a
+        // prologue does not, so a prologue is found once every kernel is. A
+        // product computes its prologue over the rows it reads, so a kernel
+        // folding rows is one only where it writes them whole.
+        let writes_rows = match group.rows {
+            Some(space) => same_space(&space, &group.out),
+            None => true,
+        };
+        if group.contracted matches { None }
+            && writes_rows
+            && decisions[*head] matches { Written(Reader(Contraction)) } {
+            let reads = readers.get(*head).unwrap_or([]);
+            if let Some(product) = prologue_head(graph, head, &reads, &by_rhs, &heads) {
+                decisions[*head] = Decision::Prologue(product);
+            }
+        }
     }
-    return Plan { decisions, rows, lowered, spreads };
+    return Plan { decisions, rows, lowered, spreads, pairs, rhs, concats };
+}
+
+/// The weights a backend may hold with another's, by their element: each held
+/// as stored for products (`rhs`), and read by one alone.
+fn lone_weights(graph: &Graph, rhs: &HashMap<String, bool>) -> HashMap<String, String> {
+    let reads = read_counts(graph);
+    let mut lone = HashMap::<String, String>::new();
+    for let vi of &graph.initializers {
+        if rhs.get(vi.name) == Option::Some(false) && reads.get(vi.name) == Option::Some(1) {
+            lone[vi.name] = vi.dtype;
+        }
+    }
+    return lone;
+}
+
+/// The products of one left operand computed as one product, by their
+/// weights' columns concatenated, by the first of them: two or more, each a
+/// `MatMul` that is a kernel alone (`heads`), by a `lone` weight, the weights
+/// of one row axis and element, and the products over one set of leading axes.
+fn concatenated(
+    graph: &Graph,
+    checked: &Checked,
+    heads: &HashMap<String, String>,
+    by_rhs: &List<Option<String>>,
+    lone: &HashMap<String, String>,
+) -> HashMap<String, List<String>> {
+    let mut members = HashMap::<String, i32>::new();
+    for let [_, head] of heads.entries() {
+        members[*head] = members.get(*head).unwrap_or(0) + 1;
+    }
+    // The products each could join, by their left operand, in the graph's order.
+    let mut by_lhs = TreeMap::<String, List<i32>>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        let tensor = node.outputs[0];
+        if let Some(lhs) = by_rhs[at]
+            && node.op == "MatMul"
+            && heads.get(tensor) == Option::Some(tensor)
+            && members[tensor] == 1
+            && lone.contains_key(node.inputs[1]) {
+            let mut at_lhs = by_lhs.get(lhs).unwrap_or([]);
+            at_lhs.push(at);
+            by_lhs[lhs] = at_lhs;
+        }
+    }
+    let concatenates = |a: &Node, b: &Node| {
+        let [wa, wb] = [checked.shapes[a.inputs[1]], checked.shapes[b.inputs[1]]];
+        let [oa, ob] = [checked.shapes[a.outputs[0]], checked.shapes[b.outputs[0]]];
+        if !same_axis(&wa, 0, &wb, 0) || lone[a.inputs[1]] != lone[b.inputs[1]] || oa.rank() != ob.rank() {
+            return false;
+        }
+        for let i of 0..<oa.rank() - 1 {
+            if !same_axis(&oa, i, &ob, i) {
+                return false;
+            }
+        }
+        return true;
+    };
+    let mut concats = HashMap::<String, List<String>>::new();
+    for let [_, products] of by_lhs.entries() {
+        let mut open = *products;
+        while open.len() >= 2 {
+            let first = &graph.nodes[open[0]];
+            let mut parts: List<String> = [first.outputs[0]];
+            let mut rest: List<i32> = [];
+            for let at of open[1..<open.len()].to_list() {
+                if concatenates(first, &graph.nodes[at]) {
+                    parts.push(graph.nodes[at].outputs[0]);
+                } else {
+                    rest.push(at);
+                }
+            }
+            if parts.len() >= 2 {
+                concats[parts[0]] = parts;
+            }
+            open = rest;
+        }
+    }
+    return concats;
+}
+
+/// The product kernel that takes `tensor` in as its prologue, read at `reads`:
+/// where every read is a product's left operand, by a weight held for
+/// products (`by_rhs`), and the products are one kernel.
+fn prologue_head(
+    graph: &Graph,
+    tensor: &String,
+    reads: &List<i32>,
+    by_rhs: &List<Option<String>>,
+    heads: &HashMap<String, String>,
+) -> Option<String> {
+    let mut head: Option<String> = null;
+    for let r of *reads {
+        if by_rhs[r] != Option::Some(*tensor) {
+            return null;
+        }
+        let h = heads[graph.nodes[r].outputs[0]];
+        if head matches { Some(other) && other != h } {
+            return null;
+        }
+        head = Option::Some(h);
+    }
+    return head;
 }
 
 /// The axes `forward` computes `tensor` over: its own, or for a `Spread`'s
@@ -519,14 +736,161 @@ fn original(aliased: &HashMap<String, String>, tensor: &String) -> String {
     return aliased.get(*tensor).unwrap_or(*tensor);
 }
 
-/// `group` with `node` in it. Only a fold makes it a row kernel: a value per
-/// row without one is read at each element of its row, as a broadcast is.
-fn joined(group: &Group, node: &Node, join: &Option<Join>, checked: &Checked) -> Group {
+/// `group` with `node` in it, `pairable` what it pairs on where it is a
+/// product a second could pair with. Only a fold makes it a row kernel: a
+/// value per row without one is read at each element of its row, as a
+/// broadcast is.
+fn joined(group: &Group, node: &Node, join: &Option<Join>, pairable: &Option<Pairable>, checked: &Checked) -> Group {
     return match join {
-        Some(Contraction) => Group { ..*group, contraction: true },
+        Some(Contraction) => {
+            let contracted = match group.contracted {
+                None => Contracted::One(FirstProduct { tensor: node.outputs[0], pairable: *pairable }),
+                _ => Contracted::Two,
+            };
+            Group { ..*group, contracted };
+        },
         Some(Row) => Group { ..*group, rows: Option::Some(checked.shapes[node.inputs[0]]) },
         _ => *group,
     };
+}
+
+/// The left operand of `node` where it is a matrix product another of that
+/// operand pairs with, computing over its output's axes: a `MatMul` of
+/// matrices by its right operand as stored, or a `Spread`'s `Gemm`, which
+/// reads past the flattening.
+fn product_lhs(
+    node: &Node,
+    checked: &Checked,
+    spreads: &HashMap<String, Spread>,
+    aliased: &HashMap<String, String>,
+) -> Option<String> {
+    if node.op == "MatMul" && checked.shapes[node.inputs[0]].rank() >= 2 && !aliased.contains_key(node.inputs[1]) {
+        return Option::Some(original(aliased, &node.inputs[0]));
+    }
+    if node.op == "Gemm" && let Some(s) = spreads.get(node.outputs[0]) {
+        return Option::Some(s.operand);
+    }
+    return null;
+}
+
+/// The initializers of rank 2 that every read takes as a matrix product's right
+/// operand, in one orientation, in the graph and every branch it carries, and
+/// that are not an output. Each maps to whether the product reads it
+/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
+/// in the layout the product reads, which only a product, a product by its
+/// viewed transpose, and a row gather read.
+fn rhs_weights(graph: &Graph, checked: &Checked, lowered: &List<Lowering>, fuse: bool) -> HashMap<String, bool> {
+    let mut uses = OperandUses {
+        right: HashMap::new(),
+        elsewhere: HashSet::new(),
+    };
+    uses.note(graph, checked, lowered, fuse);
+    let mut out = HashMap::<String, bool>::new();
+    for let vi of &graph.initializers {
+        if let Some(transposed) = uses.right.get(vi.name)
+            && !uses.elsewhere.contains(vi.name)
+            && checked.shapes[vi.name].rank() == 2 {
+            out[vi.name] = transposed;
+        }
+    }
+    return out;
+}
+
+/// How the nodes read each operand: as a product's right operand, transposed
+/// or not, or some other way.
+struct OperandUses {
+    right: HashMap<String, bool>,
+    elsewhere: HashSet<String>,
+}
+
+impl OperandUses {
+    /// The reads of `graph`'s nodes, lowered as `lowered`, its outputs, and
+    /// those of the branches they carry, a branch's outputs being values it
+    /// yields as tensors. A tensor read in both orientations is read
+    /// elsewhere, as no one layout serves.
+    ///
+    /// A product by a viewed transpose reads the weight itself, in the
+    /// orientation its rows are stored in, and so does a row gather of it.
+    fn note(&mut self, graph: &Graph, checked: &Checked, lowered: &List<Lowering>, fuse: bool) {
+        for let vi of &graph.outputs {
+            self.elsewhere.insert(vi.name);
+        }
+        let mut viewed = HashMap::<String, String>::new();
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if lowered[at] matches { Transposed } {
+                viewed[node.outputs[0]] = node.inputs[0];
+            }
+        }
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if viewed.contains_key(node.outputs[0]) {
+                continue;
+            }
+            let orientation = rhs_orientation(&node, &checked.shapes);
+            let gathers = lowered[at] matches { Kernel } && gathers_float_rows(&node, checked);
+            for let [i, input] of node.inputs.into_iter().enumerate() {
+                if i == 1 && let Some(weight) = viewed.get(input) {
+                    self.right_operand(weight, false);
+                } else if i == 1 && let Some(transposed) = orientation {
+                    self.right_operand(input, transposed);
+                } else if i == 0 && gathers {
+                    self.right_operand(input, false);
+                } else {
+                    self.elsewhere.insert(input);
+                }
+            }
+        }
+        for let [branch_graph, branch] of branches_of(graph, checked) {
+            let [branch_lowered, _] = lowerings(&branch_graph, &branch, fuse);
+            self.note(&branch_graph, &branch, &branch_lowered, fuse);
+        }
+    }
+
+    fn right_operand(&mut self, tensor: String, transposed: bool) {
+        if self.right.get(tensor) matches { Some(t) && t != transposed } {
+            self.elsewhere.insert(tensor);
+        }
+        self.right[tensor] = transposed;
+    }
+}
+
+/// Whether `node` gathers whole rows of a float matrix, as an embedding
+/// lookup does.
+fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
+    if node.op != "Gather" {
+        return false;
+    }
+    let data = checked.shapes[node.inputs[0]];
+    return data.rank() == 2
+        && settled(gather_axis(node, data.rank())) == 0
+        && checked.primitives[node.inputs[0]] == "f32";
+}
+
+/// Whether `node` reads its operand 1 as the right operand of a matrix
+/// product `matmul_rhs` serves, and if so whether transposed:
+/// `Gemm`'s, and `MatMul`'s beside a left operand of rank 2 or more.
+fn rhs_orientation(node: &Node, shapes: &HashMap<String, Shape>) -> Option<bool> {
+    if node.op == "Gemm" {
+        return Option::Some(settled(gemm_options(node)).3);
+    }
+    if node.op == "MatMul" && shapes[node.inputs[0]].rank() >= 2 {
+        return Option::Some(false);
+    }
+    return null;
+}
+
+/// Each `If`'s two branches in `graph`, in order: the graph each holds, and the
+/// scope stage 0 checked it in.
+pub fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
+    let mut found: List<[Graph, Checked]> = [];
+    for let node of &graph.nodes {
+        if !checked.branches.contains_key(node.outputs[0]) {
+            continue;
+        }
+        for let b of branches(node, checked) {
+            found.push([b.graph, b.checked]);
+        }
+    }
+    return found;
 }
 
 /// Where `node`'s output goes, its readers' kernels and the scope's returns
@@ -538,6 +902,7 @@ fn decided(
     node: &Node,
     out: &Shape,
     join: &Option<Join>,
+    pairable: &Option<Pairable>,
     readers: &HashMap<String, List<i32>>,
     returned: &HashMap<String, bool>,
     heads: &HashMap<String, String>,
@@ -583,7 +948,16 @@ fn decided(
             }
         },
         Contraction => {
-            if group.contraction {
+            // A second product of the first's space pairing with it is
+            // computed with it, the two reading their left operand once.
+            let pairs = match [*pairable, group.contracted] {
+                [Some(p), One(first)] => first.pairable matches { Some(q) && q.pairs(&p, checked) }
+                    && same_space(out, &group.out),
+                _ => false,
+            };
+            if pairs {
+                Decision::Fused(head);
+            } else if !group.contracted matches { None } {
                 Decision::Written(Reason::SecondContraction);
             } else if group.rows matches { Some(_) } {
                 Decision::Written(Reason::ContractionAndFold);
@@ -599,7 +973,7 @@ fn decided(
                 Some(space) => same_space(whole, space),
                 None => same_space(&group.out, whole) || per_row(&group.out, whole),
             };
-            if group.contraction {
+            if !group.contracted matches { None } {
                 Decision::Written(Reason::ContractionAndFold);
             } else if fits {
                 Decision::Fused(head);

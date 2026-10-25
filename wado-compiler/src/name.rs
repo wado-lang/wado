@@ -46,9 +46,13 @@ pub const CLOSURE_CALL_METHOD: &str = "$call";
 /// `use { X as Y }` alias, scoped to the namespace's own module.
 pub const NAMESPACE_MEMBER_SEP: char = '$';
 
-/// Build the `ns$member` alias for a namespace-imported symbol.
+/// Build the `ns$member` alias for a namespace-imported symbol. A namespace
+/// that is itself a path, `ns::Interface`, joins on the same separator.
 pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
-    format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
+    format!(
+        "{}{NAMESPACE_MEMBER_SEP}{member}",
+        namespace.replace("::", &NAMESPACE_MEMBER_SEP.to_string())
+    )
 }
 
 /// Split a `ns$member` alias into its namespace and member. The member is an

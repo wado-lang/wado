@@ -7,11 +7,11 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::common::{project_root, wado_bin};
+use crate::common::{project_root, wado_process};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -70,9 +70,8 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     // leaves a TOCTOU window in which a parallel test can grab the same
     // port — so one test's client connects to another test's server and
     // sees a spurious connection reset when that server is torn down.
-    let mut cmd = Command::new(wado_bin());
-    cmd.current_dir(project_root())
-        .arg("serve")
+    let mut cmd = wado_process(&project_root());
+    cmd.arg("serve")
         .arg("--addr")
         .arg("127.0.0.1:0")
         .arg("-O0")
