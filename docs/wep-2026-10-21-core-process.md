@@ -476,7 +476,7 @@ cannot be taken back.
 
 ## Known gaps
 
-### Not yet decided
+### Open in Wado
 
 - Resources are unlimited. A child can run many children, use memory and CPU
   without bound, and fork without limit.
@@ -492,7 +492,7 @@ cannot be taken back.
 - The compiler's e2e harness does not link `core:process`, so a fixture cannot
   spawn; the stdlib's own tests cover it under `wado test`.
 
-### What the OS mechanisms leave open
+### Left open by the OS mechanisms
 
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
   outside its grants exists, and its metadata. Seatbelt hides it but for the
