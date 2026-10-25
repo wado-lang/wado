@@ -296,8 +296,9 @@ not.
 An assignment to a place drops the old objects below it, so it ends what a
 reference taken before it read there. Where a place inside it had moved, the
 assignment stores a new object there, so it also ends what a reference taken
-before the move read at or below that place. A reference to the place itself
-reads the new value, which the assignment writes in place.
+before the move read at or below that place. A reference to the place itself,
+where that place had not moved, reads the new value, which the assignment
+writes in place.
 
 This refuses programs a lifetime system would accept: a call handed `&t` and
 `&mut v`, where `v`'s type could hold a reference into `t`'s, is taken to store
