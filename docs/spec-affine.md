@@ -332,6 +332,9 @@ A value referring into an affine local is read only while the local holds what
 it read. The compiler refuses (`TYPE_MISMATCH`):
 
 - a read of it after the local moved, or after the local's scope ended;
+- a read of it after an assignment to a place holding what it reads, which
+  drops the old value. A read of the assigned place itself is still allowed,
+  since the assignment writes in place, unless that place had moved;
 - a read of it after a `&mut` use of the local other than through it, such as a
   method taking `&mut self`, which may have moved out a part of the local;
 - a `return` of it from the body declaring the local;

@@ -703,51 +703,12 @@ fn weight_type(checked: &Checked, rhs: &HashMap<String, bool>, together: &Togeth
     return `${BACKEND_PARAM}::Rhs<${checked.shapes[*tensor].axes[k].name}, ${together.columns(checked, tensor, n)}>`;
 }
 
-<<<<<<< HEAD
-/// The initializers of rank 2 that every read takes as a matrix product's right
-/// operand, in one orientation, in the graph and every branch it carries, and
-/// that are not an output. Each maps to whether the product reads it
-/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
-/// in the layout the product reads, which only a product, a product by its
-/// viewed transpose, and a row gather read.
-fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, bool> {
-    let mut uses = OperandUses {
-        right: HashMap::new(),
-        elsewhere: HashSet::new(),
-    };
-    uses.note(graph, checked, fuse);
-    let mut out = HashMap::<String, bool>::new();
-    for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
-            out[vi.name] = transposed;
-        }
-||||||| b0344c1144d
-/// The initializers of rank 2 that every read takes as a matrix product's right
-/// operand, in one orientation, in the graph and every branch it carries, and
-/// that are not an output. Each maps to whether the product reads it
-/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
-/// in the layout the product reads, which only a product, a product by its
-/// viewed transpose, and a row gather read.
-fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> HashMap<String, bool> {
-    let mut uses = OperandUses {
-        right: HashMap::new(),
-        elsewhere: HashSet::new(),
-    };
-    uses.note(graph, checked, fuse);
-    let mut out = HashMap::<String, bool>::new();
-    for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
-        ) == 2 {
-            out[vi.name] = transposed;
-        }
-=======
 /// The weights a backend holds in pairs, each pair's first mapped to its
 /// second: the right operands of two products the plan pairs.
 fn paired_weights(decided: &Plan, weight_of: &HashMap<String, String>) -> HashMap<String, String> {
     let mut paired = HashMap::<String, String>::new();
     for let [x, y] of decided.pairs {
         paired[weight_of[x]] = weight_of[y];
->>>>>>> origin/main
     }
     return paired;
 }
