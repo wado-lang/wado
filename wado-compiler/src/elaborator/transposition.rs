@@ -1,8 +1,8 @@
 //! What the syntax of a destructuring assignment says of it (WEP: Destructuring
 //! Assignment), and which may be a transposition within one container. Annotate
 //! settles the rest: that the container is a local, that no `mut` reference
-//! local it is reached through is referenced, that no index reads a mutable global, and
-//! that the type implements `IndexSwap`.
+//! local it is reached through is referenced, that no index reads a mutable
+//! global, and that the type implements `IndexSwap`.
 
 use crate::ast::{
     AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, IndexExpr, Literal,
@@ -147,7 +147,12 @@ impl<'ast> Scan<'ast> {
         for (id, index_locals, root) in std::mem::take(&mut self.candidates) {
             if index_locals.iter().all(|l| !self.referenced.contains(l)) {
                 let container_root_referenced = self.referenced.contains(root);
-                self.found.insert(id, Clean { container_root_referenced });
+                self.found.insert(
+                    id,
+                    Clean {
+                        container_root_referenced,
+                    },
+                );
             }
         }
         self.referenced.clear();
@@ -192,11 +197,8 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
                     for index in [transposition.i, transposition.j] {
                         collect_idents(index, &mut index_locals);
                     }
-                    self.candidates.push((
-                        assign.id,
-                        index_locals,
-                        transposition.container_root(),
-                    ));
+                    self.candidates
+                        .push((assign.id, index_locals, transposition.container_root()));
                 }
             }
             _ => {}

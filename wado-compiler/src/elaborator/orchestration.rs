@@ -12,8 +12,8 @@ use std::sync::Arc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt, Type,
-    declared_handle_classes, declares_unrestricted, walk_expr, walk_stmt, walk_type,
+    self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt,
+    Type, declared_handle_classes, declares_unrestricted, walk_expr, walk_stmt, walk_type,
     world_import_of,
 };
 use crate::bail_with;

@@ -264,8 +264,9 @@ always checks both indices.
 
 ### What counts as referencing an index local
 
-Whether an index local is referenced or captured is read from the syntax of
-the item holding the statement, by name. A method call on the local counts,
+Whether an index local, or a `mut` reference local the container is reached
+through, is referenced or captured is read from the syntax of the item holding
+the statement, by name. A method call on the local counts,
 since its receiver may be taken `&self` or `&mut self`, and so does any
 mention inside a closure that is not the closure's own parameter. A
 transposition indexed by `i` falls back where the same item calls `i.abs()`,
