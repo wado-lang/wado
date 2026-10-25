@@ -412,11 +412,8 @@ struct Signatures {
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
     param_struct: Vec<Vec<Option<TypeKey>>>,
-    /// Whether the function has a body the summary can walk.
+    /// Whether the function has a body the summary can walk and a clone can copy.
     has_body: Vec<bool>,
-    /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
-    /// the unique anchor passes resolve that item by.
-    specializable: Vec<bool>,
     /// Whether each parameter's own slot may be replaced by a constant. A
     /// slot the body reassigns, references or aliases holds more than the argument.
     param_fixed: Vec<Vec<bool>>,
@@ -438,7 +435,6 @@ impl Signatures {
         let mut param_names = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
-        let mut specializable = Vec::with_capacity(project.functions.len());
         let mut param_fixed = Vec::with_capacity(project.functions.len());
         let mut scalar_specializable = Vec::with_capacity(project.functions.len());
         for (index, func) in project.functions.iter().enumerate() {
@@ -470,16 +466,13 @@ impl Signatures {
                     })
                     .collect(),
             );
-            let live_body = func.body.is_some() && !func.is_dead;
-            has_body.push(live_body);
-            specializable.push(live_body && func.compiler_item.is_none());
+            has_body.push(func.body.is_some() && !func.is_dead);
         }
         Signatures {
             param_locals,
             param_names,
             param_struct,
             has_body,
-            specializable,
             param_fixed,
             scalar_specializable,
             immutable_globals: project
@@ -1198,7 +1191,7 @@ fn select_sites(
             _ => return,
         };
         let index = callee.index();
-        if !signatures.specializable[index] {
+        if !signatures.has_body[index] {
             return;
         }
         let unanimous = constants.get(&callee);
@@ -1793,6 +1786,10 @@ fn build_clone(
     clone.id = Some(id);
     clone.visibility = Visibility::Private;
     clone.is_export = false;
+    // The marker names the one canonical function behind a compiler item, and
+    // that stays the original, which the passes resolving the item synthesize
+    // calls to.
+    clone.compiler_item = None;
 
     let mut bound: IndexMap<u32, FieldConsts> = IndexMap::default();
     let mut whole: IndexMap<u32, FieldConst> = IndexMap::default();
@@ -2018,12 +2015,13 @@ fn redirect_const_reads(
 }
 
 /// Whether a place read may name a fresh copy of the literal instead: one that
-/// only reads through it, `&s` or `s.used`, sees what the copy holds.
+/// only reads through it, `&s`, `s.used` or `&s.repr`, sees what the copy holds.
 fn reads_fresh_literal(engine: &Engine, read: ExprId, value: &FieldConst) -> bool {
-    if !matches!(value, FieldConst::Literal(_)) {
-        return false;
-    }
-    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(read)) else {
+    matches!(value, FieldConst::Literal(_)) && only_read_through(engine, read)
+}
+
+fn only_read_through(engine: &Engine, place: ExprId) -> bool {
+    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(place)) else {
         return false;
     };
     match engine.body.exprs[parent].kind {
@@ -2031,7 +2029,9 @@ fn reads_fresh_literal(engine: &Engine, read: ExprId, value: &FieldConst) -> boo
             op: NirUnaryOp::Ref,
             ..
         } => true,
-        ExprKind::FieldAccess { .. } => !is_place_read(engine, parent),
+        ExprKind::FieldAccess { .. } => {
+            !is_place_read(engine, parent) || only_read_through(engine, parent)
+        }
         _ => false,
     }
 }
