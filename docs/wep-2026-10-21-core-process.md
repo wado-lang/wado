@@ -469,32 +469,33 @@ cannot be taken back.
   path.
 - [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
   `status` and `read`, with its stdlib reference and a cheatsheet entry.
+- [ ] Bounded resources. A child can run many children, use memory and CPU
+  without bound, and fork without limit. Done when a child that tries any of
+  these is stopped at a limit the host sets.
+- [ ] A compile-time answer for a world that cannot spawn. A component that
+  spawns imports `core:process`, which no WASI world defines, so only the
+  `wado` host instantiates it, and nothing at compile time says so: an effect
+  the selected world does not import is imported all the same
+  ([Worlds](./spec-worlds.md)). Done when compiling such a component reports
+  it.
+- [ ] The remaining CLI surface: a flag that grants the real `HOME`, and the
+  option that sets the grace period, which stays at 3 seconds until it is.
+  Done when both are named and documented.
+- [ ] `core:process` in the compiler's e2e harness. It does not link the
+  interface, so a fixture cannot spawn; the stdlib's own tests cover it under
+  `wado test`. Done when a fixture can spawn.
+- [ ] Spawning under a guest directory granted at a different host path, which
+  turns spawning off. Done when the child sees the guest's view of it.
+- [ ] A pseudo-terminal. A child that needs one (a full-screen editor) gets the
+  inherited terminal or none. Done when such a child runs under one.
 - [ ] Filtering the network per host through a proxy, for the guest and the
   child together.
 
 ## Known gaps
 
-### Open in Wado
-
-- Resources are unlimited. A child can run many children, use memory and CPU
-  without bound, and fork without limit.
-- The CLI surface is not named for a flag that grants the real `HOME`, or for
-  the option that sets the grace period, which stays at 3 seconds until it is.
-- A component that spawns imports `core:process`, which no WASI world defines,
-  so only the `wado` host instantiates it. Nothing at compile time says so: an
-  effect the selected world does not import is imported all the same
-  ([Worlds](./spec-worlds.md)).
-- A guest directory granted under a different host path turns spawning off.
-- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
-  inherited terminal or none.
-- The compiler's e2e harness does not link `core:process`, so a fixture cannot
-  spawn; the stdlib's own tests cover it under `wado test`.
 - WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
   tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:
   availability answers `unsupported`, and nothing spawns.
-
-### Left open by the OS mechanisms
-
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
   outside its grants exists, and its metadata. Seatbelt hides it but for the
   directories above a grant, which resolving a path stats, and the `/var` link,
