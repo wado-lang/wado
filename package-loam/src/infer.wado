@@ -951,17 +951,14 @@ fn merge_declared(
     let mut merged = *produced;
     for let mut i = 0; i < dims.len(); i += 1 {
         let axis = &merged.axes[i];
-        // `?` names nothing, and a `dim_param` claims nothing of the length:
-        // it names the axis, which a word the layout gave it overrides.
-        let declared = match dims[i] {
-            Static(n) => n,
-            Symbol(text) => {
-                declared_name(vi, axis, &text, axes)?;
-                continue;
-            },
-            Unknown => {
-                continue;
-            },
+        // `?` names nothing, and a `dim_param` claims nothing of the length
+        // until `dims` binds it: it names the axis, which a word the layout
+        // gave it overrides.
+        if let Some(text) = param_of(&dims[i]) {
+            declared_name(vi, axis, &text, axes)?;
+        }
+        let Some(declared) = dims[i].as_static() else {
+            continue;
         };
         let agrees = match axis.extent {
             Static(found) => declared == found,
@@ -1030,7 +1027,7 @@ fn shape_of(vi: &ValueInfo, schema: &Schema, axes: &mut Axes, declares: bool) ->
             Some(w) => axes.authored(&w[i], &vi.name, origin, extent),
             None => axes.mint(origin, extent),
         };
-        if declares && let Symbol(text) = dims[i] {
+        if declares && let Some(text) = param_of(&dims[i]) {
             declared_name(vi, &axis, &text, axes)?;
         }
         shape.push(axis);
@@ -1054,8 +1051,18 @@ fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
 fn extent_of(dim: &Dim, origin: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
+        Bound([_, n]) => Extent::Static(*n),
         Symbol(s) => Extent::param(s),
         Unknown => Extent::symbol(origin),
+    };
+}
+
+/// The `dim_param` a dimension was declared with, bound or not.
+fn param_of(dim: &Dim) -> Option<String> {
+    return match dim {
+        Symbol(s) => Option::Some(*s),
+        Bound([s, _]) => Option::Some(*s),
+        _ => null,
     };
 }
 

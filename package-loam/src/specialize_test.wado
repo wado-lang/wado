@@ -29,11 +29,11 @@ fn relu() -> Graph {
     return read("g (float[N, 4] X) => (float[N, 4] Y) { Y = Relu(X) }").unwrap();
 }
 
-test "a bound dimension becomes static on every tensor declaring it" {
+test "a bound dimension becomes static on every tensor declaring it, keeping its name" {
     let mut graph = relu();
     bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
-    assert dims_of(&graph, "X") == "Rank::Dims([Dim::Static(2), Dim::Static(4)])";
-    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Static(2), Dim::Static(4)])";
+    assert dims_of(&graph, "X") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
 }
 
 test "a dimension the graph never declares stops the build" {
@@ -97,7 +97,7 @@ test "an output the graph does not declare stops the build" {
 test "a bound dimension fixes the arithmetic a dim_param spells over it" {
     let mut graph = read("g (float[N, 4] X) => (float[\"N + 1\", 4] Y) { Y = Relu(X) }").unwrap();
     bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
-    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Static(3), Dim::Static(4)])";
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N + 1\", 3]), Dim::Static(4)])";
 }
 
 test "binding one name of a dim_param's arithmetic but not another stops the build" {
@@ -254,7 +254,7 @@ test "a value stage 0 folds stays whole where a cut node reads it" {
             Y = Add(X, U)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Y1,Embed";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Seq,Embed";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {

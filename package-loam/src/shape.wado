@@ -540,7 +540,8 @@ impl Shape {
     }
 
     /// Align two axis lists from the end and take, at each position, the axis
-    /// the other cannot override: a missing axis or an extent of 1 yields. An
+    /// the other cannot override: a missing axis yields, and so does an extent
+    /// of 1 against another length, while two of 1 stretch neither and meet. An
     /// extent that is 1 only as `Extent::oneness` reads it yields where the two
     /// do not agree as they stand.
     fn broadcast(
@@ -576,11 +577,11 @@ impl Shape {
                 axes.push(r);
                 continue;
             }
-            if l.extent.is_one() {
+            if l.extent.is_one() && !r.extent.is_one() {
                 axes.push(r);
                 continue;
             }
-            if r.extent.is_one() {
+            if r.extent.is_one() && !l.extent.is_one() {
                 axes.push(l);
                 continue;
             }

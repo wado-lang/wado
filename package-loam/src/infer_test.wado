@@ -24,6 +24,8 @@ use { read } from "./onnx_text.wado";
 use { Poly } from "./poly.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 use { AxisConflict } from "./shape.wado";
+use { bind_dims } from "./specialize.wado";
+use { TreeMap } from "core:collections";
 
 fn is_error<E: Error>() {
 }
@@ -136,6 +138,12 @@ test "a dim_param on two inputs is one axis, though no operation meets them" {
     let shapes = infer(&graph, &Schema { layout: [] }).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "N";
     assert shapes["Z"].axes[0].name == "N";
+
+    let mut bound = graph;
+    bind_dims(&mut bound, &({ N: 1 } as TreeMap<String, i32>)).unwrap();
+    let fixed = infer(&bound, &Schema { layout: [] }).unwrap().shapes;
+    assert `${fixed["Y"].axes[0].name}=${fixed["Y"].axes[0].extent}` == "N=1";
+    assert fixed["Z"].axes[0].name == "N";
 }
 
 test "a class two dim_params reach takes the one the graph declares first" {
