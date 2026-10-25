@@ -176,7 +176,9 @@ impl Producer {
 
 impl Consumer {
     pub fn all() -> List<Consumer> {
-        return [Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf, Handle, Forward];
+        return [
+            Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf, Handle, Forward,
+        ];
     }
 
     fn statement(&self, value: Value) -> String {
@@ -261,6 +263,13 @@ impl Case {
 
     pub fn label(&self) -> String {
         return `${self.producer:?} ${self.value:?} (companion ${self.companion:?}), ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+    }
+
+    /// Whether the case varies only its consumer, context and flag. Where `t`
+    /// comes from, its type and its companion do not decide whether a
+    /// program compiles.
+    pub fn is_plain(&self) -> bool {
+        return self.producer matches { Literal } && self.companion matches { None } && self.value matches { Tok };
     }
 
     fn runs_consumer(&self) -> bool {
