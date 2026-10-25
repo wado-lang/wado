@@ -268,3 +268,6 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
+- [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
+  an arm `match_to_switch` turns into a `br_table` target reaches no hint the
+  engine reads.
