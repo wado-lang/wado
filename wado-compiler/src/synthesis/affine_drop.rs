@@ -793,7 +793,7 @@ fn copied_to_callers(func: &TirFunction) -> bool {
 
 /// Cheap pre-check: does the body produce or bind any affine
 /// value? Lets the pass skip the (vast majority of) functions that touch no
-/// affine_types.
+/// `affine_types`.
 fn body_has_affine(block: &TirBlock, affine_types: AffineTypes) -> bool {
     let mut probe = AffineProbe {
         affine_types,

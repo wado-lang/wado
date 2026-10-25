@@ -42,6 +42,8 @@ import fn wasi/$wasi:demo/gfx@0.1.0#finish from "wasi/$wasi:demo/gfx@0.1.0#finis
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0: ref "core:prelude/types.wado//Result<(),()>" = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
+
 fn "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(outcome) with Api {
     let $outcome_disc: i32;
     let $outcome_p0: i32;
@@ -62,7 +64,7 @@ fn "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish"(outcome) with 
 fn "cm_result_param.wado/$cm_export__run"() {
     "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Ok" { discriminant: 0, payload_0: 1 });
     "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Err" { discriminant: 1, payload_0: 2 });
-    "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish"(struct.new "core:prelude/types.wado//Result<(),()>" { 0, nop });
+    "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish"(global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0);
     "wasi/task-return"(0);
 }
 
