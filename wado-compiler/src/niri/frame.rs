@@ -427,14 +427,22 @@ impl Interpreter<'_> {
             let (key, value) = ((module_source.clone(), name.clone()), *value);
             return self.exec_global_materialize(body, key, value);
         }
+        let Some(e) = op.as_expr() else {
+            return match self.operand_to_lattice(body, op) {
+                lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
+                Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+            };
+        };
+        // A `match` this frame settles reduces to the block of its arm.
+        if block_shape(body, e).is_none() {
+            self.reduce_in_place(body, e);
+        }
         // A block at statement position is run for what it performs. Inlining
         // leaves one where a call stood, and a unit-typed one — every `push`
         // onto a string or list, once inlined — denotes nothing to evaluate, so
         // the value path would abandon the frame over a statement whose whole
         // purpose is its writes.
-        if let Some(e) = op.as_expr()
-            && let Some((block, label)) = block_shape(body, e)
-        {
+        if let Some((block, label)) = block_shape(body, e) {
             let label = label.map(str::to_string);
             let flow = self.exec_block(body, block);
             return match value_of_block_flow(flow, label.as_deref()) {
@@ -442,7 +450,7 @@ impl Interpreter<'_> {
                 Err(other) => other,
             };
         }
-        match self.eval_operand(body, op) {
+        match self.reduce_to_lattice(body, e) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
             Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
         }
