@@ -18,7 +18,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias, split_namespace_member,
 };
-use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
+use crate::symbol::{GlobalSymbol, Symbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
 
@@ -624,11 +624,19 @@ fn namespace_member(
     let alias = namespace_member_alias(namespace, member);
     symbols
         .imported(module, &alias)
-        .or_else(|| {
-            let (owner, member) = split_namespace_member(&alias)?;
-            symbols.interface_type(module, owner, member)
-        })
+        .or_else(|| interface_type(symbols, module, &alias))
         .map(|sym| defs.def_at(sym.defined_at))
+}
+
+/// The type a path spelled `Interface$Type` names in `module`: one an
+/// interface declares, named through it.
+fn interface_type<'s>(
+    symbols: &'s SymbolTable,
+    module: &ModuleSource,
+    key: &str,
+) -> Option<&'s Symbol> {
+    let (owner, member) = split_namespace_member(key)?;
+    symbols.interface_type(module, owner, member)
 }
 
 /// The trait an `impl` header names, for a pass that rewrites the AST before
@@ -786,12 +794,8 @@ impl Resolver<'_> {
             .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
-    /// The type a path spelled `Interface$Type` names: one an interface
-    /// declares, named through it.
     fn interface_type(&self, key: &str) -> Option<DefId> {
-        let (owner, member) = split_namespace_member(key)?;
-        let symbol = self.symbols.interface_type(self.module, owner, member)?;
-        Some(self.defs.def_at(symbol.defined_at))
+        interface_type(self.symbols, self.module, key).map(|sym| self.defs.def_at(sym.defined_at))
     }
 
     /// Record what `site`, which named `key` in its scope, refers to.
