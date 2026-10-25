@@ -508,11 +508,15 @@ fn expand_grammar_templates<S: AsStrSlice, S1: AsStrSlice>(key: S, grammar: S1) 
     return outcome.text;
 }
 
-/// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
-/// caller decides whether a missing file is fatal (typical use is "best
-/// effort cleanup", where any failure is silently ignored).
-fn remove_file<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), ErrorCode> {
-    return dir.unlink_file_at(path.to_string()).wait();
+/// Remove a file the corpus no longer holds, absent or not. A file left behind
+/// would stay committed as if this run had produced it, so any other failure
+/// ends the run.
+fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit) {
+    let path = path.to_string();
+    if let Err(e) = dir.unlink_file_at(path).wait() && !e matches { NoEntry } {
+        eprintln(`extract: cannot remove ${path}: ${e:?}`);
+        exit(1);
+    }
 }
 
 fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor, ErrorCode> {
@@ -800,7 +804,7 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     attr: S,
     category: S1,
     chunks: &List<TestChunk>,
-) -> i32 with Stderr {
+) -> i32 with (Stderr, Exit) {
     let mut written: List<String> = [];
     let mut failed = false;
     let mut index = 0;
@@ -824,7 +828,7 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     }
     for let existing of list_files_with_suffix(dir, "_test.wado") {
         if !written.contains(&existing) {
-            let _ = remove_file(dir, &existing);
+            remove_stale(dir, &existing);
         }
     }
     return written.len();
@@ -1595,12 +1599,11 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
                 // makes the committed corpus look larger than the supported
                 // set. (Slave names are `{base}.slave<N>.g4`; enumerate by
                 // prefix since N is unknown without parsing the descriptor.)
-                if let Err(_) = remove_file(&cat_out_dir, `${base}.g4`) {
-                }
+                remove_stale(&cat_out_dir, `${base}.g4`);
                 let slave_prefix = `${base}.slave`;
                 for let existing of list_files_with_suffix(&cat_out_dir, ".g4") {
                     if existing.starts_with(slave_prefix) {
-                        let _ = remove_file(&cat_out_dir, &existing);
+                        remove_stale(&cat_out_dir, &existing);
                     }
                 }
                 continue;
@@ -1772,8 +1775,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             // re-write the files when the descriptor is a candidate.
             let oracle_input_filename = `${base}.input`;
             let oracle_start_filename = `${base}.start`;
-            let _ = remove_file(&oracle_pending_cat_dir, &oracle_input_filename);
-            let _ = remove_file(&oracle_pending_cat_dir, &oracle_start_filename);
+            remove_stale(&oracle_pending_cat_dir, &oracle_input_filename);
+            remove_stale(&oracle_pending_cat_dir, &oracle_start_filename);
             let oracle_triage = stage_b_oracle_triage_map.lookup(&key);
             let oracle_intrinsic = stage_b_oracle_eligible(&parsed);
             let oracle_eligible = oracle_intrinsic && !oracle_triage matches { Skip(_) };
@@ -1914,9 +1917,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
         // intentional case where every descriptor was `[skip]`-triaged
         // (currently only `Listeners`), so the file goes.
         if entries.is_empty() {
-            if let Err(_) = remove_file(&compat_dir, &test_filename) {
-                // No prior file is fine; only a real I/O failure would surface here.
-            }
+            remove_stale(&compat_dir, &test_filename);
             println(`  empty: antlr4-compat/${test_filename} (no descriptors emitted; not writing)`);
             continue;
         }
@@ -2026,7 +2027,10 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
             let label = `${category.name}/${name}`;
             let base = fs::join(&category_dir, &name);
             let expected_path = `${base}.expected`;
-            let _ = fs::remove_file(&expected_path);
+            // A stale `.expected` left behind would pin the last run's tree.
+            if let Err(e) = fs::remove_file(&expected_path) && !e.kind matches { NotFound } {
+                return Err(`${e}`);
+            }
             let start = match fs::read_to_string(`${base}.start`) {
                 Ok(start) => start,
                 Err(e) => {
@@ -2129,10 +2133,10 @@ fn write_oracle_pending_files<S: AsStrSlice, S1: AsStrSlice>(
     input_filename: S,
     start_filename: S1,
     parsed: &ParsedDescriptor,
-) -> Result<(), ErrorCode> {
+) -> Result<(), ErrorCode> with (Stderr, Exit) {
     write_file_string(dir, input_filename, &parsed.input)?;
     if let Err(e) = write_file_string(dir, start_filename, &parsed.start) {
-        let _ = remove_file(dir, input_filename);
+        remove_stale(dir, input_filename);
         return Result::Err(e);
     }
     return Result::Ok(());
