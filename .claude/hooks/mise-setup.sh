@@ -128,6 +128,29 @@ if [ -f .gitmodules ]; then
     else
         log "Warning: failed to sync vendor/wasmtime submodule"
     fi
+    # Gale's descriptor corpus and oracle pipeline read it (package-gale/AGENTS.md).
+    if git submodule update --init --recommend-shallow vendor/antlr4; then
+        log "vendor/antlr4 initialized"
+    else
+        log "Warning: failed to initialize vendor/antlr4 submodule"
+    fi
+fi
+
+# A program core:process spawns reads only /usr and /etc by default, so the
+# toolchains mise installs (the JDK the Gale oracle runs) are opened through
+# the user config. A config already there is the user's and is left alone.
+WADO_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/wado/config.toml"
+if [ -e "$WADO_CONFIG" ]; then
+    log "$WADO_CONFIG exists; leaving it as it is"
+else
+    mkdir -p "$(dirname "$WADO_CONFIG")"
+    cat > "$WADO_CONFIG" << EOF
+[process]
+read = ["${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs"]
+EOF
+    # wado ignores a config another user could write.
+    chmod go-w "$WADO_CONFIG"
+    log "Wrote $WADO_CONFIG"
 fi
 
 log "mise setup complete"
