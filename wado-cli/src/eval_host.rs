@@ -30,7 +30,8 @@ use wado_lsp::host::dependency_index_from;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
-use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
+use crate::cache::derived_dir;
+use crate::compile::{load_nearest_manifest, render_error_diagnostics};
 use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
@@ -340,9 +341,8 @@ struct Dependencies {
     /// The calling package's root, which no dependency's files include, even
     /// a dependency whose package holds it.
     caller_root: Option<PathBuf>,
-    /// Where outcomes are cached: `build/eval/` under the calling package's
-    /// root, or under the caller's directory when it is in no package. `None`,
-    /// and so no cache, when the package's manifest is invalid.
+    /// Where outcomes are cached: the calling package's [`derived_dir`].
+    /// `None`, and so no cache, when the package's manifest is invalid.
     cache_dir: Option<PathBuf>,
 }
 
@@ -364,7 +364,7 @@ impl Dependencies {
         };
         let project = match load_nearest_manifest(caller) {
             Ok(Some(project)) => project,
-            Ok(None) => return none(Some(build_dir(&base).join("eval"))),
+            Ok(None) => return none(derived_dir(None, "eval")),
             Err(_) => return none(None),
         };
         let index = dependency_index_from(&project.manifest, &project.root, &base);
@@ -382,7 +382,7 @@ impl Dependencies {
                 .map(absolute)
                 .collect(),
             caller_root: Some(normalize_path(&absolutize(&project.root))),
-            cache_dir: Some(build_dir(&project.root).join("eval")),
+            cache_dir: derived_dir(Some(&project.root), "eval"),
             base,
             index,
         }

@@ -78,16 +78,36 @@ pub(crate) fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
     hasher.update(bytes);
 }
 
-/// A file a compile looked up, known by its contents, or by its absence.
+/// Something a compile looked up, by what it found.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub(crate) struct Input {
-    pub(crate) path: PathBuf,
+#[serde(untagged)]
+pub(crate) enum Input {
+    File(FileInput),
+    /// An environment variable, as a `#[param(from_env = ...)]` reads one.
+    /// `None` where it was unset.
+    Env {
+        env: String,
+        value: Option<String>,
+    },
+}
+
+/// A file, known by its contents, or by its absence.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FileInput {
+    path: PathBuf,
     /// How many leading bytes the compile depended on, as a Kiln input cut to
     /// its probe's extent; `None` is the whole file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) prefix: Option<u64>,
+    prefix: Option<u64>,
     /// `None` where the file was absent.
     sha256: Option<String>,
+}
+
+/// What an [`Input`] is of, whatever it held.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum InputKey {
+    File(PathBuf, Option<u64>),
+    Env(String),
 }
 
 impl Input {
@@ -97,19 +117,37 @@ impl Input {
 
     /// An input whose bytes the caller has already hashed.
     pub(crate) fn hashed(path: PathBuf, prefix: Option<u64>, sha256: Option<[u8; 32]>) -> Self {
-        Self {
+        Self::File(FileInput {
             path,
             prefix,
             sha256: sha256.map(|hash| hex32(&hash)),
+        })
+    }
+
+    pub(crate) fn key(&self) -> InputKey {
+        match self {
+            Self::File(file) => InputKey::File(file.path.clone(), file.prefix),
+            Self::Env { env, .. } => InputKey::Env(env.clone()),
         }
     }
 
     pub(crate) fn unchanged(&self) -> bool {
-        Self::on_disk(self.path.clone(), self.prefix).as_ref() == Some(self)
+        Self::now(&self.key()).as_ref() == Some(self)
     }
 
-    /// What `path` holds now, its first `prefix` bytes where that is given;
-    /// `None` where it cannot be read, which matches no recorded input.
+    /// What `key` names holds now; `None` where it cannot be read, which
+    /// matches no recorded input.
+    pub(crate) fn now(key: &InputKey) -> Option<Self> {
+        match key {
+            InputKey::File(path, prefix) => Self::on_disk(path.clone(), *prefix),
+            InputKey::Env(name) => Some(Self::Env {
+                env: name.clone(),
+                value: std::env::var(name).ok(),
+            }),
+        }
+    }
+
+    /// What `path` holds now, its first `prefix` bytes where that is given.
     pub(crate) fn on_disk(path: PathBuf, prefix: Option<u64>) -> Option<Self> {
         match read_prefix(&path, prefix) {
             Ok(bytes) => Some(Self::hashed(

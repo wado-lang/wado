@@ -63,6 +63,13 @@ still sees dependencies and builds real files; it just never does the resolving.
 - `run` / `serve` / `test` / `publish` share the `build` core in project mode.
   A bare-file argument (`wado run file.wado`) routes through the standalone
   `compile` path instead.
+- `run` and `serve` keep the component they built, keyed by the `wado`
+  binary, the options, the `WADO_*` environment and the entry file, and reuse
+  it while every file and environment variable its compile read is unchanged.
+  It lives in `build/run/` under the package root, or in the user cache,
+  `$XDG_CACHE_HOME/wado/run/` (else `~/.cache/wado/run/`), for a file in no
+  package, so a script run from a shebang writes nothing beside itself.
+  `--no-cache` compiles anyway.
 
 | Tier                  | Commands                                                             | Resolves deps                  |
 | --------------------- | -------------------------------------------------------------------- | ------------------------------ |
@@ -442,6 +449,11 @@ the canonical clones and registry components so a rebuild needs no network;
 `--all` additionally removes those. Worktrees are reproducible from the lock, so
 this is always safe — `wado fetch` rebuilds them. Like `wado list`, it scans the
 cache and needs no project context.
+
+`--global` removes the user cache instead (`$XDG_CACHE_HOME/wado`, else
+`~/.cache/wado`): what `run`, `serve`, `test` and `core:eval` cached for
+files in no package, whichever files those were. A package's own caches live in
+its `build/`.
 
 ### Entry Point and CLI Commands
 

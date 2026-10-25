@@ -13,13 +13,18 @@ use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, CompileOptions};
+use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
+use crate::fingerprint::Input;
+use crate::input_cache::{InputCache, wado_env};
+use crate::kiln_provider::hex32;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{self, openable_dir};
+use wado_host::atomic_write::write_atomic;
 use wado_host::sync::joined;
 
 pub struct BuildOptions {
@@ -318,7 +323,7 @@ pub async fn build_world_component(
     target: &BuildTarget,
     knobs: &CompileKnobs,
     embed: EmbedOptions,
-) -> Result<Vec<u8>, CliExit> {
+) -> Result<Artifact, CliExit> {
     let mut opts = CompileOptions::for_world_build(
         target.entry.to_string_lossy().into_owned(),
         target.output.clone(),
@@ -331,7 +336,7 @@ pub async fn build_world_component(
     // concurrent build (e.g. parallel `serve` drivers sharing this project's
     // `build/<world>.wasm`) could leave the file torn or holding another
     // world's module.
-    Ok(compile::compile_to_artifact(opts).await?.bytes)
+    compile::compile_to_artifact(opts).await
 }
 
 /// Produce the runnable component for a driver (`run` / `serve`). In a project
@@ -341,12 +346,20 @@ pub async fn build_world_component(
 /// no artifact on disk). `flags` supplies the build knobs and the fallback
 /// world. Metadata and WIT embed at their defaults, matching `wado build`, so a
 /// run/serve artifact is identical to a built one.
+///
+/// A component built before, from sources unchanged since, is taken from the
+/// [`DriverCache`] instead, and nothing is written.
 pub async fn build_for_driver(
     entry: &str,
     target_world: &str,
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
-    match compile::load_nearest_manifest(Path::new(entry)).map_err(CliExit::error)? {
+    let cache = DriverCache::new(target_world, flags);
+    let entry_path = Path::new(entry);
+    if let Some(wasm) = cache.lookup(entry_path) {
+        return Ok(wasm);
+    }
+    let (wasm, reads) = match compile::load_nearest_manifest(entry_path).map_err(CliExit::error)? {
         Some(project) => {
             let segment = compile::world_path_segment(target_world);
             let target = BuildTarget {
@@ -355,8 +368,51 @@ pub async fn build_for_driver(
                 lib_world: None,
                 target_world: Some(target_world.to_string()),
             };
-            build_world_component(&target, &flags.knobs, EmbedOptions::default()).await
+            let artifact =
+                build_world_component(&target, &flags.knobs, EmbedOptions::default()).await?;
+            (artifact.bytes, artifact.reads)
         }
-        None => compile::compile(entry, flags).await,
+        None => compile::compile_with_reads(entry, flags).await?,
+    };
+    if let Some(reads) = reads {
+        cache.store(entry_path, reads, &wasm);
     }
+    Ok(wasm)
+}
+
+/// The components `run` and `serve` built, each beside an [`InputCache`]
+/// entry naming it by its SHA-256, so a torn or replaced file is a miss.
+struct DriverCache(InputCache);
+
+impl DriverCache {
+    fn new(target_world: &str, flags: &CompileFlags) -> Self {
+        let mut keyed = flags.clone();
+        // `--no-cache` only skips reading, so it is no part of the key.
+        keyed.knobs.no_cache = false;
+        Self(InputCache::new(
+            "run",
+            &format!("{target_world} {keyed:?} {:?}", wado_env()),
+            !flags.knobs.no_cache,
+        ))
+    }
+
+    fn lookup(&self, entry: &Path) -> Option<Vec<u8>> {
+        let sha256: String = self.0.lookup(entry)?;
+        let wasm = std::fs::read(self.0.entry_stem(entry)?.with_extension("wasm")).ok()?;
+        (sha256_hex(&wasm) == sha256).then_some(wasm)
+    }
+
+    fn store(&self, entry: &Path, reads: Vec<Input>, wasm: &[u8]) {
+        let Some(stem) = self.0.entry_stem(entry) else {
+            return;
+        };
+        // Losing the cache is never an error: the next run compiles again.
+        if write_atomic(&stem.with_extension("wasm"), wasm).is_ok() {
+            self.0.store(entry, reads, sha256_hex(wasm));
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex32(&Sha256::digest(bytes).into())
 }

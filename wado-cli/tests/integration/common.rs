@@ -8,6 +8,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
+
+use tempfile::TempDir;
 
 /// Repository root (parent of `wado-cli/`).
 pub fn project_root() -> PathBuf {
@@ -22,12 +25,23 @@ pub fn wado_bin() -> PathBuf {
     assert_cmd::cargo::cargo_bin!("wado").into()
 }
 
+/// The user cache every `wado` this binary runs is given, so a file a test
+/// writes in no package caches there rather than in the real one.
+pub fn user_cache() -> &'static Path {
+    static DIR: OnceLock<TempDir> = OnceLock::new();
+    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+}
+
+fn wado_command(dir: &Path) -> assert_cmd::Command {
+    let mut cmd = Command::new(wado_bin());
+    cmd.current_dir(dir).env("XDG_CACHE_HOME", user_cache());
+    cmd.into()
+}
+
 /// `wado` invocation rooted at the project root. Use this when the test
 /// drives an example file (e.g. `example/hello.wado`) by relative path.
 pub fn wado() -> assert_cmd::Command {
-    let mut cmd = Command::new(wado_bin());
-    cmd.current_dir(project_root());
-    cmd.into()
+    wado_command(&project_root())
 }
 
 /// `wado test`, reading no cached result: a test of the runner's own output
@@ -41,9 +55,7 @@ pub fn wado_test() -> assert_cmd::Command {
 /// `wado` invocation rooted at `dir`. Use this when the test creates a
 /// self-contained workspace (`wado.toml`, sources) under a tempdir.
 pub fn wado_in(dir: &Path) -> assert_cmd::Command {
-    let mut cmd = Command::new(wado_bin());
-    cmd.current_dir(dir);
-    cmd.into()
+    wado_command(dir)
 }
 
 /// Single-threaded Tokio runtime for tests that drive async APIs from a

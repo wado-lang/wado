@@ -19,7 +19,8 @@
 //! path. This module adds the concrete `PathBuf`s.
 
 use crate::build_dep::GENERATOR_WORLD_SEGMENT;
-use std::path::PathBuf;
+use crate::compile::build_dir;
+use std::path::{Path, PathBuf};
 use wado_lsp::host::discovery::home_dir;
 
 /// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
@@ -80,6 +81,26 @@ fn expand_tilde(path: &str) -> PathBuf {
         return home.join(rest);
     }
     PathBuf::from(path)
+}
+
+/// Where derived files outside any package go: `$XDG_CACHE_HOME/wado`, else
+/// `~/.cache/wado`. Not the Wado [`root`], which holds dependencies a build
+/// needs rather than what any build can recreate.
+pub fn user_cache_dir() -> Option<PathBuf> {
+    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(xdg).join("wado"));
+    }
+    home_dir().map(|home| home.join(".cache").join("wado"))
+}
+
+/// The directory for the `kind` cache of a file in the package at
+/// `package_root`: `build/<kind>/` there, or `<user cache>/<kind>/` for a file
+/// in no package, so a script run from a shebang leaves nothing beside itself.
+pub fn derived_dir(package_root: Option<&Path>, kind: &str) -> Option<PathBuf> {
+    match package_root {
+        Some(root) => Some(build_dir(root).join(kind)),
+        None => user_cache_dir().map(|dir| dir.join(kind)),
+    }
 }
 
 /// The cached component path for a registry coordinate at a version, under the

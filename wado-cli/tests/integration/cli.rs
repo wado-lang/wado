@@ -1410,6 +1410,107 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
     run()
         .failure()
         .stdout(predicate::str::contains("cached:").not());
+    // A file in no package caches in the user cache, never beside itself.
+    assert!(!tmp.path().join("build").exists());
+}
+
+/// An environment variable the compile read is an input like a file: a run
+/// that sees another value compiles again.
+#[test]
+fn test_test_caches_a_file_whose_compile_read_the_environment() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("param_test.wado");
+    std::fs::write(
+        &main,
+        "#[param(from_env = \"PARAM_TEST_N\")]\nglobal N: i32 = 1;\n\ntest \"t\" {\n    assert N == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&main).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    wado()
+        .env("PARAM_TEST_N", "2")
+        .arg("test")
+        .arg(&main)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+/// `wado run` takes the component it built from the cache while nothing the
+/// compile read has changed, and a file in no package keeps that cache in the
+/// user cache rather than beside itself.
+#[cfg(unix)]
+#[test]
+fn test_run_reuses_its_component_until_something_it_read_changes() {
+    use std::os::unix::fs::MetadataExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let scripts = tmp.path().join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    let dep = scripts.join("dep.wado");
+    let body = |n: i32| format!("pub fn n() -> i32 {{\n    return {n};\n}}\n");
+    std::fs::write(&dep, body(1)).unwrap();
+    let main = scripts.join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\nuse { n } from \"./dep.wado\";\n\nexport fn run() with Stdout {\n    println(`${n()}`);\n}\n",
+    )
+    .unwrap();
+    let run = |expected: &str| {
+        wado_in(&scripts)
+            .env("XDG_CACHE_HOME", cache.path())
+            .args(["run", "main.wado"])
+            .assert()
+            .success()
+            .stdout(format!("{expected}\n"));
+    };
+    let entry = || {
+        let dir = cache.path().join("wado/run");
+        let entries: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "json"))
+            .collect();
+        assert_eq!(entries.len(), 1, "one entry per entry file and options");
+        std::fs::metadata(&entries[0]).unwrap().ino()
+    };
+
+    run("1");
+    let first = entry();
+    run("1");
+    assert_eq!(entry(), first, "an unchanged run writes no entry");
+    std::fs::write(&dep, body(2)).unwrap();
+    run("2");
+    assert_ne!(entry(), first, "an edited import compiles again");
+    assert_eq!(
+        std::fs::read_dir(&scripts).unwrap().count(),
+        2,
+        "nothing is written beside the script"
+    );
+}
+
+#[test]
+fn test_clean_global_removes_the_user_cache() {
+    let cache = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(cache.path().join("wado/run")).unwrap();
+    std::fs::write(cache.path().join("wado/run/x.json"), "{}").unwrap();
+    wado()
+        .env("XDG_CACHE_HOME", cache.path())
+        .args(["clean", "--global"])
+        .assert()
+        .success();
+    assert!(!cache.path().join("wado").exists());
+    assert!(cache.path().exists(), "only wado's own directory goes");
+    wado()
+        .args(["clean", "--global", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pass one"));
 }
 
 #[test]

@@ -17,6 +17,7 @@ use crate::dep_component::{
     Acquisition, Resolution, fetch_component_dependencies, resolve_inline_component_dependencies,
     resolve_inline_git_dependencies,
 };
+use crate::fingerprint::Input;
 use crate::git::materialize;
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
@@ -435,6 +436,18 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
         .await
         .map(|result| result.wasm)
         .map_err(|_| CliExit::silent_failure(1))
+}
+
+/// [`compile`], and what it read where it read nothing but files.
+pub(crate) async fn compile_with_reads(
+    filename: &str,
+    flags: &CompileFlags,
+) -> Result<(Vec<u8>, Option<Vec<Input>>), CliExit> {
+    let scope = RunCache::new().scoped();
+    let result = try_compile_with_run_cache(filename, flags, Some(Arc::clone(&scope)))
+        .await
+        .map_err(|_| CliExit::silent_failure(1))?;
+    Ok((result.wasm, scope.reads()))
 }
 
 /// Seed `host` with the `[dependencies]` index derived from `manifest_pair`
@@ -1347,6 +1360,8 @@ fn read_license_text(
 pub struct Artifact {
     pub bytes: Vec<u8>,
     pub output_path: Option<PathBuf>,
+    /// What the compile read, where it read nothing but files.
+    pub(crate) reads: Option<Vec<Input>>,
 }
 
 /// Report a written file. A command that exists to produce one says so; a
@@ -1397,10 +1412,15 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
             Some(&default_interface_name(&opts.input, nearest.as_ref())),
         ));
     }
+    let scope = RunCache::new().scoped();
     // Boxed so the manifest held across it keeps every caller's future small.
-    let result = Box::pin(try_compile(&opts.input, &flags))
-        .await
-        .map_err(|_| CliExit::silent_failure(1))?;
+    let result = Box::pin(try_compile_with_run_cache(
+        &opts.input,
+        &flags,
+        Some(Arc::clone(&scope)),
+    ))
+    .await
+    .map_err(|_| CliExit::silent_failure(1))?;
     let wasm = result.wasm;
 
     if opts.wat_to_stdout {
@@ -1409,6 +1429,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         return Ok(Artifact {
             bytes: Vec::new(),
             output_path: None,
+            reads: None,
         });
     }
 
@@ -1446,6 +1467,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
     Ok(Artifact {
         bytes,
         output_path: Some(output_path),
+        reads: scope.reads(),
     })
 }
 

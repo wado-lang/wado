@@ -27,6 +27,7 @@ pub mod format;
 pub mod git;
 pub mod http_hooks;
 pub mod init;
+mod input_cache;
 pub mod kiln_provider;
 pub mod kiln_wit;
 pub mod knobs;

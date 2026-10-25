@@ -11,7 +11,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::common::{project_root, wado_bin};
+use crate::common::{project_root, user_cache, wado_bin};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -72,6 +72,7 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     // sees a spurious connection reset when that server is torn down.
     let mut cmd = Command::new(wado_bin());
     cmd.current_dir(project_root())
+        .env("XDG_CACHE_HOME", user_cache())
         .arg("serve")
         .arg("--addr")
         .arg("127.0.0.1:0")

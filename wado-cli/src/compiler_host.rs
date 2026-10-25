@@ -382,8 +382,9 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn env_var(&self, name: &str) -> Option<String> {
-        self.run.observe_untracked();
-        std::env::var(name).ok()
+        let value = std::env::var(name).ok();
+        self.run.observe_env(name, value.as_deref());
+        value
     }
 
     /// A dev build compiles against the stdlib it read from disk, which an edit

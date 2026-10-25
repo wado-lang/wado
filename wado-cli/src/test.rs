@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -24,6 +23,7 @@ use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
+use crate::input_cache::wado_env;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
@@ -2406,17 +2406,6 @@ fn write_profile(
     eprintln!("Profile written to {path}");
     eprintln!("View at https://profiler.firefox.com/");
     Ok(())
-}
-
-/// The `WADO_*` environment, sorted. The compiler reads these itself
-/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
-/// and they change what it emits.
-fn wado_env() -> Vec<(OsString, OsString)> {
-    let mut vars: Vec<_> = std::env::vars_os()
-        .filter(|(name, _)| name.as_encoded_bytes().starts_with(b"WADO_"))
-        .collect();
-    vars.sort();
-    vars
 }
 
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
