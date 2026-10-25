@@ -44,7 +44,7 @@ traps.
 - CM-binding synthesis maps `&R` → `borrow<R>` and by-value `R` → `own<R>`.
 - The value-copy machinery already treats resources as non-copyable (an identity
   copy, never a deep clone), so a resource never physically duplicates.
-- `resource_cleanup.rs` inserts `resource.drop` for every owned resource a body
+- `affine_drop.rs` inserts `resource.drop` for every owned resource a body
   does not transfer, reconstructing ownership by dataflow.
 
 ## Decision
@@ -139,7 +139,7 @@ non-method, and a call consumes its receiver iff the dispatch resolves to
 
 ### The move check
 
-`resource_move_check.rs` gives resources their move-only semantics in one
+`affine_move_check.rs` gives resources their move-only semantics in one
 diagnostic pass.
 
 Layer — it runs on the `Semantics` layer (AST + type facts), a sibling of
@@ -159,7 +159,7 @@ future work, not a present fact.
 
 Done: use-after-move of a bare resource local, by-value `self` consumption (a
 bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
-semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
+semantic-layer twin of `affine_drop`'s `owned_self`), and whole-move of a
 resource-carrying struct / tuple / `Result`, and no-move-out-of-reference (a `&self`
 return rooted in the reference that carries a resource) — see below.
 
@@ -185,7 +185,7 @@ concrete value type.
 
 A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { … => interior }`, or a `let`-bound projection) moves a resource out of a referenced
 place: the reference keeps the source owned, so the returned handle aliases it — a
-double-free. `resource_move_check` rejects it. For each function it seeds the
+double-free. `affine_move_check` rejects it. For each function it seeds the
 reference parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
 from them (through `let`, field access, deref, and match-arm bindings whose
 scrutinee is a reference), and flags a `return` whose value is rooted in a
@@ -233,7 +233,7 @@ A result whose type parameters no reference parameter stores is fresh
 
 ### Authoritative cleanup
 
-`resource_cleanup.rs` drops every owned, untransferred resource on each
+`affine_drop.rs` drops every owned, untransferred resource on each
 fall-through path, structurally for aggregates via a synthesized `match`. A value
 is transferred when passed by value, returned, placed in an aggregate, or used as
 the receiver of a by-value (`self`) method — so extraction (`unwrap`) is just a
@@ -259,7 +259,7 @@ The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned a
 not transferred at scope exit" directly.
 
 Whether a type holds a resource is answered by one walk,
-`resource_holding::holds_resource`, for the move check, a by-value `self` and
+`affine_holding::holds_affine`, for the move check, a by-value `self` and
 this pass alike. Each supplies a type's members typed at its instance, and the
 walk cuts a declaration it reaches again with arguments that hold alike, which
 ends on polymorphic recursion as well as on a type that holds itself.
@@ -500,13 +500,13 @@ Verified against the tree.
 
 ### Move check
 
-- [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP; covers
+- [x] `affine_move_check.rs` on `Semantics`, wired into batch and LSP; covers
   free / `impl` / `trait` / `test` / function-local bodies.
 - [x] Use-after-move of a bare resource local (branch-join, divergence-aware,
   loop-carried, rebind clears).
 - [x] By-value `self` consumption via the `consumes_self` dispatch fact.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
-  kept in step with cleanup's `carries_resource` (variant / `Option` /
+  kept in step with cleanup's `carries_affine` (variant / `Option` /
   `List` deferred with their destructors); whole-aggregate move only.
 - [x] No-move-out-of-reference: a `&self` / `&T`-param return rooted in the
   reference whose concrete type carries a resource is rejected.

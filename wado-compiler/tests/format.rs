@@ -300,6 +300,21 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// An empty argument list stays `()` on an overlong line: wrapping it shortens
+/// nothing, as an empty parameter list is never wrapped either.
+#[test]
+fn test_format_keeps_empty_call_args_inline_on_overlong_line() {
+    let source = concat!(
+        "fn f() {\n",
+        "    assert failure.rendered.contains(\"a closure captures `t` by reference, so its body cannot move it, ever\"), case.label();\n",
+        "    assert failure.rendered.contains(\"a closure captures `t` by reference, so its body cannot move it, ever\"), `${case.label()}: ${x}`;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(!formatted.contains("(\n"), "got:\n{formatted}");
+    assert_format_preserves_ast(source);
+}
+
 /// `resume value;` prints with its own keyword, as a statement and as a match
 /// arm, and an arm is braced as a `return` arm is.
 #[test]

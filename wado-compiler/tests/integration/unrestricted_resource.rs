@@ -5,7 +5,7 @@ use crate::common::{
     check_diagnostics as diagnostics, diagnostic_messages, in_memory_host, runtime,
 };
 use wado_compiler::semantics::semantics;
-use wado_compiler::{Diagnostic, check_resource_moves_semantic};
+use wado_compiler::{Diagnostic, check_affine_moves_semantic};
 
 /// The move errors in `source`, which must compile otherwise: a source rejected
 /// before the move check runs says nothing about what the move check decides.
@@ -17,7 +17,7 @@ fn move_errors(source: &str) -> Vec<String> {
         rejected.is_empty(),
         "the source must reach the move check, got {rejected:?}"
     );
-    check_resource_moves_semantic(&sem)
+    check_affine_moves_semantic(&sem)
         .into_iter()
         .map(|e| Diagnostic::from(e).message)
         .collect()

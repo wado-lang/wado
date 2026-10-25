@@ -4,11 +4,11 @@
 //! All of it runs pre-monomorphize, so the trait calls template expansion emits
 //! resolve to concrete implementations there.
 
+pub mod affine_drop;
 pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
 pub mod reflect_bridge;
-pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
@@ -124,15 +124,16 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     // cm_binding, so a user resource call is intercepted at its pre-cm_binding
     // `cm_name`-tagged shape and routed to the dispatch wrapper, whose fallback
     // emits that same shape for cm_binding to rewrite uniformly. `WithHandler`
-    // desugaring stays late: effect-check reads the original shape.
+    // desugars ahead of drop elaboration, so a handler held by value drops
+    // after the `with` restores the handler it shadowed, on every path out.
     let project =
         effect_dispatch::synthesize_pre_cm_binding(project).map_err(SynthesisError::from)?;
 
-    // Insert `resource.drop` for every owned Component Model resource that is
-    // never transferred. Runs before CM-binding synthesis, whose rewrite of
-    // resource method calls would obscure the reference-vs-transfer distinction.
+    // Insert the drop of every affine value that never moves. Runs before
+    // CM-binding synthesis, whose rewrite of resource method calls would
+    // obscure the reference-vs-transfer distinction.
     let mut project = project;
-    resource_cleanup::elaborate_resource_drops(&mut project);
+    affine_drop::elaborate_affine_drops(&mut project);
     effect_dispatch::rewrite_resource_drops(&project);
 
     let project = cm_binding::generate_adapters(project)?;

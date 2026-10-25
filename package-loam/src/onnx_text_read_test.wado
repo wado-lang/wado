@@ -51,8 +51,7 @@ test "the default domain's opset comes off the model's metadata" {
 }
 
 test "a Concat before opset 4 without an axis reads as the axis 1 it defaulted to" {
-    let g = read(`<ir_version: 3, opset_import: ["" : 3]> g (float[1, 2] X) => (float[1, 4] Y) { Y = Concat(X, X) }`).unwrap(
-    );
+    let g = read(`<ir_version: 3, opset_import: ["" : 3]> g (float[1, 2] X) => (float[1, 4] Y) { Y = Concat(X, X) }`).unwrap();
     assert g.nodes[0].attr("axis").unwrap().values == ["1"] as List<String>;
 }
 

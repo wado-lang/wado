@@ -1,5 +1,5 @@
-//! Whether a type holds a resource, answered by one walk for every phase that
-//! asks: the move check, a by-value `self`, and the cleanup pass. Each phase
+//! Whether a type is affine, answered by one walk for every phase that asks:
+//! the move check, a by-value `self`, and drop elaboration. Each phase
 //! supplies what a type holds one level down, typed at its instance; the walk
 //! here decides the rest, so the phases cannot disagree on an aggregate.
 
@@ -9,9 +9,9 @@ use crate::type_table::TypeKey;
 
 /// What a type holds, one level down.
 pub(crate) enum Held {
-    /// A resource the asking phase counts.
-    Resource,
-    /// Nothing that can hold a resource: a scalar, a reference, a type
+    /// An affine leaf the asking phase counts.
+    Affine,
+    /// Nothing that can hold an affine value: a scalar, a reference, a type
     /// parameter.
     Nothing,
     /// An aggregate's members, typed at this instance. `decl` is the
@@ -31,8 +31,8 @@ pub(crate) trait HeldTypes {
     fn key(&self, type_id: TypeId) -> TypeKey;
 }
 
-/// Whether `type_id` is, or holds at any depth, a resource `types` counts.
-pub(crate) fn holds_resource(types: &impl HeldTypes, type_id: TypeId) -> bool {
+/// Whether `type_id` is, or holds at any depth, an affine leaf `types` counts.
+pub(crate) fn holds_affine(types: &impl HeldTypes, type_id: TypeId) -> bool {
     Walk {
         types,
         open: Vec::new(),
@@ -43,7 +43,7 @@ pub(crate) fn holds_resource(types: &impl HeldTypes, type_id: TypeId) -> bool {
 struct Walk<'a, T> {
     types: &'a T,
     /// The declarations the walk is inside, each with which of its arguments
-    /// hold a resource, and the arguments.
+    /// hold an affine value, and the arguments.
     open: Vec<Open>,
 }
 
@@ -65,7 +65,7 @@ impl<T: HeldTypes> Walk<'_, T> {
 
     fn holds(&mut self, type_id: TypeId) -> bool {
         match self.types.held(type_id) {
-            Held::Resource => true,
+            Held::Affine => true,
             Held::Nothing => false,
             Held::Members {
                 decl: None,

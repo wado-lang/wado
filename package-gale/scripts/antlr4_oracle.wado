@@ -660,8 +660,7 @@ internal fn compile(recognizer: &Recognizer) -> Option<Ran> with (Process, Preop
     }
 
     let java_files = match fs::read_dir(work) {
-        Ok(entries) => entries.into_iter().filter(|e| e.name.ends_with(".java")).map(|e| fs::join(work, e.name)).collect(
-        ),
+        Ok(entries) => entries.into_iter().filter(|e| e.name.ends_with(".java")).map(|e| fs::join(work, e.name)).collect(),
         Err(e) => {
             return Some(failed(`oracle: ${e}\n`));
         },

@@ -4,6 +4,9 @@
 //! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::ast::{RestClause, Visibility};
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
@@ -19,9 +22,9 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::synthesis::common::{
-    alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span, unreachable_call,
+    alloc_local, alloc_named_local, assign, expr_stmt, let_mut_stmt, local_ref, option_none,
+    option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
-use crate::synthesis::resource_cleanup;
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
@@ -214,8 +217,7 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
 /// All the bookkeeping needed to emit / refer to one effect's dispatch
 /// infrastructure. Built once per active effect by
 /// `synthesize_dispatch_infrastructure`, then consumed by the lowering and
-/// call-site-rewriting passes. The map lives on `Package::dispatch_plans` so the
-/// late synthesis half does not re-derive it.
+/// call-site-rewriting passes.
 #[derive(Debug, Clone)]
 pub struct DispatchPlan {
     /// `TypeId` of the synthesised `$Dispatch_<E>` struct.
@@ -1095,46 +1097,43 @@ struct LowerCtx {
     /// Stack of local-allocation scopes — one entry per active function
     /// or closure body. Top of stack is the innermost scope.
     scopes: Vec<LocalScope>,
-    /// Whether a `WithHandler` was desugared.
-    desugared: bool,
+    /// Serial that names each `with` body's label, unique in the function.
+    with_serial: u32,
 }
 
-/// One frame on `LowerCtx.scopes`. The outermost is always `Function` and owns
-/// the `locals` vector, moved back into `TirFunction.locals` on exit. A
-/// `Closure` frame owns only a `next_local` counter — the lower phase rebuilds
-/// each functor's local table from the body's `Let` statements.
-enum LocalScope {
-    Function {
-        next_local: u32,
-        locals: Vec<TirLocal>,
-    },
-    Closure {
-        next_local: u32,
-    },
+/// One frame on `LowerCtx.scopes`: a function's local table, or a closure
+/// body's, whose parameters are numbered ahead of it. A local allocated here is
+/// recorded in the table, which drop elaboration then numbers its own after.
+struct LocalScope {
+    first: u32,
+    locals: Vec<TirLocal>,
+}
+
+impl LocalScope {
+    fn enter(first: u32, locals: &mut Vec<TirLocal>) -> Self {
+        Self {
+            first,
+            locals: std::mem::take(locals),
+        }
+    }
+
+    fn next_local(&self) -> u32 {
+        self.first + self.locals.len() as u32
+    }
 }
 
 impl LowerCtx {
     fn alloc_local(&mut self, ty: TypeId) -> u32 {
         let scope = self.scopes.last_mut().expect("at least one scope");
-        match scope {
-            LocalScope::Function { next_local, locals } => {
-                let idx = *next_local;
-                *next_local += 1;
-                locals.push(TirLocal {
-                    name: format!("$local_{idx}"),
-                    type_id: ty,
-                    is_mut: false,
-                    span: token::Span::default(),
-                });
-                idx
-            }
-            LocalScope::Closure { next_local } => {
-                let idx = *next_local;
-                *next_local += 1;
-                let _ = ty; // closure-local types are rebuilt later
-                idx
-            }
-        }
+        let idx = scope.next_local();
+        scope.locals.push(TirLocal::synth(idx, ty, false));
+        idx
+    }
+
+    fn fresh_with_label(&mut self) -> String {
+        let serial = self.with_serial;
+        self.with_serial += 1;
+        format!("$with_{serial}")
     }
 }
 
@@ -1165,29 +1164,15 @@ fn lower_with_handler_dispatch_in_modules(
 
 fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv) {
     if let Some(body) = &mut func.body {
-        let locals = std::mem::take(&mut func.locals);
+        assert_eq!(func.local_count as usize, func.locals.len());
         let mut ctx = LowerCtx {
-            scopes: vec![LocalScope::Function {
-                next_local: func.local_count,
-                locals,
-            }],
-            desugared: false,
+            scopes: vec![LocalScope::enter(0, &mut func.locals)],
+            with_serial: 0,
         };
         lower_dispatch_in_block(body, env, &mut ctx);
-        match ctx.scopes.pop().expect("function scope") {
-            LocalScope::Function { next_local, locals } => {
-                func.local_count = next_local;
-                func.locals = locals;
-            }
-            LocalScope::Closure { .. } => {
-                unreachable!("outermost scope must be a function frame")
-            }
-        }
-        // The desugaring marks what it moves for the instances of a template,
-        // whose drops are elaborated later; any other body's already are.
-        if ctx.desugared && !func.is_template() {
-            resource_cleanup::strip_moves(func);
-        }
+        let scope = ctx.scopes.pop().expect("function scope");
+        func.local_count = scope.next_local();
+        func.locals = scope.locals;
     }
 }
 
@@ -1199,11 +1184,10 @@ fn lower_dispatch_in_block(block: &mut TirBlock, env: &DispatchEnv, ctx: &mut Lo
 
 fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::TaskReturn { value } => {
             lower_dispatch_in_expr(value, env, ctx);
-        }
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
@@ -1346,16 +1330,20 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_expr(elem, env, ctx);
             }
         }
-        TirExprKind::Closure { params, body, .. } => {
-            // Push a closure-local scope. The closure body's lets and
-            // any nested `WithHandler` desugaring allocate locals in
-            // this scope. `next_local` starts past the closure's own
-            // params plus any pre-existing body lets we discover.
-            let body_max = max_local_index_in_expr(body);
-            let start = (params.len() as u32).max(body_max + 1);
-            ctx.scopes.push(LocalScope::Closure { next_local: start });
+        TirExprKind::Closure {
+            params,
+            body,
+            body_locals,
+            ..
+        } => {
+            let scope = LocalScope::enter(params.len() as u32, body_locals);
+            assert!(
+                local_index_bound(body) <= scope.next_local(),
+                "a closure's locals must list every local its body reads"
+            );
+            ctx.scopes.push(scope);
             lower_dispatch_in_expr(body, env, ctx);
-            ctx.scopes.pop();
+            *body_locals = ctx.scopes.pop().expect("closure scope").locals;
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
@@ -1392,23 +1380,19 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
     }
 }
 
-/// Largest local index in use anywhere inside `expr`, counting reads and binding
-/// sites alike, or `0` if there are none. Seeds a closure body's local counter
-/// so synthesis does not collide with indices the body already uses. Nested
-/// closures are not descended into — their locals are a different scope.
-fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
-    let mut visitor = MaxLocalIndex(0);
+/// One past the largest local index `expr` reads or binds. Nested closures are
+/// not descended into: their locals are a different frame.
+fn local_index_bound(expr: &TirExpr) -> u32 {
+    let mut visitor = LocalIndexBound(0);
     visitor.visit_expr(expr);
     visitor.0
 }
 
-struct MaxLocalIndex(u32);
+struct LocalIndexBound(u32);
 
-impl MaxLocalIndex {
+impl LocalIndexBound {
     fn note(&mut self, idx: u32) {
-        if idx > self.0 {
-            self.0 = idx;
-        }
+        self.0 = self.0.max(idx + 1);
     }
 
     fn walk_pattern(&mut self, pattern: &TirPattern) {
@@ -1441,7 +1425,7 @@ impl MaxLocalIndex {
     }
 }
 
-impl TirRefVisitor for MaxLocalIndex {
+impl TirRefVisitor for LocalIndexBound {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.note(*index),
@@ -1485,7 +1469,6 @@ impl TirRefVisitor for MaxLocalIndex {
 /// order after the body. A binding with no matching plan panics: annotate and
 /// this pass are out of sync.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
-    ctx.desugared = true;
     let span = expr.span;
     let result_type = expr.type_id;
 
@@ -1753,76 +1736,162 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         ));
     }
 
-    // Compose prelude + body.stmts + reversed restore, first splicing the same
-    // restore sequence in front of every control-flow exit that leaves this
-    // `with` body, so an early jump cannot strand the dispatch global out of
-    // sync with the lexical scope. Both paths use reverse install order, so
-    // `restore_seq` is materialised once and reused.
-    let restore_seq: Vec<TirStmt> = restore.iter().rev().cloned().collect();
-    let mut injector = RestoreInjector::new(&restore_seq, ctx);
-    injector.visit_block(&mut body);
+    // The body runs in a labeled block, and every jump out of the `with` leaves
+    // that block by `break`, recording in a slot where it was going. The
+    // restore runs after the block, then the recorded jump. Drop elaboration
+    // runs on this shape, so the body's locals drop under the handler and
+    // everything outside the `with`, a handler held by value included, drops
+    // after the restore, on every path out.
+    let label = ctx.fresh_with_label();
+    let mut redirector = ExitRedirector::new(&label, &env.type_table, ctx);
+    redirector.visit_block(&mut body);
+    let exits = redirector.exits;
 
-    let mut stmts: Vec<TirStmt> = Vec::with_capacity(prelude.len() + body.stmts.len() + 2);
-    stmts.extend(prelude);
+    let is_never = env.type_table.borrow().is_never(result_type);
+    let result_slot = (result_type != TypeTable::UNIT && !is_never)
+        .then(|| ExitSlot::new(result_type, "$with_result", &env.type_table, ctx));
 
-    if result_type == TypeTable::UNIT || env.type_table.borrow().is_never(result_type) {
-        // Statement form (or a diverging body): the body produces no value to
-        // preserve, so the restore simply runs after it.
-        stmts.extend(body.stmts);
-        stmts.extend(restore_seq);
-    } else {
-        // Value form (`let x = with E => h do { ... }`): the do-block's value
-        // must survive the restore sequence. Wrap the whole body in an inner
-        // block expression, bind its value to a temp local while the handler is
-        // still installed, run the restore, then yield the local as the
-        // desugared block's tail. Wrapping the entire body — rather than
-        // detaching its last statement — preserves the value for every tail
-        // kind (a bare expression, an `if`/`else`, a `match`, a labeled block),
-        // matching `synthesis::resource_cleanup::append_block_drops`.
-        let body_span = body.span;
-        let local = ctx.alloc_local(result_type);
-        let name = format!("$with_result_{local}");
-        let body_expr = TirExpr::new(TirExprKind::Block(body), result_type, body_span);
+    let mut stmts = prelude;
+    for slot in result_slot
+        .iter()
+        .chain(exits.iter().map(|exit| &exit.slot))
+    {
+        stmts.push(slot.declare(&env.type_table));
+    }
+    let body_span = body.span;
+    let body_expr = TirExpr::new(TirExprKind::Block(body), result_type, body_span);
+    let run_body = match &result_slot {
+        Some(slot) => slot.fill(body_expr, &env.type_table),
+        None => TirStmt::new(TirStmtKind::Expr(body_expr), body_span),
+    };
+    stmts.push(TirStmt::new(
+        TirStmtKind::LabeledBlock {
+            label,
+            block: TirBlock::new(vec![run_body], body_span),
+        },
+        body_span,
+    ));
+    stmts.extend(restore.into_iter().rev());
+    for exit in exits {
         stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index: local,
-                is_mut: false,
-                type_id: result_type,
-                value: body_expr,
-                storage: LetStorage::Planned,
+            TirStmtKind::If {
+                condition: exit.slot.is_filled(),
+                then_block: TirBlock::new(vec![exit.jump], body_span),
+                else_block: None,
             },
             body_span,
         ));
-        stmts.extend(restore_seq);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Expr(
-                TirExpr::new(
-                    TirExprKind::Local { index: local, name },
-                    result_type,
-                    body_span,
-                )
-                .moved(),
-            ),
-            body_span,
-        ));
+    }
+    match result_slot {
+        Some(slot) => stmts.push(TirStmt::new(TirStmtKind::Expr(slot.take()), body_span)),
+        None if is_never => stmts.push(TirStmt::new(
+            TirStmtKind::Expr(unreachable_call(result_type, span)),
+            span,
+        )),
+        None => {}
     }
 
     expr.kind = TirExprKind::Block(TirBlock::new(stmts, span));
     expr.type_id = result_type;
 }
 
-/// Splice the restore sequence in front of every jump that leaves the `with`
-/// body and would otherwise skip the fall-through restore: any `Return`, and a
-/// `Break`/`Continue` whose target is not open inside the body. A value-carrying
-/// jump binds its value to `$early_jump_<n>` first, so `return Counter::next()`
-/// evaluates under the do-block's handler. `Closure` bodies are skipped.
-struct RestoreInjector<'a, 'b> {
-    /// The restore statements to splice in front of every exit, in
-    /// the exact order they should appear (reverse install order —
-    /// matching the fall-through restore at the end of the desugared
-    /// block).
-    restore_seq: &'a [TirStmt],
+/// A local of type `Option<T>` that holds a value across the restore: a
+/// jump's value, or the body's.
+struct ExitSlot {
+    local: u32,
+    name: String,
+    option_type: TypeId,
+    payload_type: TypeId,
+    some_index: u32,
+    some_name: String,
+}
+
+impl ExitSlot {
+    fn new(
+        payload_type: TypeId,
+        prefix: &str,
+        type_table: &Rc<RefCell<TypeTable>>,
+        ctx: &mut LowerCtx,
+    ) -> Self {
+        let option_type = type_table.borrow_mut().make_option(payload_type);
+        let (some_name, some_index) = {
+            let tt = type_table.borrow();
+            let (_, _, name, index) = tt
+                .compiler_items()
+                .require_variant_case(CompilerItem::OptionSome);
+            (name.to_string(), index)
+        };
+        let local = ctx.alloc_local(option_type);
+        Self {
+            local,
+            name: format!("{prefix}_{local}"),
+            option_type,
+            payload_type,
+            some_index,
+            some_name,
+        }
+    }
+
+    fn place(&self) -> TirExpr {
+        local_ref(self.local, &self.name, self.option_type)
+    }
+
+    fn declare(&self, type_table: &Rc<RefCell<TypeTable>>) -> TirStmt {
+        let none = option_none(self.option_type, type_table.borrow().compiler_items());
+        let_mut_stmt(&self.name, self.local, self.option_type, none)
+    }
+
+    fn fill(&self, value: TirExpr, type_table: &Rc<RefCell<TypeTable>>) -> TirStmt {
+        let some = option_some(
+            value,
+            self.option_type,
+            type_table.borrow().compiler_items(),
+        );
+        expr_stmt(assign(self.place(), some))
+    }
+
+    fn is_filled(&self) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::VariantTest {
+                expr: Box::new(self.place()),
+                case_index: self.some_index,
+                case_name: self.some_name.clone(),
+            },
+            TypeTable::BOOL,
+            synth_span(),
+        )
+    }
+
+    fn take(&self) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::VariantPayload {
+                expr: Box::new(self.place()),
+                case_index: self.some_index,
+                payload_type: self.payload_type,
+            },
+            self.payload_type,
+            synth_span(),
+        )
+        .moved()
+    }
+}
+
+/// A jump out of a `with` body, taken after the restore once its slot is
+/// filled.
+struct Exit {
+    slot: ExitSlot,
+    jump: TirStmt,
+}
+
+/// Turn every jump that leaves the `with` body into a `break` out of the
+/// body's labeled block: any `Return`, and a `Break`/`Continue` whose target is
+/// not open inside the body. The jump's value is computed where the jump was,
+/// under the do-block's handler (`return Counter::next()`), and parked in a
+/// slot. `Closure` bodies are skipped.
+struct ExitRedirector<'a, 'b> {
+    /// The label of the body's block, which each redirected jump breaks.
+    label: &'a str,
+    type_table: &'a Rc<RefCell<TypeTable>>,
     /// Number of anonymous loops (`loop { }` / `VariadicForOf`)
     /// currently open along the walk. While positive, bare
     /// `break`/`continue` stay inside the `with` body.
@@ -1831,85 +1900,56 @@ struct RestoreInjector<'a, 'b> {
     /// expression form) along the walk. `break L` whose `L` is in
     /// this stack stays inside the `with` body.
     inner_labels: Vec<String>,
-    /// Local-allocation context, used to mint fresh temp locals for
-    /// value-carrying early exits (`return v`, `break L: v`).
     ctx: &'b mut LowerCtx,
+    /// The redirected jumps, in the order the walk met them.
+    exits: Vec<Exit>,
 }
 
-impl<'a, 'b> RestoreInjector<'a, 'b> {
-    fn new(restore_seq: &'a [TirStmt], ctx: &'b mut LowerCtx) -> Self {
+impl<'a, 'b> ExitRedirector<'a, 'b> {
+    fn new(label: &'a str, type_table: &'a Rc<RefCell<TypeTable>>, ctx: &'b mut LowerCtx) -> Self {
         Self {
-            restore_seq,
+            label,
+            type_table,
             inner_loop_depth: 0,
             inner_labels: Vec::new(),
             ctx,
+            exits: Vec::new(),
         }
     }
 
     fn visit_block(&mut self, block: &mut TirBlock) {
         let mut i = 0;
         while i < block.stmts.len() {
-            // Recurse into the children of this stmt first so nested
-            // exits inside an `If`/`Match`/`LabeledBlock`/loop body
-            // get their own restores. Then check whether the stmt
-            // itself is an exit.
+            // Nested exits inside an `If`/`Match`/`LabeledBlock`/loop body are
+            // redirected first, then the stmt itself if it is one.
             self.visit_stmt(&mut block.stmts[i]);
-
             if !self.is_exit_stmt(&block.stmts[i].kind) {
                 i += 1;
                 continue;
             }
-
-            let stmt_span = block.stmts[i].span;
-            let mut to_insert: Vec<TirStmt> = Vec::new();
-
-            // Value-carrying exits must evaluate their value under the
-            // do-block's still-installed handler before the restore
-            // runs. Bind the value to a fresh temp local, then restore,
-            // then jump with the temp.
-            let value_slot: Option<&mut Option<TirExpr>> = match &mut block.stmts[i].kind {
-                TirStmtKind::Return { value } => Some(value),
-                TirStmtKind::Break { value, .. } => Some(value),
+            let span = block.stmts[i].span;
+            let mut jump = block.stmts.remove(i);
+            let carried = match &mut jump.kind {
+                TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => value.as_mut(),
                 _ => None,
             };
-            if let Some(value_slot) = value_slot
-                && let Some(v) = value_slot.as_mut()
-            {
-                let value_type = v.type_id;
-                let value_expr =
-                    std::mem::replace(v, TirExpr::new(TirExprKind::Unit, value_type, stmt_span));
-                let temp_local = self.ctx.alloc_local(value_type);
-                let temp_name = format!("$early_jump_{temp_local}");
-                to_insert.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: temp_name.clone(),
-                        local_index: temp_local,
-                        is_mut: false,
-                        type_id: value_type,
-                        value: value_expr,
-                        storage: LetStorage::Aliased,
-                    },
-                    stmt_span,
-                ));
-                *v = TirExpr::new(
-                    TirExprKind::Local {
-                        index: temp_local,
-                        name: temp_name,
-                    },
-                    value_type,
-                    stmt_span,
-                )
-                .moved();
-            }
-
-            to_insert.extend(self.restore_seq.iter().cloned());
-
-            let n = to_insert.len();
-            if n > 0 {
-                block.stmts.splice(i..i, to_insert);
-                i += n;
-            }
-            i += 1;
+            let payload_type = carried.as_ref().map_or(TypeTable::UNIT, |v| v.type_id);
+            let slot = ExitSlot::new(payload_type, "$exit", self.type_table, self.ctx);
+            let parked = match carried {
+                Some(value) => std::mem::replace(value, slot.take()),
+                None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            };
+            let fill = slot.fill(parked, self.type_table);
+            let leave = TirStmt::new(
+                TirStmtKind::Break {
+                    label: Some(self.label.to_string()),
+                    value: None,
+                },
+                span,
+            );
+            block.stmts.splice(i..i, [fill, leave]);
+            i += 2;
+            self.exits.push(Exit { slot, jump });
         }
     }
 
@@ -1917,10 +1957,9 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
         match &mut stmt.kind {
             TirStmtKind::Let { value, .. }
             | TirStmtKind::Expr(value)
-            | TirStmtKind::LetDestructure { value, .. } => self.visit_expr(value),
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-            }
+            | TirStmtKind::LetDestructure { value, .. }
+            // A `task return` delivers the result but stays in the body.
+            | TirStmtKind::TaskReturn { value } => self.visit_expr(value),
             TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     self.visit_expr(v);
@@ -2532,7 +2571,7 @@ fn build_wrapper_indexes(
 }
 
 /// The resource half of [`rewrite_call_sites_to_wrappers`] again, for the
-/// drops `resource_cleanup` inserts after it: an installed handler sees a
+/// drops `affine_drop` inserts after it: an installed handler sees a
 /// scope-exit drop as it sees one the user wrote (WEP: Affine Types).
 pub fn rewrite_resource_drops(project: &Package) {
     for module in project.tir_modules.values() {
@@ -2916,11 +2955,10 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     }
 }
 
-/// **Early phase** — synthesise the dispatch infrastructure and rewrite call
-/// sites to route through it, before `cm_binding::generate_adapters`. That
-/// ordering catches resource calls at their pre-adapter `cm_name`-tagged shape
-/// and lets the wrapper fallbacks emit that same shape. `WithHandler`
-/// desugaring waits for [`synthesize_post_check`].
+/// Synthesise the dispatch infrastructure, rewrite call sites to route through
+/// it, and desugar `WithHandler` into it, before `cm_binding::generate_adapters`.
+/// That ordering catches resource calls at their pre-adapter `cm_name`-tagged
+/// shape and lets the wrapper fallbacks emit that same shape.
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
@@ -2949,10 +2987,7 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
         &open_effects,
     );
     rewrite_call_sites_to_wrappers(&mut project, &plans);
-    // Hand the plans off to `synthesize_post_check` via the project so
-    // the late half doesn't re-derive the same struct / global / wrapper
-    // triple from existing declarations.
-    project.dispatch_plans = plans;
+    lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
     Ok(project)
 }
 
@@ -2974,21 +3009,6 @@ fn open_boundary_effects(project: &Package) -> IndexSet<DeclaredHead> {
         }
     }
     out
-}
-
-/// **Late phase** — desugar `WithHandler` into the dispatch protocol, after
-/// `effect_check`, which reads the original shape to say whether effects are
-/// satisfied locally. Takes the `dispatch_plans`
-/// [`synthesize_pre_cm_binding`] left on the `Package`.
-pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
-    let plans = std::mem::take(&mut project.dispatch_plans);
-    if plans.is_empty() {
-        return Ok(project);
-    }
-    let effect_index = build_effect_index(&project);
-    let impl_index = build_handler_impl_index(&project, &effect_index);
-    lower_with_handler_dispatch_in_modules(&mut project, &plans, &impl_index);
-    Ok(project)
 }
 
 /// Synthesise one dispatch struct + global + per-op wrapper triple per entry in

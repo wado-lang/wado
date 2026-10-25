@@ -1,0 +1,515 @@
+//! Programs that move one affine value through every pairing of a consumer and
+//! the context it runs in, with the output each must print.
+//!
+//! The model is one rule: a value drops exactly once, at the end of the block
+//! that holds it last. A consumer either drops what it takes before its
+//! statement ends, or binds it to a local of the block it runs in. The
+//! generated program prints a marker before and after the consuming statement,
+//! so where the drop lands says which of those the compiler did.
+
+use { CodeWriter, FnSpec } from "lib:wadopoet";
+
+/// Where the case's `t` comes from.
+pub enum Producer {
+    /// `let t = Tok { … };`.
+    Literal,
+    /// `let t = make(…);`.
+    Returned,
+    /// The case's own parameter.
+    Param,
+    /// `let t = pair.0;`, moved out of a tuple.
+    TupleElement,
+    /// `let t = h.tok;`, moved out of a struct without a `Drop`.
+    Field,
+    /// `let t = match Option::Some(…) { Some(v) => v, None => … };`.
+    MatchArm,
+    /// `let Some(t) = Option::Some(…) else { … };`.
+    LetElse,
+}
+
+/// What the generated statement does with the value `t`.
+pub enum Consumer {
+    /// `eat_tok(t);`, whose parameter drops as `eat_tok` returns.
+    Call,
+    /// `builtin::drop(t);`.
+    Drop,
+    /// `let u = t;`.
+    Bind,
+    /// `let p = [t, 1];`.
+    Tuple,
+    /// `let o = Option::Some(t);`.
+    Wrap,
+    /// `let w = t as RenamedTok;`, a newtype cast.
+    Cast,
+    /// `look_tok(&t);`, which moves nothing.
+    Borrow,
+    /// `keep(t);`, whose `affine T` parameter drops as `keep` returns.
+    GenericCall,
+    /// `let u = pass(t);`, through an `affine T` and back.
+    GenericPass,
+    /// `xs.push(t);` onto a fresh `List<Tok>`.
+    Push,
+    /// `let u = o.take();` out of a fresh `Option<Tok>`.
+    Take,
+    /// `for let x of xs {}` over a fresh `List<Tok>`, consuming it.
+    ForOf,
+    /// `with Ask => t do { … }`, which owns its handler until it ends.
+    Handle,
+    /// `SinkTok::put(t)` under a handler, whose parameter drops as it resumes.
+    Forward,
+}
+
+/// Where the consuming statement sits in the case's body.
+pub enum Context {
+    /// Directly in the body.
+    Straight,
+    /// In `if flag { … }`.
+    If,
+    /// In the `true` arm of `match flag { … }`.
+    Match,
+    /// In `loop { …; break; }`.
+    LoopOnce,
+    /// In `blk: { … }`.
+    Labeled,
+    /// In `while flag { …; break; }`.
+    While,
+    /// In `if flag { …; return; }`, which leaves before the marker after it.
+    IfReturn,
+}
+
+/// A second value `s`, declared in the case's body beside `t`. The body's
+/// locals drop in reverse declaration order, so it fixes where `t`'s drop falls
+/// among the body's.
+pub enum Companion {
+    None,
+    /// Declared before `t`.
+    Before,
+    /// Declared after `t`.
+    After,
+}
+
+/// The type of `t`.
+pub enum Value {
+    /// `Tok`, whose `Drop` prints `drop N`.
+    Tok,
+    /// `Shell { tok }`, without a `Drop`: dropping it drops its field.
+    Shell,
+    /// `Guard { tok }`, whose `Drop` prints `guard N` before its field drops.
+    Guard,
+}
+
+pub struct Case {
+    pub producer: Producer,
+    pub companion: Companion,
+    pub value: Value,
+    pub consumer: Consumer,
+    pub context: Context,
+    /// The `flag` the case runs with: whether a conditional context runs the
+    /// consumer.
+    pub flag: bool,
+}
+
+impl Value {
+    pub fn all() -> List<Value> {
+        return [Tok, Shell, Guard];
+    }
+
+    fn name(&self) -> String {
+        return `${self}`;
+    }
+
+    /// The suffix of the helpers taking this type.
+    fn helper(&self) -> String {
+        return self.name().to_ascii_lowercase();
+    }
+
+    fn literal(&self, index: i32) -> String {
+        let tok = `Tok { id: ${index} }`;
+        return match self {
+            Tok => tok,
+            Shell | Guard => `${self.name()} { tok: ${tok} }`,
+        };
+    }
+
+    /// What dropping the value made by `literal(index)` prints.
+    fn dropped(&self, index: i32) -> String {
+        let tok = `drop ${index}\n`;
+        return if self matches { Guard } { `guard ${index}\n${tok}` } else { tok };
+    }
+}
+
+impl Producer {
+    pub fn all() -> List<Producer> {
+        return [Literal, Returned, Param, TupleElement, Field, MatchArm, LetElse];
+    }
+
+    fn emit(&self, index: i32, value: Value, w: &mut CodeWriter) {
+        assert self matches { Literal } || value matches { Tok }, "only a literal makes a type other than `Tok`";
+        let tok = value.literal(index);
+        match self {
+            Literal => w.line(`let t = ${tok};`),
+            Returned => w.line(`let t = make(${index});`),
+            Param => {
+            },
+            TupleElement => {
+                w.line(`let pair = [${tok}, 0];`);
+                w.line("let t = pair.0;");
+            },
+            Field => {
+                w.line(`let h = Holder { tok: ${tok}, n: 0 };`);
+                w.line("let t = h.tok;");
+            },
+            MatchArm => {
+                w.begin(`let t = match Option::Some(${tok})`);
+                w.line("Some(v) => v,");
+                w.line("None => unreachable(),");
+                w.end_with(";");
+            },
+            LetElse => {
+                w.begin(`let Some(t) = Option::Some(${tok}) else`);
+                w.line("unreachable();");
+                w.end_with(";");
+            },
+        }
+    }
+}
+
+impl Consumer {
+    pub fn all() -> List<Consumer> {
+        return [
+            Call, Drop, Bind, Tuple, Wrap, Cast, Borrow, GenericCall, GenericPass, Push, Take, ForOf, Handle, Forward,
+        ];
+    }
+
+    fn statement(&self, value: Value) -> String {
+        let ty = value.name();
+        let helper = value.helper();
+        return match self {
+            Call => `eat_${helper}(t);`,
+            Drop => "builtin::drop(t);",
+            Bind => "let u = t;",
+            Tuple => "let p = [t, 1];",
+            Wrap => "let o = Option::Some(t);",
+            Cast => `let w = t as Renamed${ty};`,
+            Borrow => `look_${helper}(&t);`,
+            GenericCall => "keep(t);",
+            GenericPass => "let u = pass(t);",
+            Push => `let mut xs: List<${ty}> = []; xs.push(t);`,
+            Take => "let mut o = Option::Some(t); let u = o.take();",
+            ForOf => `let xs: List<${ty}> = [t]; for let x of xs {}`,
+            Handle => "with Ask => t do { let _ = Ask::ask(); }",
+            Forward => `let mut sink = Sink { n: 0 }; with Sink${ty} => &mut sink do { let _ = Sink${ty}::put(t); }`,
+        };
+    }
+
+    /// Whether the value is gone once the statement ends, rather than held by
+    /// a local of the block the statement runs in.
+    fn drops_in_statement(&self) -> bool {
+        return self matches { Call | Drop | GenericCall | ForOf | Handle | Forward };
+    }
+
+    pub fn moves(&self) -> bool {
+        return !self matches { Borrow };
+    }
+}
+
+impl Context {
+    pub fn all() -> List<Context> {
+        return [Straight, If, Match, LoopOnce, Labeled, While, IfReturn];
+    }
+
+    /// Whether `flag` decides if the consumer runs.
+    pub fn is_conditional(&self) -> bool {
+        return self matches { If | Match | While | IfReturn };
+    }
+
+    /// Whether the consumer runs in a block of its own, which ends before the
+    /// marker after it.
+    fn opens_block(&self) -> bool {
+        return !self matches { Straight };
+    }
+}
+
+impl Case {
+    /// Every case: each consumer in each context, and a conditional context
+    /// both taken and skipped. Where `t` comes from bears neither on the order
+    /// of the body's drops nor on what dropping its type does, so only
+    /// `Literal` takes a companion or a type other than `Tok`.
+    pub fn all() -> List<Case> {
+        let mut cases: List<Case> = [];
+        for let producer of Producer::all() {
+            let mut shapes: List<[Companion, Value]> = [
+                [None, Tok],
+            ];
+            if producer matches { Literal } {
+                shapes.push([Before, Tok]);
+                shapes.push([After, Tok]);
+                shapes.push([None, Shell]);
+                shapes.push([None, Guard]);
+            }
+            for let [companion, value] of shapes {
+                for let consumer of Consumer::all() {
+                    for let context of Context::all() {
+                        cases.push(Case { producer, companion, value, consumer, context, flag: true });
+                        if context.is_conditional() {
+                            cases.push(Case { producer, companion, value, consumer, context, flag: false });
+                        }
+                    }
+                }
+            }
+        }
+        return cases;
+    }
+
+    pub fn label(&self) -> String {
+        return `${self.producer:?} ${self.value:?} (companion ${self.companion:?}), ${self.consumer:?} in ${self.context:?} (flag ${self.flag})`;
+    }
+
+    /// Whether the case varies only its consumer, context and flag. Where `t`
+    /// comes from, its type and its companion do not decide whether a
+    /// program compiles.
+    pub fn is_plain(&self) -> bool {
+        return self.producer matches { Literal } && self.companion matches { None } && self.value matches { Tok };
+    }
+
+    fn runs_consumer(&self) -> bool {
+        return !self.context.is_conditional() || self.flag;
+    }
+
+    /// Whether the value drops between the markers around the consumer, rather
+    /// than when the case's body ends.
+    fn drops_at_consumer(&self) -> bool {
+        if !self.runs_consumer() || !self.consumer.moves() {
+            return false;
+        }
+        return self.consumer.drops_in_statement() || self.context.opens_block();
+    }
+
+    /// What the case prints, given that it runs as `case_<index>`.
+    pub fn expected(&self, index: i32) -> String {
+        let mut out = `case ${index}\nbefore\n`;
+        if self.drops_at_consumer() {
+            out.push_str(&self.value.dropped(index));
+        }
+        // The `return` leaves the body before the marker after the consumer.
+        if !(self.context matches { IfReturn } && self.runs_consumer()) {
+            out.push_str("after\n");
+        }
+        out.push_str(&self.body_drops(index));
+        return out;
+    }
+
+    /// What the body still holds as it ends, in the reverse of the order it
+    /// declared it. A consumer that binds the value moves it to a local
+    /// declared after both `t` and `s`.
+    fn body_drops(&self, index: i32) -> String {
+        let t = if self.drops_at_consumer() { "" } else { self.value.dropped(index) };
+        let s = if self.companion matches { None } { "" } else { `drop ${companion_id(index)}\n` };
+        let rebound = self.runs_consumer() && self.consumer.moves();
+        return if rebound || self.companion matches { Before } { `${t}${s}` } else { `${s}${t}` };
+    }
+
+    /// Whether `t` may be read after the consumer: no path reaching that read
+    /// moved it.
+    pub fn readable_after(&self) -> bool {
+        return !self.consumer.moves() || self.context matches { IfReturn };
+    }
+
+    fn emit(&self, index: i32, w: &mut CodeWriter, probe: Probe) {
+        let mut f = FnSpec::new(`case_${index}`);
+        f.add_param("flag", "bool");
+        if self.producer matches { Param } {
+            f.add_param("t", "Tok");
+        }
+        f.emit_begin(w);
+        w.line(`log_stdout("case ${index}");`);
+        let companion = `let s = Tok { id: ${companion_id(index)} };`;
+        if self.companion matches { Before } {
+            w.line(&companion);
+        }
+        self.producer.emit(index, self.value, w);
+        if self.companion matches { After } {
+            w.line(&companion);
+        }
+        w.line("log_stdout(\"before\");");
+        let statement = self.consumer.statement(self.value);
+        if probe matches { InClosure } {
+            w.begin("let f = ||");
+        }
+        match self.context {
+            Straight => w.line(&statement),
+            If => {
+                w.begin("if flag");
+                w.line(&statement);
+                w.end();
+            },
+            Match => {
+                w.begin("match flag");
+                w.begin("true =>");
+                w.line(&statement);
+                w.end_with(",");
+                w.line("false => {},");
+                w.end();
+            },
+            LoopOnce => {
+                w.begin("loop");
+                w.line(&statement);
+                w.line("break;");
+                w.end();
+            },
+            Labeled => {
+                w.begin("blk:");
+                w.line(&statement);
+                w.end();
+            },
+            While => {
+                w.begin("while flag");
+                w.line(&statement);
+                w.line("break;");
+                w.end();
+            },
+            IfReturn => {
+                w.begin("if flag");
+                w.line(&statement);
+                w.line("return;");
+                w.end();
+            },
+        }
+        if probe matches { InClosure } {
+            w.end_with(";");
+            w.line("f();");
+        }
+        w.line("log_stdout(\"after\");");
+        if probe matches { ReadAfter } {
+            w.line(`look_${self.value.helper()}(&t);`);
+        }
+        w.end();
+    }
+}
+
+/// What a program built for one case checks, beyond what it prints.
+enum Probe {
+    None,
+    /// Reads `t` once the consumer is done.
+    ReadAfter,
+    /// Runs the consumer, in its context, inside a closure that captures `t`.
+    InClosure,
+}
+
+fn companion_id(index: i32) -> i32 {
+    return 100_000 + index;
+}
+
+/// One program running every case in `cases`, in order.
+pub fn program(cases: &List<Case>) -> String {
+    return emit_program(cases, None);
+}
+
+/// [`program`] for `case` alone, reading `t` once the consumer is done.
+pub fn read_after_program(case: &Case) -> String {
+    return emit_program(&[*case], ReadAfter);
+}
+
+/// [`program`] for `case` alone, with the consumer inside a closure.
+pub fn in_closure_program(case: &Case) -> String {
+    return emit_program(&[*case], InClosure);
+}
+
+fn emit_program(cases: &List<Case>, probe: Probe) -> String {
+    let mut w = CodeWriter::new();
+    w.line("use { log_stdout } from \"core:cli\";");
+    w.blank();
+    w.begin("affine struct Tok");
+    w.line("id: i32,");
+    w.end();
+    w.blank();
+    w.begin("impl Drop for Tok");
+    w.begin("fn drop(self)");
+    w.line("log_stdout(`drop ${self.id}`);");
+    w.end();
+    w.end();
+    w.blank();
+    w.begin("affine struct Holder");
+    w.line("tok: Tok,");
+    w.line("n: i32,");
+    w.end();
+    w.blank();
+    w.begin("affine struct Shell");
+    w.line("tok: Tok,");
+    w.end();
+    w.blank();
+    w.begin("affine struct Guard");
+    w.line("tok: Tok,");
+    w.end();
+    w.blank();
+    w.begin("impl Drop for Guard");
+    w.begin("fn drop(self)");
+    w.line("log_stdout(`guard ${self.tok.id}`);");
+    w.end();
+    w.end();
+    w.blank();
+    w.begin("fn make(id: i32) -> Tok");
+    w.line("return Tok { id };");
+    w.end();
+    w.blank();
+    w.line("fn keep<affine T>(x: T) {}");
+    w.blank();
+    w.begin("fn pass<affine T>(x: T) -> T");
+    w.line("return x;");
+    w.end();
+    w.blank();
+    w.begin("interface Ask");
+    w.line("fn ask() -> i32;");
+    w.end();
+    w.blank();
+    w.begin("struct Sink");
+    w.line("n: i32,");
+    w.end();
+    for let value of Value::all() {
+        let ty = value.name();
+        let helper = value.helper();
+        w.blank();
+        w.begin(`impl Ask for ${ty}`);
+        w.begin("fn ask(&mut self) -> i32");
+        w.line("resume 0");
+        w.end();
+        w.end();
+        w.blank();
+        w.begin(`interface Sink${ty}`);
+        w.line(`fn put(t: ${ty}) -> i32;`);
+        w.end();
+        w.blank();
+        w.begin(`impl Sink${ty} for Sink`);
+        w.begin(`fn put(&mut self, t: ${ty}) -> i32`);
+        w.line("resume self.n");
+        w.end();
+        w.end();
+        w.blank();
+        w.line(`type Renamed${ty} = ${ty};`);
+        w.blank();
+        w.line(`fn eat_${helper}(t: ${ty}) {}`);
+        w.blank();
+        w.line(`fn look_${helper}(t: &${ty}) {}`);
+    }
+    for let i of 0..<cases.len() {
+        w.blank();
+        cases[i].emit(i, &mut w, probe);
+    }
+    w.blank();
+    w.begin("export fn run()");
+    for let i of 0..<cases.len() {
+        let tok = if cases[i].producer matches { Param } { `, Tok { id: ${i} }` } else { "" };
+        w.line(`case_${i}(builtin::black_box(${cases[i].flag})${tok});`);
+    }
+    w.end();
+    return w.to_string();
+}
+
+/// What [`program`] prints for `cases`.
+pub fn expected(cases: &List<Case>) -> String {
+    let mut out = String::new();
+    for let i of 0..<cases.len() {
+        out.push_str(&cases[i].expected(i));
+    }
+    return out;
+}

@@ -334,7 +334,7 @@ fn bad() {
 A resource's drop is an operation of its effect too, but a benign one: a
 function declares no effect for a drop it performs. Every drop of the resource
 reaches an installed handler, a written `x.drop()` and an implicit one alike
-([Drop](./spec-types.md#drop)), so a test double that counts drops sees both. A
+([Drop](./spec-affine.md#drop)), so a test double that counts drops sees both. A
 double that leaves its other operations to `..trap` answers `drop` itself.
 
 ### Implied Resources
@@ -878,7 +878,7 @@ A bundled binding whose type implements no effect is a compile error. So is one 
 
 ### Handler State
 
-A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block.
+A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block. An affine one moves into the `with` (see [Drop](./spec-affine.md#drop)).
 
 <!-- {"fixture":"spec_effects_handler_scope.wado"} -->
 

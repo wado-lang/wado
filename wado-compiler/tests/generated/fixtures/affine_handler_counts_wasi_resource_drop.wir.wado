@@ -699,25 +699,28 @@ fn "affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_res
 }
 
 fn "affine_handler_counts_wasi_resource_drop.wado/affine_handler_counts_wasi_resource_drop.wado/$Closure_10::$call"(self_0, self_1) {
-    let self_2: ref "affine_handler_counts_wasi_resource_drop.wado//CountingFields";
-    let $moved_2: ref null "core:prelude//$Resource";
+    let $local_2_2: ref null "core:prelude//$Resource";
+    let self_3: ref "affine_handler_counts_wasi_resource_drop.wado//CountingFields";
     let $local_1: ref null "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    let $local_2: ref "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    local.tee self_2(self_0.$capture_0).drops = self_2.drops + 1;
+    let $local_2_9: ref "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
+    self_3 = self_0.$capture_0;
+    $local_2_2 = self_1;
+    self_1 = ref.null none;
+    self_3.drops = self_3.drops + 1;
     $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_0: block {
-        $moved_2 = self_1;
-        self_1 = ref.null none;
+        self_1 = $local_2_2;
+        $local_2_2 = ref.null none;
         if ref.is_null(local.tee $local_1(global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields)) == 0 {
-            global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_2(ref.as_non_null($local_1)).outer;
+            global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_2_9(ref.as_non_null($local_1)).outer;
             let $indirect_call_3: ref "canonical//CanonicalClosure_10";
-            call_ref "functype/$canonical_closure_fn_10"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_10"($local_2.op_drop)).env, self_1 = $moved_2; $moved_2 = ref.null none; self_1);
+            call_ref "functype/$canonical_closure_fn_10"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_10"($local_2_9.op_drop)).env, $local_2_2 = self_1; self_1 = ref.null none; $local_2_2);
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_0: global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = $local_1;
         } else {
-            self_1 = $moved_2;
-            $moved_2 = ref.null none;
+            $local_2_2 = self_1;
+            self_1 = ref.null none;
             let $cm_handle_2: i32;
-            $cm_handle_2 = self_1.value;
-            self_1.value = 0;
+            $cm_handle_2 = $local_2_2.value;
+            $local_2_2.value = 0;
             "wasi/resource-drop:wasi/http/types.wado#Fields"($cm_handle_2);
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_0;
         }
