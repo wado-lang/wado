@@ -7,7 +7,7 @@
 use crate::ast::{AstId, TestMetadata};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
-use crate::lexer::{is_ident_continue, is_valid_ident};
+use crate::lexer::is_ident_continue;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
@@ -57,11 +57,11 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 
 /// Split a `ns$member` alias into its namespace and member. The member is an
 /// identifier, so the last separator splits them, a minted `$ns` included. A
-/// minted name that is no alias answers `None`, as `$a:x/trip::Inner` does: a
-/// type of the interface minted `$a:x/trip`.
+/// minted name holds its one `$` first, so it splits off no namespace and is
+/// no alias: `$a:x/trip::Inner` is a type of the interface minted `$a:x/trip`.
 pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
     name.rsplit_once(NAMESPACE_MEMBER_SEP)
-        .filter(|(_, member)| is_valid_ident(member))
+        .filter(|(namespace, _)| !namespace.is_empty())
 }
 
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
