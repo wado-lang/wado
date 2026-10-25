@@ -1,14 +1,66 @@
-//! The destructuring assignments that may be a transposition within one
-//! container, as far as the syntax tells (WEP: Destructuring Assignment § A
-//! transposition within one container is `IndexSwap`). Annotate settles the
-//! rest: that the container is a local, that no index reads a mutable global,
-//! and that the type implements `IndexSwap`.
+//! What the syntax of a destructuring assignment says of it (WEP: Destructuring
+//! Assignment), and which may be a transposition within one container. Annotate
+//! settles the rest: that the container is a local, that no index reads a
+//! mutable global, and that the type implements `IndexSwap`.
 
 use crate::ast::{
     AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, IndexExpr, Literal, Module,
     UnaryOp, walk_expr,
 };
 use crate::hashmap::IndexSet;
+
+pub(super) enum Reading<'a> {
+    /// The right side is not the targets, reordered.
+    NotAPermutation,
+    Transposition(Transposition<'a>),
+    /// Two subscripts exchanged, of containers not written as one path.
+    OtherContainers,
+    /// Any other reordering of the targets.
+    Permutation,
+}
+
+impl<'a> Reading<'a> {
+    pub(super) fn of(assign: &'a AssignExpr) -> Self {
+        let AssignTarget::Destructuring { places, .. } = &assign.target else {
+            unreachable!("only a destructuring assignment is read");
+        };
+        let Expr::TupleLiteral(value) = &assign.value else {
+            return Self::NotAPermutation;
+        };
+        if !is_permutation(places, &value.elements) {
+            return Self::NotAPermutation;
+        }
+        let ([Expr::Index(first), Expr::Index(second)], [read_second, _]) =
+            (places.as_slice(), value.elements.as_slice())
+        else {
+            return Self::Permutation;
+        };
+        if !same(read_second, &places[1]) {
+            return Self::Permutation;
+        }
+        if !same(&first.expr, &second.expr) || !is_container_path(&first.expr) {
+            return Self::OtherContainers;
+        }
+        if !is_index_operand(&first.index) || !is_index_operand(&second.index) {
+            return Self::Permutation;
+        }
+        Self::Transposition(Transposition {
+            container: &first.expr,
+            i: &first.index,
+            j: &second.index,
+        })
+    }
+}
+
+/// Whether `values` is `places`, reordered.
+fn is_permutation(places: &[Expr], values: &[Expr]) -> bool {
+    let mut unmatched: Vec<&Expr> = places.iter().collect();
+    values.len() == places.len()
+        && values.iter().all(|value| {
+            let found = unmatched.iter().position(|place| same(place, value));
+            found.map(|at| unmatched.swap_remove(at)).is_some()
+        })
+}
 
 /// `[c[i], c[j]] = [c[j], c[i]]`, read as `c.index_swap(i, j)`.
 pub(super) struct Transposition<'a> {
@@ -19,31 +71,10 @@ pub(super) struct Transposition<'a> {
 
 impl<'a> Transposition<'a> {
     pub(super) fn of(assign: &'a AssignExpr) -> Option<Self> {
-        let AssignTarget::Destructuring { places, .. } = &assign.target else {
-            return None;
-        };
-        let Expr::TupleLiteral(value) = &assign.value else {
-            return None;
-        };
-        let (
-            [Expr::Index(first), Expr::Index(second)],
-            [Expr::Index(read_second), Expr::Index(read_first)],
-        ) =
-            (places.as_slice(), value.elements.as_slice())
-        else {
-            return None;
-        };
-        let shaped = same_subscript(first, read_first)
-            && same_subscript(second, read_second)
-            && same(&first.expr, &second.expr)
-            && is_container_path(&first.expr)
-            && is_index_operand(&first.index)
-            && is_index_operand(&second.index);
-        shaped.then_some(Self {
-            container: &first.expr,
-            i: &first.index,
-            j: &second.index,
-        })
+        match Reading::of(assign) {
+            Reading::Transposition(transposition) => Some(transposition),
+            Reading::NotAPermutation | Reading::OtherContainers | Reading::Permutation => None,
+        }
     }
 
     /// The local the container is reached from.
@@ -119,7 +150,9 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
                 return;
             }
             Expr::Assign(assign) => {
-                if let Some(transposition) = Transposition::of(assign) {
+                if matches!(assign.target, AssignTarget::Destructuring { .. })
+                    && let Some(transposition) = Transposition::of(assign)
+                {
                     self.candidates
                         .push((assign.id, transposition.rebindable_locals()));
                 }
@@ -137,8 +170,8 @@ fn same_subscript(a: &IndexExpr, b: &IndexExpr) -> bool {
         && same(&a.index, &b.index)
 }
 
-/// Whether `a` and `b` spell one expression, over the shapes
-/// [`is_container_path`] and [`is_index_operand`] admit.
+/// Whether `a` and `b` spell one place or index: a name, a literal, arithmetic,
+/// a field, a dereference or a subscript of them. Anything else spells none.
 fn same(a: &Expr, b: &Expr) -> bool {
     match (a, b) {
         (Expr::Ident(a), Expr::Ident(b)) => a.name == b.name && a.type_args.is_empty() && b.type_args.is_empty(),
@@ -150,6 +183,7 @@ fn same(a: &Expr, b: &Expr) -> bool {
         (Expr::FieldAccess(a), Expr::FieldAccess(b)) => {
             a.field == b.field && same(&a.expr, &b.expr)
         }
+        (Expr::Index(a), Expr::Index(b)) => same_subscript(a, b),
         _ => false,
     }
 }

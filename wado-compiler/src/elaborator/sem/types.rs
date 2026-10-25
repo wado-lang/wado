@@ -418,6 +418,47 @@ pub(crate) struct TypeAnnotations {
     /// Outside [`BodyFacts`] because a pattern names the same float whichever
     /// element a tuple `for-of` binds.
     pub(crate) inexact_float_patterns: IndexMap<Span, IndexSet<String>>,
+    /// Why each destructuring assignment keeps its desugaring, keyed by its
+    /// span: the note a surviving value copy's remark, or an affine value's
+    /// move error, carries there.
+    pub(crate) destructuring_fallbacks: IndexMap<Span, DestructuringFallback>,
+}
+
+/// Why a destructuring assignment keeps its desugaring, which copies each value
+/// it reads (WEP: Destructuring Assignment § A fallback that makes a value copy
+/// is reported, an affine one is an error).
+#[derive(Clone, Debug)]
+pub(crate) enum DestructuringFallback {
+    NotAPermutation,
+    /// Every target is owned, so a copy survives only for a reference.
+    ReferenceReadable,
+    NotOwned,
+    OtherContainer,
+    Rebindable,
+    NoIndexSwap { container: String },
+}
+
+impl DestructuringFallback {
+    pub(crate) fn note(&self) -> String {
+        match self {
+            Self::NotAPermutation => "the right side is not a permutation of the targets".into(),
+            Self::ReferenceReadable => {
+                "a reference to a target is readable after the statement".into()
+            }
+            Self::NotOwned => "a target is not owned, and the statement is not a \
+                 transposition within one container"
+                .into(),
+            Self::OtherContainer => "the two subscripts name different containers, or one \
+                 the compiler cannot show to be the same"
+                .into(),
+            Self::Rebindable => "an index local, or the local the container is reached \
+                 through, is referenced or captured"
+                .into(),
+            Self::NoIndexSwap { container } => {
+                format!("`{container}` does not implement `IndexSwap`")
+            }
+        }
+    }
 }
 
 impl std::ops::Deref for TypeAnnotations {

@@ -159,6 +159,107 @@ export fn run() with Stdout {
 }
 
 /// [`remarks_under`] at `-O2` with `-D` overrides.
+#[test]
+fn destructuring_assignment_copy_remark_notes_its_cause() {
+    // One function per reason a destructuring assignment keeps its copying
+    // desugaring rather than a move or an `index_swap`.
+    let remarks = remarks_for(
+        r#"
+use { println, Stdout } from "core:cli";
+
+fn rows() -> List<List<i32>> {
+    return [[builtin::black_box(1)], [2]];
+}
+
+fn not_a_permutation() -> i32 {
+    let mut a: List<i32> = [builtin::black_box(1)];
+    let mut b: List<i32> = [2];
+    [a, b] = [b, b];
+    a.push(1);
+    return a.len() + b.len();
+}
+
+fn reference_readable() -> i32 {
+    let mut a: List<i32> = [builtin::black_box(1)];
+    let mut b: List<i32> = [2];
+    let r = &a;
+    [a, b] = [b, a];
+    return r.len() + b.len();
+}
+
+fn not_owned(rs: &mut List<List<i32>>, x: &mut List<i32>) -> i32 {
+    [rs[0], *x] = [*x, rs[0]];
+    return rs.len();
+}
+
+fn other_container() -> i32 {
+    let mut ts = rows();
+    let mut us = rows();
+    [ts[0], us[1]] = [us[1], ts[0]];
+    return ts.len() + us.len();
+}
+
+fn rebindable() -> i32 {
+    let mut ts = rows();
+    let i = builtin::black_box(0);
+    let r = &i;
+    [ts[i], ts[1]] = [ts[1], ts[i]];
+    return ts[0].len() + *r;
+}
+
+struct Shelf { rows: List<List<i32>> }
+
+impl IndexRef<i32> for Shelf {
+    type Output = List<i32>;
+    fn index_ref(&self, index: i32) -> &List<i32> { return &self.rows[index]; }
+}
+
+impl IndexAssign<i32> for Shelf {
+    type Output = List<i32>;
+    fn index_assign(&mut self, index: i32, value: List<i32>) { self.rows[index] = value; }
+}
+
+fn no_index_swap() -> i32 {
+    let mut s = Shelf { rows: rows() };
+    [s[0], s[1]] = [s[1], s[0]];
+    return s.rows.len();
+}
+
+export fn run() with Stdout {
+    let mut rs = rows();
+    let mut x: List<i32> = [3];
+    println(`${not_a_permutation()} ${reference_readable()} ${not_owned(&mut rs, &mut x)}`);
+    println(`${other_container()} ${rebindable()} ${no_index_swap()}`);
+}
+"#,
+    );
+
+    for (line, note) in [
+        (11, "the right side is not a permutation of the targets"),
+        (20, "a reference to a target is readable after the statement"),
+        (
+            25,
+            "a target is not owned, and the statement is not a transposition within one container",
+        ),
+        (
+            32,
+            "the two subscripts name different containers, or one the compiler cannot show to be the same",
+        ),
+        (
+            40,
+            "an index local, or the local the container is reached through, is referenced or captured",
+        ),
+        (58, "`Shelf` does not implement `IndexSwap`"),
+    ] {
+        assert!(
+            remarks.iter().any(|r| r.starts_with(&format!("{line}:5 "))
+                && r.contains("a copy of")
+                && r.ends_with(&format!("\n  note: {note}"))),
+            "expected a copy remark at line {line} noting {note:?}: {remarks:?}"
+        );
+    }
+}
+
 fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
     let mut params = wado_compiler::param_resolution::ParamInputs::default();
     for (k, v) in overrides {

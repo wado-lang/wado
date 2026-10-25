@@ -1,6 +1,7 @@
 // A destructuring assignment that is not a transposition within one container
 // falls back to the desugaring, which copies each element it reads: here an
-// affine one, which cannot be copied. One function per condition.
+// affine one, which cannot be copied. The error carries a note naming why. One
+// function per condition.
 
 affine struct Tok {
     id: i32,
@@ -10,7 +11,39 @@ impl Drop for Tok {
     fn drop(self) {}
 }
 
+// Reads by reference and writes by value, but exchanges nothing.
+affine struct Bin {
+    toks: List<Tok>,
+}
+
+impl IndexRef<i32> for Bin {
+    type Output = Tok;
+
+    fn index_ref(&self, index: i32) -> &Tok {
+        return &self.toks[index];
+    }
+}
+
+impl IndexAssign<i32> for Bin {
+    type Output = Tok;
+
+    fn index_assign(&mut self, index: i32, value: Tok) {
+        self.toks[index] = value;
+    }
+}
+
 global mut K: i32 = 0;
+
+fn not_a_permutation() {
+    let mut a = Tok { id: 1 };
+    let mut b = Tok { id: 2 };
+    [a, b] = [b, b];
+}
+
+fn without_index_swap() {
+    let mut bin = Bin { toks: toks() };
+    [bin[0], bin[1]] = [bin[1], bin[0]];
+}
 
 fn toks() -> List<Tok> {
     let mut ts: List<Tok> = [];
@@ -69,6 +102,8 @@ fn captured_container() {
 }
 
 export fn run() {
+    not_a_permutation();
+    without_index_swap();
     not_transposed();
     two_containers();
     index_read_from_a_list();
@@ -81,4 +116,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": ":24:23: analysis error: cannot move affine type `Tok` out of a reference; 24:30: cannot move affine type `Tok` out of a reference; 30:23: cannot move affine type `Tok` out of a reference; 30:30: cannot move affine type `Tok` out of a reference; 36:31: cannot move affine type `Tok` out of a reference; 36:42: cannot move affine type `Tok` out of a reference; 43:23: cannot move affine type `Tok` out of a reference; 43:30: cannot move affine type `Tok` out of a reference; 50:23: cannot move affine type `Tok` out of a reference; 50:30: cannot move affine type `Tok` out of a reference; 55:27: cannot move affine type `Tok` out of a reference; 55:36: cannot move affine type `Tok` out of a reference; 60:23: cannot move affine type `Tok` out of a reference; 60:30: cannot move affine type `Tok` out of a reference; 66:27: cannot move affine type `Tok` out of a reference; 66:34: cannot move affine type `Tok` out of a reference"}
+{"compile_error":":40:18: analysis error: affine value `b` used after it was moved (moved at 40:15)\n  note: the right side is not a permutation of the targets; 45:25: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 45:33: cannot move affine type `Tok` out of a reference\n  note: `Bin` does not implement `IndexSwap`; 57:23: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 57:30: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 63:23: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 63:30: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 69:31: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 69:42: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 76:23: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 76:30: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 83:23: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 83:30: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 88:27: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 88:36: cannot move affine type `Tok` out of a reference\n  note: an index local, or the local the container is reached through, is referenced or captured; 93:23: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 93:30: cannot move affine type `Tok` out of a reference\n  note: a target is not owned, and the statement is not a transposition within one container; 99:27: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same; 99:34: cannot move affine type `Tok` out of a reference\n  note: the two subscripts name different containers, or one the compiler cannot show to be the same"}

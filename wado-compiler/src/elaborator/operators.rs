@@ -26,11 +26,13 @@ use super::trait_query::primitive_has_operator;
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
-use super::transposition::Transposition;
+use super::transposition::{Reading, Transposition};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
-use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
+use crate::elaborator::sem::types::{
+    AssignPlace, DesugarKind, DestructuringFallback, OperatorDispatch,
+};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
@@ -1096,11 +1098,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
-        if self.transpositions.contains(&assign.id)
-            && let Some(transposition) = Transposition::of(assign)
-            && let Some(type_id) = self.resolve_index_swap(assign.id, &transposition, ctx)
-        {
-            return type_id;
+        let fallback = match Reading::of(assign) {
+            Reading::Transposition(_) if !self.transpositions.contains(&assign.id) => {
+                Some(DestructuringFallback::Rebindable)
+            }
+            Reading::Transposition(transposition) => {
+                match self.resolve_index_swap(assign.id, &transposition, ctx) {
+                    Ok(type_id) => return type_id,
+                    Err(fallback) => fallback,
+                }
+            }
+            Reading::NotAPermutation => Some(DestructuringFallback::NotAPermutation),
+            Reading::OtherContainers => Some(DestructuringFallback::OtherContainer),
+            Reading::Permutation if targets.iter().all(|t| self.is_owned_place(t, ctx)) => {
+                Some(DestructuringFallback::ReferenceReadable)
+            }
+            Reading::Permutation => Some(DestructuringFallback::NotOwned),
+        };
+        if let Some(fallback) = fallback {
+            self.sem
+                .types
+                .destructuring_fallbacks
+                .insert(assign.span, fallback);
         }
         let places: Vec<Result<WritePlace, ()>> = targets
             .iter()
@@ -1157,23 +1176,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a transposition as its container's `index_swap`, recording the
-    /// dispatch reify replays. `None` falls back to the desugaring, with
-    /// nothing recorded and no local taken.
+    /// dispatch reify replays. `Err` falls back to the desugaring, with nothing
+    /// recorded and no local taken, and says why where the desugaring does not
+    /// report an error.
     fn resolve_index_swap(
         &mut self,
         assign_id: AstId,
         transposition: &Transposition<'_>,
         ctx: &mut FunctionContext,
-    ) -> Option<TypeId> {
+    ) -> Result<TypeId, Option<DestructuringFallback>> {
         let container = transposition.container;
         if ctx.lookup(transposition.container_root()).is_none() {
-            return None;
+            return Err(Some(DestructuringFallback::OtherContainer));
         }
         let container_type = self.resolve_expr(container, ctx, None);
         if container_type == TypeTable::ERROR {
-            return Some(TypeTable::ERROR);
+            return Ok(TypeTable::ERROR);
         }
-        // The desugaring reports a container no write may reach.
         if matches!(
             self.tysys.type_table.borrow().get(container_type),
             ResolvedType::Ref(_)
@@ -1182,30 +1201,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .place_roots_at_immutable_binding(container, ctx)
                 .is_some()
         {
-            return None;
+            return Err(None);
         }
         let base_type_id = self.tysys.through_ref(container_type);
-        let head = self.index_dispatch_head(base_type_id)?;
-        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
-        let (info, _) = self.index_lookup_or_newtype_base(
-            &head,
-            base_type_id,
-            &lookup_name,
-            lookup_type_id,
-            Elaborator::find_index_swap_trait_impl,
-        )?;
+        let found = self.index_dispatch_head(base_type_id).and_then(|head| {
+            let (lookup_name, lookup_type_id) =
+                self.tysys.newtype_base_lookup(&head, base_type_id);
+            self.index_lookup_or_newtype_base(
+                &head,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                Elaborator::find_index_swap_trait_impl,
+            )
+        });
+        let Some((info, _)) = found else {
+            return Err(Some(DestructuringFallback::NoIndexSwap {
+                container: self.tysys.type_table.borrow().type_name(base_type_id),
+            }));
+        };
         let index_type = info.index_type;
         let j_type = self.resolve_expr(transposition.j, ctx, index_type);
         let i_type = self.resolve_expr(transposition.i, ctx, index_type);
         if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
-            return Some(TypeTable::ERROR);
+            return Ok(TypeTable::ERROR);
         }
         // The desugaring's first write could change a mutable global.
         if [transposition.i, transposition.j]
             .into_iter()
             .any(|index| self.reads_mutable_global(index))
         {
-            return None;
+            return Err(Some(DestructuringFallback::NotOwned));
         }
         if let Some(index_type) = index_type {
             self.typecheck(j_type, index_type, transposition.j.span());
@@ -1228,7 +1254,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 needs_deref: false,
             },
         );
-        Some(TypeTable::UNIT)
+        Ok(TypeTable::UNIT)
+    }
+
+    /// Whether `place` is owned: a local, or a field path from one, reached
+    /// through no reference and no subscript.
+    fn is_owned_place(&self, place: &ast::Expr, ctx: &FunctionContext) -> bool {
+        match place {
+            ast::Expr::Ident(ident) => ctx
+                .lookup(&ident.name)
+                .is_some_and(|local| self.tysys.pointee_of(local.type_id).is_none()),
+            ast::Expr::FieldAccess(field) => self.is_owned_place(&field.expr, ctx),
+            _ => false,
+        }
     }
 
     /// Whether `index`, one [`Transposition`] admits, reads a mutable global.

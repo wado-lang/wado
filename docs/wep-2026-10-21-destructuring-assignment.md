@@ -237,7 +237,7 @@ well.
 - [x] Recognize the transposition before typing the desugared form and lower
   it to `index_swap`. Fixtures cover each condition that makes it fall back,
   an affine list, and an out-of-range index failing as the desugaring does.
-- [ ] Extend the surviving value-copy remark with the cause note for a
+- [x] Extend the surviving value-copy remark with the cause note for a
   destructuring assignment, and report an affine fallback as the compile error
   carrying the same note. Fixtures cover each cause, for the remark and for
   the error.

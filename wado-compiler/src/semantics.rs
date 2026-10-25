@@ -20,7 +20,9 @@ use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
-use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
+use crate::elaborator::sem::types::{
+    CoercionKind, DesugarKind, DestructuringFallback, MethodDispatch, TypeAnnotations,
+};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -369,13 +371,7 @@ impl Semantics {
     ) -> IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> {
         let mut by_module: IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> =
             IndexMap::default();
-        let walks = self.state.iter().flat_map(|state| {
-            state.module_semantics.values().flat_map(|sem| {
-                std::iter::once(&sem.types)
-                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
-            })
-        });
-        for types in walks {
+        for types in self.walks() {
             for (site, shown) in &types.inexact_float_patterns {
                 let module = self.space_modules[&site.space].clone();
                 by_module
@@ -387,6 +383,37 @@ impl Semantics {
             }
         }
         by_module
+    }
+
+    /// Why each destructuring assignment keeps its desugaring, by the module
+    /// that writes it, keyed by the assignment's span. Gathered from every
+    /// walk, as [`Self::inexact_float_patterns`] are.
+    pub(crate) fn destructuring_fallbacks(
+        &self,
+    ) -> IndexMap<ModuleSource, IndexMap<Span, DestructuringFallback>> {
+        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, DestructuringFallback>> =
+            IndexMap::default();
+        for types in self.walks() {
+            for (site, fallback) in &types.destructuring_fallbacks {
+                let module = self.space_modules[&site.space].clone();
+                by_module
+                    .entry(module)
+                    .or_default()
+                    .insert(*site, fallback.clone());
+            }
+        }
+        by_module
+    }
+
+    /// The facts of every body walk: each module's own, and each trait default
+    /// body's, which a walk resolves in the module that takes it.
+    fn walks(&self) -> impl Iterator<Item = &TypeAnnotations> {
+        self.state.iter().flat_map(|state| {
+            state.module_semantics.values().flat_map(|sem| {
+                std::iter::once(&sem.types)
+                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
+            })
+        })
     }
 
     /// Every value recorded for `fact` at `id`, from the module

@@ -12,6 +12,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::divergence::{self, ExprTypes};
+use crate::elaborator::sem::types::DestructuringFallback;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
@@ -26,6 +27,8 @@ pub struct ResourceMoveError {
     kind: MoveError,
     span: Span,
     module: String,
+    /// Why the destructuring assignment the error sits in copies.
+    note: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +199,10 @@ impl From<ResourceMoveError> for Diagnostic {
                 format!("global `{global}` cannot keep a reference into `{owner}`, which drops"),
             ),
         };
+        let message = match e.note {
+            Some(note) => format!("{message}\n  note: {note}"),
+            None => message,
+        };
         Diagnostic {
             severity: Severity::Error,
             code,
@@ -208,6 +215,7 @@ impl From<ResourceMoveError> for Diagnostic {
 #[must_use]
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let drops = Drops::of(sem);
+    let mut fallbacks = sem.destructuring_fallbacks();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         let mut checker = Checker {
@@ -215,6 +223,8 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
             module: src,
             drops: &drops,
             out: &mut out,
+            fallbacks: fallbacks.swap_remove(src).unwrap_or_default(),
+            in_fallback: None,
         };
         for item in &module.items {
             checker.check_item(item);
@@ -265,14 +275,32 @@ struct Checker<'a> {
     module: &'a ModuleSource,
     drops: &'a Drops,
     out: &'a mut Vec<ResourceMoveError>,
+    /// This module's [`Semantics::destructuring_fallbacks`].
+    fallbacks: IndexMap<Span, DestructuringFallback>,
+    /// The span (its first token) and note of the falling-back destructuring
+    /// assignment whose right side is being walked.
+    in_fallback: Option<(Span, String)>,
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
+        // A copy the fallback makes is a move out of a reference, or a second
+        // read of a target the right side moved already: between the
+        // assignment's first token and this read.
+        let note = self
+            .in_fallback
+            .as_ref()
+            .filter(|(at, _)| match &kind {
+                MoveError::MoveOutOfReference { .. } => true,
+                MoveError::UseAfterMove { moved_at, .. } => at.merge(&span).encloses(moved_at),
+                _ => false,
+            })
+            .map(|(_, note)| note.clone());
         self.out.push(ResourceMoveError {
             kind,
             span,
             module: self.module.source_path(),
+            note,
         });
     }
 
@@ -1306,7 +1334,15 @@ impl MoveWalker<'_, '_> {
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
+        let fallback = self
+            .checker
+            .fallbacks
+            .get(&a.span)
+            .filter(|f| !matches!(f, DestructuringFallback::ReferenceReadable))
+            .map(|f| (a.span, f.note()));
+        let enclosing = std::mem::replace(&mut self.checker.in_fallback, fallback);
         self.visit_at(&a.value);
+        self.checker.in_fallback = enclosing;
         let places = a.places();
         let owners: Vec<Owners> = match (&a.value, &a.target) {
             (Expr::TupleLiteral(value), AssignTarget::Destructuring { .. })
