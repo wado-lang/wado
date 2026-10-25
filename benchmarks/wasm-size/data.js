@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792941283988,
+  "lastUpdate": 1792964753037,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70941,6 +70941,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/124fbfdb1b4073a366a2b4438d4cf73d1a8e07f8"
         },
         "date": 1792941283329,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7fec7454cf6650a4c217f1daf73c6bd209a481d",
+          "message": "Merge pull request #2459 from wado-lang/ccr-8dca5f71-587irx\n\nfeat: swap two elements of a container without copying them",
+          "timestamp": "2026-10-26T06:32:48+09:00",
+          "tree_id": "5969a01e3c5355b176415b4ce48e4ff89f89d7df",
+          "url": "https://github.com/wado-lang/wado/commit/f7fec7454cf6650a4c217f1daf73c6bd209a481d"
+        },
+        "date": 1792964751960,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
