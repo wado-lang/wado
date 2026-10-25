@@ -59,9 +59,19 @@ test {
 }
 ```
 
-An interface may also declare types (`struct`, `variant`, `enum`, `flags`, and
-`resource`). Inside the interface a type is named by its own name; outside, only
-through the interface, as `Geo::Point`.
+An interface may also declare types: `struct`, `enum`, `variant`, `flags`,
+`resource`, and `type Name = T;`, which declares a newtype, since an interface
+has no associated types. It declares nothing else. Inside the interface a type
+is named by its own name, looked up in the interface before the module.
+Outside, a path through the interface is its only name, as `Geo::Point`, in a
+type, a literal, a pattern and a call alike. A namespace import adds its prefix,
+as `geo::Geo::Point`.
+
+A type in an interface takes no visibility modifier: it reaches as far as its
+interface. In an interface that carries `#[cm]`, every field must be `pub`,
+since a WIT record has no private field. A type an exported interface's signature names
+belongs to that interface, or to another one, and naming a type no interface
+declares is an error.
 
 > Not yet implemented: a type declared in an interface
 > ([WEP](./wep-2026-10-22-component-export-names.md)).

@@ -1,0 +1,137 @@
+// `Hash` is derived where a use needs it, as `Eq` is (WEP 2026-10-01): a struct
+// feeds its fields in declaration order, a variant its case and then the
+// payload a payload case carries, an enum its case and a flags type its bits.
+// Values that are `==` feed a hasher alike, so either keys a `HashMap`. A
+// `hash` written beside a written `eq` is the one that answers.
+
+use { HashMap, HashSet } from "core:collections";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Hash for Point;
+
+enum Color {
+    Red,
+    Green,
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+struct Tagged {
+    id: i32,
+    note: String,
+}
+
+impl Eq for Tagged {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
+    }
+}
+
+impl Hash for Tagged {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.id.hash(h);
+    }
+}
+
+struct Named {
+    name: String,
+    at: Point,
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+variant Shape {
+    Circle(i32),
+    Rect([i32, i32]),
+    Dot,
+}
+
+/// Records what a value feeds, so a test reads the stream itself.
+struct Recorder {
+    words: List<u64>,
+}
+
+impl Hasher for Recorder {
+    fn write_u64(&mut self, x: u64) {
+        self.words.push(x);
+    }
+
+    fn write_bytes(&mut self, bytes: ByteSlice) {
+        self.words.push(bytes.len() as u64);
+        for let b of bytes {
+            self.words.push(b as u64);
+        }
+    }
+}
+
+fn fed<T: Hash>(v: &T) -> List<u64> {
+    let mut r = Recorder { words: [] };
+    v.hash(&mut r);
+    return r.words;
+}
+
+test "a struct feeds its fields in order" {
+    assert fed(&Point { x: 1, y: 2 }) == [1, 2];
+    assert fed(&Named { name: "ab", at: Point { x: 3, y: 4 } }) == [2, 97, 98, 3, 4];
+    assert fed(&Pair { a: 7, b: Point { x: 8, y: 9 } }) == [7, 8, 9];
+}
+
+test "a variant feeds its case, then the payload" {
+    assert fed(&Shape::Circle(5)) == [0, 5];
+    assert fed(&Shape::Rect([2, 3])) == [1, 2, 3];
+    assert fed(&Shape::Dot) == [2];
+    let some: Option<Point> = Some(Point { x: 1, y: 1 });
+    let none: Option<Point> = null;
+    assert fed(&some) != fed(&none);
+}
+
+test "an enum feeds its case, a flags type its bits" {
+    assert fed(&Color::Green) == [1];
+    assert fed(&(Perm::Read | Perm::Write)) == [3];
+
+    let mut colors = HashSet::<Color>::new();
+    assert colors.insert(Color::Red);
+    assert !colors.contains(Color::Green);
+    let mut perms = HashMap::<Perm, i32>::new();
+    perms[Perm::Read | Perm::Write] = 3;
+    assert perms[Perm::Write | Perm::Read] == 3;
+    assert perms.get(Perm::Read) == null;
+}
+
+test "a written hash answers beside a written eq" {
+    assert fed(&Tagged { id: 4, note: "x" }) == [4];
+    let mut tags = HashSet::<Tagged>::new();
+    tags.insert(Tagged { id: 1, note: "a" });
+    assert tags.contains(Tagged { id: 1, note: "b" });
+}
+
+test "derived keys find their entries" {
+    let mut m = HashMap::<Point, String>::new();
+    m[Point { x: 1, y: 2 }] = "a";
+    m[Point { x: 2, y: 1 }] = "b";
+    assert m.len() == 2;
+    assert m[Point { x: 1, y: 2 }] == "a";
+    assert m[Point { x: 2, y: 1 }] == "b";
+
+    let mut shapes = HashSet::<Shape>::new();
+    assert shapes.insert(Shape::Circle(1));
+    assert shapes.insert(Shape::Dot);
+    assert !shapes.insert(Shape::Circle(1));
+    assert shapes.contains(Shape::Dot);
+    assert !shapes.contains(Shape::Circle(2));
+
+    let mut by_name = HashMap::<Pair<String, Shape>, i32>::new();
+    by_name[Pair { a: "x", b: Shape::Rect([1, 2]) }] = 1;
+    assert by_name.get(Pair { a: "x", b: Shape::Rect([1, 2]) }) == Option::Some(1);
+    assert by_name.get(Pair { a: "x", b: Shape::Rect([2, 1]) }) == null;
+}

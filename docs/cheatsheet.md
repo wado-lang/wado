@@ -1342,7 +1342,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Hash`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable, hashable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }

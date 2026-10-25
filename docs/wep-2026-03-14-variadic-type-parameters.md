@@ -87,9 +87,11 @@ impl<..T: Eq> Eq for [..T] { ... }
 impl<..T: Default> Default for [..T] { ... }
 ```
 
-The bound `..T: Trait` means "every type in the pack T implements Trait." This is checked
-at monomorphization: when `T` is instantiated to `[i32, String]`, the compiler verifies
-that `i32: Eq` and `String: Eq`.
+The bound `..T: Trait` means "every type in the pack T implements Trait." It is
+checked once the pack is known: when `T` is instantiated to `[i32, String]`, the
+compiler verifies that `i32: Eq` and `String: Eq`. A pack a pin binds
+(`ReflectStruct<FieldTypes = [..F]>`) is known where the blanket is asked for,
+and checked there.
 
 Multiple bounds are written with `+`:
 

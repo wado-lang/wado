@@ -3518,16 +3518,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let sig = match self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[]) {
-            Some(sig) => Some(sig),
+        let sig = self
+            .static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
             // What `Self::infer_through_newtype` solved: the base's.
-            None => {
+            .or_else(|| {
                 let key = self.static_receiver_key(prefix, receiver_key);
                 self.newtype_base_target(&key).and_then(|(base_key, _)| {
                     self.static_call_sig(prefix, suffix, Some(&base_key), SigChoice::Unique, &[])
                 })
-            }
-        };
+            });
         let Some(sig) = sig else {
             self.report_uninferred_derived_type_args(
                 prefix,
