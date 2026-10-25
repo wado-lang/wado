@@ -57,7 +57,7 @@ pub struct Logger<'a, H: CompilerHost> {
     parses: std::cell::RefCell<hashmap::IndexMap<AstIdSpace, ModuleSource>>,
     /// Each wasm asset's file -> the `use` where a diagnostic in its bindings
     /// is reported. The bindings are synthesized, so a location in them
-    /// indexes no text anyone wrote.
+    /// indexes no text.
     bindings_origins: std::cell::RefCell<hashmap::IndexMap<String, DiagnosticSpan>>,
 }
 
@@ -87,8 +87,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
-    /// Record, for each wasm asset's file, the asset path of the `use` where a
-    /// diagnostic in the asset's bindings is reported.
+    /// Record where each asset's bindings report ([`crate::loader::LoadResult::bindings_origins`]).
     pub fn register_bindings_origins(
         &self,
         origins: impl IntoIterator<Item = (String, DiagnosticSpan)>,

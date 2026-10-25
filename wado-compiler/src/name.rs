@@ -7,7 +7,7 @@
 use crate::ast::{AstId, TestMetadata};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
-use crate::lexer::is_ident_continue;
+use crate::lexer::{is_ident_continue, is_valid_ident};
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
@@ -61,11 +61,7 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 /// type of the interface minted `$a:x/trip`.
 pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
     name.rsplit_once(NAMESPACE_MEMBER_SEP)
-        .filter(|(namespace, member)| !namespace.is_empty() && is_identifier(member))
-}
-
-fn is_identifier(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(is_ident_continue)
+        .filter(|(_, member)| is_valid_ident(member))
 }
 
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
