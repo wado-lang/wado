@@ -977,7 +977,15 @@ fn run_with_allocator(
 
     for level in spec.remarks.keys() {
         assert!(
-            ["O0", "O1", "O2", "O3", "Os"].contains(&level.as_str()),
+            [
+                OptLevel::O0,
+                OptLevel::O1,
+                OptLevel::O2,
+                OptLevel::O3,
+                OptLevel::Os
+            ]
+            .map(common::opt_level_name)
+            .contains(&level.as_str()),
             "[{test_id}] `remarks` is keyed by an optimization level, not {level:?}"
         );
     }
