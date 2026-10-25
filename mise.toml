@@ -91,11 +91,17 @@ run = "scripts/dev-bin.sh wado-dev-tools highlight-corpus"
 description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
 run = "scripts/dev-bin.sh wado-dev-tools highlight-vocab"
 
-# The corpus is listed here rather than in the tool: a `git` the tool ran would
-# be confined to the current directory, which a worktree's git directory is not.
+# A corpus is listed by the task rather than by its tool: a `git` the tool ran
+# would be confined to the current directory, which a worktree's git directory
+# is not.
+[tasks.rust-corpus]
+hide = true
+run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt"
+
 [tasks.check-rust-paths]
 description = "Fail if a Rust file gained a `crate::` / `super::` path outside a module-level `use` item"
-run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt && scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --check --paths-from target/rust-paths.txt"
+depends = ["rust-corpus"]
+run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --check --paths-from target/rust-paths.txt"
 
 [tasks.list-rust-paths]
 description = "List the inline `crate::` / `super::` paths the named Rust files carry"
@@ -134,7 +140,8 @@ git diff --exit-code -- package-wadopoet/src/vocabulary.wado
 
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
-run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt && scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from target/rust-paths.txt"
+depends = ["rust-corpus"]
+run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from target/rust-paths.txt"
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
