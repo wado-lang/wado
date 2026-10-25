@@ -110,7 +110,7 @@ fn chapters(files: &List<String>) -> List<String> with (Preopens, Stderr, Exit) 
                 break;
             }
             inside = line == "## Chapters";
-        } else if inside && let Some(file) = chapter_link(line.as_str_slice()) {
+        } else if inside && let Some(file) = chapter_link(&line) {
             listed.push(file);
         }
     }
@@ -149,7 +149,8 @@ fn chapters(files: &List<String>) -> List<String> with (Preopens, Stderr, Exit) 
 }
 
 /// The file a `1. [Title](./spec-x.md)` line links to.
-fn chapter_link(line: StrSlice) -> Option<String> {
+fn chapter_link<S: AsStrSlice>(line: S) -> Option<String> {
+    let line = line.as_str_slice();
     let mut digits = 0;
     for let c of line.chars() {
         if !c.is_ascii_digit() {
