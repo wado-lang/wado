@@ -520,7 +520,7 @@ scripts/dev-bin.sh wado doc --format markdown --title "WASI WebGPU Standard Libr
 
 [tasks.update-docs-index]
 description = "Regenerate the index of docs/README.md from the titles of the docs"
-run = "node scripts/docs-index.mjs"
+run = "scripts/dev-bin.sh wado run scripts/docs_index.wado"
 
 [tasks.clean]
 description = "Clean all build artifacts"
@@ -864,12 +864,7 @@ run = "mise run -C wasm-size report-wasm-size"
 
 [tasks.report-const-regions]
 description = "Count the compile-time regions that survive optimization, by cause"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-wado=$(scripts/dev-bin.sh --path wado)
-node scripts/const-region-census.mjs --bin "$wado"
-"""
+run = "scripts/dev-bin.sh wado-dev-tools const-regions"
 
 [tasks.jco-deps]
 description = "Install the released jco for the vendor-free pipeline (scripts/jco)"

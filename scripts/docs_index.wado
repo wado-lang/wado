@@ -1,0 +1,192 @@
+//! Regenerates the index in docs/README.md: the title of every document in
+//! docs/, grouped by filename prefix. Only the text between the markers changes.
+//!
+//! Run from the repository root: `wado run` reaches only the current directory.
+
+use { eprintln, exit, Stderr, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+global DOCS: String = "docs";
+global README: String = "docs/README.md";
+global BEGIN: String = "<!-- BEGIN GENERATED: mise run update-docs-index -->";
+global END: String = "<!-- END GENERATED -->";
+global OVERVIEW: String = "spec-overview.md";
+
+struct Group {
+    heading: String,
+    prefix: String,
+}
+
+export fn run() with (Preopens, Stderr, Exit) {
+    let current = read(&README);
+    let [begin, end] = match [
+        current.find(&BEGIN),
+        current.find(&END),
+    ] {
+        [Some(begin), Some(end)] && begin < end => [begin, end],
+        _ => fail(`${README}: missing index markers`),
+    };
+    let head = current.substr_bytes(0, begin);
+    let tail = current.substr_bytes(end, current.len());
+    let next = `${head}${BEGIN}\n\n${index()}\n\n${tail}`;
+    if next != current && let Err(e) = fs::write(&README, &next) {
+        fail(`${e}`);
+    }
+}
+
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(message);
+    exit(1);
+}
+
+fn index() -> String with (Preopens, Stderr, Exit) {
+    let groups: List<Group> = [
+        { heading: "Specification", prefix: "spec-" },
+        { heading: "Wado Evolution Proposals", prefix: "wep-" },
+        { heading: "Standard Library", prefix: "stdlib-" },
+        { heading: "Research", prefix: "research-" },
+        { heading: "Guides", prefix: "" },
+    ];
+    let mut files: List<String> = [];
+    for let entry of fs::read_dir(&DOCS).unwrap() {
+        if entry.name.ends_with(".md") && entry.name != "README.md" && entry.name != "AGENTS.md" {
+            files.push(entry.name);
+        }
+    }
+    files.sort();
+
+    let mut sections: List<String> = [];
+    for let group of groups {
+        let mut mine: List<String> = [];
+        let mut rest: List<String> = [];
+        for let file of files {
+            if file.starts_with(&group.prefix) {
+                mine.push(file);
+            } else {
+                rest.push(file);
+            }
+        }
+        files = rest;
+        if group.prefix == "spec-" {
+            mine = chapters(&mine);
+        }
+        let mut items: List<String> = [];
+        for let file of mine {
+            let heading = title(&file);
+            let name = match heading.as_str_slice().strip_prefix("WEP: ") {
+                Some(proposal) => proposal.to_string(),
+                None => heading,
+            };
+            items.push(`- [${name}](./${file})`);
+        }
+        sections.push(`## ${group.heading}\n\n${items.join("\n")}`);
+    }
+    return sections.join("\n\n");
+}
+
+/// The first `# ` heading outside a code fence.
+fn title(file: &String) -> String with (Preopens, Stderr, Exit) {
+    let mut fence = false;
+    for let line of read(&`${DOCS}/${file}`).lines() {
+        if line.starts_with("```") || line.starts_with("~~~") {
+            fence = !fence;
+        } else if !fence && let Some(rest) = line.strip_prefix("# ") {
+            return rest.trim().to_string();
+        }
+    }
+    fail(`${DOCS}/${file}: no top-level heading`);
+}
+
+/// The overview's `## Chapters` list: the specification's reading order. It
+/// must name every other spec file exactly once.
+fn chapters(files: &List<String>) -> List<String> with (Preopens, Stderr, Exit) {
+    let path = `${DOCS}/${OVERVIEW}`;
+    let mut listed: List<String> = [];
+    let mut inside = false;
+    for let line of read(&path).lines() {
+        if line.starts_with("## ") {
+            if inside {
+                break;
+            }
+            inside = line == "## Chapters";
+        } else if inside && let Some(file) = chapter_link(line.as_str_slice()) {
+            listed.push(file);
+        }
+    }
+    if !inside {
+        fail(`${path}: no "## Chapters" section`);
+    }
+
+    let mut missing: List<String> = [];
+    for let file of files {
+        if file != OVERVIEW && !listed.contains_str(file) {
+            missing.push(*file);
+        }
+    }
+    let mut unknown: List<String> = [];
+    let mut repeated: List<String> = [];
+    let mut seen: List<String> = [];
+    for let file of listed {
+        if !files.contains_str(&file) || file == OVERVIEW {
+            unknown.push(file);
+        }
+        if seen.contains_str(&file) {
+            repeated.push(file);
+        }
+        seen.push(file);
+    }
+    if !missing.is_empty() || !unknown.is_empty() || !repeated.is_empty() {
+        fail(`${path}: "## Chapters" must list every spec file once (missing: ${names(&missing)}; unknown: ${names(
+            &unknown,
+        )}; repeated: ${names(&repeated)})`);
+    }
+    let mut ordered: List<String> = [OVERVIEW];
+    for let file of listed {
+        ordered.push(file);
+    }
+    return ordered;
+}
+
+/// The file a `1. [Title](./spec-x.md)` line links to.
+fn chapter_link(line: StrSlice) -> Option<String> {
+    let mut digits = 0;
+    for let c of line.chars() {
+        if !c.is_ascii_digit() {
+            break;
+        }
+        digits += 1;
+    }
+    if digits == 0 {
+        return null;
+    }
+    let Some(label) = line.slice(digits, line.len()).strip_prefix(". [") else {
+        return null;
+    };
+    let Some(close) = label.find("](./") else {
+        return null;
+    };
+    let target = label.slice(close + 4, label.len());
+    let Some(stop) = target.find(")") else {
+        return null;
+    };
+    let file = target.slice(0, stop);
+    if !file.starts_with("spec-") || !file.ends_with(".md") || file.contains("#") {
+        return null;
+    }
+    return Some(file.to_string());
+}
+
+fn names(files: &List<String>) -> String {
+    if files.is_empty() {
+        return "none";
+    }
+    return files.join(", ");
+}
+
+fn read(path: &String) -> String with (Preopens, Stderr, Exit) {
+    return match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) => fail(`${e}`),
+    };
+}
