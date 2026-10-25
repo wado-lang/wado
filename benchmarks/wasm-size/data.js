@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792884352611,
+  "lastUpdate": 1792889506268,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70369,6 +70369,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5d56bec29ae34ced1e02ee98f7a17088d5ab052b"
         },
         "date": 1792884352182,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "051b0621da44328f806d10cb4a3ed0e99162e100",
+          "message": "Merge pull request #2447 from wado-lang/dependabot/npm_and_yarn/cloudflare-worker/npm_and_yarn-78d33245f9\n\nbuild(deps): Bump the npm_and_yarn group across 2 directories with 2 updates",
+          "timestamp": "2026-10-25T09:30:53+09:00",
+          "tree_id": "3d02b1bf619245e65bcad3486230869326ac8156",
+          "url": "https://github.com/wado-lang/wado/commit/051b0621da44328f806d10cb4a3ed0e99162e100"
+        },
+        "date": 1792889505457,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
