@@ -185,9 +185,12 @@ struct MavenDoc {
 
 fn resolve_latest_version() -> Result<String, String> with (Process, Preopens, SystemClock) {
     let cache = fs::join(CACHE_DIR, "antlr4-latest-version");
-    if let Ok(meta) = fs::metadata(&cache) && let Some(modified) = meta.modified && SystemClock::now().seconds - modified.seconds < LATEST_VERSION_TTL_SECONDS && let Ok(version) = fs::read_to_string(
-        &cache,
-    ) {
+    if let Ok(meta) = fs::metadata(&cache)
+        && let Some(modified) = meta.modified
+        && SystemClock::now().seconds - modified.seconds < LATEST_VERSION_TTL_SECONDS
+        && let Ok(version) = fs::read_to_string(
+            &cache,
+        ) {
         return Ok(version);
     }
     let body = match Command::new("curl").args(["-fsSL", MAVEN_SEARCH_URL]).read() {
@@ -367,10 +370,11 @@ fn declared_super_class(text: &String) -> Option<String> {
 fn declares_lexer_grammar(text: &String) -> bool {
     for let line of text.lines() {
         let line = line.to_string();
-        if let Some(end) = word_then_space(&line, skip_spaces(&line, 0), "lexer") && word_then_space(&line, skip_spaces(
-            &line,
-            end,
-        ), "grammar") matches { Some(_) } {
+        if let Some(end) = word_then_space(&line, skip_spaces(&line, 0), "lexer")
+            && word_then_space(&line, skip_spaces(
+                &line,
+                end,
+            ), "grammar") matches { Some(_) } {
             return true;
         }
     }
