@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792926949221,
+  "lastUpdate": 1792927976314,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70765,6 +70765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6853639b04bf2d3f2feeb01615da3e04731c6405"
         },
         "date": 1792926948437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b5b76d048eb1a85c05341f7f91888112c2996df",
+          "message": "Merge pull request #2454 from wado-lang/ccr-bf269f57-0gkwrh\n\nfix(cm): name a component interface's types through the interface",
+          "timestamp": "2026-10-25T20:13:14+09:00",
+          "tree_id": "b47ba242036b9e2311275c77903ebe43f693fd3d",
+          "url": "https://github.com/wado-lang/wado/commit/7b5b76d048eb1a85c05341f7f91888112c2996df"
+        },
+        "date": 1792927975537,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
