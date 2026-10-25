@@ -621,9 +621,13 @@ fn namespace_member(
     namespace: &str,
     member: &str,
 ) -> Option<DefId> {
+    let alias = namespace_member_alias(namespace, member);
     symbols
-        .imported(module, &namespace_member_alias(namespace, member))
-        .or_else(|| symbols.interface_type(module, namespace, member))
+        .imported(module, &alias)
+        .or_else(|| {
+            let (owner, member) = split_namespace_member(&alias)?;
+            symbols.interface_type(module, owner, member)
+        })
         .map(|sym| defs.def_at(sym.defined_at))
 }
 
@@ -826,8 +830,9 @@ impl Resolver<'_> {
             self.used_imports.insert(key.to_string());
         } else if let Some((owner, _)) = split_namespace_member(key)
             && self.scopes.imported(self.module, owner).is_some()
-            && self.interface_type(key) == Some(def)
         {
+            // A `$` key no import holds names no binder or item either, so
+            // the imported interface `owner` answered it.
             self.used_imports.insert(owner.to_string());
         }
     }
@@ -1407,11 +1412,11 @@ impl AstVisitor<'_> for Resolver<'_> {
         {
             self.record_name(head.id, &head.name);
             if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
-                let qualified = format!(
-                    "{}${}",
-                    ident.segments[owner - 1].name,
-                    ident.segments[owner].name
-                );
+                let qualified = ident.segments[..=owner]
+                    .iter()
+                    .map(|segment| segment.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(&NAMESPACE_MEMBER_SEP.to_string());
                 self.record_name(ident.segments[owner].id, &qualified);
             }
         }

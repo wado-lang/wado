@@ -1189,29 +1189,41 @@ impl Parser {
             Vec::new()
         };
 
-        let (qualifier, case_name, case_span) = if self.check(&TokenKind::ColonColon) {
+        // Every segment after the second; the last names the case, the ones
+        // before it extend the namespace (`ns::Interface::Type::Case`).
+        let mut rest = Vec::new();
+        while self.check(&TokenKind::ColonColon) {
             self.advance();
-            let case_span = self.peek().span;
-            let case_name = self.consume_ident()?;
-            let qualifier = match first_type {
-                Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+            let span = self.peek().span;
+            rest.push((self.consume_ident()?, span));
+        }
+        let (qualifier, case_name, case_span) = match (rest.pop(), first_type) {
+            (None, first_type) => (first_type, second_name, second_span),
+            (Some((case_name, case_span)), Type::Named(t))
+                if rest.is_empty() || second_args.is_empty() =>
+            {
+                let mut namespace = t.name;
+                let (mut name, mut name_span) = (second_name, second_span);
+                for (segment, span) in rest {
+                    namespace = namespaced_name(&namespace, &name);
+                    (name, name_span) = (segment, span);
+                }
+                let qualifier = Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
-                    namespace: t.name.clone(),
-                    name: second_name,
-                    name_span: second_span,
+                    namespace,
+                    name,
+                    name_span,
                     args: second_args,
                     span: start_span,
-                })),
-                _ => {
-                    return Err(ParseError {
-                        message: "invalid qualified case pattern".to_string(),
-                        span: start_span,
-                    });
-                }
-            };
-            (qualifier, case_name, case_span)
-        } else {
-            (first_type, second_name, second_span)
+                }));
+                (qualifier, case_name, case_span)
+            }
+            (Some(_), _) => {
+                return Err(ParseError {
+                    message: "invalid qualified case pattern".to_string(),
+                    span: start_span,
+                });
+            }
         };
 
         if self.check(&TokenKind::LBrace) {
@@ -5723,10 +5735,17 @@ impl Parser {
 
         let name = self.consume_ident()?;
 
-        // Check for namespaced type: namespace::type<T>
+        // Check for namespaced type: namespace::type<T>, where the namespace may
+        // itself be a path (`ns::Interface::Type`).
         if self.check(&TokenKind::ColonColon) {
             self.advance();
-            let (type_name, type_name_span) = self.consume_ident_with_span()?;
+            let mut name = name;
+            let (mut type_name, mut type_name_span) = self.consume_ident_with_span()?;
+            while self.check(&TokenKind::ColonColon) {
+                self.advance();
+                name = namespaced_name(&name, &type_name);
+                (type_name, type_name_span) = self.consume_ident_with_span()?;
+            }
 
             // Namespaced generic type: namespace::type<T>
             if self.check(&TokenKind::Lt) {

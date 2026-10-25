@@ -633,8 +633,7 @@ impl SymbolTable {
         self.lookup_in_module_with_visited(&declaring, &qualified, visited)
     }
 
-    /// Where an `Owner::member` name reached from `module_source` is declared:
-    /// the owning interface's module, and the member's name there.
+    /// Where an `Owner::member` name reached from `module_source` is declared.
     fn declared_member(
         &self,
         module_source: &ModuleSource,
@@ -642,13 +641,10 @@ impl SymbolTable {
         visited: &mut Vec<(ModuleSource, String)>,
     ) -> Option<(ModuleSource, String)> {
         let (owner, member) = split_local_method(name)?;
-        let owner = self.lookup_in_module_with_visited(module_source, owner, visited)?;
-        matches!(owner.kind, SymbolKind::Effect(_)).then(|| {
-            (
-                owner.module_source().clone(),
-                mangle_local_method(&owner.name, member),
-            )
-        })
+        interface_member(
+            self.lookup_in_module_with_visited(module_source, owner, visited)?,
+            member,
+        )
     }
 
     /// The type `owner::member` written in `module` names, where `owner` is an
@@ -663,13 +659,8 @@ impl SymbolTable {
         let owner = self
             .imported(module, owner)
             .or_else(|| self.lookup_in_module(module, owner))?;
-        if !matches!(owner.kind, SymbolKind::Effect(_)) {
-            return None;
-        }
-        let symbol = self.lookup_in_module(
-            owner.module_source(),
-            &mangle_local_method(&owner.name, member),
-        )?;
+        let (declaring, qualified) = interface_member(owner, member)?;
+        let symbol = self.lookup_in_module(&declaring, &qualified)?;
         symbol.kind.declares_type().then_some(symbol)
     }
 
@@ -721,6 +712,17 @@ impl SymbolTable {
     pub fn all_symbols(&self) -> impl Iterator<Item = &Symbol> {
         self.symbols.values()
     }
+}
+
+/// Where `member` of the interface `owner` is declared: the interface's module,
+/// and the member's name there. `None` when `owner` is no interface.
+fn interface_member(owner: &Symbol, member: &str) -> Option<(ModuleSource, String)> {
+    matches!(owner.kind, SymbolKind::Effect(_)).then(|| {
+        (
+            owner.module_source().clone(),
+            mangle_local_method(&owner.name, member),
+        )
+    })
 }
 
 #[cfg(test)]

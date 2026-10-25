@@ -2521,6 +2521,13 @@ impl CmInterfaceRegistry {
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
         }
+        // The bindings declare an imported interface's types too, so each maps
+        // back to them; the first component to import one declares it.
+        for fq in host_leaf_imports {
+            self.cm_interface_module_sources
+                .entry(fq.clone())
+                .or_insert_with(|| module_source.clone());
+        }
         Ok(())
     }
 

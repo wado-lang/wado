@@ -304,8 +304,13 @@ this way, since each component's export is its own declaration.
   `cm_component_import_same_interface_two_components.wado` passes.
 - [x] A component's interface types are named only through their interface,
   except the default interface's, which are items of the module. The bindings
-  declare each as `Interface::Type`, a member of its interface.
-  `cm_component_import_same_type_two_interfaces.wado` passes.
+  declare each as `Interface::Type`, a member of its interface, an imported
+  interface's included, and a WIT `use` names the type of the interface it
+  reaches. `cm_component_import_same_type_two_interfaces.wado`,
+  `cm_component_import_interface_type_kinds.wado` and
+  `cm_component_import_interface_type_namespace.wado` pass.
+- [x] `core:icu` re-exports the interface `Properties` alone, and its callers
+  write `Properties::BinaryProperty`.
 - [ ] A Wado `interface` declares the WIT type kinds, named bare inside it and
   only through it outside. A visibility modifier on one, and a field that is not
   `pub` in a `#[cm]` interface, are errors.

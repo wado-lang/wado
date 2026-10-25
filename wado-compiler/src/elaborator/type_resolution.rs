@@ -457,10 +457,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.project_off(param_type_id, &base_name, namespaced)
     }
 
-    /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import.
+    /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import or an
+    /// interface declaring `Type`.
     fn resolve_namespace_member(&mut self, namespaced: &NamespacedGenericType) -> TypeId {
         // The alias belongs to whichever module wrote this node, so a type a
         // travelled expression spells `ns::Type` reads its author's `use ns`.
+        // The resolve walk answered an interface's type at the site.
         if self
             .namespace_alias_source(&namespaced.namespace, namespaced.id)
             .is_some()
@@ -470,10 +472,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .declared_if_walked(namespaced.id)
                 .is_some()
         {
-            // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
-            // resolve the `ns$Type` alias, which the import tier scopes to the
+            // Resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
-            // `Interface::Type` the resolve walk answered at the site.
             let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
                 self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)

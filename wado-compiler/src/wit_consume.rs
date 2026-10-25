@@ -244,16 +244,20 @@ fn interface_names(
     exports: &hashmap::IndexMap<String, String>,
     guest_imports: &[wit_parser::InterfaceId],
 ) -> InterfaceNames {
-    let declared: Vec<CmImport> = exports
-        .keys()
-        .cloned()
-        .chain(guest_imports.iter().map(|id| interface_fq(resolve, *id)))
-        .map(|fq| CmImport::parse(&fq).expect("interface FQ is well-formed"))
-        .collect();
-    let defaults: hashmap::IndexSet<String> = declared[..exports.len()]
+    let parse = |fq: &str| CmImport::parse(fq).expect("interface FQ is well-formed");
+    let exported: Vec<CmImport> = exports.keys().map(|fq| parse(fq)).collect();
+    let defaults: hashmap::IndexSet<String> = exported
         .iter()
         .filter(|cm| cm.is_package_default())
         .map(CmImport::interface_path)
+        .collect();
+    let declared: Vec<CmImport> = exported
+        .into_iter()
+        .chain(
+            guest_imports
+                .iter()
+                .map(|id| parse(&interface_fq(resolve, *id))),
+        )
         .collect();
     let mut taken: hashmap::IndexSet<String> = hashmap::IndexSet::default();
     for item in resolve.worlds[world].exports.values() {
@@ -578,6 +582,9 @@ impl Builder {
         let Some(wit_name) = td.name.as_deref() else {
             return; // anonymous structural type: rendered inline at use sites
         };
+        if used_origin(resolve, type_id) != type_id {
+            return; // a WIT `use`: a site naming it names the other interface's type
+        }
         let wado_name = self.type_name(fq, wit_name);
         let cm = self.cm_import_attr(fq, Some(wit_name));
 
@@ -797,6 +804,7 @@ impl Builder {
         let WitType::Id(id) = ty else {
             unreachable!("non-Id leaf handled above");
         };
+        let id = used_origin(resolve, id);
         let td = &resolve.types[id];
         if let Some(name) = td.name.as_deref() {
             let owner = type_source_fq(resolve, id, current_fq);
@@ -923,6 +931,20 @@ fn type_source_fq(resolve: &Resolve, type_id: TypeId, current_fq: &str) -> Strin
         TypeOwner::Interface(id) => interface_fq(resolve, id),
         TypeOwner::World(_) | TypeOwner::None => current_fq.to_string(),
     }
+}
+
+/// The type a WIT `use` of `type_id` reaches, through any chain of them, or
+/// `type_id` itself. A `use` is a named alias of a type another interface owns;
+/// an alias within one interface is a `type` declaration of its own.
+fn used_origin(resolve: &Resolve, type_id: TypeId) -> TypeId {
+    let td = &resolve.types[type_id];
+    if let TypeDefKind::Type(WitType::Id(inner)) = td.kind
+        && resolve.types[inner].name.is_some()
+        && resolve.types[inner].owner != td.owner
+    {
+        return used_origin(resolve, inner);
+    }
+    type_id
 }
 
 /// `namespace:package/interface@version` for an interface.

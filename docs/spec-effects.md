@@ -64,7 +64,8 @@ An interface may also declare types: `struct`, `enum`, `variant`, `flags`,
 has no associated types. It declares nothing else. Inside the interface a type
 is named by its own name, looked up in the interface before the module.
 Outside, a path through the interface is its only name, as `Geo::Point`, in a
-type, a literal, a pattern and a call alike.
+type, a literal, a pattern and a call alike. A namespace import adds its prefix,
+as `geo::Geo::Point`.
 
 A type in an interface takes no visibility modifier: it reaches as far as its
 interface. In an interface that carries `#[cm]`, every field must be `pub`,
