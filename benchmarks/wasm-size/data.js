@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792889506268,
+  "lastUpdate": 1792891347511,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70413,6 +70413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/051b0621da44328f806d10cb4a3ed0e99162e100"
         },
         "date": 1792889505457,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e22eab94d30898e6159ee20a887d35482cc01ed0",
+          "message": "Merge pull request #2445 from wado-lang/ccr-2a1ab409-7czdp5\n\nperf(optimize): run the NIR passes' whole-program collection on the executor",
+          "timestamp": "2026-10-25T10:04:47+09:00",
+          "tree_id": "353c30125d86fc0298bf220f348e638aeef101f3",
+          "url": "https://github.com/wado-lang/wado/commit/e22eab94d30898e6159ee20a887d35482cc01ed0"
+        },
+        "date": 1792891346725,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
