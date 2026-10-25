@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792964753037,
+  "lastUpdate": 1792969929712,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70985,6 +70985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f7fec7454cf6650a4c217f1daf73c6bd209a481d"
         },
         "date": 1792964751960,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe39caccd7be039ed9bcfe33b2965eb07209d7cc",
+          "message": "Merge pull request #2460 from wado-lang/claude/upbeat-knuth-rwam10\n\nchore: run the corpus checks straight from mise",
+          "timestamp": "2026-10-26T07:58:28+09:00",
+          "tree_id": "eafbf272d5b1225026e78933d35ca1249231bbf6",
+          "url": "https://github.com/wado-lang/wado/commit/fe39caccd7be039ed9bcfe33b2965eb07209d7cc"
+        },
+        "date": 1792969929220,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
