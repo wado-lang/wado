@@ -1094,7 +1094,12 @@ impl MoveWalker<'_, '_> {
             !inside
         });
         let instance = self.instance(def);
-        for (owner, site) in self.flow.holders.values_mut().flat_map(|owners| owners.iter_mut()) {
+        for (owner, site) in self
+            .flow
+            .holders
+            .values_mut()
+            .flat_map(|owners| owners.iter_mut())
+        {
             if owner.def != def || owner.instance != instance || site.gone.is_some() {
                 continue;
             }
