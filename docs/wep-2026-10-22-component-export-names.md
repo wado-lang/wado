@@ -227,10 +227,10 @@ that the resolver answers. A module generated from WIT is written the same way:
 each `wasi:*` file holds one interface and declares its types inside it, so the
 standard library names a WASI type as user code does, `SystemClock::Instant`.
 
-A module-level type no longer carries a `#[cm("…#name")]` that names it into an
-interface. The `wasi:*` files are what use that form today, and keeping it for
-user code alone would leave the standard library and user code writing one
-thing two ways. The `#[cm]` of an operation, a case or a flag is unchanged.
+A module-level type carries no `#[cm("…#name")]` that names it into an
+interface. The `wasi:*` files use that form until the roadmap item below moves
+their types into their interfaces. Keeping it for user code alone would leave
+the standard library and user code writing one thing two ways. The `#[cm]` of an operation, a case or a flag is unchanged.
 
 The module that declares an interface is then the declaring module of its
 types, the one module per CM interface that
