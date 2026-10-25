@@ -45,6 +45,7 @@ use super::coercion::{
 };
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
+use super::transposition::Transposition;
 use super::typecheck::admits_condition;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
@@ -5553,6 +5554,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let span = assign.span;
+        if let Some(dispatch) = self.ann_index_swap_dispatch(assign.id) {
+            let transposition = Transposition::of(assign).expect("annotate read a transposition");
+            return self.reify_index_swap(&transposition, dispatch, span, ctx);
+        }
         let places: Vec<WritePlace> = targets
             .iter()
             .map(|target| self.reify_write_place(target, span, ctx))
@@ -5602,6 +5607,67 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         TirExpr::new(
             TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        )
+    }
+
+    /// `[c[i], c[j]] = [c[j], c[i]]` as `{ let $da_N = j; c.index_swap(i, $da_N) }`,
+    /// which evaluates `c`, `j` and `i` in the order the desugaring first reads
+    /// them.
+    fn reify_index_swap(
+        &mut self,
+        transposition: &Transposition<'_>,
+        dispatch: OperatorDispatch,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let receiver = self.reify_expr(transposition.container, ctx, None);
+        let receiver = adjust_receiver_for_self_kind(
+            receiver,
+            dispatch.self_kind,
+            false,
+            span,
+            &self.tysys.type_table,
+        );
+        let j = self.reify_expr(transposition.j, ctx, None);
+        let i = self.reify_expr(transposition.i, ctx, None);
+        let ctx = &mut ctx.enter_scope();
+        let name = minted_name("da", ctx.fresh_serial());
+        let type_id = j.type_id;
+        let local_index = ctx.add_local(name.clone(), type_id, false, None);
+        let bind_j = TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                type_id,
+                value: j,
+                storage: LetStorage::Planned,
+            },
+            span,
+        );
+        let j = self.handed_on(TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
+        ));
+        let swap = build_tir_method_call(
+            receiver,
+            dispatch.function_ref,
+            vec![],
+            vec![CallArg::new(i, false), CallArg::new(j, false)],
+            dispatch.return_type,
+            span,
+        );
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(
+                vec![bind_j, TirStmt::new(TirStmtKind::Expr(swap), span)],
+                span,
+            )),
             TypeTable::UNIT,
             span,
         )

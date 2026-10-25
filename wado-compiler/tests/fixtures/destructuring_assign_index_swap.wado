@@ -1,0 +1,76 @@
+// A transposition within one container is its `index_swap`: a list, a map, a
+// container reached through a field path and through a dereference, an index
+// written as arithmetic, and one index twice. Each element is a list, so a
+// value copy would show. An affine element, which no read can copy, swaps too.
+
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+struct Holder {
+    items: List<List<i32>>,
+}
+
+fn sizes(xs: &List<List<i32>>) -> String {
+    let mut out = "";
+    for let x of xs {
+        out.push_str(`${x.len()}`);
+    }
+    return out;
+}
+
+fn in_list() -> String {
+    let mut xs: List<List<i32>> = [[1], [2, 2], [3, 3, 3]];
+    let i = 0;
+    let j = 2;
+    [xs[i], xs[j]] = [xs[j], xs[i]];
+    [xs[i + 1], xs[2]] = [xs[2], xs[i + 1]];
+    [xs[1], xs[1]] = [xs[1], xs[1]];
+    return sizes(&xs);
+}
+
+fn in_map() -> String {
+    let mut m = TreeMap::<String, List<i32>>::new();
+    m["a"] = [1];
+    m["b"] = [2, 2];
+    [m["a"], m["b"]] = [m["b"], m["a"]];
+    return `${m["a"].len()}${m["b"].len()}`;
+}
+
+fn through_field() -> String {
+    let mut h = Holder { items: [[1], [2, 2]] };
+    [h.items[0], h.items[1]] = [h.items[1], h.items[0]];
+    return sizes(&h.items);
+}
+
+fn through_deref(r: &mut List<List<i32>>) {
+    [(*r)[0], (*r)[1]] = [(*r)[1], (*r)[0]];
+}
+
+fn affine_elements() -> i32 {
+    let mut ts: List<Tok> = [];
+    ts.push(Tok { id: 1 });
+    ts.push(Tok { id: 2 });
+    [ts[0], ts[1]] = [ts[1], ts[0]];
+    return ts[0].id * 10 + ts[1].id;
+}
+
+export fn run() with Stdout {
+    let mut ys: List<List<i32>> = [[1], [2, 2]];
+    through_deref(&mut ys);
+    println(`${in_list()} ${in_map()} ${through_field()} ${sizes(&ys)} ${affine_elements()}`);
+}
+
+__DATA__
+{
+    "stdout": "312 21 21 21 21\n",
+    "wir_not_expect:O0": ["List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

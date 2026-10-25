@@ -232,9 +232,9 @@ well.
   `spec-expressions.md` and the cheatsheet.
 - [x] Show that a permutation of owned targets with no readable reference
   moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
-- [ ] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
+- [x] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
   `HashMap` and `TreeMap`.
-- [ ] Recognize the transposition before typing the desugared form and lower
+- [x] Recognize the transposition before typing the desugared form and lower
   it to `index_swap`. Fixtures cover each condition that makes it fall back,
   an affine list, and an out-of-range index failing as the desugaring does.
 - [ ] Extend the surviving value-copy remark with the cause note for a
@@ -257,6 +257,15 @@ compound assignment to a tuple (`[a, b] += [1, 2]`).
 `unchecked xs[i]` vouches for a `List` index contract. Nothing says where
 `unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
 always checks both indices.
+
+### What counts as referencing an index local
+
+Whether an index local is referenced or captured is read from the syntax of
+the item holding the statement, by name. A method call on the local counts,
+since its receiver may be taken `&self` or `&mut self`, and so does any
+mention inside a closure that is not the closure's own parameter. A
+transposition indexed by `i` falls back where the same item calls `i.abs()`,
+or binds an unrelated `i` that a closure reads.
 
 ### A permutation of owned targets with a readable reference copies
 

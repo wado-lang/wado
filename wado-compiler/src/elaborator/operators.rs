@@ -26,6 +26,7 @@ use super::trait_query::primitive_has_operator;
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
+use super::transposition::Transposition;
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
@@ -1095,6 +1096,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
+        if self.transpositions.contains(&assign.id)
+            && let Some(transposition) = Transposition::of(assign)
+            && let Some(type_id) = self.resolve_index_swap(assign.id, &transposition, ctx)
+        {
+            return type_id;
+        }
         let places: Vec<Result<WritePlace, ()>> = targets
             .iter()
             .map(|target| self.resolve_write_place(target, ctx))
@@ -1147,6 +1154,112 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_write(target, place, type_id, span, ctx);
         }
         TypeTable::UNIT
+    }
+
+    /// Resolve a transposition as its container's `index_swap`, recording the
+    /// dispatch reify replays. `None` falls back to the desugaring, with
+    /// nothing recorded and no local taken.
+    fn resolve_index_swap(
+        &mut self,
+        assign_id: AstId,
+        transposition: &Transposition<'_>,
+        ctx: &mut FunctionContext,
+    ) -> Option<TypeId> {
+        let container = transposition.container;
+        if ctx.lookup(transposition.container_root()).is_none() {
+            return None;
+        }
+        let container_type = self.resolve_expr(container, ctx, None);
+        if container_type == TypeTable::ERROR {
+            return Some(TypeTable::ERROR);
+        }
+        // The desugaring reports a container no write may reach.
+        if matches!(
+            self.tysys.type_table.borrow().get(container_type),
+            ResolvedType::Ref(_)
+        ) || self.place_roots_at_immutable_ref(container)
+            || self
+                .place_roots_at_immutable_binding(container, ctx)
+                .is_some()
+        {
+            return None;
+        }
+        let base_type_id = self.tysys.through_ref(container_type);
+        let head = self.index_dispatch_head(base_type_id)?;
+        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
+        let (info, _) = self.index_lookup_or_newtype_base(
+            &head,
+            base_type_id,
+            &lookup_name,
+            lookup_type_id,
+            Elaborator::find_index_swap_trait_impl,
+        )?;
+        let index_type = info.index_type;
+        let j_type = self.resolve_expr(transposition.j, ctx, index_type);
+        let i_type = self.resolve_expr(transposition.i, ctx, index_type);
+        if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
+            return Some(TypeTable::ERROR);
+        }
+        // The desugaring's first write could change a mutable global.
+        if [transposition.i, transposition.j]
+            .into_iter()
+            .any(|index| self.reads_mutable_global(index))
+        {
+            return None;
+        }
+        if let Some(index_type) = index_type {
+            self.typecheck(j_type, index_type, transposition.j.span());
+            self.typecheck(i_type, index_type, transposition.i.span());
+        }
+        // Reserve reify's `$da_N` for the second index, so both walks allocate
+        // the same frame.
+        let ctx = &mut ctx.enter_scope();
+        let name = minted_name("da", ctx.fresh_serial());
+        let _local_index = ctx.add_local(name, j_type, false, None);
+        let function_ref = self.indexing_function_ref(&info, "index_swap");
+        self.sem.types.index_swap_dispatch.insert(
+            assign_id,
+            OperatorDispatch {
+                function_ref,
+                method_def: Some(info.method_def),
+                self_kind: info.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+        );
+        Some(TypeTable::UNIT)
+    }
+
+    /// Whether `index`, one [`Transposition`] admits, reads a mutable global.
+    fn reads_mutable_global(&self, index: &ast::Expr) -> bool {
+        match index {
+            ast::Expr::Ident(ident) => matches!(
+                self.assign_place_of(ident.id),
+                Some(AssignPlace::Global { mutable: true, .. })
+            ),
+            ast::Expr::Binary(binary) => {
+                self.reads_mutable_global(&binary.left) || self.reads_mutable_global(&binary.right)
+            }
+            ast::Expr::Unary(unary) => self.reads_mutable_global(&unary.expr),
+            _ => false,
+        }
+    }
+
+    /// The name an indexing trait impl on `base_type_id` is looked up under,
+    /// or `None` for a type no such impl can be written for.
+    fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(base_type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
+            // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the
+            // base name "Array".
+            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
+            _ => None,
+        }
     }
 
     /// Resolve `expr` with every subscript `target` projects through standing as
@@ -1294,29 +1407,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Get base type (unwrap reference if needed)
             let base_type_id = self.tysys.through_ref(indexed_type);
 
-            // Check for IndexAssign trait implementation
-            // Arrays now use IndexAssign trait like other types
             {
-                // Check for IndexAssign trait implementation
-                let struct_name = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(base_type_id) {
-                        ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Newtype { .. }
-                        | ResolvedType::Flags { .. } => tt.base_type_name(base_type_id),
-                        // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
-                        // keyed by the base name "Array".
-                        ResolvedType::BuiltinArray(_) => ARRAY_TYPE_NAME.to_string(),
-                        _ => String::new(),
-                    }
-                };
-
-                // For newtypes, resolve the base type name for trait impl lookup
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-
-                if !struct_name.is_empty() {
+                if let Some(struct_name) = self.index_dispatch_head(base_type_id) {
+                    // For newtypes, resolve the base type name for trait impl lookup
+                    let (lookup_name, lookup_type_id) =
+                        self.tysys.newtype_base_lookup(&struct_name, base_type_id);
                     let assign_info = self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
@@ -1334,29 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     if let Some((trait_info, _)) = assign_info {
                         let output_type = trait_info.output_type;
-                        // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let receiver = trait_info.receiver.clone();
-                        let mangled_method_name = MethodName::format_local(
-                            &receiver,
-                            Some(&trait_info.trait_name),
-                            "index_assign",
-                        );
-
-                        let func = FunctionRef {
-                            module_source: trait_info.impl_module_source.clone(),
-                            name: mangled_method_name,
-                            template: Some(
-                                self.tysys
-                                    .signatures
-                                    .declared_template(trait_info.method_def),
-                            ),
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                receiver,
-                                Some(trait_info.trait_name),
-                                "index_assign".to_string(),
-                            )),
-                        };
+                        let func = self.indexing_function_ref(&trait_info, "index_assign");
 
                         // Record the
                         // resolved `IndexAssign` dispatch keyed by

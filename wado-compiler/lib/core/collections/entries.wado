@@ -48,10 +48,10 @@ impl<K, V> EntryLog<K, V> {
     /// Room for `cap` entries, the `count` there are kept.
     fn grow(&mut self, cap: i32) {
         let mut keys = Array::<K>::new(cap);
-        keys.copy_from(0, &self.keys, 0, self.count);
+        builtin::array_move(&mut keys, 0, &self.keys, 0, self.count);
         self.keys = keys;
         let mut values = Array::<V>::new(cap);
-        values.copy_from(0, &self.values, 0, self.count);
+        builtin::array_move(&mut values, 0, &self.values, 0, self.count);
         self.values = values;
         let mut alive = Array::<bool>::new(cap);
         alive.copy_from(0, &self.alive, 0, self.count);

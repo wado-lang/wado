@@ -1366,6 +1366,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             infer_holes: InferHoleTable::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
             abstract_selection_cache: Rc::clone(&state.abstract_selections),
+            transpositions: hashmap::IndexSet::default(),
         }
     }
 

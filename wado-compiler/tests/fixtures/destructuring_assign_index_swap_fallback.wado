@@ -1,0 +1,84 @@
+// A destructuring assignment that is not a transposition within one container
+// falls back to the desugaring, which copies each element it reads: here an
+// affine one, which cannot be copied. One function per condition.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+global mut K: i32 = 0;
+
+fn toks() -> List<Tok> {
+    let mut ts: List<Tok> = [];
+    ts.push(Tok { id: 1 });
+    ts.push(Tok { id: 2 });
+    return ts;
+}
+
+fn not_transposed() {
+    let mut ts = toks();
+    [ts[0], ts[1]] = [ts[0], ts[1]];
+}
+
+fn two_containers() {
+    let mut ts = toks();
+    let mut us = toks();
+    [ts[0], us[1]] = [us[1], ts[0]];
+}
+
+fn index_read_from_a_list() {
+    let mut ts = toks();
+    let ks: List<i32> = [0, 1];
+    [ts[ks[0]], ts[ks[1]]] = [ts[ks[1]], ts[ks[0]]];
+}
+
+fn index_referenced() {
+    let mut ts = toks();
+    let i = 0;
+    let r = &i;
+    [ts[i], ts[1]] = [ts[1], ts[i]];
+}
+
+fn index_captured() {
+    let mut ts = toks();
+    let i = 0;
+    let f = || i;
+    [ts[i], ts[1]] = [ts[1], ts[i]];
+}
+
+fn container_reference_referenced(r: &mut List<Tok>) {
+    let rr = &r;
+    [(*r)[0], (*r)[1]] = [(*r)[1], (*r)[0]];
+}
+
+fn mutable_global_index() {
+    let mut ts = toks();
+    [ts[K], ts[1]] = [ts[1], ts[K]];
+}
+
+fn captured_container() {
+    let mut ts = toks();
+    let mut f = || {
+        [ts[0], ts[1]] = [ts[1], ts[0]];
+    };
+    f();
+}
+
+export fn run() {
+    not_transposed();
+    two_containers();
+    index_read_from_a_list();
+    index_referenced();
+    index_captured();
+    let mut ts = toks();
+    container_reference_referenced(&mut ts);
+    mutable_global_index();
+    captured_container();
+}
+
+__DATA__
+{"compile_error": ":24:23: analysis error: cannot move affine type `Tok` out of a reference; 24:30: cannot move affine type `Tok` out of a reference; 30:23: cannot move affine type `Tok` out of a reference; 30:30: cannot move affine type `Tok` out of a reference; 36:31: cannot move affine type `Tok` out of a reference; 36:42: cannot move affine type `Tok` out of a reference; 43:23: cannot move affine type `Tok` out of a reference; 43:30: cannot move affine type `Tok` out of a reference; 50:23: cannot move affine type `Tok` out of a reference; 50:30: cannot move affine type `Tok` out of a reference; 55:27: cannot move affine type `Tok` out of a reference; 55:36: cannot move affine type `Tok` out of a reference; 60:23: cannot move affine type `Tok` out of a reference; 60:30: cannot move affine type `Tok` out of a reference; 66:27: cannot move affine type `Tok` out of a reference; 66:34: cannot move affine type `Tok` out of a reference"}

@@ -230,6 +230,9 @@ macro_rules! with_body_facts {
             /// read-side `IndexValue` / `Index` dispatch cohabits under the
             /// same key in `operator_dispatch`, via different traits.
             ann_index_assign_dispatch => index_assign_dispatch: $crate::elaborator::sem::types::OperatorDispatch,
+            /// `IndexSwap` dispatch for a transposition within one container,
+            /// keyed by the destructuring assignment's [`AstId`].
+            ann_index_swap_dispatch => index_swap_dispatch: $crate::elaborator::sem::types::OperatorDispatch,
             /// Resolved `let x: T = …` whole-pattern annotation, keyed by the
             /// `LetStmt`'s `AstId`. A simple binding also has it in
             /// `local_types`, but a destructuring pattern's binding ids carry
@@ -477,6 +480,7 @@ impl BodyFacts {
             .operator_dispatch
             .iter()
             .chain(&self.index_assign_dispatch)
+            .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
             [info.into_iter_def, info.next_def]

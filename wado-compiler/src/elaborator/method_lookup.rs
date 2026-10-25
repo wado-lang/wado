@@ -2841,6 +2841,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    pub(super) fn find_index_swap_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<IndexingTraitInfo> {
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            CompilerItem::IndexSwap,
+            "index_swap",
+            "Output",
+            None,
+        )
+    }
+
+    /// The `method` of the impl `info` found, as a dispatch names it.
+    pub(super) fn indexing_function_ref(
+        &self,
+        info: &IndexingTraitInfo,
+        method: &str,
+    ) -> FunctionRef {
+        FunctionRef {
+            module_source: info.impl_module_source.clone(),
+            name: MethodName::format_local(&info.receiver, Some(&info.trait_name), method),
+            template: Some(self.tysys.signatures.declared_template(info.method_def)),
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                info.receiver.clone(),
+                Some(info.trait_name.clone()),
+                method.to_string(),
+            )),
+        }
+    }
+
     pub(super) fn find_index_mut_trait_impl(
         &mut self,
         struct_name: &str,

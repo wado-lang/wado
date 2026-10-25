@@ -277,6 +277,8 @@ pub enum CompilerItem {
     IndexRef,
     IndexRefMut,
     IndexAssign,
+    /// What `[c[i], c[j]] = [c[j], c[i]]` dispatches to.
+    IndexSwap,
     /// The traits an operator dispatches to. The compiler picks each by
     /// construction, so they are items and not spellings a user trait of
     /// the same name could answer for.
@@ -819,6 +821,7 @@ impl CompilerItem {
         Self::IndexRef,
         Self::IndexRefMut,
         Self::IndexAssign,
+        Self::IndexSwap,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -1073,6 +1076,7 @@ impl CompilerItem {
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
             Self::IndexAssign => "index_assign",
+            Self::IndexSwap => "index_swap",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -1382,6 +1386,7 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
@@ -1661,6 +1666,7 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord

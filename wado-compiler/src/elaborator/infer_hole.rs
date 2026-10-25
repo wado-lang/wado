@@ -658,6 +658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .operator_dispatch
             .values_mut()
             .chain(facts.index_assign_dispatch.values_mut())
+            .chain(facts.index_swap_dispatch.values_mut())
         {
             sub_operator_dispatch(tt, od, subst);
         }
