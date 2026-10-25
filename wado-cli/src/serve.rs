@@ -972,7 +972,7 @@ async fn run_http_server(
     let linker = runtime::create_linker(&component)?;
     // Open preopens once at startup; they are attached to every worker
     // generation's `WasiState`.
-    let preopens = Arc::new(Preopens::open(&preopened_dirs)?);
+    let preopens = Arc::new(Preopens::open(&preopened_dirs, runtime_knobs.process)?);
     let argv: Arc<[String]> = Arc::new([program.to_owned()]);
     let instance_pre = linker.instantiate_pre(&component)?;
     let service_pre = Arc::new(ServicePre::<WasiState>::new(instance_pre)?);

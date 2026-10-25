@@ -1411,7 +1411,7 @@ pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
 /// merged into a live range is read elsewhere and keeps its tee.
 pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage) {
     for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
-        let mut reads = Default::default();
+        let mut reads = IndexMap::default();
         for instr in body.iter() {
             util::count_local_gets(instr, &mut reads);
         }

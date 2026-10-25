@@ -65,13 +65,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(16)
+type "functype//wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32, i32);  // TypeId(16)
 
 type "functype//resource_method_static.wado/run" = fn();  // TypeId(17)
 
-type "functype//resource_method_static.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
+type "functype//resource_method_static.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
 
 type "functype//resource_method_static.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -89,7 +89,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//resource_method_static.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//resource_method_static.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
 
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
@@ -99,8 +99,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:sockets/TcpSocket::create from "wasi/wasi:sockets/TcpSocket::create";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create from "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -131,10 +131,10 @@ fn "resource_method_static.wado/run"() with Stdout, TcpSocket {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    result = "resource_method_static.wado/$cm_binding__TcpSocket_create"(0);
+    result = "resource_method_static.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "resource_method_static.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
+    $moved_4 = "resource_method_static.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -151,11 +151,11 @@ fn "resource_method_static.wado/run"() with Stdout, TcpSocket {
     }
 }
 
-fn "resource_method_static.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "resource_method_static.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "resource_method_static.wado/$cm_binding__TcpSocket_create"(address_family) with TcpSocket {
+fn "resource_method_static.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family) with TcpSocket {
     let $outptr: i32;
     let $result_val: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let $local_5: ref "wasi:sockets/types.wado//ErrorCode";
@@ -165,7 +165,7 @@ fn "resource_method_static.wado/$cm_binding__TcpSocket_create"(address_family) w
     let arr_16: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 20);
-    "wasi/wasi:sockets/TcpSocket::create"(address_family, $outptr);
+    "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
     $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) } };
     } else {

@@ -80,6 +80,10 @@ let out = Compress::compress(bytes);
 // The default interface, named after its package (`acme:geo/geo`, what a Wado
 // library exports), also offers its functions by bare name, as source does.
 use { area } from "./geo.wasm" with { type: "wasm" };
+
+// Any interface by its full name; the version may go where only one is offered.
+use { "acme:geo/geo@0.1.0" as Geo } from "./geo.wasm" with { type: "wasm" };
+use { "wasi:cli/stdout" as Out } from "wasi:cli";
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
@@ -289,6 +293,7 @@ See the spec on [tuple literals](./spec-literals.md#tuple-literals) and [list li
 let t = [1, "hello", true];   // [i32, String, bool]
 let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
+[a, b] = [b, a];              // destructuring assignment: the right side first, then each target
 
 // Lists (requires explicit type context)
 let a: List<i32> = [1, 2, 3];           // type annotation
@@ -1868,6 +1873,25 @@ let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem 
 
 Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 `example/cat.wado`.
+
+### core:process
+
+Runs a host program, confined to the guest's own grants plus a fixed system
+baseline. `availability()` says whether this host can enforce that. The `cmd`
+template splits literal text on spaces and keeps each hole one argument, so
+no shell ever parses it. See [`core:process`](./stdlib-core-process.md).
+
+```wado
+use { cmd, Command, Process } from "core:process";
+
+let head = cmd`git rev-parse HEAD`.read()?;          // ByteList; Err on a nonzero exit
+let out = cmd`git commit -m ${msg} -- ${files}`.output()?;  // status, stdout, stderr
+let status = Command::new("make").arg("test").inherit_stdio().status()?;
+let status = cmd`sleep 30`.timeout(100_000_000).status()?;  // ns; ExitStatus::TimedOut
+
+let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
+child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe
+```
 
 ### core:collections
 

@@ -1,7 +1,7 @@
 //! The type table: every `TypeId` the compiler interns, and the questions
 //! asked of them.
 
-use std::fmt::Write;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
@@ -17,10 +17,10 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTraitName, FqTypeName, INTERNAL_PREFIX, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
+    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type, ref_type_name, type_pack_name,
+    mangle_tuple_type, ref_type_name, template_shape_name, type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -1416,12 +1416,7 @@ impl TypeTable {
                         None => h.update([0u8]),
                     }
                 }
-                let bytes: [u8; 32] = h.finalize().into();
-                let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
-                for b in &bytes[..8] {
-                    let _ = write!(mangle, "{b:02x}");
-                }
-                mangle
+                template_shape_name(&h.finalize().into())
             }
         }
     }
@@ -3726,6 +3721,7 @@ impl TypeTable {
                 })?
                 .at(self, trait_args)
         })
+        .or_else(|| self.is_never(concrete_id).then_some(Self::NEVER))
     }
 
     /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.
@@ -7350,6 +7346,32 @@ impl Ord for TypeKey {
 impl PartialOrd for TypeKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+/// An answer about each type, computed once per [`TypeKey`] so every id naming
+/// one type shares it. Valid while the facts the answer reads stay fixed.
+pub struct TypeMemo<V> {
+    answers: RefCell<IndexMap<TypeKey, V>>,
+}
+
+impl<V> Default for TypeMemo<V> {
+    fn default() -> Self {
+        Self {
+            answers: RefCell::default(),
+        }
+    }
+}
+
+impl<V: Copy> TypeMemo<V> {
+    /// `compute` may ask this memo of other types: no borrow is held across it.
+    pub fn get_or_compute(&self, key: TypeKey, compute: impl FnOnce() -> V) -> V {
+        if let Some(&answer) = self.answers.borrow().get(&key) {
+            return answer;
+        }
+        let answer = compute();
+        self.answers.borrow_mut().insert(key, answer);
+        answer
     }
 }
 

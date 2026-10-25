@@ -13,6 +13,7 @@ use std::rc::Rc;
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
+use crate::divergence;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -36,7 +37,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
-use crate::type_table::{TypeKey, TypeTable};
+use crate::type_table::{TypeKey, TypeMemo, TypeTable};
 
 /// An affine local a scope declared.
 #[derive(Clone)]
@@ -60,24 +61,6 @@ impl Live {
 struct Scope {
     lives: Vec<Live>,
     temporaries: TemporaryScope,
-}
-
-/// Whether a statement sequence falls through to its successor.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Flow {
-    Normal,
-    Diverged,
-}
-
-impl Flow {
-    /// The flow where two paths meet: diverged only when both diverge.
-    fn join(self, other: Flow) -> Flow {
-        if self == Flow::Diverged && other == Flow::Diverged {
-            Flow::Diverged
-        } else {
-            Flow::Normal
-        }
-    }
 }
 
 /// Where a `break` or `continue` lands: a labeled block, or a loop
@@ -141,6 +124,16 @@ impl Cx<'_> {
 
     fn carries_resource(&self, type_id: TypeId) -> bool {
         self.resources.carried_by(type_id)
+    }
+
+    /// Where the value of a block producing `type_id` goes when it is
+    /// consumed: nowhere when it is `()`, or a value no path produces.
+    fn yields(&self, type_id: TypeId) -> Tail {
+        if type_id == TypeTable::UNIT || self.resources.tt.borrow().is_never(type_id) {
+            Tail::Discarded
+        } else {
+            Tail::Consumed
+        }
     }
 
     /// Declare `live` in the innermost scope.
@@ -251,7 +244,7 @@ struct Resources<'a> {
     /// Each type's `Drop::drop`, by the type's declaration.
     drop_impls: &'a DropImpls,
     /// What [`Self::carried_by`] has answered, by type.
-    answers: &'a RefCell<IndexMap<TypeKey, bool>>,
+    answers: &'a TypeMemo<bool>,
 }
 
 impl<'a> Resources<'a> {
@@ -260,12 +253,8 @@ impl<'a> Resources<'a> {
     /// / tuple / variant that transitively contains one.
     fn carried_by(&self, type_id: TypeId) -> bool {
         let key = self.tt.borrow().type_key(type_id);
-        if let Some(&carried) = self.answers.borrow().get(&key) {
-            return carried;
-        }
-        let carried = holds_resource(self, type_id);
-        self.answers.borrow_mut().insert(key, carried);
-        carried
+        self.answers
+            .get_or_compute(key, || holds_resource(self, type_id))
     }
 
     /// The [`Layout`] of `type_id`.
@@ -505,7 +494,7 @@ pub fn elaborate_resource_drops(project: &mut Package) {
         }),
         &type_table.borrow(),
     );
-    let answers = RefCell::default();
+    let answers = TypeMemo::default();
     let resources = Resources {
         tt: &type_table,
         reg: &project.cm_interface_registry,
@@ -577,7 +566,7 @@ fn with_flat_resources<R>(
 ) -> R {
     let mut struct_fields = generics.struct_fields.clone();
     struct_fields.extend(tir::struct_fields(&flat.structs));
-    let answers = RefCell::default();
+    let answers = TypeMemo::default();
     f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
@@ -743,7 +732,7 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut D
         module: module_source.clone(),
         drop_self,
     };
-    let yields = yields(*return_type);
+    let yields = cx.yields(*return_type);
     elab_scope(body, owned, TemporaryScope::Statement, yields, &mut cx);
 }
 
@@ -1230,15 +1219,6 @@ enum Tail {
     Referenced,
 }
 
-/// Where the value of a block producing `type_id` goes when it is consumed.
-fn yields(type_id: TypeId) -> Tail {
-    if type_id == TypeTable::UNIT || type_id == TypeTable::NEVER {
-        Tail::Discarded
-    } else {
-        Tail::Consumed
-    }
-}
-
 /// Elaborate `block` in place as a scope that opens declaring `declared`. Its
 /// locals drop at its end where it falls through, and its temporaries where
 /// `temporaries` says. Its last statement's value goes where `tail` says.
@@ -1248,14 +1228,14 @@ fn elab_scope(
     temporaries: TemporaryScope,
     tail: Tail,
     cx: &mut Cx,
-) -> Flow {
+) {
     cx.open_scope(declared, temporaries);
     let stmts = std::mem::take(&mut block.stmts);
     let mut out: Vec<TirStmt> = Vec::new();
-    let mut flow = Flow::Normal;
+    let mut diverged = false;
     let last = stmts.len().wrapping_sub(1);
     for (idx, mut stmt) in stmts.into_iter().enumerate() {
-        if flow == Flow::Diverged {
+        if diverged {
             // No path reaches it, so nothing drops there and a move takes nothing.
             StripMoves.visit_stmt(&mut stmt);
             out.push(stmt);
@@ -1265,9 +1245,10 @@ fn elab_scope(
         let first_declared = cx.scopes.last().expect("pushed above").lives.len();
         let first_out = out.len();
         let first_declaration = cx.declarations.len();
-        flow = elab_stmt(stmt, cx, stmt_tail, &mut out);
+        diverged = divergence::tir_stmt_always_exits(&cx.resources.tt.borrow(), &stmt);
+        elab_stmt(stmt, cx, stmt_tail, &mut out);
         if temporaries == TemporaryScope::Statement {
-            if flow == Flow::Normal {
+            if !diverged {
                 let spilled = take_temporaries(cx, first_declared);
                 let drops = drop_lives(&spilled, cx);
                 if stmt_tail == Tail::Discarded {
@@ -1287,7 +1268,7 @@ fn elab_scope(
         .lives
         .into_iter()
         .partition(|live| live.temporary && temporaries == TemporaryScope::Enclosing);
-    if flow == Flow::Normal {
+    if !diverged {
         let lives: Vec<Live> = lives.into_iter().rev().collect();
         let drops = drop_lives(&lives, cx);
         out = append_block_drops(out, drops, cx);
@@ -1296,7 +1277,6 @@ fn elab_scope(
         enclosing.lives.extend(deferred);
     }
     block.stmts = out;
-    flow
 }
 
 /// Take the temporaries the innermost scope declared from `first` on,
@@ -1325,8 +1305,8 @@ fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> 
     let span = synth_span();
     let inner = TirBlock { stmts, span };
     let result_ty = tir::block_result_type(&cx.resources.tt.borrow(), &inner);
-    if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
-        // The block yields nothing observable; the drops can simply run last.
+    if cx.yields(result_ty) == Tail::Discarded {
+        // The drops can simply run last.
         let mut out = inner.stmts;
         out.extend(drops);
         return out;
@@ -1356,8 +1336,8 @@ fn append_expr_drops(expr: &mut TirExpr, drops: Vec<TirStmt>, cx: &mut Cx) {
 }
 
 /// Elaborate a block in place as a fresh nested scope.
-fn elab_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) -> Flow {
-    elab_scope(block, Vec::new(), TemporaryScope::Statement, tail, cx)
+fn elab_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
+    elab_scope(block, Vec::new(), TemporaryScope::Statement, tail, cx);
 }
 
 /// Elaborate a plain block expression in place. Nothing can leave it but a
@@ -1372,7 +1352,7 @@ fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
 /// Elaborate `block`, the body `target` is reached from. An expanded template
 /// string's block is part of the statement holding the template, as a plain
 /// block is: its temporaries outlive the string it breaks out with.
-fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) -> Flow {
+fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) {
     let temporaries = if label.as_deref().is_some_and(is_template_block) {
         TemporaryScope::Enclosing
     } else {
@@ -1382,14 +1362,12 @@ fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx:
         label,
         depth: cx.scopes.len(),
     });
-    let flow = elab_scope(block, Vec::new(), temporaries, tail, cx);
+    elab_scope(block, Vec::new(), temporaries, tail, cx);
     cx.targets.pop();
-    flow
 }
 
-/// Elaborate one statement, appending the result to `out`. Returns whether
-/// control falls through to the next statement.
-fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> Flow {
+/// Elaborate one statement, appending the result to `out`.
+fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
     let span = stmt.span;
     match stmt.kind {
         TirStmtKind::Let {
@@ -1420,7 +1398,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 },
                 span,
             });
-            Flow::Normal
         }
 
         // The pattern consumes its value as an arm's does: the parts no
@@ -1438,7 +1415,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 span,
             });
             out.extend(entry);
-            Flow::Normal
         }
 
         TirStmtKind::Expr(expr) => {
@@ -1455,7 +1431,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                     span,
                 });
             }
-            Flow::Normal
         }
 
         TirStmtKind::TaskReturn { value } => {
@@ -1464,7 +1439,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 kind: TirStmtKind::TaskReturn { value },
                 span,
             });
-            Flow::Normal
         }
 
         TirStmtKind::Return { value } => {
@@ -1472,7 +1446,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             let drops = cx.drop_scopes_from(0);
             leave_after_drops(value, drops, span, cx, out, |value| TirStmtKind::Return {
                 value,
-            })
+            });
         }
 
         TirStmtKind::If {
@@ -1481,14 +1455,11 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             else_block,
         } => {
             let condition = elab_value_expr(condition, cx);
-            let then_flow = elab_block(&mut then_block, Tail::Discarded, cx);
-            let (else_block, else_flow) = match else_block {
-                Some(mut block) => {
-                    let flow = elab_block(&mut block, Tail::Discarded, cx);
-                    (Some(block), flow)
-                }
-                None => (None, Flow::Normal),
-            };
+            elab_block(&mut then_block, Tail::Discarded, cx);
+            let else_block = else_block.map(|mut block| {
+                elab_block(&mut block, Tail::Discarded, cx);
+                block
+            });
             out.push(TirStmt {
                 kind: TirStmtKind::If {
                     condition,
@@ -1497,7 +1468,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 },
                 span,
             });
-            then_flow.join(else_flow)
         }
 
         TirStmtKind::Loop { mut body } => {
@@ -1506,7 +1476,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 kind: TirStmtKind::Loop { body },
                 span,
             });
-            Flow::Normal
         }
 
         TirStmtKind::LabeledBlock { label, mut block } => {
@@ -1515,8 +1484,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 kind: TirStmtKind::LabeledBlock { label, block },
                 span,
             });
-            // A `break label` lands after the block whatever its body does.
-            Flow::Normal
         }
 
         TirStmtKind::Break { label, value } => {
@@ -1527,13 +1494,13 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
             leave_after_drops(value, drops, span, cx, out, |value| TirStmtKind::Break {
                 label,
                 value,
-            })
+            });
         }
 
         TirStmtKind::Continue => {
             let depth = cx.target_depth(None);
             let drops = cx.drop_scopes_from(depth);
-            leave_after_drops(None, drops, span, cx, out, |_| TirStmtKind::Continue)
+            leave_after_drops(None, drops, span, cx, out, |_| TirStmtKind::Continue);
         }
 
         TirStmtKind::VariadicForOf { .. } => {
@@ -1544,7 +1511,6 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> 
                 elab_expr(iterable, true, cx);
             }
             out.push(stmt);
-            Flow::Normal
         }
     }
 }
@@ -1559,7 +1525,7 @@ fn leave_after_drops(
     cx: &mut Cx,
     out: &mut Vec<TirStmt>,
     leave: impl FnOnce(Option<TirExpr>) -> TirStmtKind,
-) -> Flow {
+) {
     let value = match value {
         Some(value) if !drops.is_empty() => {
             let ty = value.type_id;
@@ -1574,7 +1540,6 @@ fn leave_after_drops(
         kind: leave(value),
         span,
     });
-    Flow::Diverged
 }
 
 // ---------------------------------------------------------------------------
@@ -1713,7 +1678,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         // Every operator takes its operands by reference.
         TirExprKind::Binary { op, left, right } => {
             elab_expr(left, false, cx);
-            if matches!(op, TirBinaryOp::And | TirBinaryOp::Or) {
+            if op.is_short_circuit() {
                 elab_expr_scope(right, cx);
             } else {
                 elab_expr(right, false, cx);
@@ -1734,14 +1699,14 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         }
 
         TirExprKind::Block(block) => {
-            let tail = match yields(type_id) {
+            let tail = match cx.yields(type_id) {
                 Tail::Consumed if !consuming => Tail::Referenced,
                 tail => tail,
             };
             elab_plain_block(block, tail, cx);
         }
         TirExprKind::LabeledBlock { label, block, .. } => {
-            elab_target_body(block, Some(label.clone()), yields(type_id), cx);
+            elab_target_body(block, Some(label.clone()), cx.yields(type_id), cx);
         }
         TirExprKind::If {
             condition,
@@ -1749,9 +1714,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             else_branch,
         } => {
             elab_expr(condition, true, cx);
-            elab_block(then_branch, yields(type_id), cx);
+            elab_block(then_branch, cx.yields(type_id), cx);
             if let Some(else_branch) = else_branch {
-                elab_block(else_branch, yields(type_id), cx);
+                elab_block(else_branch, cx.yields(type_id), cx);
             }
         }
         TirExprKind::Match {
@@ -1762,7 +1727,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             for binding in bindings {
                 elab_expr(&mut binding.handler, true, cx);
             }
-            elab_block(body, yields(type_id), cx);
+            elab_block(body, cx.yields(type_id), cx);
         }
 
         TirExprKind::StructLiteral { fields, .. } => {
@@ -2141,7 +2106,7 @@ fn elab_closure(
         module: cx.module.clone(),
         drop_self: None,
     };
-    let yields = yields(body.type_id);
+    let yields = inner.yields(body.type_id);
     let mut block = into_block(body);
     elab_scope(
         &mut block,
@@ -2521,7 +2486,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         }
         cx.scopes.pop();
         let mut block = into_block(&mut arm.body);
-        let yields = yields(arm.body.type_id);
+        let yields = cx.yields(arm.body.type_id);
         elab_scope(
             &mut block,
             arm_bindings,

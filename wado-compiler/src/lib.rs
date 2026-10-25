@@ -25,6 +25,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
@@ -2161,7 +2162,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("lower");
-        lower(flat, logger)?
+        lower(flat, logger, logger)?
     };
 
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
@@ -2612,7 +2613,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Lower (FlatPackage → NirPackage)
             let nir = {
                 let _span = logger.span("lower");
-                lower(flat, &logger)?
+                lower(flat, &logger, &logger)?
             };
             // Snapshot lowered state (NIR right after lower, before optimize)
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));

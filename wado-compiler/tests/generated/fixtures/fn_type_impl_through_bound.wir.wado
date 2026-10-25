@@ -76,9 +76,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//fn_type_impl_through_bound.wado/$cm_export__$test_0_a_closure_through_a_bound" = fn();  // TypeId(25)
 
@@ -150,7 +150,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(58)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(59)
 
-type "functype//fn_type_impl_through_bound.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(60)
+type "functype//fn_type_impl_through_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(60)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(61)
 
@@ -160,8 +160,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -175,8 +175,8 @@ global global:fn_type_impl_through_bound.wado::$const_obj_4: ref Array<u8> = arr
 global global:fn_type_impl_through_bound.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(124, 112, 58, 32, 80, 111, 105, 110, 116, 124, 32, 40, 112, 46, 120, 32, 42, 32, 50, 41);
 global mut global:fn_type_impl_through_bound.wado::$const_obj_7: ref null Array<u8> = ref.null none;
 
-fn "fn_type_impl_through_bound.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "fn_type_impl_through_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "fn_type_impl_through_bound.wado/$cm_export__$test_0_a_closure_through_a_bound"() {
@@ -527,7 +527,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -939,7 +939,7 @@ fn "fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$Closure_3::
     }
     is_negative_11 = builtin::i32_wrap_i64(local.tee x_15("wasi/stream-new"()));
     digit_count_13 = builtin::i32_wrap_i64(x_15 >> 32_i64);
-    start_78 = "fn_type_impl_through_bound.wado/$cm_binding__Stdout_write_via_stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
+    start_78 = "fn_type_impl_through_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_78 = is_negative_11; is_negative_11 = 0; start_78);
     is_negative_11 = digit_count_13;
     digit_count_13 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_11, $local_2.repr, $local_2.used);

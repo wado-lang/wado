@@ -111,9 +111,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(26)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(29)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
 
 type "functype//treemap_btree2.wado/run" = fn();  // TypeId(30)
 
@@ -233,7 +233,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(87)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(88)
 
-type "functype//treemap_btree2.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(89)
+type "functype//treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(89)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(90)
 
@@ -255,8 +255,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -311,7 +311,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elderberry"), used: 10 }, 5);
     $sroa_$pattern_temp_0_0_13_397 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_398 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $moved_4_388 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_388 = $sroa_$pattern_temp_0_0_13_397; $sroa_$pattern_temp_0_0_13_397 = 0; $moved_4_388);
+    $moved_4_388 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_388 = $sroa_$pattern_temp_0_0_13_397; $sroa_$pattern_temp_0_0_13_397 = 0; $moved_4_388);
     $sroa_$pattern_temp_0_0_13_397 = $sroa_$pattern_temp_0_1_14_398;
     $sroa_$pattern_temp_0_1_14_398 = 0;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -332,7 +332,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_0_13_397, $cm_pair_7_391, $moved_4_388);
     $moved_4_388 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_397 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
+    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
     $moved_4_388 = $sroa_$pattern_temp_0_0_13_397;
     $sroa_$pattern_temp_0_0_13_397 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_388, $mv_arg_2.repr, $mv_arg_2.used);
@@ -374,7 +374,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_398, $cm_pair_7_391, $moved_4_388);
     $moved_4_388 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_398 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_397 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_0_13_397);
+    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_397 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_0_13_397);
     $moved_4_388 = $sroa_$pattern_temp_0_1_14_398;
     $sroa_$pattern_temp_0_1_14_398 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_388, $mv_arg_2.repr, $mv_arg_2.used);
@@ -415,7 +415,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_0_13_397, $cm_pair_7_391, $moved_4_388);
     $moved_4_388 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_397 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
+    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
     $moved_4_388 = $sroa_$pattern_temp_0_0_13_397;
     $sroa_$pattern_temp_0_0_13_397 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_388, $mv_arg_2.repr, $mv_arg_2.used);
@@ -457,14 +457,14 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $sroa_$pattern_temp_0_1_14_398, $cm_pair_7_391, $moved_4_388);
     $moved_4_388 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_398 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_397 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_0_13_397);
+    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_397 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_0_13_397);
     $moved_4_388 = $sroa_$pattern_temp_0_1_14_398;
     $sroa_$pattern_temp_0_1_14_398 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_388, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_388 = $sroa_$pattern_temp_0_0_13_397; $sroa_$pattern_temp_0_0_13_397 = 0; $moved_4_388);
     $moved_4_388 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_397 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
+    $sroa_$pattern_temp_0_1_14_398 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_398 = $moved_4_388; $moved_4_388 = 0; $sroa_$pattern_temp_0_1_14_398);
     $moved_4_388 = $sroa_$pattern_temp_0_0_13_397;
     $sroa_$pattern_temp_0_0_13_397 = 0;
     $mv_arg_2 = global:treemap_btree2.wado::$const_obj_10;
@@ -493,14 +493,14 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $moved_4_388, $cm_pair_7_391, $sroa_$pattern_temp_0_1_14_398);
     $sroa_$pattern_temp_0_1_14_398 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $moved_4_388 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_397 = $sroa_$pattern_temp_0_1_14_398; $sroa_$pattern_temp_0_1_14_398 = 0; $sroa_$pattern_temp_0_0_13_397);
+    $sroa_$pattern_temp_0_0_13_397 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_397 = $sroa_$pattern_temp_0_1_14_398; $sroa_$pattern_temp_0_1_14_398 = 0; $sroa_$pattern_temp_0_0_13_397);
     $sroa_$pattern_temp_0_1_14_398 = $moved_4_388;
     $moved_4_388 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_398, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_398 = $sroa_$pattern_temp_0_0_13_397; $sroa_$pattern_temp_0_0_13_397 = 0; $sroa_$pattern_temp_0_1_14_398);
     $sroa_$pattern_temp_0_1_14_398 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_397 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-    $moved_4_388 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_388 = $sroa_$pattern_temp_0_1_14_398; $sroa_$pattern_temp_0_1_14_398 = 0; $moved_4_388);
+    $moved_4_388 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_388 = $sroa_$pattern_temp_0_1_14_398; $sroa_$pattern_temp_0_1_14_398 = 0; $moved_4_388);
     $sroa_$pattern_temp_0_1_14_398 = $sroa_$pattern_temp_0_0_13_397;
     $sroa_$pattern_temp_0_0_13_397 = 0;
     $mv_arg_2 = global:treemap_btree2.wado::$const_obj_8;
@@ -635,7 +635,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
             }
             start_254 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
             $sroa_item_1_643 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-            start_254 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_508 = start_254; start_254 = 0; $moved_4_508);
+            start_254 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_508 = start_254; start_254 = 0; $moved_4_508);
             $load_79 = $sroa_item_1_643;
             $sroa_item_1_643 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_3_516($load_79), $mv_arg_2.repr, $mv_arg_2.used);
@@ -645,7 +645,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     };
     $moved_6_510 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
     $moved_3_516 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-    $moved_4_508 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_508 = $moved_6_510; $moved_6_510 = 0; $moved_4_508);
+    $moved_4_508 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_508 = $moved_6_510; $moved_6_510 = 0; $moved_4_508);
     $moved_6_510 = $moved_3_516;
     $moved_3_516 = 0;
     $mv_arg_2 = global:treemap_btree2.wado::$const_obj_6;
@@ -658,7 +658,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     }) {
         $moved_6_510 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
         $moved_4_508 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-        $moved_3_516 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_3_516 = $moved_6_510; $moved_6_510 = 0; $moved_3_516);
+        $moved_3_516 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3_516 = $moved_6_510; $moved_6_510 = 0; $moved_3_516);
         $moved_6_510 = $moved_4_508;
         $moved_4_508 = 0;
         $mv_arg_2 = global:treemap_btree2.wado::$const_obj_5;
@@ -684,7 +684,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $moved_6_510, $cm_pair_7_511, $moved_3_516);
     $moved_3_516 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
     $moved_6_510 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-    $moved_4_508 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_508 = $moved_3_516; $moved_3_516 = 0; $moved_4_508);
+    $moved_4_508 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_508 = $moved_3_516; $moved_3_516 = 0; $moved_4_508);
     $moved_3_516 = $moved_6_510;
     $moved_6_510 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_516, $mv_arg_2.repr, $mv_arg_2.used);
@@ -703,14 +703,14 @@ fn "treemap_btree2.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, $moved_3_516, $cm_pair_7_511, $moved_4_508);
     $moved_4_508 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
     $moved_3_516 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-    $moved_6_510 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_6_510 = $moved_4_508; $moved_4_508 = 0; $moved_6_510);
+    $moved_6_510 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_6_510 = $moved_4_508; $moved_4_508 = 0; $moved_6_510);
     $moved_4_508 = $moved_3_516;
     $moved_3_516 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_508, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_508 = $moved_6_510; $moved_6_510 = 0; $moved_4_508);
     $moved_4_508 = builtin::i32_wrap_i64(local.tee $cm_pair_7_511("wasi/stream-new"()));
     $moved_6_510 = builtin::i32_wrap_i64($cm_pair_7_511 >> 32_i64);
-    $moved_3_516 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_3_516 = $moved_4_508; $moved_4_508 = 0; $moved_3_516);
+    $moved_3_516 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3_516 = $moved_4_508; $moved_4_508 = 0; $moved_3_516);
     $moved_4_508 = $moved_6_510;
     $moved_6_510 = 0;
     $mv_arg_2 = global:treemap_btree2.wado::$const_obj_2;
@@ -841,7 +841,7 @@ fn "treemap_btree2.wado/run"() with Stdout {
             }
             new_used_253 = builtin::i32_wrap_i64(local.tee $cm_pair_7_391("wasi/stream-new"()));
             $load_79 = builtin::i32_wrap_i64($cm_pair_7_391 >> 32_i64);
-            new_used_253 = "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"($moved_4_388 = new_used_253; new_used_253 = 0; $moved_4_388);
+            new_used_253 = "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_388 = new_used_253; new_used_253 = 0; $moved_4_388);
             start_254 = $load_79;
             $load_79 = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $sroa_$pattern_temp_0_1_14_398(start_254), $mv_arg_2.repr, $mv_arg_2.used);
@@ -851,8 +851,8 @@ fn "treemap_btree2.wado/run"() with Stdout {
     };
 }
 
-fn "treemap_btree2.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "treemap_btree2.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "treemap_btree2.wado/$cm_export__run"() {
@@ -1037,7 +1037,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

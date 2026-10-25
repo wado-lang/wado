@@ -33,7 +33,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
 type "functype//opt_lbf_arm_break_captured.wado/labels" = fn(i32, i32);  // TypeId(12)
 
@@ -59,7 +59,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(25)
 
@@ -71,7 +71,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -208,7 +208,7 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
             }
             start_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
             n = builtin::i32_wrap_i64(x >> 32_i64);
-            m = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"(m = start_18; start_18 = 0; m);
+            m = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(m = start_18; start_18 = 0; m);
             start_18 = n;
             n = 0;
             "core:rt/write_string_to_stream$dae[add_newline]"(start_18, $local_4.repr, $local_4.used);
@@ -217,7 +217,7 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
         }
         start_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         m = builtin::i32_wrap_i64(x >> 32_i64);
-        n = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"(n = start_18; start_18 = 0; n);
+        n = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n = start_18; start_18 = 0; n);
         start_18 = m;
         m = 0;
         $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_1;
@@ -226,7 +226,7 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
     };
     start_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     n = builtin::i32_wrap_i64(x >> 32_i64);
-    m = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"(m = start_18; start_18 = 0; m);
+    m = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(m = start_18; start_18 = 0; m);
     start_18 = n;
     n = 0;
     $local_4 = global:opt_lbf_arm_break_captured.wado::$const_obj_0;
@@ -404,7 +404,7 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                 $sroa_$pattern_temp_0_1_14_51 = builtin::i32_wrap_i64($cm_pair_7_44 >> 32_i64);
                 rx_38 = $sroa_$pattern_temp_0_0_13_50;
                 tx_39 = $sroa_$pattern_temp_0_1_14_51;
-                handle_40 = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"($moved_4_41 = rx_38; rx_38 = 0; $moved_4_41);
+                handle_40 = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_41 = rx_38; rx_38 = 0; $moved_4_41);
                 $moved_5_42 = tx_39;
                 tx_39 = 0;
                 "core:rt/write_string_to_stream$dae[add_newline]"($moved_5_42, $local_5.repr, $local_5.used);
@@ -413,7 +413,7 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
             }
             $sroa_$pattern_temp_0_0_13_75 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_76 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-            $sroa_$pattern_temp_0_0_13_75 = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"($moved_4_66 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_4_66);
+            $sroa_$pattern_temp_0_0_13_75 = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_66 = $sroa_$pattern_temp_0_0_13_75; $sroa_$pattern_temp_0_0_13_75 = 0; $moved_4_66);
             $moved_5_67 = $sroa_$pattern_temp_0_1_14_76;
             $sroa_$pattern_temp_0_1_14_76 = 0;
             $moved_3_74 = $moved_5_67;
@@ -426,7 +426,7 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
     };
     $moved_6_68 = builtin::i32_wrap_i64(local.tee $cm_pair_7_69("wasi/stream-new"()));
     $moved_3_74 = builtin::i32_wrap_i64($cm_pair_7_69 >> 32_i64);
-    $moved_4_66 = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"($moved_4_66 = $moved_6_68; $moved_6_68 = 0; $moved_4_66);
+    $moved_4_66 = "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_66 = $moved_6_68; $moved_6_68 = 0; $moved_4_66);
     $moved_6_68 = $moved_3_74;
     $moved_3_74 = 0;
     $mv_arg_2 = global:opt_lbf_arm_break_captured.wado::$const_obj_0;
@@ -440,8 +440,8 @@ fn "opt_lbf_arm_break_captured.wado/run"() with Stdout {
     "opt_lbf_arm_break_captured.wado/loops"(black_box(7), black_box(100));
 }
 
-fn "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "opt_lbf_arm_break_captured.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_lbf_arm_break_captured.wado/$cm_export__run"() {

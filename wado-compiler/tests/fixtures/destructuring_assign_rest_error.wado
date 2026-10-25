@@ -1,0 +1,13 @@
+// The left side takes only a flat tuple of targets, so no rest.
+
+export fn run() {
+    let mut a = 1;
+    let mut rest = [2, 3];
+    [a, ..rest] = [1, 2, 3];
+}
+
+__DATA__
+{
+    "compile_error": ":6:9: parse error: a destructuring assignment takes no rest; name each target",
+    "compile_error_codes": ["INVALID_SYNTAX"]
+}

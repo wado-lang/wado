@@ -1,0 +1,65 @@
+// An expression that evaluates an operand of type `!` never falls through,
+// whatever type the expression itself has, so the body needs no `return` after
+// it.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn show(s: String) {}
+
+fn by_argument(flag: bool) -> i32 {
+    if flag {
+        return 1;
+    }
+    show(panic("gone"));
+}
+
+fn by_binary_operand(flag: bool) -> i32 {
+    if flag {
+        return 2;
+    }
+    let n: i32 = 1 + panic("gone");
+}
+
+fn by_condition(flag: bool) -> i32 {
+    if flag {
+        return 3;
+    }
+    if panic("gone") {
+    }
+}
+
+fn by_field(flag: bool) -> i32 {
+    if flag {
+        return 4;
+    }
+    let p = Point { x: 0, y: panic("gone") };
+}
+
+fn by_element(flag: bool) -> i32 {
+    if flag {
+        return 5;
+    }
+    let t: [i32, i32] = [1, panic("gone")];
+}
+
+fn by_scrutinee(flag: bool) -> i32 {
+    if flag {
+        return 6;
+    }
+    match panic("gone") {
+        _ => {}
+    }
+}
+
+export fn run() with Stdout {
+    println(`${by_argument(true)} ${by_binary_operand(true)} ${by_condition(true)}`);
+    println(`${by_field(true)} ${by_element(true)} ${by_scrutinee(true)}`);
+}
+
+__DATA__
+{"stdout": "1 2 3\n4 5 6\n"}

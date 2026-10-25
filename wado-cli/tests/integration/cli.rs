@@ -6,6 +6,8 @@
 use std::time::Duration;
 
 use predicates::prelude::*;
+#[cfg(unix)]
+use wado_host::sandbox;
 
 use crate::common::{custom_sections, wado, wado_in, wado_test};
 
@@ -1587,6 +1589,29 @@ fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
             .success()
             .stdout(predicate::str::is_match(r"fuel \d+").unwrap());
     }
+}
+
+/// A test blocked on a host future runs no wasm, so no epoch interrupts it; the
+/// timeout still ends it.
+#[cfg(unix)]
+#[test]
+fn test_test_times_out_a_guest_blocked_on_the_host() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("blocked_test.wado");
+    std::fs::write(
+        &file,
+        "use { cmd } from \"core:process\";\n\n#[timeout_ms(300)]\ntest \"blocked\" {\n    let _ = cmd`sleep 30`.status();\n}\n",
+    )
+    .unwrap();
+    wado_test()
+        .arg(&file)
+        .timeout(Duration::from_secs(60))
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("test timed out after 300ms"));
 }
 
 #[test]

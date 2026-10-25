@@ -1,0 +1,9 @@
+// Two components each export a world function `twin`: each module's `twin` is
+// its own, so each call reaches the component it was imported from.
+use { twin as twin_a } from "./sub/wasm_import_cm_world_twin_a.wat" with { type: "wat" };
+use { twin as twin_b } from "./sub/wasm_import_cm_world_twin_b.wat" with { type: "wat" };
+
+test {
+    assert twin_a() == 1;
+    assert twin_b() == 2;
+}

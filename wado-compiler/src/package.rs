@@ -48,7 +48,7 @@ pub struct Package {
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
-    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
+    /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,

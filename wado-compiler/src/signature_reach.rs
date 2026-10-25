@@ -252,7 +252,7 @@ impl Walk<'_> {
 /// caller has to write.
 struct Sites(Vec<(AstId, Span)>);
 
-impl AstVisitor for Sites {
+impl AstVisitor<'_> for Sites {
     fn visit_id(&mut self, id: AstId, span: Span) {
         self.0.push((id, span));
     }

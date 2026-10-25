@@ -782,6 +782,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         {
             scope.reject_provided_from(target, source, impl_block.span);
         }
+        if scope.tysys.type_table.borrow().is_never(target) {
+            let type_name = scope.tysys.type_table.borrow().type_name(target);
+            let _ = scope.emit(TypeError::ImplForNever {
+                type_name,
+                span: impl_block.span,
+            });
+        }
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
         }
@@ -2182,7 +2189,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s.
     /// `resource_self` marks a resource decl, whose `&self` shorthand becomes a
-    /// real parameter at index 0 to match `$cm_binding__<R>_<op>(self, args)`;
+    /// real parameter at index 0 to match its `$cm_binding__*(self, args)`;
     /// an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
@@ -2341,6 +2348,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
 
             ops.push(TirEffectOp {
+                def: method_def,
                 name: method.name.clone(),
                 params,
                 return_type,

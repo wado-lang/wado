@@ -140,7 +140,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(31)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
 
 type "functype//spec_traits_parse.wado/$test_0" = fn();  // TypeId(34)
 
@@ -362,9 +362,9 @@ type "functype//core:prelude/primitive.wado/fmt_float_special$spec1" = fn(ref "c
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/intparse.wado/ParseIntError,[core:prelude/intparse.wado/IntErrorKind]>$sroa[v.kind]" = fn("core:prelude/intparse.wado//enum:IntErrorKind", ref "core:prelude/format.wado//Formatter");  // TypeId(143)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(144)
+type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/ParseIntError>$sroa[value.kind]" = fn(ref Array<u8>, i32, "core:prelude/intparse.wado//enum:IntErrorKind");  // TypeId(144)
 
-type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/ParseIntError>$sroa[value.kind]" = fn(ref Array<u8>, i32, "core:prelude/intparse.wado//enum:IntErrorKind");  // TypeId(145)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(145)
 
 type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/traits.wado/LenientParseError>$sroa[value.reason]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String");  // TypeId(146)
 
@@ -542,7 +542,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -2204,7 +2204,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -4025,6 +4025,23 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<c
     return;
 }
 
+fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/ParseIntError>$sroa[value.kind]"($mv$msg$repr, $mv$msg$used, value) {
+    let $load_0: ref Array<u8>;
+    let $local_2: ref "core:prelude/string.wado//String";
+    let $local_3: ref "core:prelude/format.wado//Formatter";
+    let $fuse_at_5: i32;
+    cold_path;
+    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }), 2 + $mv$msg$used);
+    builtin::array_copy<u8>(local.tee $load_0($local_2.repr), $fuse_at_5, $mv$msg$repr, 0, $mv$msg$used);
+    $mv$msg$used = $fuse_at_5 + $mv$msg$used;
+    $mv$msg$repr = array.new_fixed<u8>(58, 32);
+    builtin::array_copy<u8>($load_0, $mv$msg$used, $mv$msg$repr, 0, 2);
+    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
+    "core:prelude/traits.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Inspect::inspect$sroa[self.kind]"(value, $local_3);
+    "core:rt/panic"($local_2.repr, $local_2.used);
+    unreachable;
+}
+
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
     let field_6: ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";
@@ -4043,23 +4060,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<c
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_110);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(125), used: 1 });
     return;
-}
-
-fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/ParseIntError>$sroa[value.kind]"($mv$msg$repr, $mv$msg$used, value) {
-    let $load_0: ref Array<u8>;
-    let $local_2: ref "core:prelude/string.wado//String";
-    let $local_3: ref "core:prelude/format.wado//Formatter";
-    let $fuse_at_5: i32;
-    cold_path;
-    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }), 2 + $mv$msg$used);
-    builtin::array_copy<u8>(local.tee $load_0($local_2.repr), $fuse_at_5, $mv$msg$repr, 0, $mv$msg$used);
-    $mv$msg$used = $fuse_at_5 + $mv$msg$used;
-    $mv$msg$repr = array.new_fixed<u8>(58, 32);
-    builtin::array_copy<u8>($load_0, $mv$msg$used, $mv$msg$repr, 0, 2);
-    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
-    "core:prelude/traits.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Inspect::inspect$sroa[self.kind]"(value, $local_3);
-    "core:rt/panic"($local_2.repr, $local_2.used);
-    unreachable;
 }
 
 fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/traits.wado/LenientParseError>$sroa[value.reason]"($mv$msg$repr, $mv$msg$used, value) {

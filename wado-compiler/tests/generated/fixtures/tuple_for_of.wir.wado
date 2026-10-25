@@ -72,7 +72,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 type "functype//tuple_for_of.wado/$test_0_basic_heterogeneous" = fn();  // TypeId(21)
 
@@ -282,7 +282,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -330,12 +330,12 @@ fn "tuple_for_of.wado/$test_0_basic_heterogeneous"() {
     let results: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $v0_6: ref "core:prelude/string.wado//String";
     let $local_16: ref "core:prelude/string.wado//String";
-    let a_103: ref Array<u8>;
-    let a_end_105: i32;
-    let b_106: ref Array<u8>;
-    let i_110: i32;
-    let f_133: ref "core:prelude/format.wado//Formatter";
-    let i_164: i32;
+    let a_102: ref Array<u8>;
+    let a_end_104: i32;
+    let b_105: ref Array<u8>;
+    let i_109: i32;
+    let f_132: ref "core:prelude/format.wado//Formatter";
+    let i_163: i32;
     results = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     if @unlikely(0 >= builtin::array_len(results.repr)) {
         cold_path;
@@ -356,173 +356,173 @@ fn "tuple_for_of.wado/$test_0_basic_heterogeneous"() {
     builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_1(results.repr), 2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 });
     results.used = 3;
     $v0_6 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 0);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__25: block -> bool {
-        a_103 = $v0_6.repr;
-        a_end_105 = $v0_6.used;
-        b_106 = global:tuple_for_of.wado::$const_obj_16;
-        if a_end_105 != 2 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__25: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__24: block -> bool {
+        a_102 = $v0_6.repr;
+        a_end_104 = $v0_6.used;
+        b_105 = global:tuple_for_of.wado::$const_obj_16;
+        if a_end_104 != 2 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__24: 0;
         }
-        i_110 = 0;
+        i_109 = 0;
         b5: block {
             l6: loop {
-                break_if b5 i_110 >= a_end_105;
-                if builtin::array_get_value<u8>(a_103, i_110) != builtin::array_get_value<u8>(b_106, i_110) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__25: 0;
+                break_if b5 i_109 >= a_end_104;
+                if builtin::array_get_value<u8>(a_102, i_109) != builtin::array_get_value<u8>(b_105, i_109) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__24: 0;
                 }
-                i_110 = i_110 + 1;
+                i_109 = i_109 + 1;
                 continue l6;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__25: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__24: 1;
     } == 0) {
         cold_path;
-        i_110 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(133), used: 0 }), 69);
-        b_106 = $local_16.repr;
-        a_103 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_106, i_110, a_103, 0, 20);
-        a_end_105 = i_110 + 20;
-        a_103 = array.new_data<u8>("$test_0_basic_heterogeneous");
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 27);
-        a_end_105 = i_110 + 47;
-        a_103 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 4);
-        a_end_105 = i_110 + 51;
-        a_103 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 17);
-        i_110 = i_110 + 68;
-        a_103 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_106, i_110, a_103, 0, 1);
-        f_133 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(30, f_133);
-        i_110 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_16, 43);
-        a_103 = $local_16.repr;
-        b_106 = array.new_data<u8>("
+        i_109 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(133), used: 0 }), 69);
+        b_105 = $local_16.repr;
+        a_102 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_105, i_109, a_102, 0, 20);
+        a_end_104 = i_109 + 20;
+        a_102 = array.new_data<u8>("$test_0_basic_heterogeneous");
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 27);
+        a_end_104 = i_109 + 47;
+        a_102 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 4);
+        a_end_104 = i_109 + 51;
+        a_102 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 17);
+        i_109 = i_109 + 68;
+        a_102 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_105, i_109, a_102, 0, 1);
+        f_132 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(30, f_132);
+        i_109 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_16, 43);
+        a_102 = $local_16.repr;
+        b_105 = array.new_data<u8>("
 condition: results[0] == \"42\"
 ");
-        builtin::array_copy<u8>(a_103, i_110, b_106, 0, 31);
-        i_110 = i_110 + 31;
-        b_106 = array.new_data<u8>("results[0]: ");
-        builtin::array_copy<u8>(a_103, i_110, b_106, 0, 12);
+        builtin::array_copy<u8>(a_102, i_109, b_105, 0, 31);
+        i_109 = i_109 + 31;
+        b_105 = array.new_data<u8>("results[0]: ");
+        builtin::array_copy<u8>(a_102, i_109, b_105, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16), $v0_6);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_16);
         "core:rt/panic"($local_16.repr, $local_16.used);
         unreachable;
     }
-    i_110 = results.used;
-    if @unlikely(1 >= i_110) {
+    i_109 = results.used;
+    if @unlikely(1 >= i_109) {
         cold_path;
-        "tuple_for_of.wado/$test_0_basic_heterogeneous$cold1$dae[$contract_arg_1]"(i_110);
+        "tuple_for_of.wado/$test_0_basic_heterogeneous$cold1$dae[$contract_arg_1]"(i_109);
         unreachable;
     }
     $local_16 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 1);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__41: block -> bool {
-        b_106 = $local_16.repr;
-        a_end_105 = $local_16.used;
-        a_103 = global:tuple_for_of.wado::$const_obj_15;
-        if a_end_105 != 5 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__41: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
+        b_105 = $local_16.repr;
+        a_end_104 = $local_16.used;
+        a_102 = global:tuple_for_of.wado::$const_obj_15;
+        if a_end_104 != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
-        i_164 = 0;
+        i_163 = 0;
         b11: block {
             l12: loop {
-                break_if b11 i_164 >= a_end_105;
-                if builtin::array_get_value<u8>(b_106, i_164) != builtin::array_get_value<u8>(a_103, i_164) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__41: 0;
+                break_if b11 i_163 >= a_end_104;
+                if builtin::array_get_value<u8>(b_105, i_163) != builtin::array_get_value<u8>(a_102, i_163) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
-                i_164 = i_164 + 1;
+                i_163 = i_163 + 1;
                 continue l12;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__41: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__40: 1;
     } == 0) {
         cold_path;
-        i_164 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $v0_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }), 69);
-        b_106 = $v0_6.repr;
-        a_103 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_106, i_164, a_103, 0, 20);
-        a_end_105 = i_164 + 20;
-        a_103 = array.new_data<u8>("$test_0_basic_heterogeneous");
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 27);
-        a_end_105 = i_164 + 47;
-        a_103 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 4);
-        a_end_105 = i_164 + 51;
-        a_103 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_106, a_end_105, a_103, 0, 17);
-        i_164 = i_164 + 68;
-        a_103 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_106, i_164, a_103, 0, 1);
-        f_133 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_6);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(31, f_133);
-        i_164 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v0_6, 46);
-        a_103 = $v0_6.repr;
-        b_106 = array.new_data<u8>("
+        i_163 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $v0_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }), 69);
+        b_105 = $v0_6.repr;
+        a_102 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_105, i_163, a_102, 0, 20);
+        a_end_104 = i_163 + 20;
+        a_102 = array.new_data<u8>("$test_0_basic_heterogeneous");
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 27);
+        a_end_104 = i_163 + 47;
+        a_102 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 4);
+        a_end_104 = i_163 + 51;
+        a_102 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_105, a_end_104, a_102, 0, 17);
+        i_163 = i_163 + 68;
+        a_102 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_105, i_163, a_102, 0, 1);
+        f_132 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_6);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(31, f_132);
+        i_163 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v0_6, 46);
+        a_102 = $v0_6.repr;
+        b_105 = array.new_data<u8>("
 condition: results[1] == \"hello\"
 ");
-        builtin::array_copy<u8>(a_103, i_164, b_106, 0, 34);
-        i_164 = i_164 + 34;
-        b_106 = array.new_data<u8>("results[1]: ");
-        builtin::array_copy<u8>(a_103, i_164, b_106, 0, 12);
+        builtin::array_copy<u8>(a_102, i_163, b_105, 0, 34);
+        i_163 = i_163 + 34;
+        b_105 = array.new_data<u8>("results[1]: ");
+        builtin::array_copy<u8>(a_102, i_163, b_105, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_6), $local_16);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $v0_6);
         "core:rt/panic"($v0_6.repr, $v0_6.used);
         unreachable;
     }
-    if @unlikely(2 >= i_110) {
+    if @unlikely(2 >= i_109) {
         cold_path;
-        "tuple_for_of.wado/$test_0_basic_heterogeneous$cold0$dae[$contract_arg_2]"(i_110);
+        "tuple_for_of.wado/$test_0_basic_heterogeneous$cold0$dae[$contract_arg_2]"(i_109);
         unreachable;
     }
     $v0_6 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 2);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__57: block -> bool {
-        b_106 = $v0_6.repr;
-        i_110 = $v0_6.used;
-        a_103 = global:tuple_for_of.wado::$const_obj_14;
-        if i_110 != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__56: block -> bool {
+        b_105 = $v0_6.repr;
+        i_109 = $v0_6.used;
+        a_102 = global:tuple_for_of.wado::$const_obj_14;
+        if i_109 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__56: 0;
         }
-        i_164 = 0;
+        i_163 = 0;
         b17: block {
             l18: loop {
-                break_if b17 i_164 >= i_110;
-                if builtin::array_get_value<u8>(b_106, i_164) != builtin::array_get_value<u8>(a_103, i_164) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
+                break_if b17 i_163 >= i_109;
+                if builtin::array_get_value<u8>(b_105, i_163) != builtin::array_get_value<u8>(a_102, i_163) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__56: 0;
                 }
-                i_164 = i_164 + 1;
+                i_163 = i_163 + 1;
                 continue l18;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__57: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__56: 1;
     } == 0) {
         cold_path;
-        i_164 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 69);
-        b_106 = $local_16.repr;
-        a_103 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_106, i_164, a_103, 0, 20);
-        i_110 = i_164 + 20;
-        a_103 = array.new_data<u8>("$test_0_basic_heterogeneous");
-        builtin::array_copy<u8>(b_106, i_110, a_103, 0, 27);
-        i_110 = i_164 + 47;
-        a_103 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_106, i_110, a_103, 0, 4);
-        i_110 = i_164 + 51;
-        a_103 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_106, i_110, a_103, 0, 17);
-        i_164 = i_164 + 68;
-        a_103 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_106, i_164, a_103, 0, 1);
-        f_133 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(32, f_133);
-        i_164 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_16, 45);
-        a_103 = $local_16.repr;
-        b_106 = array.new_data<u8>("
+        i_163 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 69);
+        b_105 = $local_16.repr;
+        a_102 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_105, i_163, a_102, 0, 20);
+        i_109 = i_163 + 20;
+        a_102 = array.new_data<u8>("$test_0_basic_heterogeneous");
+        builtin::array_copy<u8>(b_105, i_109, a_102, 0, 27);
+        i_109 = i_163 + 47;
+        a_102 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_105, i_109, a_102, 0, 4);
+        i_109 = i_163 + 51;
+        a_102 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_105, i_109, a_102, 0, 17);
+        i_163 = i_163 + 68;
+        a_102 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_105, i_163, a_102, 0, 1);
+        f_132 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(32, f_132);
+        i_163 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_16, 45);
+        a_102 = $local_16.repr;
+        b_105 = array.new_data<u8>("
 condition: results[2] == \"true\"
 ");
-        builtin::array_copy<u8>(a_103, i_164, b_106, 0, 33);
-        i_164 = i_164 + 33;
-        b_106 = array.new_data<u8>("results[2]: ");
-        builtin::array_copy<u8>(a_103, i_164, b_106, 0, 12);
+        builtin::array_copy<u8>(a_102, i_163, b_105, 0, 33);
+        i_163 = i_163 + 33;
+        b_105 = array.new_data<u8>("results[2]: ");
+        builtin::array_copy<u8>(a_102, i_163, b_105, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_16), $v0_6);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_16);
         "core:rt/panic"($local_16.repr, $local_16.used);
@@ -538,11 +538,11 @@ fn "tuple_for_of.wado/$test_1_enumerate"() {
     let $v0_10: i32;
     let $v0_16: ref "core:prelude/string.wado//String";
     let $local_32: ref "core:prelude/string.wado//String";
-    let used_124: i32;
-    let a_187: ref Array<u8>;
-    let b_190: ref Array<u8>;
-    let i_194: i32;
-    let f_217: ref "core:prelude/format.wado//Formatter";
+    let used_123: i32;
+    let a_186: ref Array<u8>;
+    let b_189: ref Array<u8>;
+    let i_193: i32;
+    let f_216: ref "core:prelude/format.wado//Formatter";
     indices = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     values = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     if @unlikely(0 >= builtin::array_len(indices.repr)) {
@@ -557,34 +557,34 @@ fn "tuple_for_of.wado/$test_1_enumerate"() {
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(values.repr, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 48), used: 2 });
     values.used = 0 + 1;
-    if @unlikely(local.tee used_124(indices.used) >= builtin::array_len(indices.repr)) {
+    if @unlikely(local.tee used_123(indices.used) >= builtin::array_len(indices.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(indices);
     }
-    builtin::array_set<i32>(indices.repr, used_124, 1);
-    indices.used = used_124 + 1;
-    if @unlikely(local.tee used_124(values.used) >= builtin::array_len(values.repr)) {
+    builtin::array_set<i32>(indices.repr, used_123, 1);
+    indices.used = used_123 + 1;
+    if @unlikely(local.tee used_123(values.used) >= builtin::array_len(values.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(values);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(values.repr, used_124, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
-    values.used = used_124 + 1;
-    if @unlikely(local.tee used_124(indices.used) >= builtin::array_len(indices.repr)) {
+    builtin::array_set<ref "core:prelude/string.wado//String">(values.repr, used_123, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
+    values.used = used_123 + 1;
+    if @unlikely(local.tee used_123(indices.used) >= builtin::array_len(indices.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(indices);
     }
-    builtin::array_set<i32>(indices.repr, used_124, 2);
-    indices.used = used_124 + 1;
-    if @unlikely(local.tee used_124(values.used) >= builtin::array_len(values.repr)) {
+    builtin::array_set<i32>(indices.repr, used_123, 2);
+    indices.used = used_123 + 1;
+    if @unlikely(local.tee used_123(values.used) >= builtin::array_len(values.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(values);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_15(values.repr), used_124, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 });
-    values.used = used_124 + 1;
-    used_124 = indices.used;
-    if @unlikely(0 >= used_124) {
+    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_15(values.repr), used_123, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 });
+    values.used = used_123 + 1;
+    used_123 = indices.used;
+    if @unlikely(0 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold8$dae[$contract_arg_0]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold8$dae[$contract_arg_0]"(used_123);
         unreachable;
     }
     if @unlikely((local.tee $v0_10(builtin::array_get_value<i32>(local.tee $load_17(indices.repr), 0)) == 0) == 0) {
@@ -592,9 +592,9 @@ fn "tuple_for_of.wado/$test_1_enumerate"() {
         "tuple_for_of.wado/$test_1_enumerate$cold7"($v0_10);
         unreachable;
     }
-    if @unlikely(1 >= used_124) {
+    if @unlikely(1 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold6$dae[$contract_arg_1]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold6$dae[$contract_arg_1]"(used_123);
         unreachable;
     }
     if @unlikely(local.tee $v0_10(builtin::array_get_value<i32>($load_17, 1)) != 1) {
@@ -602,189 +602,189 @@ fn "tuple_for_of.wado/$test_1_enumerate"() {
         "tuple_for_of.wado/$test_1_enumerate$cold5"($v0_10);
         unreachable;
     }
-    if @unlikely(2 >= used_124) {
+    if @unlikely(2 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold4$dae[$contract_arg_2]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold4$dae[$contract_arg_2]"(used_123);
         unreachable;
     }
-    if @unlikely(local.tee used_124(builtin::array_get_value<i32>($load_17, 2)) != 2) {
+    if @unlikely(local.tee used_123(builtin::array_get_value<i32>($load_17, 2)) != 2) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold3"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold3"(used_123);
         unreachable;
     }
-    used_124 = values.used;
-    if @unlikely(0 >= used_124) {
+    used_123 = values.used;
+    if @unlikely(0 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold2$dae[$contract_arg_3]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold2$dae[$contract_arg_3]"(used_123);
         unreachable;
     }
     $v0_16 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_15, 0);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__41: block -> bool {
-        a_187 = $v0_16.repr;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__40: block -> bool {
+        a_186 = $v0_16.repr;
         $v0_10 = $v0_16.used;
-        b_190 = global:tuple_for_of.wado::$const_obj_19;
+        b_189 = global:tuple_for_of.wado::$const_obj_19;
         if $v0_10 != 2 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__41: 0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
         }
-        i_194 = 0;
+        i_193 = 0;
         b35: block {
             l36: loop {
-                break_if b35 i_194 >= $v0_10;
-                if builtin::array_get_value<u8>(a_187, i_194) != builtin::array_get_value<u8>(b_190, i_194) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__41: 0;
+                break_if b35 i_193 >= $v0_10;
+                if builtin::array_get_value<u8>(a_186, i_193) != builtin::array_get_value<u8>(b_189, i_193) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__40: 0;
                 }
-                i_194 = i_194 + 1;
+                i_193 = i_193 + 1;
                 continue l36;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__41: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__40: 1;
     } == 0) {
         cold_path;
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_32(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(131), used: 0 }), 59);
-        b_190 = $local_32.repr;
-        a_187 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 20);
-        $v0_10 = i_194 + 20;
-        a_187 = array.new_data<u8>("$test_1_enumerate");
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 17);
-        $v0_10 = i_194 + 37;
-        a_187 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 4);
-        $v0_10 = i_194 + 41;
-        a_187 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 17);
-        i_194 = i_194 + 58;
-        a_187 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 1);
-        f_217 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(46, f_217);
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_32, 41);
-        a_187 = $local_32.repr;
-        b_190 = array.new_data<u8>("
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_32(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(131), used: 0 }), 59);
+        b_189 = $local_32.repr;
+        a_186 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 20);
+        $v0_10 = i_193 + 20;
+        a_186 = array.new_data<u8>("$test_1_enumerate");
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 17);
+        $v0_10 = i_193 + 37;
+        a_186 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 4);
+        $v0_10 = i_193 + 41;
+        a_186 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 17);
+        i_193 = i_193 + 58;
+        a_186 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 1);
+        f_216 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(46, f_216);
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_32, 41);
+        a_186 = $local_32.repr;
+        b_189 = array.new_data<u8>("
 condition: values[0] == \"10\"
 ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 30);
-        i_194 = i_194 + 30;
-        b_190 = array.new_data<u8>("values[0]: ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 11);
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 30);
+        i_193 = i_193 + 30;
+        b_189 = array.new_data<u8>("values[0]: ");
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 11);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32), $v0_16);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_32);
         "core:rt/panic"($local_32.repr, $local_32.used);
         unreachable;
     }
-    if @unlikely(1 >= used_124) {
+    if @unlikely(1 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold1$dae[$contract_arg_4]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold1$dae[$contract_arg_4]"(used_123);
         unreachable;
     }
     $local_32 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_15, 1);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__57: block -> bool {
-        b_190 = $local_32.repr;
-        i_194 = $local_32.used;
-        a_187 = global:tuple_for_of.wado::$const_obj_18;
-        if i_194 != 5 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__56: block -> bool {
+        b_189 = $local_32.repr;
+        i_193 = $local_32.used;
+        a_186 = global:tuple_for_of.wado::$const_obj_18;
+        if i_193 != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__56: 0;
         }
         $v0_10 = 0;
         b41: block {
             l42: loop {
-                break_if b41 $v0_10 >= i_194;
-                if builtin::array_get_value<u8>(b_190, $v0_10) != builtin::array_get_value<u8>(a_187, $v0_10) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
+                break_if b41 $v0_10 >= i_193;
+                if builtin::array_get_value<u8>(b_189, $v0_10) != builtin::array_get_value<u8>(a_186, $v0_10) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__56: 0;
                 }
                 $v0_10 = $v0_10 + 1;
                 continue l42;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__57: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__56: 1;
     } == 0) {
         cold_path;
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $v0_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 }), 59);
-        b_190 = $v0_16.repr;
-        a_187 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 20);
-        $v0_10 = i_194 + 20;
-        a_187 = array.new_data<u8>("$test_1_enumerate");
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 17);
-        $v0_10 = i_194 + 37;
-        a_187 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 4);
-        $v0_10 = i_194 + 41;
-        a_187 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_190, $v0_10, a_187, 0, 17);
-        i_194 = i_194 + 58;
-        a_187 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 1);
-        f_217 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_16);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(47, f_217);
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v0_16, 44);
-        a_187 = $v0_16.repr;
-        b_190 = array.new_data<u8>("
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $v0_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 }), 59);
+        b_189 = $v0_16.repr;
+        a_186 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 20);
+        $v0_10 = i_193 + 20;
+        a_186 = array.new_data<u8>("$test_1_enumerate");
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 17);
+        $v0_10 = i_193 + 37;
+        a_186 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 4);
+        $v0_10 = i_193 + 41;
+        a_186 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_189, $v0_10, a_186, 0, 17);
+        i_193 = i_193 + 58;
+        a_186 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 1);
+        f_216 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_16);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(47, f_216);
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v0_16, 44);
+        a_186 = $v0_16.repr;
+        b_189 = array.new_data<u8>("
 condition: values[1] == \"world\"
 ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 33);
-        i_194 = i_194 + 33;
-        b_190 = array.new_data<u8>("values[1]: ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 11);
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 33);
+        i_193 = i_193 + 33;
+        b_189 = array.new_data<u8>("values[1]: ");
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 11);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v0_16), $local_32);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $v0_16);
         "core:rt/panic"($v0_16.repr, $v0_16.used);
         unreachable;
     }
-    if @unlikely(2 >= used_124) {
+    if @unlikely(2 >= used_123) {
         cold_path;
-        "tuple_for_of.wado/$test_1_enumerate$cold0$dae[$contract_arg_5]"(used_124);
+        "tuple_for_of.wado/$test_1_enumerate$cold0$dae[$contract_arg_5]"(used_123);
         unreachable;
     }
     $v0_16 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_15, 2);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__73: block -> bool {
-        b_190 = $v0_16.repr;
-        used_124 = $v0_16.used;
-        a_187 = global:tuple_for_of.wado::$const_obj_17;
-        if used_124 != 5 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__73: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__72: block -> bool {
+        b_189 = $v0_16.repr;
+        used_123 = $v0_16.used;
+        a_186 = global:tuple_for_of.wado::$const_obj_17;
+        if used_123 != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__72: 0;
         }
-        i_194 = 0;
+        i_193 = 0;
         b47: block {
             l48: loop {
-                break_if b47 i_194 >= used_124;
-                if builtin::array_get_value<u8>(b_190, i_194) != builtin::array_get_value<u8>(a_187, i_194) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__73: 0;
+                break_if b47 i_193 >= used_123;
+                if builtin::array_get_value<u8>(b_189, i_193) != builtin::array_get_value<u8>(a_186, i_193) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__72: 0;
                 }
-                i_194 = i_194 + 1;
+                i_193 = i_193 + 1;
                 continue l48;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__73: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__72: 1;
     } == 0) {
         cold_path;
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_32(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 }), 59);
-        b_190 = $local_32.repr;
-        a_187 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 20);
-        used_124 = i_194 + 20;
-        a_187 = array.new_data<u8>("$test_1_enumerate");
-        builtin::array_copy<u8>(b_190, used_124, a_187, 0, 17);
-        used_124 = i_194 + 37;
-        a_187 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_190, used_124, a_187, 0, 4);
-        used_124 = i_194 + 41;
-        a_187 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_190, used_124, a_187, 0, 17);
-        i_194 = i_194 + 58;
-        a_187 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_190, i_194, a_187, 0, 1);
-        f_217 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(48, f_217);
-        i_194 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_32, 44);
-        a_187 = $local_32.repr;
-        b_190 = array.new_data<u8>("
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_32(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 }), 59);
+        b_189 = $local_32.repr;
+        a_186 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 20);
+        used_123 = i_193 + 20;
+        a_186 = array.new_data<u8>("$test_1_enumerate");
+        builtin::array_copy<u8>(b_189, used_123, a_186, 0, 17);
+        used_123 = i_193 + 37;
+        a_186 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_189, used_123, a_186, 0, 4);
+        used_123 = i_193 + 41;
+        a_186 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_189, used_123, a_186, 0, 17);
+        i_193 = i_193 + 58;
+        a_186 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_189, i_193, a_186, 0, 1);
+        f_216 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(48, f_216);
+        i_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_32, 44);
+        a_186 = $local_32.repr;
+        b_189 = array.new_data<u8>("
 condition: values[2] == \"false\"
 ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 33);
-        i_194 = i_194 + 33;
-        b_190 = array.new_data<u8>("values[2]: ");
-        builtin::array_copy<u8>(a_187, i_194, b_190, 0, 11);
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 33);
+        i_193 = i_193 + 33;
+        b_189 = array.new_data<u8>("values[2]: ");
+        builtin::array_copy<u8>(a_186, i_193, b_189, 0, 11);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32), $v0_16);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_32);
         "core:rt/panic"($local_32.repr, $local_32.used);
@@ -1141,12 +1141,12 @@ fn "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion"() {
     let results: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $local_23: ref "core:prelude/string.wado//String";
     let $local_25: ref "core:prelude/string.wado//String";
-    let used_118: i32;
-    let a_136: ref Array<u8>;
-    let a_end_138: i32;
-    let b_139: ref Array<u8>;
-    let i_143: i32;
-    let f_166: ref "core:prelude/format.wado//Formatter";
+    let used_116: i32;
+    let a_134: ref Array<u8>;
+    let a_end_136: i32;
+    let b_137: ref Array<u8>;
+    let i_141: i32;
+    let f_164: ref "core:prelude/format.wado//Formatter";
     results = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     if @unlikely(0 >= builtin::array_len(results.repr)) {
         cold_path;
@@ -1168,244 +1168,244 @@ fn "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion"() {
     results.used = 3;
     $local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(3.14, $local_23);
-    if @unlikely(local.tee used_118(results.used) >= builtin::array_len(results.repr)) {
+    if @unlikely(local.tee used_116(results.used) >= builtin::array_len(results.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(results);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_1(results.repr), used_118, $local_23);
-    results.used = used_118 + 1;
-    used_118 = results.used;
-    if @unlikely(0 >= used_118) {
+    builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_1(results.repr), used_116, $local_23);
+    results.used = used_116 + 1;
+    used_116 = results.used;
+    if @unlikely(0 >= used_116) {
         cold_path;
-        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold3$dae[$contract_arg_0]"(used_118);
+        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold3$dae[$contract_arg_0]"(used_116);
         unreachable;
     }
     $local_23 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 0);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__33: block -> bool {
-        a_136 = $local_23.repr;
-        a_end_138 = $local_23.used;
-        b_139 = global:tuple_for_of.wado::$const_obj_28;
-        if a_end_138 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__33: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__31: block -> bool {
+        a_134 = $local_23.repr;
+        a_end_136 = $local_23.used;
+        b_137 = global:tuple_for_of.wado::$const_obj_28;
+        if a_end_136 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__31: 0;
         }
-        i_143 = 0;
+        i_141 = 0;
         b90: block {
             l91: loop {
-                break_if b90 i_143 >= a_end_138;
-                if builtin::array_get_value<u8>(a_136, i_143) != builtin::array_get_value<u8>(b_139, i_143) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__33: 0;
+                break_if b90 i_141 >= a_end_136;
+                if builtin::array_get_value<u8>(a_134, i_141) != builtin::array_get_value<u8>(b_137, i_141) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__31: 0;
                 }
-                i_143 = i_143 + 1;
+                i_141 = i_141 + 1;
                 continue l91;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__33: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__31: 1;
     } == 0) {
         cold_path;
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_25(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }), 79);
-        b_139 = $local_25.repr;
-        a_136 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 20);
-        a_end_138 = i_143 + 20;
-        a_136 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 37);
-        a_end_138 = i_143 + 57;
-        a_136 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 4);
-        a_end_138 = i_143 + 61;
-        a_136 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 17);
-        i_143 = i_143 + 78;
-        a_136 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 1);
-        f_166 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(107, f_166);
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_25, 42);
-        a_136 = $local_25.repr;
-        b_139 = array.new_data<u8>("
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_25(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }), 79);
+        b_137 = $local_25.repr;
+        a_134 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 20);
+        a_end_136 = i_141 + 20;
+        a_134 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 37);
+        a_end_136 = i_141 + 57;
+        a_134 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 4);
+        a_end_136 = i_141 + 61;
+        a_134 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 17);
+        i_141 = i_141 + 78;
+        a_134 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 1);
+        f_164 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(107, f_164);
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_25, 42);
+        a_134 = $local_25.repr;
+        b_137 = array.new_data<u8>("
 condition: results[0] == \"1\"
 ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 30);
-        i_143 = i_143 + 30;
-        b_139 = array.new_data<u8>("results[0]: ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 12);
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 30);
+        i_141 = i_141 + 30;
+        b_137 = array.new_data<u8>("results[0]: ");
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25), $local_23);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_25);
         "core:rt/panic"($local_25.repr, $local_25.used);
         unreachable;
     }
-    if @unlikely(1 >= used_118) {
+    if @unlikely(1 >= used_116) {
         cold_path;
-        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold2$dae[$contract_arg_1]"(used_118);
+        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold2$dae[$contract_arg_1]"(used_116);
         unreachable;
     }
     $local_25 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 1);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__49: block -> bool {
-        b_139 = $local_25.repr;
-        i_143 = $local_25.used;
-        a_136 = global:tuple_for_of.wado::$const_obj_27;
-        if i_143 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__49: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__47: block -> bool {
+        b_137 = $local_25.repr;
+        i_141 = $local_25.used;
+        a_134 = global:tuple_for_of.wado::$const_obj_27;
+        if i_141 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__47: 0;
         }
-        a_end_138 = 0;
+        a_end_136 = 0;
         b96: block {
             l97: loop {
-                break_if b96 a_end_138 >= i_143;
-                if builtin::array_get_value<u8>(b_139, a_end_138) != builtin::array_get_value<u8>(a_136, a_end_138) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__49: 0;
+                break_if b96 a_end_136 >= i_141;
+                if builtin::array_get_value<u8>(b_137, a_end_136) != builtin::array_get_value<u8>(a_134, a_end_136) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__47: 0;
                 }
-                a_end_138 = a_end_138 + 1;
+                a_end_136 = a_end_136 + 1;
                 continue l97;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__49: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__47: 1;
     } == 0) {
         cold_path;
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }), 79);
-        b_139 = $local_23.repr;
-        a_136 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 20);
-        a_end_138 = i_143 + 20;
-        a_136 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 37);
-        a_end_138 = i_143 + 57;
-        a_136 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 4);
-        a_end_138 = i_143 + 61;
-        a_136 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 17);
-        i_143 = i_143 + 78;
-        a_136 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 1);
-        f_166 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(108, f_166);
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_23, 42);
-        a_136 = $local_23.repr;
-        b_139 = array.new_data<u8>("
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }), 79);
+        b_137 = $local_23.repr;
+        a_134 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 20);
+        a_end_136 = i_141 + 20;
+        a_134 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 37);
+        a_end_136 = i_141 + 57;
+        a_134 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 4);
+        a_end_136 = i_141 + 61;
+        a_134 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 17);
+        i_141 = i_141 + 78;
+        a_134 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 1);
+        f_164 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(108, f_164);
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_23, 42);
+        a_134 = $local_23.repr;
+        b_137 = array.new_data<u8>("
 condition: results[1] == \"a\"
 ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 30);
-        i_143 = i_143 + 30;
-        b_139 = array.new_data<u8>("results[1]: ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 12);
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 30);
+        i_141 = i_141 + 30;
+        b_137 = array.new_data<u8>("results[1]: ");
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23), $local_25);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_23);
         "core:rt/panic"($local_23.repr, $local_23.used);
         unreachable;
     }
-    if @unlikely(2 >= used_118) {
+    if @unlikely(2 >= used_116) {
         cold_path;
-        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold1$dae[$contract_arg_2]"(used_118);
+        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold1$dae[$contract_arg_2]"(used_116);
         unreachable;
     }
     $local_23 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 2);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__65: block -> bool {
-        b_139 = $local_23.repr;
-        i_143 = $local_23.used;
-        a_136 = global:tuple_for_of.wado::$const_obj_14;
-        if i_143 != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__65: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__63: block -> bool {
+        b_137 = $local_23.repr;
+        i_141 = $local_23.used;
+        a_134 = global:tuple_for_of.wado::$const_obj_14;
+        if i_141 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__63: 0;
         }
-        a_end_138 = 0;
+        a_end_136 = 0;
         b102: block {
             l103: loop {
-                break_if b102 a_end_138 >= i_143;
-                if builtin::array_get_value<u8>(b_139, a_end_138) != builtin::array_get_value<u8>(a_136, a_end_138) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__65: 0;
+                break_if b102 a_end_136 >= i_141;
+                if builtin::array_get_value<u8>(b_137, a_end_136) != builtin::array_get_value<u8>(a_134, a_end_136) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__63: 0;
                 }
-                a_end_138 = a_end_138 + 1;
+                a_end_136 = a_end_136 + 1;
                 continue l103;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__65: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__63: 1;
     } == 0) {
         cold_path;
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_25(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 79);
-        b_139 = $local_25.repr;
-        a_136 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 20);
-        a_end_138 = i_143 + 20;
-        a_136 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 37);
-        a_end_138 = i_143 + 57;
-        a_136 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 4);
-        a_end_138 = i_143 + 61;
-        a_136 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_139, a_end_138, a_136, 0, 17);
-        i_143 = i_143 + 78;
-        a_136 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 1);
-        f_166 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(109, f_166);
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_25, 45);
-        a_136 = $local_25.repr;
-        b_139 = array.new_data<u8>("
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_25(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 79);
+        b_137 = $local_25.repr;
+        a_134 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 20);
+        a_end_136 = i_141 + 20;
+        a_134 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 37);
+        a_end_136 = i_141 + 57;
+        a_134 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 4);
+        a_end_136 = i_141 + 61;
+        a_134 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_137, a_end_136, a_134, 0, 17);
+        i_141 = i_141 + 78;
+        a_134 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 1);
+        f_164 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(109, f_164);
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_25, 45);
+        a_134 = $local_25.repr;
+        b_137 = array.new_data<u8>("
 condition: results[2] == \"true\"
 ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 33);
-        i_143 = i_143 + 33;
-        b_139 = array.new_data<u8>("results[2]: ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 12);
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 33);
+        i_141 = i_141 + 33;
+        b_137 = array.new_data<u8>("results[2]: ");
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_25), $local_23);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_25);
         "core:rt/panic"($local_25.repr, $local_25.used);
         unreachable;
     }
-    if @unlikely(3 >= used_118) {
+    if @unlikely(3 >= used_116) {
         cold_path;
-        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold0$dae[$contract_arg_3]"(used_118);
+        "tuple_for_of.wado/$test_7_nested_tuple_for_of_expansion$cold0$dae[$contract_arg_3]"(used_116);
         unreachable;
     }
     $local_25 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1, 3);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__81: block -> bool {
-        b_139 = $local_25.repr;
-        used_118 = $local_25.used;
-        a_136 = global:tuple_for_of.wado::$const_obj_25;
-        if used_118 != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__81: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__79: block -> bool {
+        b_137 = $local_25.repr;
+        used_116 = $local_25.used;
+        a_134 = global:tuple_for_of.wado::$const_obj_25;
+        if used_116 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__79: 0;
         }
-        i_143 = 0;
+        i_141 = 0;
         b108: block {
             l109: loop {
-                break_if b108 i_143 >= used_118;
-                if builtin::array_get_value<u8>(b_139, i_143) != builtin::array_get_value<u8>(a_136, i_143) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__81: 0;
+                break_if b108 i_141 >= used_116;
+                if builtin::array_get_value<u8>(b_137, i_141) != builtin::array_get_value<u8>(a_134, i_141) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__79: 0;
                 }
-                i_143 = i_143 + 1;
+                i_141 = i_141 + 1;
                 continue l109;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__81: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__79: 1;
     } == 0) {
         cold_path;
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 79);
-        b_139 = $local_23.repr;
-        a_136 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 20);
-        used_118 = i_143 + 20;
-        a_136 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
-        builtin::array_copy<u8>(b_139, used_118, a_136, 0, 37);
-        used_118 = i_143 + 57;
-        a_136 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b_139, used_118, a_136, 0, 4);
-        used_118 = i_143 + 61;
-        a_136 = array.new_data<u8>("tuple_for_of.wado");
-        builtin::array_copy<u8>(b_139, used_118, a_136, 0, 17);
-        i_143 = i_143 + 78;
-        a_136 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b_139, i_143, a_136, 0, 1);
-        f_166 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(110, f_166);
-        i_143 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_23, 45);
-        a_136 = $local_23.repr;
-        b_139 = array.new_data<u8>("
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(135), used: 0 }), 79);
+        b_137 = $local_23.repr;
+        a_134 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 20);
+        used_116 = i_141 + 20;
+        a_134 = array.new_data<u8>("$test_7_nested_tuple_for_of_expansion");
+        builtin::array_copy<u8>(b_137, used_116, a_134, 0, 37);
+        used_116 = i_141 + 57;
+        a_134 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b_137, used_116, a_134, 0, 4);
+        used_116 = i_141 + 61;
+        a_134 = array.new_data<u8>("tuple_for_of.wado");
+        builtin::array_copy<u8>(b_137, used_116, a_134, 0, 17);
+        i_141 = i_141 + 78;
+        a_134 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b_137, i_141, a_134, 0, 1);
+        f_164 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(110, f_164);
+        i_141 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_23, 45);
+        a_134 = $local_23.repr;
+        b_137 = array.new_data<u8>("
 condition: results[3] == \"3.14\"
 ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 33);
-        i_143 = i_143 + 33;
-        b_139 = array.new_data<u8>("results[3]: ");
-        builtin::array_copy<u8>(a_136, i_143, b_139, 0, 12);
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 33);
+        i_141 = i_141 + 33;
+        b_137 = array.new_data<u8>("results[3]: ");
+        builtin::array_copy<u8>(a_134, i_141, b_137, 0, 12);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_23), $local_25);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_23);
         "core:rt/panic"($local_23.repr, $local_23.used);
@@ -2423,7 +2423,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

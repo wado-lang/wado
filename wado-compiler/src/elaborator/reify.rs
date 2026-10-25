@@ -167,7 +167,7 @@ fn ast_expr_is_place(expr: &ast::Expr) -> bool {
 /// The side-effecting value operands of a compound-assign target — index
 /// subscripts, deref'd references, and owned-value bases (`get_obj().field`) —
 /// each bound once so the inline place skeleton is pure to duplicate. Shared by
-/// reify (binds `let $caN`, overrides) and annotate (reserves the matching
+/// reify (binds `let $ca_N`, overrides) and annotate (reserves the matching
 /// frame slots).
 pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
     match expr {
@@ -204,6 +204,62 @@ fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'
             piece: base,
             index_ctx: None,
         });
+    }
+}
+
+/// Where an assignment writes, reified ahead of the value it takes.
+enum WritePlace {
+    /// `recv[i] = v`, which becomes `recv.index_assign(i, v)`.
+    IndexAssign {
+        receiver: TirExpr,
+        index: Box<TirExpr>,
+        dispatch: Box<OperatorDispatch>,
+    },
+    /// Any other place; a global's becomes a `GlobalVarSet`.
+    Place(TirExpr),
+}
+
+impl WritePlace {
+    fn value_type(&self) -> Option<TypeId> {
+        match self {
+            Self::IndexAssign { .. } => None,
+            Self::Place(target) => Some(target.type_id),
+        }
+    }
+
+    fn write(self, value: TirExpr, span: Span) -> TirExpr {
+        let target = match self {
+            Self::IndexAssign {
+                receiver,
+                index,
+                dispatch,
+            } => {
+                return build_tir_method_call(
+                    receiver,
+                    dispatch.function_ref,
+                    vec![],
+                    vec![CallArg::new(*index, false), CallArg::new(value, false)],
+                    dispatch.return_type,
+                    span,
+                );
+            }
+            Self::Place(target) => target,
+        };
+        let kind = match target.kind {
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value: Box::new(value),
+            },
+            _ => TirExprKind::Assign {
+                target: Box::new(target),
+                value: Box::new(value),
+            },
+        };
+        TirExpr::new(kind, TypeTable::UNIT, span)
     }
 }
 
@@ -420,7 +476,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) emit_live: Option<&'a IndexSet<AstId>>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
-    /// `let $caN` before the read/write. Reify returns the bound `Local` for
+    /// `let $ca_N` before the read/write. Reify returns the bound `Local` for
     /// those exact nodes so `arr[bump()] += 1` evaluates `bump()` once while
     /// the place skeleton (index calls, field / deref chain) stays inline and
     /// still writes back. Empty outside `reify_compound_assign`.
@@ -2304,8 +2360,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// builds. A `return` / `break` ends a path too, but a normal exit is not a
     /// cold one, so it is left alone.
     fn mark_diverging_stmts(&self, stmts: Vec<TirStmt>) -> Vec<TirStmt> {
+        let tt = self.tysys.type_table.borrow();
         let diverges =
-            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if e.type_id == TypeTable::NEVER);
+            |s: &TirStmt| matches!(&s.kind, TirStmtKind::Expr(e) if tt.is_never(e.type_id));
         if !stmts.iter().any(diverges) {
             return stmts;
         }
@@ -2790,6 +2847,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let inner_expected = Some(recorded_type)
                     .filter(|&t| t != TypeTable::UNKNOWN && unary_passes_expected_type(unary));
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
+                if self.tysys.type_table.borrow().is_never(inner.type_id) {
+                    return inner;
+                }
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
                     // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
@@ -2956,69 +3016,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::If(if_expr) => {
                 self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
             }
-            ast::Expr::Assign(assign) => {
-                // IndexAssign rewrite: `arr[i] = v` lowers to
-                // `arr.index_assign(i, v)`. The elaborator's
-                // `assign_to_target` records the resolved
-                // `FunctionRef` on `index_assign_dispatch[index.id]`;
-                // reify replays the same method-call shape.
-                if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
-                {
-                    let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-                    let receiver = adjust_receiver_for_self_kind(
-                        receiver,
-                        dispatch.self_kind,
-                        false,
-                        span,
-                        &self.tysys.type_table,
-                    );
-                    let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
-                    let value_expr = self.reify_expr(&assign.value, ctx, None);
-                    return build_tir_method_call(
-                        receiver,
-                        dispatch.function_ref,
-                        vec![],
-                        vec![
-                            CallArg::new(idx_expr, false),
-                            CallArg::new(value_expr, false),
-                        ],
-                        dispatch.return_type,
-                        span,
-                    );
+            ast::Expr::Assign(assign) => match &assign.target {
+                ast::AssignTarget::Place(target) => {
+                    self.reify_write(target, &assign.value, span, ctx)
                 }
-                // `target = value` — both sides walked recursively; the
-                // expression's type is `Unit` (assignment is a stmt-shape
-                // expression in Wado, mirroring Rust).
-                let target = self.reify_expr(&assign.target, ctx, None);
-                let value = self.reify_expr(&assign.value, ctx, Some(target.type_id));
-                // Global-var write: `g = v` lowers to `GlobalVarSet` so
-                // codegen actually mutates the global. The production
-                // `assign_to_target` rewrites here too.
-                if let TirExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } = &target.kind
-                {
-                    return TirExpr::new(
-                        TirExprKind::GlobalVarSet {
-                            module_source: module_source.clone(),
-                            name: name.clone(),
-                            value: Box::new(value),
-                        },
-                        TypeTable::UNIT,
-                        span,
-                    );
+                ast::AssignTarget::Destructuring { places, .. } => {
+                    self.reify_destructuring_assign(assign, places, ctx)
                 }
-                TirExpr::new(
-                    TirExprKind::Assign {
-                        target: Box::new(target),
-                        value: Box::new(value),
-                    },
-                    recorded_type,
-                    span,
-                )
-            }
+            },
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`
                 // TIR are positional; the elaborator looks them up from
@@ -3026,6 +3031,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // info from `tysys.data.struct_fields` keyed by the
                 // receiver's resolved struct name.
                 let inner = self.reify_expr(&field_access.expr, ctx, None);
+                if self.tysys.type_table.borrow().is_never(inner.type_id) {
+                    return inner;
+                }
                 let (field_index, field_name, field_type) =
                     self.lookup_struct_field_index(inner.type_id, &field_access.field);
                 TirExpr::new(
@@ -3682,6 +3690,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match self.ann_desugars(for_of.id) {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
+            Some(DesugarKind::ForOfNever) => {
+                let (iterable, _) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+                let iterable = self.reify_expr(iterable, ctx, None);
+                self.skip_for_of_body(for_of.id);
+                vec![TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)]
+            }
             Some(DesugarKind::ForOfIterator) | None => {
                 let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return vec![TirStmt::new(
@@ -3695,7 +3709,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 self.reify_iterator_for_of(for_of, ctx, info)
             }
-            _ => unreachable!("for_of carries one of the three ForOf* desugar tags"),
+            _ => unreachable!("for_of carries one of the ForOf* desugar tags"),
         }
     }
 
@@ -3859,12 +3873,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
-        let (actual_iterable, is_enumerate) = match &for_of.iterable {
-            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            other => (other, false),
-        };
+        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let tuple_type_id = iterable.type_id;
         // Look through a `&`/`&mut` wrapper: `for v of &tuple` binds each
@@ -4055,12 +4064,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
-        let (actual_iterable, is_enumerate) = match &for_of.iterable {
-            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            other => (other, false),
-        };
+        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -5403,7 +5407,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self::hoist_block(literal, base_binding)
     }
 
-    /// Bind each collected impure sub-piece to a `let $caN = …;` in `prelude`
+    /// Bind each collected impure sub-piece to a `let $ca_N = …;` in `prelude`
     /// once and register its `AstId` → `Local` override, so every recurrence
     /// in the reified read / write becomes that `Local` read.
     fn bind_compound_hoists(
@@ -5412,24 +5416,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prelude: &mut Vec<TirStmt>,
         ctx: &mut FunctionContext,
     ) {
-        for (counter, hoist) in hoists.iter().enumerate() {
+        for hoist in hoists {
             let value = self.reify_expr(hoist.piece, ctx, None);
-            let span = value.span;
-            let type_id = value.type_id;
-            let name = format!("$ca{counter}");
-            let index = ctx.add_local(name.clone(), type_id, false, None);
-            prelude.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: name.clone(),
-                    local_index: index,
-                    is_mut: false,
-                    type_id,
-                    value,
-                    storage: LetStorage::Planned,
-                },
-                span,
-            ));
-            let local = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
+            let name = minted_name("ca", ctx.fresh_serial());
+            let local = bind_to_local(ctx, name, value, prelude);
             self.compound_overrides.insert(hoist.piece.id(), local);
         }
     }
@@ -5510,8 +5500,115 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// `target = value`. A place's operands evaluate before the value.
+    fn reify_write(
+        &mut self,
+        target: &ast::Expr,
+        value: &ast::Expr,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let place = self.reify_write_place(target, span, ctx);
+        let value = self.reify_expr(value, ctx, place.value_type());
+        place.write(value, span)
+    }
+
+    /// The place `target` names. An `IndexAssign` target replays the
+    /// dispatch `resolve_write_place` recorded on the subscript.
+    fn reify_write_place(
+        &mut self,
+        target: &ast::Expr,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> WritePlace {
+        if let ast::Expr::Index(index_expr) = target
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+        {
+            let receiver = self.reify_expr(&index_expr.expr, ctx, None);
+            let receiver = adjust_receiver_for_self_kind(
+                receiver,
+                dispatch.self_kind,
+                false,
+                span,
+                &self.tysys.type_table,
+            );
+            let index = self.reify_expr(&index_expr.index, ctx, None);
+            return WritePlace::IndexAssign {
+                receiver,
+                index: Box::new(index),
+                dispatch: Box::new(dispatch),
+            };
+        }
+        WritePlace::Place(self.reify_expr(target, ctx, None))
+    }
+
+    /// `[t0, t1, …] = value` as `{ let [$da_0, $da_1, …] = value; t0 = $da_0;
+    /// t1 = $da_1; … }`: the whole value first, then each target in turn.
+    /// The target places reify before the value, in the order annotate
+    /// resolved them, so both walks allocate the same frame.
+    fn reify_destructuring_assign(
+        &mut self,
+        assign: &ast::AssignExpr,
+        targets: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let span = assign.span;
+        let places: Vec<WritePlace> = targets
+            .iter()
+            .map(|target| self.reify_write_place(target, span, ctx))
+            .collect();
+        let value = self.reify_expr(&assign.value, ctx, None);
+        let element_types = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_tuple(value.type_id)
+            .expect("annotate checked the value is a tuple of one element per target");
+        assert_eq!(element_types.len(), targets.len());
+        let ctx = &mut ctx.enter_scope();
+        let bindings: Vec<(String, u32, TypeId)> = element_types
+            .into_iter()
+            .map(|type_id| {
+                let name = minted_name("da", ctx.fresh_serial());
+                let index = ctx.add_local(name.clone(), type_id, false, None);
+                (name, index, type_id)
+            })
+            .collect();
+        let pattern = TirPattern::Tuple(
+            bindings
+                .iter()
+                .map(|(name, local_index, type_id)| TirPattern::Binding {
+                    name: name.clone(),
+                    local_index: *local_index,
+                    type_id: *type_id,
+                })
+                .collect(),
+            false,
+        );
+        let mut stmts = vec![TirStmt::new(
+            TirStmtKind::LetDestructure { pattern, value },
+            span,
+        )];
+        for (place, (name, index, type_id)) in places.into_iter().zip(bindings) {
+            let element = self.handed_on(TirExpr::new(
+                TirExprKind::Local { index, name },
+                type_id,
+                span,
+            ));
+            stmts.push(TirStmt::new(
+                TirStmtKind::Expr(place.write(element, span)),
+                span,
+            ));
+        }
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        )
+    }
+
     /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
-    /// target sub-expression once: impure value operands bind to `let $caN`
+    /// target sub-expression once: impure value operands bind to `let $ca_N`
     /// while the place skeleton stays inline. Residual: a nested index's
     /// receiver (`m.index(i)` in `m[i][j] += 1`) is still duplicated, so a
     /// side-effecting custom `Index::index` runs twice.
@@ -5535,7 +5632,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = compound.span;
 
         // A nested compound assign keeps its own overrides; the scope keeps
-        // `$caN` names out of the enclosing map.
+        // `$ca_N` names out of the enclosing map.
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
         util::replaced(
@@ -5566,31 +5663,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
         // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let recv = self.reify_expr(&index_expr.expr, ctx, None);
-            let idx = self.reify_expr(&index_expr.index, ctx, None);
+            let index = self.reify_expr(&index_expr.index, ctx, None);
 
-            let read = self.build_index_trait_read(&recv, &idx, index_expr, span);
+            let read = self.build_index_trait_read(&recv, &index, index_expr, span);
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
-            let write_recv = adjust_receiver_for_self_kind(
+            let receiver = adjust_receiver_for_self_kind(
                 recv,
-                assign_dispatch.self_kind,
+                dispatch.self_kind,
                 false,
                 span,
                 &self.tysys.type_table,
             );
-            let write = build_tir_method_call(
-                write_recv,
-                assign_dispatch.function_ref,
-                vec![],
-                vec![CallArg::new(idx, false), CallArg::new(combined, false)],
-                assign_dispatch.return_type,
-                span,
-            );
-            return self.wrap_prelude(prelude, write, span);
+            let place = WritePlace::IndexAssign {
+                receiver,
+                index: Box::new(index),
+                dispatch: Box::new(dispatch),
+            };
+            return self.wrap_prelude(prelude, place.write(combined, span), span);
         }
 
         // General l-values (local, global, field-access, tuple index, deref):
@@ -5599,31 +5693,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let place = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(place.type_id));
         let combined = self.build_compound_combined(place.clone(), rhs, op, compound);
-
-        let write = if let TirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &place.kind
-        {
-            TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    module_source: module_source.clone(),
-                    name: name.clone(),
-                    value: Box::new(combined),
-                },
-                TypeTable::UNIT,
-                span,
-            )
-        } else {
-            TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(place),
-                    value: Box::new(combined),
-                },
-                TypeTable::UNIT,
-                span,
-            )
-        };
+        let write = WritePlace::Place(place).write(combined, span);
         self.wrap_prelude(prelude, write, span)
     }
 
@@ -5895,7 +5965,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a comparison chain `a < b < c …` into
-    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
+    /// `let $m_0 = a; let $m_1 = b; ($m_0 < $m_1) & ($m_1 < c) …`.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -5911,8 +5981,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cmp0 = &chain.comparisons[0];
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
-        let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
-        let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
+        let first_ref = Self::bind_chain_operand(first_tir, &mut stmts, ctx);
+        let right0_ref = Self::bind_chain_operand(right0_tir, &mut stmts, ctx);
 
         let mut acc_tir = self.reify_binary_op(
             cmp0.id,
@@ -5931,7 +6001,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right_tir = if idx == last_idx {
                 raw_right
             } else {
-                Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
+                Self::bind_chain_operand(raw_right, &mut stmts, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.reify_binary_op(
@@ -5962,36 +6032,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// `let $mK = value;` pushed onto `stmts`, answered by a read of `$mK`.
+    /// `let $m_K = value;` pushed onto `stmts`, answered by a read of `$m_K`.
     fn bind_chain_operand(
-        idx: usize,
         value: TirExpr,
         stmts: &mut Vec<TirStmt>,
-        span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let type_id = value.type_id;
-        let name = format!("$m{idx}");
-        let local_index = ctx.add_local(name.clone(), type_id, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index,
-                is_mut: false,
-                type_id,
-                value,
-                storage: LetStorage::Planned,
-            },
-            span,
-        ));
-        TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name,
-            },
-            type_id,
-            span,
-        )
+        let name = minted_name("m", ctx.fresh_serial());
+        bind_to_local(ctx, name, value, stmts)
     }
 
     /// Reify an `expr[idx]` index expression into one of three shapes: a tuple
@@ -6006,6 +6054,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         let receiver = self.reify_expr(&index.expr, ctx, None);
+        if self.tysys.type_table.borrow().is_never(receiver.type_id) {
+            // The key never runs, yet resolve walked it, so its probes and
+            // slots are reified here, after the receiver that diverges.
+            let (type_id, span) = (receiver.type_id, receiver.span);
+            let key = self.reify_expr(&index.index, ctx, None);
+            let stmts = vec![
+                TirStmt::new(TirStmtKind::Expr(receiver), span),
+                TirStmt::new(TirStmtKind::Expr(key), span),
+            ];
+            return TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                type_id,
+                span,
+            );
+        }
 
         // Tuple constant-index path: detect via the receiver's
         // resolved type + the index being a constant integer
@@ -10480,7 +10543,7 @@ fn names_captured_by_defaults(
 #[derive(Default)]
 struct SpelledNames(IndexSet<String>);
 
-impl AstVisitor for SpelledNames {
+impl AstVisitor<'_> for SpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Ident(ident) = expr {
             self.0.insert(ident.name.clone());
@@ -10493,7 +10556,7 @@ impl AstVisitor for SpelledNames {
 #[derive(Default)]
 struct ClosureSpelledNames(SpelledNames);
 
-impl AstVisitor for ClosureSpelledNames {
+impl AstVisitor<'_> for ClosureSpelledNames {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Closure(_) = expr {
             self.0.visit_expr(expr);

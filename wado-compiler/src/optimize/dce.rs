@@ -15,7 +15,6 @@ use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
 use crate::compiler_item::CompilerItem;
-use crate::component_model::operation_key;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::copies_array_elements;
@@ -39,11 +38,16 @@ use crate::tir::{ResolvedType, StructDef, TypeId, projection_arguments};
 use crate::type_table::TypeTable;
 use crate::{hashmap, nir};
 
-/// Call graph: function ID -> set of called function IDs
-type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
+/// What a call reaches: a function in `project.functions`, by position, or a
+/// name none of them carries, such as a host builtin's.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Target {
+    Stored(usize),
+    Extern(Box<FunctionId>),
+}
 
-/// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
-type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
+/// Every target a walk of the call graph reached, in the order it reached them.
+type Reached = IndexSet<Target>;
 
 /// A pending `$Closure_N` `inspect` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
@@ -62,8 +66,8 @@ struct PendingInspectEdge {
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: IndexSet<FunctionId>,
-    /// Effect calls: (`interface_name`, `op_name`)
-    effect_calls: IndexSet<(String, String)>,
+    /// The CM functions this calls, by `CmFunctionInfo::cm_identifier`
+    effect_calls: IndexSet<String>,
     /// Pending `$Closure_N^Inspect::inspect` edges, added to the graph by
     /// `apply_inspect_edges` once the inspectable-signature set is known.
     pending_inspects: Vec<PendingInspectEdge>,
@@ -169,7 +173,9 @@ pub(super) fn analyze_dce(
     let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, &mut graph);
+    let reachable = compute_function_reachability(project, &mut graph);
+    resolve_imports(project, &graph, &reachable);
+    analysis.functions = stored_positions(&reachable).collect();
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
     populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
@@ -177,7 +183,7 @@ pub(super) fn analyze_dce(
 
 /// Callers relevant to interprocedural facts, including cached rewrite targets.
 pub(super) fn reachable_function_positions(
-    project: &mut NirPackage,
+    project: &NirPackage,
     cache: &mut DescriptorCache,
     walks: &mut ReachabilityCache,
     exec: &Executor,
@@ -188,12 +194,9 @@ pub(super) fn reachable_function_positions(
     let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
     let mut reachable = compute_function_reachability(project, &mut graph);
-    let roots = cached
-        .into_iter()
-        .map(|id| function_id_for(&project.functions[id.index()].borrow()));
-    let callees = compute_reachable(&graph.call_graph, roots);
-    reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
-    reachable
+    let roots = cached.into_iter().map(|id| Target::Stored(id.index()));
+    reachable.extend(compute_reachable(&graph, roots));
+    stored_positions(&reachable).collect()
 }
 
 /// `NirPackage::callee_descriptors_from` held across the whole of optimization,
@@ -263,14 +266,11 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
 /// per-functor `$Closure_N^Inspect` edges once the inspectable-signature set
 /// is known.
-fn compute_function_reachability(
-    project: &mut NirPackage,
-    graph: &mut AnalysisGraph,
-) -> IndexSet<usize> {
+fn compute_function_reachability(project: &NirPackage, graph: &mut AnalysisGraph) -> Reached {
     // Phase 2a: compute the provisional reachable set from the raw graph
     // (without per-functor `$Closure_N^Inspect` edges). This is what
     // determines whether a `:?` / `:#?` call site is actually live.
-    let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
+    let reachable_v1 = compute_reachable_from_entries(project, graph);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the reachable
     // functions only, then add the gated inspect edges to the call graph. The
@@ -278,38 +278,24 @@ fn compute_function_reachability(
     // just write per-literal strings), so the inspectable set is stable under
     // this expansion — no fixpoint iteration is needed.
     let inspectable = inspectable_signatures(graph, &reachable_v1);
-    apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
+    apply_inspect_edges(graph, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
-    let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
+    let mut reachable = compute_reachable_from_entries(project, graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // A pass may *synthesize* calls during the optimization loop. Their targets
     // must survive the DCE that runs before it, or the rewrite cannot fire.
     extend_reachable_for_optimizer_passes(project, graph, &mut reachable);
-
-    // Phase 4: resolve imports and WASI features using reachable set.
-    resolve_imports(project, &reachable, &graph.effect_usage);
-
-    // Phase 5: project the reachable `FunctionId`s back to positions in
-    // `project.functions`. This avoids reallocating `FunctionId`s per
-    // function inside `remove_unreachable_functions` (the previous
-    // implementation cloned 3-4 strings per function during retain).
-    compute_reachable_positions(&reachable, &graph.func_positions)
+    reachable
 }
 
-/// Map the reachable-`FunctionId` set back to positions in `project.functions`.
-///
-/// `build_analysis_graph` asserts `function_id_for` is injective over
-/// `project.functions`, so this projection is exhaustive.
-fn compute_reachable_positions(
-    reachable: &IndexSet<FunctionId>,
-    func_positions: &FuncPositions,
-) -> IndexSet<usize> {
-    reachable
-        .iter()
-        .filter_map(|id| func_positions.get(id).copied())
-        .collect()
+/// The positions in `project.functions` among `reachable`, in its order.
+fn stored_positions(reachable: &Reached) -> impl Iterator<Item = usize> + '_ {
+    reachable.iter().filter_map(|target| match target {
+        Target::Stored(pos) => Some(*pos),
+        Target::Extern(_) => None,
+    })
 }
 
 /// Add functions the NIR optimizer's rewrites reach without a call edge:
@@ -317,19 +303,16 @@ fn compute_reachable_positions(
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     graph: &AnalysisGraph,
-    reachable: &mut IndexSet<FunctionId>,
+    reachable: &mut Reached,
 ) {
-    let call_graph = &graph.call_graph;
-
     // `push_str` is generic over `AsStrSlice`, so the item marks one id per
     // monomorph; any of them reaching the fusion keeps the primitives alive.
-    let mut append_ids: Vec<FunctionId> = Vec::new();
-    let mut fused: Vec<FunctionId> = Vec::new();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        match func.compiler_item {
+    let mut append_ids: Vec<Target> = Vec::new();
+    let mut fused: Vec<Target> = Vec::new();
+    for (pos, func_rc) in project.functions.iter().enumerate() {
+        match func_rc.borrow().compiler_item {
             Some(CompilerItem::StringPushStr | CompilerItem::StringPushChar) => {
-                append_ids.push(function_id_for(&func));
+                append_ids.push(Target::Stored(pos));
             }
             Some(
                 CompilerItem::StringLen
@@ -337,7 +320,7 @@ fn extend_reachable_for_optimizer_passes(
                 | CompilerItem::StringSetByteUnchecked
                 | CompilerItem::StringWriteStrAt,
             ) => {
-                fused.push(function_id_for(&func));
+                fused.push(Target::Stored(pos));
             }
             _ => {}
         }
@@ -352,7 +335,7 @@ fn extend_reachable_for_optimizer_passes(
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {
-        reachable.extend(compute_reachable(call_graph, fused));
+        reachable.extend(compute_reachable(graph, fused));
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
@@ -366,12 +349,12 @@ fn extend_reachable_for_optimizer_passes(
     // would find no function for the helper its clone loop calls. Only a
     // reachable body seeds anything, so each is scanned once, when reached.
     let type_table = project.type_table.borrow();
-    let ids = &graph.func_positions;
-    let mut scanned = vec![false; ids.len()];
+    let functions = graph.analyses.len();
+    let mut scanned = vec![false; functions];
     loop {
-        let mut fresh: Vec<FunctionId> = Vec::new();
-        for (index, (id, _)) in ids.iter().enumerate() {
-            if scanned[index] || !reachable.contains(id) {
+        let mut fresh: Vec<Target> = Vec::new();
+        for index in 0..functions {
+            if scanned[index] || !reachable.contains(&Target::Stored(index)) {
                 continue;
             }
             scanned[index] = true;
@@ -386,11 +369,10 @@ fn extend_reachable_for_optimizer_passes(
                     continue;
                 }
                 if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
-                    let (helper_id, _) = ids
-                        .get_index(helper.index())
-                        .expect("a helper is in the store");
-                    if !reachable.contains(helper_id) {
-                        fresh.push(helper_id.clone());
+                    assert!(helper.index() < functions, "a helper is in the store");
+                    let helper = Target::Stored(helper.index());
+                    if !reachable.contains(&helper) {
+                        fresh.push(helper);
                     }
                 }
             }
@@ -398,7 +380,7 @@ fn extend_reachable_for_optimizer_passes(
         if fresh.is_empty() {
             break;
         }
-        reachable.extend(compute_reachable(call_graph, fresh));
+        reachable.extend(compute_reachable(graph, fresh));
     }
 }
 
@@ -407,48 +389,36 @@ fn extend_reachable_for_optimizer_passes(
 /// Entry points are:
 /// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
 /// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
-fn compute_reachable_from_entries(
-    project: &NirPackage,
-    call_graph: &CallGraph,
-) -> IndexSet<FunctionId> {
-    let roots = project.functions.iter().filter_map(|func_rc| {
-        let func = func_rc.borrow();
-        let is_root = func.is_cm_export
-            || (func.is_export
-                && project
-                    .wasm_module_sources
-                    .contains_key(&func.module_source));
-        is_root.then(|| FunctionId::free(&func.module_source, &func.name))
-    });
-    compute_reachable(call_graph, roots)
+fn compute_reachable_from_entries(project: &NirPackage, graph: &AnalysisGraph) -> Reached {
+    let roots = project
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(pos, func_rc)| {
+            let func = func_rc.borrow();
+            let is_root = func.is_cm_export
+                || (func.is_export
+                    && project
+                        .wasm_module_sources
+                        .contains_key(&func.module_source));
+            is_root.then_some(Target::Stored(pos))
+        });
+    compute_reachable(graph, roots)
 }
 
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
 /// from the set of reachable functions and their effect usage.
-fn resolve_imports(
-    project: &mut NirPackage,
-    reachable: &IndexSet<FunctionId>,
-    effect_usage: &EffectUsageMap,
-) {
-    // Collect used WASI functions from reachable functions
-    let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for func_id in reachable {
-        if let Some(effects) = effect_usage.get(func_id) {
-            for (interface_name, op_name) in effects {
-                used_wasi_functions.insert(operation_key(interface_name, op_name));
-            }
-        }
-    }
+fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &Reached) {
+    let mut used_wasi_functions: IndexSet<String> = stored_positions(reachable)
+        .flat_map(|pos| graph.analyses[pos].effect_calls.iter().cloned())
+        .collect();
 
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.
-    let reached_intrinsics: Vec<String> = project
-        .functions
-        .iter()
-        .map(|func| func.borrow())
-        .filter(|func| reachable.contains(&function_id_for(func)))
-        .filter_map(|func| {
-            FunctionRef::from_resolved(&func, func.module_source.clone())
+    let reached_intrinsics: Vec<String> = stored_positions(reachable)
+        .filter_map(|pos| {
+            project.functions[pos]
+                .borrow()
                 .intrinsic()
                 .map(str::to_string)
         })
@@ -460,7 +430,8 @@ fn resolve_imports(
     } else {
         let writes = |stream: AmbientStream| {
             project.provides_ambient_stdio_sink(stream)
-                || used_wasi_functions.contains(stream.write_operation().as_decl_str())
+                || used_wasi_functions
+                    .contains(&stream.write_operation(&project.cm_interface_registry))
         };
         let decided = AmbientStdio {
             stdout: writes(AmbientStream::Stdout),
@@ -471,7 +442,7 @@ fn resolve_imports(
     };
     for stream in AmbientStream::ALL {
         if ambient.writes(stream) && reaches_intrinsic(stream.write_builtin()) {
-            used_wasi_functions.insert(stream.write_operation().into_string());
+            used_wasi_functions.insert(stream.write_operation(&project.cm_interface_registry));
         }
     }
 
@@ -494,8 +465,8 @@ fn resolve_imports(
     };
 
     // Map reachable builtin function calls to imports via registry lookup
-    for func_id in reachable {
-        if let FunctionId::Free(f) = func_id
+    for target in reachable {
+        if let FunctionId::Free(f) = graph.function_id(target)
             && f.module_source.is_builtin()
         {
             add_import(&mut imports, &f.module_source, &f.name);
@@ -593,39 +564,47 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
         .retain(|functor| !functor.call_method.borrow().is_dead);
 }
 
-/// Per-caller pending inspect edges, keyed by the caller's `FunctionId`.
-/// Each entry collects every `$Closure_N` observed in that caller's body
-/// alongside its `(arity, return_type)` signature. After the
-/// inspectable-signature set is computed, `apply_inspect_edges` walks this
-/// map and adds the matching `inspect` edges to the call graph.
-type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
-
 /// `FunctionId` → position in `project.functions`. `function_id_for` is
-/// required to be injective over `project.functions`; `build_analysis_graph`
+/// required to be injective over `project.functions`; `assemble_analysis_graph`
 /// asserts this so a regression in the synthesis layer (e.g. duplicate
 /// emission of a per-signature dispatch stub) trips immediately instead of
 /// silently dropping a function during DCE retain.
 type FuncPositions = IndexMap<FunctionId, usize>;
 
-/// Result of the single call-graph build. The call graph is the raw
-/// reachability graph *without* `$Closure_N^Inspect` edges; those
-/// edges are gated by the inspectable-signature set and added after the
-/// fact by `apply_inspect_edges`.
-///
-/// `func_pos` maps each NIR-function `FunctionId` back to its position in
-/// `project.functions` so that `remove_unreachable_functions` can keep
-/// surviving functions by index instead of rebuilding `FunctionId`s and
-/// hashing them again.
+/// Result of the single call-graph build: each function's callees are its
+/// analysis's, plus the `$Closure_N^Inspect` edges `apply_inspect_edges` adds
+/// once the inspectable-signature set gates them.
 struct AnalysisGraph<'a> {
-    call_graph: CallGraph,
-    effect_usage: EffectUsageMap,
-    pending_inspects: PendingInspectsByCaller,
+    /// The inspect edges a caller's own callees lack, by caller position.
+    inspect_edges: IndexMap<usize, IndexSet<FunctionId>>,
     func_positions: FuncPositions,
     /// Each function's facts, indexed by position in `project.functions`:
     /// [`compute_global_reachability`] and [`populate_type_reachability`]
     /// aggregate the reachable ones.
     analyses: Cow<'a, [FunctionAnalysis]>,
     functors: FunctorMethods,
+}
+
+impl AnalysisGraph<'_> {
+    fn function_id<'s>(&'s self, target: &'s Target) -> &'s FunctionId {
+        match target {
+            Target::Stored(pos) => {
+                self.func_positions
+                    .get_index(*pos)
+                    .expect("a stored target")
+                    .0
+            }
+            Target::Extern(id) => id,
+        }
+    }
+
+    /// What the function at `pos` calls: its own callees, then its inspect edges.
+    fn callees(&self, pos: usize) -> impl Iterator<Item = &FunctionId> {
+        self.analyses[pos]
+            .callees
+            .iter()
+            .chain(self.inspect_edges.get(&pos).into_iter().flatten())
+    }
 }
 
 /// Build the call graph **and** per-function used-globals / used-types
@@ -707,21 +686,12 @@ fn assemble_analysis_graph<'a>(
     analyses: Cow<'a, [FunctionAnalysis]>,
     functors: FunctorMethods,
 ) -> AnalysisGraph<'a> {
-    let n = project.functions.len();
-    // `call_graph` and `func_positions` get exactly one entry per function,
-    // so size them up front to avoid the incremental rehashing that an
-    // empty map would do as the whole program is walked.
-    let mut call_graph: CallGraph =
-        IndexMap::with_capacity_and_hasher(n, rustc_hash::FxBuildHasher);
-    let mut effect_usage: EffectUsageMap = IndexMap::default();
-    let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
+    assert_eq!(analyses.len(), project.functions.len());
     let mut func_positions: FuncPositions =
-        IndexMap::with_capacity_and_hasher(n, rustc_hash::FxBuildHasher);
-
-    for ((pos, func_rc), analysis) in project.functions.iter().enumerate().zip(analyses.iter()) {
+        IndexMap::with_capacity_and_hasher(analyses.len(), rustc_hash::FxBuildHasher);
+    for (pos, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
-
         if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
             let prior = project.functions[prior].borrow();
             panic!(
@@ -732,40 +702,26 @@ fn assemble_analysis_graph<'a>(
                 prior.name, func.name,
             );
         }
-        call_graph.insert(func_id.clone(), analysis.callees.clone());
-        if !analysis.effect_calls.is_empty() {
-            effect_usage.insert(func_id.clone(), analysis.effect_calls.clone());
-        }
-        if !analysis.pending_inspects.is_empty() {
-            pending_inspects.insert(func_id, analysis.pending_inspects.clone());
-        }
     }
-
     AnalysisGraph {
-        call_graph,
-        effect_usage,
-        pending_inspects,
+        inspect_edges: IndexMap::default(),
         func_positions,
         analyses,
         functors,
     }
 }
 
-/// Augment `call_graph` with the gated `$Closure_N^Inspect::inspect`
-/// edges. Inserts exactly one edge per (caller, struct, trait) match against
-/// the inspectable-signature set computed in Phase 1b.
-fn apply_inspect_edges(
-    call_graph: &mut CallGraph,
-    pending: &PendingInspectsByCaller,
-    sigs: &InspectableSignatures,
-) {
-    for (caller, edges) in pending {
-        let Some(callees) = call_graph.get_mut(caller) else {
-            continue;
-        };
-        for edge in edges {
-            if sigs.contains(&edge.key) {
-                callees.insert(edge.inspect.clone());
+/// Add the gated `$Closure_N^Inspect::inspect` edges: one per (caller, struct,
+/// trait) match against the inspectable-signature set computed in Phase 2b.
+fn apply_inspect_edges(graph: &mut AnalysisGraph, sigs: &InspectableSignatures) {
+    for (pos, analysis) in graph.analyses.iter().enumerate() {
+        for edge in &analysis.pending_inspects {
+            if sigs.contains(&edge.key) && !analysis.callees.contains(&edge.inspect) {
+                graph
+                    .inspect_edges
+                    .entry(pos)
+                    .or_default()
+                    .insert(edge.inspect.clone());
             }
         }
     }
@@ -780,14 +736,9 @@ type InspectableSignatures = IndexSet<(usize, TypeId)>;
 /// only. Restricting it to live code keeps a dead `:?`/`:#?` call from forcing
 /// per-functor inspect impls to stay alive for an unrelated reachable closure of
 /// the same signature.
-fn inspectable_signatures(
-    graph: &AnalysisGraph,
-    reachable: &IndexSet<FunctionId>,
-) -> InspectableSignatures {
-    reachable
-        .iter()
-        .filter_map(|id| graph.func_positions.get(id))
-        .flat_map(|&pos| graph.analyses[pos].inspect_signatures.iter().copied())
+fn inspectable_signatures(graph: &AnalysisGraph, reachable: &Reached) -> InspectableSignatures {
+    stored_positions(reachable)
+        .flat_map(|pos| graph.analyses[pos].inspect_signatures.iter().copied())
         .collect()
 }
 
@@ -821,14 +772,10 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
     }
 }
 
-/// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
-/// **all** per-function facts the DCE driver needs (callees, effect calls,
-/// pending inspect edges, used globals, used types) in one traversal of a
-/// function body. Replaces three hand-rolled walkers (`analyze_block`,
-/// `collect_global_reads_block`, `collect_types_from_block`) that all
-/// rediscovered the same NIR shape independently — new `StmtKind` /
-/// `ExprKind` variants now only need to be considered in the visitor
-/// trait, not in three places.
+/// Single-walk DCE fact collector: collects **all** per-function facts the DCE
+/// driver needs (callees, effect calls, pending inspect edges, used globals,
+/// used types) in one [`Body::for_each_reachable_node`] traversal of a function
+/// body.
 struct DceWalker<'a> {
     type_table: &'a TypeTable,
     current_module: &'a ModuleSource,
@@ -912,7 +859,7 @@ impl<'a> DceWalker<'a> {
             }
         }
         if let Some(body) = func.body.as_ref() {
-            self.walk_node(body, NodeRef::Block(body.root()));
+            self.walk_body(body);
         }
     }
 
@@ -926,55 +873,33 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_call(&mut self, func: &nir::FunctionRef) {
-        let original_callee_module = func.module_source.clone();
-        let func_name = func.name.clone();
-
-        if let Some(call_info) = func.method_info.as_ref() {
+        let callee_id = if let Some(call_info) = func.method_info.as_ref() {
             // Static method call (e.g. `Box::get`, `String^Display::fmt`):
-            // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
-            let callee_id = if func.is_monomorphized() {
+            // `func.name` is `"Struct::method"` or `"Struct^Trait::method"`.
+            if func.is_monomorphized() {
                 FunctionId::Free(FreeFunctionName::new(
                     func.module_source.clone(),
-                    func_name.clone(),
+                    func.name.clone(),
                 ))
             } else {
                 // `full_method_name`, not `method_name`: `function_id_for` keys
                 // on the type arguments too, so a call keyed without them names
                 // no definition and DCE drops a live method.
                 FunctionId::Method(MethodName::new(
-                    original_callee_module,
+                    func.module_source.clone(),
                     call_info.fq_struct_name(),
                     call_info.trait_name.clone(),
                     call_info.full_method_name(),
                 ))
-            };
-            self.analysis.callees.insert(callee_id);
-
-            // Resource method call on a WASI module — record as an effect.
-            let module_path = func.module_path();
-            if module_path.len() >= 2
-                && module_path[0] == "wasi"
-                && let Some((resource_name, method_name)) = func_name.split_once("::")
-            {
-                self.analysis
-                    .effect_calls
-                    .insert((resource_name.to_string(), method_name.to_string()));
             }
         } else {
             // Free function call. `method_info` is the discriminator — a name
             // is not one: a synthesized helper embeds a type mangle, which
             // carries `::` for an associated-type projection
             // (`$value_copy$S::MapSerializer`).
-            let callee_module = original_callee_module.clone();
-            let callee_id = FunctionId::free(&callee_module, &func_name);
-            self.analysis.callees.insert(callee_id);
-
-            if let Some(interface_name) = original_callee_module.interface_name() {
-                self.analysis
-                    .effect_calls
-                    .insert((interface_name, func_name));
-            }
-        }
+            FunctionId::free(&func.module_source, &func.name)
+        };
+        self.analysis.callees.insert(callee_id);
     }
 
     fn record_method_call(&mut self, receiver_type: TypeId, func: &nir::FunctionRef) {
@@ -1185,13 +1110,6 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::Resource { def } => {
-                let name = self.type_table.def_name(def).to_string();
-                // Resource instance method (e.g. `fields.has()`):
-                // recorded as an effect so it lands in
-                // `used_wasi_functions`.
-                self.analysis.effect_calls.insert((name, method_name));
-            }
             ResolvedType::Variant { def } => {
                 let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
@@ -1234,20 +1152,12 @@ impl<'a> DceWalker<'a> {
     }
 
     fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
-        // Only a WASI import is tracked here; a canonical built-in has no
+        // Only a CM import is tracked here; a canonical built-in has no
         // interface to attribute it to.
-        let CmCallTarget::WasiAlias(local_name) = target else {
+        let CmCallTarget::Import(function) = target else {
             return;
         };
-        // Parse the alias (e.g., "wasi:cli/Stdout::write_via_stream")
-        // to extract the interface_name and op_name for WASI import tracking.
-        if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
-            // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-            let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-            (effect.to_string(), op.to_string())
-        }) {
-            self.analysis.effect_calls.insert((interface_name, op_name));
-        }
+        self.analysis.effect_calls.insert(function.clone());
     }
 
     fn record_closure_to_canonical(
@@ -1314,9 +1224,13 @@ impl DceWalker<'_> {
         }
     }
 
-    /// Record the per-node facts, then recurse into every id-bearing child
-    /// (including patterns, matching the former `NirRefVisitor` full walk).
-    fn walk_node(&mut self, body: &Body, node: NodeRef) {
+    /// The extraction sources are walked too: they produce a promoted operand's
+    /// code, and a type or callee only they name must survive.
+    fn walk_body(&mut self, body: &Body) {
+        body.for_each_reachable_node(|node| self.record_node(body, node));
+    }
+
+    fn record_node(&mut self, body: &Body, node: NodeRef) {
         match node {
             NodeRef::Stmt(s) => {
                 // The `Let` binding's declared type is not visible from its
@@ -1399,11 +1313,6 @@ impl DceWalker<'_> {
             },
             NodeRef::Block(_) => {}
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.walk_node(body, c);
-        }
     }
 }
 
@@ -1435,31 +1344,48 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     }
 }
 
-/// Worklist BFS over `call_graph` from all of `entries` at once. A separate
-/// walk per root would re-visit whatever the roots share.
-fn compute_reachable(
-    call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
-    entries: impl IntoIterator<Item = FunctionId>,
-) -> IndexSet<FunctionId> {
-    let mut reachable = IndexSet::default();
-    let mut worklist: Vec<FunctionId> = entries.into_iter().collect();
-
-    while let Some(func) = worklist.pop() {
-        if reachable.contains(&func) {
+/// Worklist walk over `graph` from all of `roots` at once. A separate walk per
+/// root would re-visit whatever the roots share.
+fn compute_reachable(graph: &AnalysisGraph, roots: impl IntoIterator<Item = Target>) -> Reached {
+    /// A target on the worklist, borrowing an extern's name from the graph or
+    /// the roots rather than copying it per edge.
+    enum Pending<'g> {
+        Stored(usize),
+        Extern(&'g FunctionId),
+    }
+    let roots: Vec<Target> = roots.into_iter().collect();
+    let mut reachable = Reached::default();
+    let mut externs: IndexSet<&FunctionId> = IndexSet::default();
+    let mut worklist: Vec<Pending> = roots
+        .iter()
+        .map(|root| match root {
+            Target::Stored(pos) => Pending::Stored(*pos),
+            Target::Extern(id) => Pending::Extern(id),
+        })
+        .collect();
+    while let Some(pending) = worklist.pop() {
+        let pos = match pending {
+            Pending::Extern(id) => {
+                if externs.insert(id) {
+                    reachable.insert(Target::Extern(Box::new(id.clone())));
+                }
+                continue;
+            }
+            Pending::Stored(pos) => pos,
+        };
+        if !reachable.insert(Target::Stored(pos)) {
             continue;
         }
-        reachable.insert(func.clone());
-
-        // Add all callees to worklist
-        if let Some(callees) = call_graph.get(&func) {
-            for callee in callees {
-                if !reachable.contains(callee) {
-                    worklist.push(callee.clone());
+        for callee in graph.callees(pos) {
+            match graph.func_positions.get(callee) {
+                Some(&callee) if !reachable.contains(&Target::Stored(callee)) => {
+                    worklist.push(Pending::Stored(callee));
                 }
+                None if !externs.contains(callee) => worklist.push(Pending::Extern(callee)),
+                _ => {}
             }
         }
     }
-
     reachable
 }
 
@@ -1654,8 +1580,7 @@ fn populate_type_reachability(
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker =
                 DceWalker::new(&type_table, &global.module_source, descriptors, functors);
-            let init_body = global.init.slot_expr().body();
-            walker.walk_node(init_body, NodeRef::Block(init_body.root()));
+            walker.walk_body(global.init.slot_expr().body());
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }
@@ -1907,21 +1832,13 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 /// Every statement id reachable from the body root. The arena keeps the nodes an
 /// in-place rewrite displaced, and one nothing refers to never runs.
 fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
-    struct Collect(Vec<StmtId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Stmt(s) = node {
-                self.0.push(s);
-            }
-            self.walk_node(body, node);
+    let mut out = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(s) = node {
+            out.push(s);
         }
-    }
-    if body.blocks.is_empty() {
-        return Vec::new();
-    }
-    let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
-    collect.0
+    });
+    out
 }
 
 /// Locals some reachable node mentions, skeleton and value pool alike. A
@@ -2212,6 +2129,25 @@ impl GlobalGuards<'_> {
     }
 }
 
+/// The callees `GlobalGuards::inert_body` asks the inert set about: each root
+/// statement whose value is a call.
+fn root_callees(body: &Body) -> Vec<FuncId> {
+    body.blocks[body.root()]
+        .stmts
+        .iter()
+        .filter_map(|s| match body.stmts[*s].kind {
+            StmtKind::Expr(value)
+            | StmtKind::Let { value, .. }
+            | StmtKind::Return { value: Some(value) } => value.as_expr(),
+            _ => None,
+        })
+        .filter_map(|e| match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => Some(*func_id),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
 /// after globalization can take every reader with them, leaving a global that
 /// holds its whole initializer in the binary for no observer. The
@@ -2224,44 +2160,71 @@ pub(super) fn unhoist_unobserved_globals(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     summaries: &FnSummaries,
+    exec: &Executor,
 ) -> bool {
     let descriptors = cache.descriptors(project);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
+    let functions = &project.functions;
     let mut guards = GlobalGuards {
         descriptors,
         types: &types,
         inert_functions: IndexSet::default(),
     };
-    loop {
-        let before = guards.inert_functions.len();
-        for (i, func) in project.functions.iter().enumerate() {
-            let func = func.borrow();
-            let calls = summaries.of_body(i);
-            if let (Some(id), Some(body)) = (func.id, &func.body)
-                && !guards.inert_functions.contains(&id)
-                && guards.inert_body(body, calls)
-            {
-                guards.inert_functions.insert(id);
-            }
-        }
-        if guards.inert_functions.len() == before {
-            break;
+    // `inert_body` only gains answers as the set grows, so adding a round's
+    // findings together reaches the same fixed point as adding them one by one.
+    // A body's answer waits only on what its root statements call, so a round
+    // asks again just the callers of what the last one found.
+    let waits_on = exec.map_indices(functions.len(), |i| {
+        functions[i]
+            .borrow()
+            .body
+            .as_ref()
+            .map(root_callees)
+            .unwrap_or_default()
+    });
+    let mut waiters: IndexMap<FuncId, Vec<usize>> = IndexMap::default();
+    for (i, callees) in waits_on.into_iter().enumerate() {
+        for callee in callees {
+            waiters.entry(callee).or_default().push(i);
         }
     }
-    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
-    let mut observed: IndexSet<(String, String)> = IndexSet::default();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
+    let mut asked: Vec<usize> = (0..functions.len()).collect();
+    loop {
+        let fresh = exec.filter_map(&asked, |&i| {
+            let func = functions[i].borrow();
+            let (Some(id), Some(body)) = (func.id, &func.body) else {
+                return None;
+            };
+            (!guards.inert_functions.contains(&id) && guards.inert_body(body, summaries.of_body(i)))
+                .then_some(id)
+        });
+        if fresh.is_empty() {
+            break;
+        }
+        asked = fresh
+            .iter()
+            .filter_map(|id| waiters.get(id))
+            .flatten()
+            .copied()
+            .collect();
+        asked.sort_unstable();
+        asked.dedup();
+        guards.inert_functions.extend(fresh);
+    }
+    let census = exec.map_indices(functions.len(), |i| {
+        let func = functions[i].borrow();
         let calls = summaries.of_body(i);
+        let mut guarded: Vec<(String, String)> = Vec::new();
+        let mut observed: Vec<(String, String)> = Vec::new();
         let Some(body) = func.body.as_ref() else {
-            continue;
+            return (guarded, observed);
         };
         let mentioned = mentioned_locals(body);
         let mut unobserving: IndexSet<ExprId> = IndexSet::default();
         for stmt in reachable_stmt_ids(body) {
             if let Some((read, key, _)) = guards.find(body, stmt, calls) {
-                guarded.insert(key);
+                guarded.push(key);
                 unobserving.insert(read);
             }
             if let Some(value) = guards.dead_binding(body, stmt, &mentioned, calls) {
@@ -2275,16 +2238,23 @@ pub(super) fn unhoist_unobserved_globals(
             } = &body.exprs[e].kind
                 && !unobserving.contains(&e)
             {
-                observed.insert(global_key(module_source, name));
+                observed.push(global_key(module_source, name));
             }
         }
+        (guarded, observed)
+    });
+    let mut guarded: IndexSet<(String, String)> = IndexSet::default();
+    let mut observed: IndexSet<(String, String)> = IndexSet::default();
+    for (g, o) in census {
+        guarded.extend(g);
+        observed.extend(o);
     }
     let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
     if unobserved.is_empty() {
         return false;
     }
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
+    exec.for_each_index(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         if let Some(body) = func.body.as_mut() {
             let mentioned = mentioned_locals(body);
@@ -2297,7 +2267,7 @@ pub(super) fn unhoist_unobserved_globals(
                  read of it survived"
             );
         }
-    }
+    });
     true
 }
 
@@ -2321,21 +2291,13 @@ fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
 /// them, which is where inlining leaves a guard — or a read it counted as
 /// non-observing outlives the store it was counted against.
 fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
-    struct Collect(Vec<BlockId>);
-    impl NirRefVisitor for Collect {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Block(b) = node {
-                self.0.push(b);
-            }
-            self.walk_node(body, node);
+    let mut out = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
         }
-    }
-    if body.blocks.is_empty() {
-        return Vec::new();
-    }
-    let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
-    collect.0
+    });
+    out
 }
 
 fn drop_unobserved_stmts(
@@ -2379,40 +2341,47 @@ fn global_key(module_source: &ModuleSource, name: &str) -> (String, String) {
 /// follows drops the global, the record and the handler's methods.
 ///
 /// Answers whether any body changed, as [`unhoist_unobserved_globals`] does.
-pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &FnSummaries) -> bool {
-    let mut readers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
-    let mut writers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
-    for (i, func) in project.functions.iter().enumerate() {
+pub(super) fn drop_self_feeding_globals(
+    project: &mut NirPackage,
+    summaries: &FnSummaries,
+    exec: &Executor,
+) -> bool {
+    let functions = &project.functions;
+    let accesses = exec.map(functions, |func| {
         let func = func.borrow();
         let Some(body) = func.body.as_ref() else {
-            continue;
+            return Vec::new();
         };
-        for node in reachable_nodes(body) {
-            let NodeRef::Expr(e) = node else {
-                continue;
+        reachable_nodes(body)
+            .into_iter()
+            .filter_map(|node| {
+                let NodeRef::Expr(e) = node else {
+                    return None;
+                };
+                match &body.exprs[e].kind {
+                    ExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    } => Some((global_key(module_source, name), Access::Read)),
+                    ExprKind::GlobalVarSet {
+                        module_source,
+                        name,
+                        ..
+                    } => Some((global_key(module_source, name), Access::Write)),
+                    _ => None,
+                }
+            })
+            .collect()
+    });
+    let mut readers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    let mut writers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    for (i, found) in accesses.into_iter().enumerate() {
+        for (key, access) in found {
+            let by = match access {
+                Access::Read => &mut readers,
+                Access::Write => &mut writers,
             };
-            match &body.exprs[e].kind {
-                ExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } => {
-                    readers
-                        .entry(global_key(module_source, name))
-                        .or_default()
-                        .insert(i);
-                }
-                ExprKind::GlobalVarSet {
-                    module_source,
-                    name,
-                    ..
-                } => {
-                    writers
-                        .entry(global_key(module_source, name))
-                        .or_default()
-                        .insert(i);
-                }
-                _ => {}
-            }
+            by.entry(key).or_default().insert(i);
         }
     }
     let mut candidates: IndexSet<(String, String)> = readers
@@ -2506,6 +2475,11 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
         );
     }
     true
+}
+
+enum Access {
+    Read,
+    Write,
 }
 
 /// The locals every reachable `let` of which binds a value the pass may delete
@@ -2686,14 +2660,16 @@ pub(super) fn remove_unreachable_globals(
     used_globals: &IndexSet<(String, String)>,
     summaries: &FnSummaries,
     initializers: Initializers,
+    exec: &Executor,
 ) {
     project
         .globals
         .retain(|global| used_globals.contains(&global_key(&global.module_source, &global.name)));
 
-    let type_table = project.type_table.borrow();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
+    let type_table = &*project.type_table.borrow();
+    let functions = &project.functions;
+    exec.for_each_index(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
         let calls = summaries.of_body(i);
         let is_module_init = func.name == MODULE_INIT_FUNCTION;
         if let Some(body) = func.body.as_mut() {
@@ -2701,9 +2677,9 @@ pub(super) fn remove_unreachable_globals(
                 drop_dead_initializers(body, used_globals);
             }
             let root = body.root();
-            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
+            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, type_table, calls);
         }
-    }
+    });
 }
 
 /// What becomes of a dead global's initializer.
@@ -2832,39 +2808,53 @@ mod tests {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
     }
 
+    /// The graph where the function at position `i` is named `names[i]` and
+    /// calls `calls[i]`.
+    fn graph(names: &[FunctionId], calls: &[&[FunctionId]]) -> AnalysisGraph<'static> {
+        AnalysisGraph {
+            inspect_edges: IndexMap::default(),
+            func_positions: names.iter().cloned().zip(0..).collect(),
+            analyses: Cow::Owned(
+                calls
+                    .iter()
+                    .map(|callees| FunctionAnalysis {
+                        callees: callees.iter().cloned().collect(),
+                        ..FunctionAnalysis::default()
+                    })
+                    .collect(),
+            ),
+            functors: FunctorMethods::default(),
+        }
+    }
+
     #[test]
     fn test_empty_reachable_set() {
         let mut interner = ModuleSourceInterner::new();
-        let call_graph = IndexMap::default();
-        let entry = free_fn(&mut interner, "run");
-        let reachable = compute_reachable(&call_graph, [entry]);
-        assert!(reachable.contains(&free_fn(&mut interner, "run")));
-        assert_eq!(reachable.len(), 1);
+        let run = free_fn(&mut interner, "run");
+        let reachable = compute_reachable(&graph(&[run], &[&[]]), [Target::Stored(0)]);
+        assert_eq!(reachable, Reached::from_iter([Target::Stored(0)]));
     }
 
     #[test]
     fn test_transitive_reachability() {
         let mut interner = ModuleSourceInterner::new();
-        let mut call_graph = IndexMap::default();
-        call_graph.insert(
-            free_fn(&mut interner, "run"),
-            IndexSet::from_iter([free_fn(&mut interner, "foo")]),
+        let [run, foo, bar, unused, host] =
+            ["run", "foo", "bar", "unused", "host"].map(|name| free_fn(&mut interner, name));
+        let graph = graph(
+            &[run, foo.clone(), bar.clone(), unused],
+            &[&[foo], &[bar.clone(), host.clone()], &[], &[bar]],
         );
-        call_graph.insert(
-            free_fn(&mut interner, "foo"),
-            IndexSet::from_iter([free_fn(&mut interner, "bar")]),
+        let reachable = compute_reachable(&graph, [Target::Stored(0)]);
+        // In the order the walk reached them, which orders what DCE keeps.
+        assert_eq!(
+            reachable.into_iter().collect::<Vec<_>>(),
+            [
+                Target::Stored(0),
+                Target::Stored(1),
+                Target::Extern(Box::new(host)),
+                Target::Stored(2),
+            ]
         );
-        call_graph.insert(free_fn(&mut interner, "bar"), IndexSet::default());
-        call_graph.insert(
-            free_fn(&mut interner, "unused"),
-            IndexSet::from_iter([free_fn(&mut interner, "bar")]),
-        );
-
-        let reachable = compute_reachable(&call_graph, [free_fn(&mut interner, "run")]);
-        assert!(reachable.contains(&free_fn(&mut interner, "run")));
-        assert!(reachable.contains(&free_fn(&mut interner, "foo")));
-        assert!(reachable.contains(&free_fn(&mut interner, "bar")));
-        assert!(!reachable.contains(&free_fn(&mut interner, "unused")));
     }
 
     /// A statement whose value is a promoted read of `local_index`, plus the

@@ -10,6 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
@@ -20,14 +21,15 @@ use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclName, DeclPath, FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name,
-    retired_name,
+    FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
+    to_cm_name,
 };
 use crate::nir::{
     ClosureFunctor, FuncCell, FuncId, FuncRef, FunctionRef, NirEnum, NirFlags, NirFunction,
     NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
+use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
 use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
@@ -59,9 +61,14 @@ impl AmbientStream {
         }
     }
 
-    /// The operation that writes the stream: `Stdout::write_via_stream`.
-    pub fn write_operation(self) -> DeclPath {
-        DeclPath::method_of(&DeclName::new(self.interface_name()), "write_via_stream")
+    /// The key in `registry` of the function that writes the stream:
+    /// `wasi:cli/stdout@…#write-via-stream`.
+    pub fn write_operation(self, registry: &CmInterfaceRegistry) -> String {
+        let version = registry
+            .get_cli_version()
+            .expect("the stdlib binds `wasi:cli`");
+        let interface = format!("wasi:cli/{}@{version}", to_cm_name(self.interface_name()));
+        cm_function_path(&interface, "write-via-stream")
     }
 
     /// `core:builtin`'s `ambient_std{out,err}_available`.
@@ -189,7 +196,7 @@ pub struct NirPackage {
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: std::sync::Arc<WorldRegistry>,
 
-    /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
+    /// The CM functions called, by `CmFunctionInfo::cm_identifier`.
     pub used_wasi_functions: IndexSet<String>,
     /// Set by the first DCE; read it through [`Self::ambient_stdio`].
     pub ambient_stdio: Option<AmbientStdio>,
@@ -660,7 +667,11 @@ impl NirPackage {
     /// already holds is that function, reached by another route: its callers
     /// call the holder, and it is retired. Returns the store positions of the
     /// functions whose bodies changed.
-    pub fn rename_reshaped(&mut self, ids: impl IntoIterator<Item = FuncId>) -> Vec<usize> {
+    pub fn rename_reshaped(
+        &mut self,
+        ids: impl IntoIterator<Item = FuncId>,
+        exec: &Executor,
+    ) -> Vec<usize> {
         use cranelift_entity::EntityRef;
         let renames = ids
             .into_iter()
@@ -682,14 +693,14 @@ impl NirPackage {
                 func.name
             );
         }
-        let mut touched = Vec::new();
-        for (i, func_rc) in self.functions.iter().enumerate() {
-            if let Some(body) = func_rc.borrow_mut().body.as_mut()
-                && retarget_calls(body, &merged)
-            {
-                touched.push(i);
-            }
-        }
+        let functions = &self.functions;
+        let touched = exec.indices_where(functions.len(), |i| {
+            functions[i]
+                .borrow_mut()
+                .body
+                .as_mut()
+                .is_some_and(|body| retarget_calls(body, &merged))
+        });
         for global in &mut self.globals {
             retarget_calls(global.init.slot_expr_mut().body_mut(), &merged);
         }

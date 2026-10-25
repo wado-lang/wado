@@ -507,12 +507,6 @@ impl Inspect for StrSlice {
     }
 }
 
-impl Inspect for ! {
-    pub fn inspect(&self, f: &mut Formatter) {
-        unreachable();
-    }
-}
-
 impl<affine T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
         f.write_str("&");

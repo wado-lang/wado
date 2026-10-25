@@ -15,8 +15,10 @@ use crate::primitive::PrimitiveType;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
-use heck::{ToKebabCase, ToSnakeCase};
+use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
+use sha2::{Digest, Sha256};
 use std::fmt;
+use std::fmt::Write as _;
 use std::hash::Hash;
 
 /// The one character every name the compiler mints starts with, whether local,
@@ -406,8 +408,20 @@ pub fn is_type_bridge(name: &str) -> bool {
         .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
-/// Prefix of a template shape's mangled name; the rest is the shape's hash.
-pub const TEMPLATE_SHAPE_PREFIX: &str = "$tmpl$";
+/// A minted name's digest part: the first 8 bytes of `digest`, in hex.
+fn short_digest(digest: &[u8]) -> String {
+    digest[..8]
+        .iter()
+        .fold(String::with_capacity(16), |mut hex, byte| {
+            write!(hex, "{byte:02x}").expect("a String accepts every write");
+            hex
+        })
+}
+
+/// The mangled name of the template shape whose hash is `digest`.
+pub fn template_shape_name(digest: &[u8; 32]) -> String {
+    format!("$tmpl${}", short_digest(digest))
+}
 
 /// Field name of the discriminant slot on a variant's base struct (the tag
 /// every case subtype inherits). Single source of truth for the WIR variant
@@ -454,14 +468,71 @@ pub fn cm_callback_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_callback__{name}")
 }
 
-/// The binding of the import `method` of `interface`.
-pub fn cm_binding_func_name(interface: &str, method: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_binding__{interface}_{method}")
+/// An interface's basename: the last label of its interface name, without the
+/// version, in `PascalCase` (`a:x/trip@0.1.0` is `Trip`).
+pub fn interface_basename(interface: &ast::CmImport) -> String {
+    interface.interface.to_upper_camel_case()
 }
 
-/// The lift of the import `method` of `interface`, which `AsyncCall<T>` points to.
-pub fn cm_lift_func_name(interface: &str, method: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_lift__{interface}_{method}")
+/// The name a component's interface is declared under where its basename is
+/// not its own: its interface name, which no Wado identifier can spell.
+pub fn unnamed_interface_name(interface: &ast::CmImport) -> String {
+    format!("{INTERNAL_PREFIX}{}", interface.interface_path())
+}
+
+// A name a dependency component exports is its own: two dependencies may each
+// export a world function, or an interface, of one name. The program imports
+// each under a name tagged with its component, and composition wires that name
+// to the component's export. The names are CM names, so they carry no `$`.
+
+/// The tag of the dependency whose canonical namespace is `component`: a
+/// digest, so it depends on no order the dependencies are met in.
+fn cm_dependency_tag(component: &str) -> String {
+    format!(
+        "dependency{}",
+        short_digest(&Sha256::digest(component.as_bytes()))
+    )
+}
+
+/// The label the program imports the world function `function` of the
+/// dependency `component` under.
+pub fn cm_world_import_label(component: &str, function: &str) -> String {
+    format!("{}-{function}", cm_dependency_tag(component))
+}
+
+/// The interface the program imports the interface `interface` the dependency
+/// `component` exports as.
+pub fn cm_dependency_interface(interface: &ast::CmImport, component: &str) -> ast::CmImport {
+    ast::CmImport {
+        package: format!("{}-{}", interface.package, cm_dependency_tag(component)),
+        ..interface.clone()
+    }
+}
+
+// A CM import's names are minted from its CM identifier
+// (`wasi:cli/stdout@0.3.0#write-via-stream`, or a world function's label),
+// which is what identifies it: a Wado spelling such as `Stdout::write_via_stream`
+// is shared by same-named interfaces.
+
+/// The core function a CM import lowers to.
+pub fn cm_import_alias(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}{cm_identifier}")
+}
+
+/// The binding of a CM import, which its call sites call.
+pub fn cm_binding_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_binding__{cm_identifier}")
+}
+
+/// The lift of an async CM import, which `AsyncCall<T>` points to.
+pub fn cm_lift_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
+}
+
+/// The function packaging a handler's result of an async CM import as the
+/// `AsyncCall<T>` its call site reads.
+pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_wrap_async__{cm_identifier}")
 }
 
 /// The helper writing a future of the payload type mangled as `payload`.
@@ -2265,13 +2336,6 @@ impl DeclPath {
         Self(format!("{receiver}::{method}"))
     }
 
-    /// A path already spelled in the declaration namespace — a WIT-derived
-    /// `interface::function` key, or one read back out of the registry.
-    #[must_use]
-    pub(crate) fn from_declared(path: impl Into<String>) -> Self {
-        Self(path.into())
-    }
-
     #[must_use]
     pub fn as_decl_str(&self) -> &str {
         &self.0
@@ -2619,10 +2683,6 @@ pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
 /// - `dispatch_field_name("read")` → `"op_read"`
 pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
-}
-
-pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_wrap_async__{interface_name}_{method_name}")
 }
 
 /// Convert a `test "name"` string into the snake-case segment of the internal

@@ -143,7 +143,7 @@ impl FirstMatch for IncludePathFinder {
     }
 }
 
-impl AstVisitor for IncludePathFinder {
+impl AstVisitor<'_> for IncludePathFinder {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if self.result.is_some() {
             return;

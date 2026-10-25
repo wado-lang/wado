@@ -2,7 +2,7 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
+    AssertStmt, AssignExpr, AssignTarget, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
     AssociatedTypeDecl, AstId, AstIdSpace, AstVisitor, AttrArg, AttrEntry, AttrItem, AttrObject,
     AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
@@ -19,8 +19,9 @@ use crate::ast::{
     StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
     TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface,
+    WorldImport,
 };
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -1927,34 +1928,13 @@ impl Parser {
 
         loop {
             let name_span = self.peek().span;
-            let name = self.consume_ident()?;
-
-            // Check if this is an effect with functions: `Effect::{...}`
-            if self.check(&TokenKind::ColonColon) {
-                self.advance(); // consume `::`
-                self.expect(&TokenKind::LBrace)?;
-
-                // Parse function list inside Effect::{...}
-                let functions = self.parse_use_item_simple_list()?;
-                let close = self.expect(&TokenKind::RBrace)?.span;
-
-                items.push(UseItem::InterfaceFunctions {
-                    id: self.alloc_ast_id(),
-                    interface_name: name,
-                    name_span,
-                    span: name_span.merge(&close),
-                    functions,
-                });
+            let item = if matches!(self.peek_kind(), TokenKind::StringLit(_)) {
+                self.parse_use_interface_name(name_span)?
             } else {
-                let (alias, local_span) = self.parse_use_alias(name_span)?;
-                items.push(UseItem::Simple {
-                    id: self.alloc_ast_id(),
-                    name,
-                    name_span,
-                    alias,
-                    local_span,
-                });
-            }
+                let name = self.consume_ident()?;
+                self.parse_use_item_after_ident(name, name_span)?
+            };
+            items.push(item);
 
             if !self.check(&TokenKind::Comma) {
                 break;
@@ -1966,6 +1946,69 @@ impl Parser {
         }
 
         Ok(items)
+    }
+
+    /// `"ns:pkg/iface@ver" as Name`: an interface imported by its full name.
+    fn parse_use_interface_name(&mut self, name_span: Span) -> ParseResult<UseItem> {
+        let name = self.consume_string()?.value;
+        let interface =
+            CmImport::parse(&name).filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
+        let Some(interface) = interface else {
+            return Err(ParseError {
+                message: format!(
+                    "a string-named import names an interface, as `\"ns:pkg/iface\"`; found `\"{name}\"`"
+                ),
+                span: name_span,
+            });
+        };
+        let (alias, local_span) = self.parse_use_alias(name_span)?;
+        let Some(alias) = alias else {
+            return Err(ParseError {
+                message: format!(
+                    "a string-named import takes `as`, as `\"{name}\" as Name`, since a string binds no name"
+                ),
+                span: name_span,
+            });
+        };
+        Ok(UseItem::Simple {
+            id: self.alloc_ast_id(),
+            name,
+            spelling: UseNameSpelling::InterfaceName(interface),
+            name_span,
+            alias: Some(alias),
+            local_span,
+        })
+    }
+
+    /// The rest of a `use` item that starts with an identifier: `Effect::{...}`,
+    /// or `name` with an optional `as alias`.
+    fn parse_use_item_after_ident(
+        &mut self,
+        name: String,
+        name_span: Span,
+    ) -> ParseResult<UseItem> {
+        if self.check(&TokenKind::ColonColon) {
+            self.advance(); // consume `::`
+            self.expect(&TokenKind::LBrace)?;
+            let functions = self.parse_use_item_simple_list()?;
+            let close = self.expect(&TokenKind::RBrace)?.span;
+            return Ok(UseItem::InterfaceFunctions {
+                id: self.alloc_ast_id(),
+                interface_name: name,
+                name_span,
+                span: name_span.merge(&close),
+                functions,
+            });
+        }
+        let (alias, local_span) = self.parse_use_alias(name_span)?;
+        Ok(UseItem::Simple {
+            id: self.alloc_ast_id(),
+            name,
+            spelling: UseNameSpelling::Ident,
+            name_span,
+            alias,
+            local_span,
+        })
     }
 
     /// An optional `as alias`, with the span of the name the import binds.
@@ -3815,6 +3858,33 @@ impl Parser {
     /// Parse assignment expression: `target = value` or `target op= value`
     /// Assignment has lowest precedence and is right-associative
     /// Compound assignments (+=, -=, *=, /=, %=) are desugared to `target = target op value`
+    /// The left side of `=`: a tuple literal is a destructuring assignment's
+    /// flat list of places, so it takes no rest and names at least one.
+    fn assign_target(&mut self, target: Expr) -> AssignTarget {
+        let Expr::TupleLiteral(tuple) = target else {
+            return AssignTarget::Place(target);
+        };
+        if tuple.elements.is_empty() {
+            self.errors.push(self.error_at_span(
+                tuple.span,
+                "a destructuring assignment names at least one target",
+            ));
+        }
+        for place in &tuple.elements {
+            if let Expr::Spread(_, span) = place {
+                self.errors.push(self.error_at_span(
+                    *span,
+                    "a destructuring assignment takes no rest; name each target",
+                ));
+            }
+        }
+        let TupleLiteralExpr { elements, span, .. } = *tuple;
+        AssignTarget::Destructuring {
+            places: elements,
+            span,
+        }
+    }
+
     fn parse_assignment_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         let expr = self.parse_range_expr()?;
@@ -3826,7 +3896,7 @@ impl Parser {
             let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
             return Ok(Expr::Assign(Box::new(AssignExpr {
                 id: self.alloc_ast_id(),
-                target: expr,
+                target: self.assign_target(expr),
                 value,
                 span: start_span,
             })));
@@ -5452,7 +5522,6 @@ impl Parser {
 
     /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
-        let pos_before = self.pos;
         let args = self.parse_comma_separated_recovering(
             &TokenKind::RParen,
             Self::parse_expr,
@@ -5462,7 +5531,6 @@ impl Parser {
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
             && self.previous().kind == TokenKind::Comma;
-        let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
 
@@ -7485,7 +7553,7 @@ impl EscapingJump {
     }
 }
 
-impl AstVisitor for EscapingJump {
+impl AstVisitor<'_> for EscapingJump {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if self.found.is_some() {
             return;
@@ -8613,7 +8681,7 @@ mod tests {
         found: Vec<(String, usize, usize)>,
     }
 
-    impl AstVisitor for IdentPositions<'_> {
+    impl AstVisitor<'_> for IdentPositions<'_> {
         fn visit_expr(&mut self, expr: &Expr) {
             if let Expr::Ident(ident) = expr {
                 let span = ident.span;

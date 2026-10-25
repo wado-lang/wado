@@ -54,9 +54,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//array_bounds_elim_version_shifted_wir.wado/run" = fn();  // TypeId(18)
 
@@ -132,7 +132,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(53)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
-type "functype//array_bounds_elim_version_shifted_wir.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(55)
+type "functype//array_bounds_elim_version_shifted_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(55)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(56)
 
@@ -142,8 +142,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -176,7 +176,7 @@ fn "array_bounds_elim_version_shifted_wir.wado/run"() with Stdout {
     let bb: i32;
     let n_152: i32;
     let c: i32;
-    let $ca0: i32;
+    let $ca_1: i32;
     let $contract_arg_0_162: i32;
     let value_171: f32;
     let $cm_pair_7: i64;
@@ -199,9 +199,9 @@ fn "array_bounds_elim_version_shifted_wir.wado/run"() with Stdout {
         b3: block {
             l4: loop {
                 break_if b3 c >= n_152;
-                $ca0 = ob + c;
-                value_171 = builtin::array_get_value<f32>(repr_41, $ca0) + (3_f32 * $contract_arg_0_162 = bb + c; builtin::array_get_value<f32>(repr_44, $contract_arg_0_162));
-                builtin::array_set<f32>(repr_41, $ca0, value_171);
+                $ca_1 = ob + c;
+                value_171 = builtin::array_get_value<f32>(repr_41, $ca_1) + (3_f32 * $contract_arg_0_162 = bb + c; builtin::array_get_value<f32>(repr_44, $contract_arg_0_162));
+                builtin::array_set<f32>(repr_41, $ca_1, value_171);
                 c = c + 1;
                 continue l4;
             };
@@ -210,16 +210,16 @@ fn "array_bounds_elim_version_shifted_wir.wado/run"() with Stdout {
         b5: block {
             l6: loop {
                 break_if b5 c >= n_152;
-                value_171 = if @unlikely(local.tee $ca0(ob + c) >=u 8) {
+                value_171 = if @unlikely(local.tee $ca_1(ob + c) >=u 8) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca0, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_wir.wado:11"), used: 45 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($ca_1, 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_wir.wado:11"), used: 45 });
                     unreachable;
-                }; builtin::array_get_value<f32>(repr_41, $ca0) + (3_f32 * $contract_arg_0_162 = bb + c; if @unlikely(((0 <= $contract_arg_0_162) & ($contract_arg_0_162 < n_42)) == 0) {
+                }; builtin::array_get_value<f32>(repr_41, $ca_1) + (3_f32 * $contract_arg_0_162 = bb + c; if @unlikely(((0 <= $contract_arg_0_162) & ($contract_arg_0_162 < n_42)) == 0) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0_162, n_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_version_shifted_wir.wado:11"), used: 45 });
                     unreachable;
                 }; builtin::array_get_value<f32>(repr_44, $contract_arg_0_162));
-                builtin::array_set<f32>(repr_41, $ca0, value_171);
+                builtin::array_set<f32>(repr_41, $ca_1, value_171);
                 c = c + 1;
                 continue l6;
             };
@@ -231,17 +231,17 @@ fn "array_bounds_elim_version_shifted_wir.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $contract_arg_0_162);
     }
-    $ca0 = $local_2.used;
+    $ca_1 = $local_2.used;
     $local_2.used = $contract_arg_0_162;
-    builtin::array_copy<u8>($local_2.repr, $ca0, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, $ca_1, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_235 = $local_2;
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<f32>(repr_41, 1), $sroa_$f_buf_235);
-    if @unlikely(local.tee $ca0($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee $ca_1($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $ca0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $ca_1);
     }
     $contract_arg_0_162 = $local_2.used;
-    $local_2.used = $ca0;
+    $local_2.used = $ca_1;
     builtin::array_copy<u8>($local_2.repr, $contract_arg_0_162, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_235 = $local_2;
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<f32>(repr_41, 2), $sroa_$f_buf_235);
@@ -249,31 +249,31 @@ fn "array_bounds_elim_version_shifted_wir.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $contract_arg_0_162);
     }
-    $ca0 = $local_2.used;
+    $ca_1 = $local_2.used;
     $local_2.used = $contract_arg_0_162;
-    builtin::array_copy<u8>($local_2.repr, $ca0, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, $ca_1, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_235 = $local_2;
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<f32>(repr_41, 6), $sroa_$f_buf_235);
-    if @unlikely(local.tee $ca0($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee $ca_1($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $ca0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $ca_1);
     }
     $contract_arg_0_162 = $local_2.used;
-    $local_2.used = $ca0;
+    $local_2.used = $ca_1;
     builtin::array_copy<u8>($local_2.repr, $contract_arg_0_162, global:array_bounds_elim_version_shifted_wir.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_235 = $local_2;
     "core:prelude/primitive.wado/f32::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<f32>(repr_41, 7), $sroa_$f_buf_235);
     $contract_arg_0_162 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $ca0 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    c = "array_bounds_elim_version_shifted_wir.wado/$cm_binding__Stdout_write_via_stream"(c = $contract_arg_0_162; $contract_arg_0_162 = 0; c);
-    $contract_arg_0_162 = $ca0;
-    $ca0 = 0;
+    $ca_1 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    c = "array_bounds_elim_version_shifted_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c = $contract_arg_0_162; $contract_arg_0_162 = 0; c);
+    $contract_arg_0_162 = $ca_1;
+    $ca_1 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_0_162, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($contract_arg_0_162 = c; c = 0; $contract_arg_0_162);
 }
 
-fn "array_bounds_elim_version_shifted_wir.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "array_bounds_elim_version_shifted_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "array_bounds_elim_version_shifted_wir.wado/$cm_export__run"() {
@@ -656,7 +656,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }

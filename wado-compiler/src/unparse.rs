@@ -3,20 +3,20 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EffectsSource, EnumCase,
-    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
-    FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
-    Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
-    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StrLit, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport, written_params,
+    AssertStmt, AssignExpr, AssignTarget, AssociatedConst, AssociatedTypeBinding,
+    AssociatedTypeDecl, AstId, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr,
+    BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, EffectsSource, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
+    FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl,
+    RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -788,8 +788,19 @@ impl<'a> Unparser<'a> {
 
     fn unparse_use_item(&mut self, item: &UseItem) {
         match item {
-            UseItem::Simple { name, alias, .. } => {
-                self.output.push_str(name);
+            UseItem::Simple {
+                name,
+                spelling,
+                alias,
+                ..
+            } => {
+                match spelling {
+                    UseNameSpelling::Ident => self.output.push_str(name),
+                    UseNameSpelling::InterfaceName(_) => {
+                        self.output
+                            .push_str(&StrLit::new(name.as_str()).as_written());
+                    }
+                }
                 if let Some(alias) = alias {
                     self.output.push_str(" as ");
                     self.output.push_str(alias);
@@ -1865,7 +1876,7 @@ impl<'a> Unparser<'a> {
             }
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
-            Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
+            Expr::TupleLiteral(t) => self.unparse_bracketed(&t.elements, t.span),
             Expr::TupleComprehension(c) => self.unparse_tuple_comprehension(c),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
             Expr::TryOp(qm) => {
@@ -1950,9 +1961,9 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" }]");
     }
 
-    fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
-        let elements = &tuple_lit.elements;
-        let has_comment = self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end);
+    /// `[e0, e1, …]`, a tuple literal or a destructuring assignment's places.
+    fn unparse_bracketed(&mut self, elements: &[Expr], span: Span) {
+        let has_comment = self.has_comment_in_range(span.start, span.end);
         // An empty array still has an interior a comment can sit in, and `[]`
         // has no room for one.
         if elements.is_empty() && !has_comment {
@@ -1979,7 +1990,7 @@ impl<'a> Unparser<'a> {
         if has_comment || has_container || call_elems > 0 {
             self.emit_entries_per_line(
                 ["[", "]"],
-                tuple_lit.span,
+                span,
                 elements,
                 |e| (e.span(), Trailing::Of(e.id())),
                 Unparser::unparse_expr,
@@ -2172,7 +2183,10 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_assign(&mut self, a: &AssignExpr) {
-        self.unparse_expr(&a.target);
+        match &a.target {
+            AssignTarget::Place(target) => self.unparse_expr(target),
+            AssignTarget::Destructuring { places, span } => self.unparse_bracketed(places, *span),
+        }
         self.output.push_str(" = ");
         self.unparse_expr(&a.value);
     }
@@ -3343,7 +3357,10 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         Expr::Matches(m) => {
             !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
         }
-        Expr::Assign(a) => closure_body_needs_parens(&a.target),
+        Expr::Assign(a) => match &a.target {
+            AssignTarget::Place(target) => closure_body_needs_parens(target),
+            AssignTarget::Destructuring { .. } => false,
+        },
         Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
         Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
         // A postfix or cast operand carries parens from `binds_tighter_than`,

@@ -1,0 +1,32 @@
+// The late freeze reads only the nodes a body still reaches. At -O1 the casts
+// below leave displaced copies in the arena whose newtype type DCE has pruned,
+// and valuing one crashed the compiler with `TypeId not found in TypeTable`.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder<F> {
+    f: F,
+}
+
+type Hold<F> = Holder<F>;
+
+fn hold<effect E>(f: fn() with E) -> Hold<fn() with E> {
+    return Holder { f } as Hold<fn() with E>;
+}
+
+fn fire<effect E>(h: Hold<fn() with E>) with E {
+    if builtin::black_box(false) {}
+    let inner = h as Holder<fn() with E>;
+    if builtin::black_box(false) {}
+    let f = inner.f;
+    f();
+}
+
+export fn run() with Stdout {
+    fire(hold(|| println("fired")));
+}
+
+__DATA__
+{
+    "stdout": "fired\n"
+}

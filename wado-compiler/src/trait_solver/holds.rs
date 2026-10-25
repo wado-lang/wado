@@ -228,6 +228,9 @@ impl Query<'_> {
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
         }
+        if let Some(holds) = never_holds(program, ty, trait_) {
+            return Some(holds);
+        }
         // A pack's bound holds of each element, so an element in a variadic
         // body answers from the pack's slot. A bound reads a projection the
         // program answers as what it binds: `U: Conv<Self::Item>` in
@@ -525,6 +528,41 @@ pub(super) fn at_self(
 pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
     let (eq, ord) = program.comparisons?;
     row_is(program, ty, eq).then_some(ord)
+}
+
+/// `!` and a newtype over it hold every trait, binding each associated type to
+/// `!`, and no impl is written for either (spec-types.md § Trait Bounds on `!`).
+fn never_holds(program: &Program, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+    if !peels_to_never(program, ty) {
+        return None;
+    }
+    let never = SolverType::Decl(program.never?, Vec::new());
+    let assoc = program.traits[&trait_]
+        .assoc_bounds
+        .keys()
+        .map(|&assoc| {
+            let member = Member {
+                binding: never.clone(),
+                matched: Vec::new(),
+            };
+            (assoc, member)
+        })
+        .collect();
+    Some(Holds {
+        requests: Vec::new(),
+        assoc,
+    })
+}
+
+/// Whether `ty` is `!` or a newtype over it.
+pub(super) fn peels_to_never(program: &Program, ty: &SolverType) -> bool {
+    is_never(program, &peel_newtypes(program, ty))
+}
+
+fn is_never(program: &Program, ty: &SolverType) -> bool {
+    program.never.is_some_and(
+        |never| matches!(ty, SolverType::Decl(id, args) if *id == never && args.is_empty()),
+    )
 }
 
 /// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait

@@ -440,7 +440,7 @@ impl SpanCollector {
     }
 }
 
-impl AstVisitor for SpanCollector {
+impl AstVisitor<'_> for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
         // Attribute keys are not expressions, so no other walk reaches them.
         if let Item::Use(decl) = item

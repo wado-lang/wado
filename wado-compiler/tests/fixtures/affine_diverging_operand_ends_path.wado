@@ -1,0 +1,71 @@
+// A path whose expression evaluates an operand of type `!` never falls through,
+// whatever type the expression itself has, so it keeps what it moved to itself:
+// a call argument, a binary operand, an `if` condition and a `match`
+// scrutinee.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn show(s: String) {}
+
+fn argument(flag: bool) -> i32 {
+    let t = Tok { id: 1 };
+    if flag {
+        eat(t);
+        show(panic("gone"));
+    }
+    return t.id;
+}
+
+fn binary_operand(flag: bool) -> i32 {
+    let t = Tok { id: 2 };
+    if flag {
+        eat(t);
+        let n: i32 = 1 + panic("gone");
+    }
+    return t.id;
+}
+
+fn condition(flag: bool) -> i32 {
+    let t = Tok { id: 3 };
+    if flag {
+        eat(t);
+        if panic("gone") {
+        }
+    }
+    return t.id;
+}
+
+fn scrutinee(flag: bool) -> i32 {
+    let t = Tok { id: 4 };
+    if flag {
+        eat(t);
+        match panic("gone") {
+            _ => {}
+        }
+    }
+    return t.id;
+}
+
+export fn run() with Stdout {
+    println(`${argument(false)}`);
+    println(`${binary_operand(false)}`);
+    println(`${condition(false)}`);
+    println(`${scrutinee(false)}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\n"}

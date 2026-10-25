@@ -164,7 +164,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(33)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(34)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
 type "functype//spec_serialization_subcommands.wado/$test_0" = fn();  // TypeId(36)
 
@@ -440,7 +440,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -869,7 +869,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -943,13 +943,13 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
     let b: ref Array<u8>;
     let i_36: i32;
     let v_38: ref "core:args//ArgsError";
-    let $licm_used_71: i32;
+    let $licm_used_65: i32;
     consumed = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(), used: 0 };
     i_2 = 0;
-    $licm_used_71 = argv.used;
+    $licm_used_65 = argv.used;
     b53: block {
         l54: loop {
-            break_if b53 i_2 >= $licm_used_71;
+            break_if b53 i_2 >= $licm_used_65;
             if @unlikely(local.tee used_21(consumed.used) >= builtin::array_len(consumed.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(consumed);
@@ -963,19 +963,19 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
     de = struct.new "core:args//ArgvDeserializer" { tokens: argv, pos: 0, after_dd: 0, cur_is_option: 0, cur_inline: ref.null none, cur_name: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, cur_written: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, consumed: consumed, forced: ref.null none, err: ref.null none, unknown_case: ref.null none };
     let $mv$$vr_15$1: ref null "spec_serialization_subcommands.wado//Cli";
     let $mv$$vr_15$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$licm_used_71, $mv$$vr_15$1, $mv$$vr_15$2] = "core:serde/spec_serialization_subcommands.wado/Cli^core:serde/Deserialize::deserialize<core:args/ArgvDeserializer>$sroa[return]"(de);
-    e_6 = (if $licm_used_71 == 0 -> ref "core:serde//DeserializeError" {
+    multivalue_bind [$licm_used_65, $mv$$vr_15$1, $mv$$vr_15$2] = "core:serde/spec_serialization_subcommands.wado/Cli^core:serde/Deserialize::deserialize<core:args/ArgvDeserializer>$sroa[return]"(de);
+    e_6 = (if $licm_used_65 == 0 -> ref "core:serde//DeserializeError" {
         v_4 = ref.as_non_null($mv$$vr_15$1);
         return 0, v_4, ref.null none;
-    } else if @likely($licm_used_71 == 1) -> ref "core:serde//DeserializeError" {
+    } else if @likely($licm_used_65 == 1) -> ref "core:serde//DeserializeError" {
         ref.as_non_null($mv$$vr_15$2);
     } else {
         unreachable;
     });
     bad = struct.new "core:args//ArgsError" { kind: local.tee bad((if ref.is_null(local.tee $local_11(de.err)) == 0 -> ref "core:args//ArgsError" {
-        let $variant_payload_13: ref "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
-        $licm_used_71 = local.tee $variant_payload_13(ref.as_non_null($local_11)).0;
-        if local.tee raised($variant_payload_13.1).kind == local.tee i_2(e_6.kind) -> ref "core:args//ArgsError" {
+        let $variant_payload_7: ref "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]";
+        $licm_used_65 = local.tee $variant_payload_7(ref.as_non_null($local_11)).0;
+        if local.tee raised($variant_payload_7.1).kind == local.tee i_2(e_6.kind) -> ref "core:args//ArgsError" {
             if $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
                 a = local.tee $load_9(raised.message).repr;
                 used_21 = $load_9.used;
@@ -996,7 +996,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
             } -> ref "core:args//ArgsError" {
-                struct.new "core:args//ArgsError" { kind: $licm_used_71, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                struct.new "core:args//ArgsError" { kind: $licm_used_65, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(raised.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, b, 0, $licm_used_65); a, used: $licm_used_65 } };
             } else if i_2 == 2 -> ref "core:args//ArgsError" {
                 if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
                     local.tee bad(ref.as_non_null($local_12));
@@ -1011,7 +1011,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                         3;
                     } else {
                         4;
-                    }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                    }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
                 }
             } else {
                 return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee v_38("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -1024,7 +1024,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, b, 0, $licm_used_65); a, used: $licm_used_65 } };
             }
         } else if i_2 == 2 -> ref "core:args//ArgsError" {
             if ref.is_null(local.tee $local_12(de.unknown_case)) == 0 -> ref "core:args//ArgsError" {
@@ -1040,7 +1040,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
             }
         } else {
             return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee v_38("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -1053,7 +1053,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                 3;
             } else {
                 4;
-            }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(v_38.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
         }
     } else {
         if local.tee i_2(e_6.kind) == 2 -> ref "core:args//ArgsError" {
@@ -1070,7 +1070,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                     3;
                 } else {
                     4;
-                }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, a, 0, $licm_used_71); b, used: $licm_used_71 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee $licm_used_71($load_9.used))), 0, b, 0, $licm_used_71); a, used: $licm_used_71 } };
+                }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee $licm_used_65($load_9.used))), 0, a, 0, $licm_used_65); b, used: $licm_used_65 } };
             }
         } else {
             return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(struct.new "core:args//ArgsError" { kind: (if i_2 == 1 -> "core:args//enum:ArgsErrorKind" {
@@ -1083,7 +1083,7 @@ fn "core:args/core/args/parse<spec_serialization_subcommands.wado/Cli>$sroa[retu
                 3;
             } else {
                 4;
-            }), message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(e_6.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
+            }), message: e_6.message }, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
         }
     })).kind, message: struct.new "core:prelude/string.wado//String" { repr: a = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee b(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, a, 0, i_2); b, used: i_2 } };
     return 1, ref.null none, struct.new "core:args//ArgsError" { kind: local.tee bad("core:args/core:args/ArgsError::at"(bad, e_6.path)).kind, message: struct.new "core:prelude/string.wado//String" { repr: b = local.tee $load_9(bad.message).repr; builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee i_2($load_9.used))), 0, b, 0, i_2); a, used: i_2 } };
@@ -2365,7 +2365,7 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
     let raised: ref "core:serde//DeserializeError";
     let other_50: ref "core:prelude/string.wado//String";
     let start_60: i32;
-    let $m1_75: i32;
+    let $m_1_75: i32;
     let $licm_tokens_15: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $licm_consumed_16: ref "core:prelude//List<bool>";
     let $licm_used_17: i32;
@@ -2382,8 +2382,8 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
     b137: block {
         l138: loop {
             if (if $hfs_pos_123 < $licm_used_17 -> i32 {
-                $m1_75 = $hfs_pos_123;
-                if @unlikely(((0 <= $m1_75) & ($m1_75 < $licm_used_18)) == 0) {
+                $m_1_75 = $hfs_pos_123;
+                if @unlikely(((0 <= $m_1_75) & ($m_1_75 < $licm_used_18)) == 0) {
                     cold_path;
                     self.pos = $hfs_pos_123;
                     "core:args/core:args/ArgvDeserializer::skip_consumed$cold0$sroa[self.pos]"($hfs_pos_123, $licm_used_18);
@@ -2400,15 +2400,15 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
             continue l138;
         };
     };
-    if (if local.tee $m1_75(self.pos) >= local.tee $hfs_pos_123(local.tee $licm_tokens_15(self.tokens).used) -> i32 {
+    if (if local.tee $m_1_75(self.pos) >= local.tee $hfs_pos_123(local.tee $licm_tokens_15(self.tokens).used) -> i32 {
         1;
     } else {
-        if @unlikely($m1_75 >=u $hfs_pos_123) {
+        if @unlikely($m_1_75 >=u $hfs_pos_123) {
             cold_path;
-            "core:args/core:args/ArgvDeserializer::pull_option_value$cold1$sroa[self.pos]"($m1_75, $hfs_pos_123);
+            "core:args/core:args/ArgvDeserializer::pull_option_value$cold1$sroa[self.pos]"($m_1_75, $hfs_pos_123);
             unreachable;
         }
-        self_15 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m1_75);
+        self_15 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m_1_75);
         $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_1: block -> bool {
             repr_25 = self_15.repr;
             $licm_used_18 = self_15.used;
@@ -2444,14 +2444,14 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
             builtin::array_copy<u8>(self_15.repr, start_60, other_50.repr, 0, $licm_used_18);
         }; raised = struct.new "core:serde//DeserializeError" { kind: 8, message: self_15, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }; self.err = struct.new "tuple//[core:args/ArgsErrorKind, core:serde/DeserializeError]" { 0: 1, 1: struct.new "core:serde//DeserializeError" { kind: 8, message: other_50 = raised.message; $licm_used_18 = self_15.used; struct.new "core:prelude/string.wado//String" { repr: repr_98 = other_50.repr; builtin::array_copy<u8>(local.tee repr_25(builtin::array_new<u8>($licm_used_18)), 0, repr_98, 0, $licm_used_18); repr_25, used: $licm_used_18 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: repr_25 = local.tee other_50(raised.path).repr; builtin::array_copy<u8>(local.tee repr_98(builtin::array_new<u8>(local.tee $licm_used_18(other_50.used))), 0, repr_25, 0, $licm_used_18); repr_98, used: $licm_used_18 } } }; raised;
     }
-    if @unlikely($m1_75 >=u $hfs_pos_123) {
+    if @unlikely($m_1_75 >=u $hfs_pos_123) {
         cold_path;
-        "core:args/core:args/ArgvDeserializer::pull_option_value$cold0$sroa[self.pos]"($m1_75, $hfs_pos_123);
+        "core:args/core:args/ArgvDeserializer::pull_option_value$cold0$sroa[self.pos]"($m_1_75, $hfs_pos_123);
         unreachable;
     }
-    $hfs_pos_123 = local.tee other_50(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m1_75)).used;
+    $hfs_pos_123 = local.tee other_50(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m_1_75)).used;
     other_50 = struct.new "core:prelude/string.wado//String" { repr: repr_98 = other_50.repr; builtin::array_copy<u8>(local.tee repr_25(builtin::array_new<u8>($hfs_pos_123)), 0, repr_98, 0, $hfs_pos_123); repr_25, used: $hfs_pos_123 };
-    self.pos = $m1_75 + 1;
+    self.pos = $m_1_75 + 1;
     return 0, other_50, ref.null none;
 }
 
@@ -2459,7 +2459,7 @@ fn "core:args/core:args/ArgvDeserializer::take_value$sroa[return]"(self) {
     let $load_2: i32;
     let v_1: ref "core:prelude/string.wado//String";
     let $match_10: ref null "core:prelude/string.wado//String";
-    let $m1_26: i32;
+    let $m_1_26: i32;
     let $licm_tokens_15: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $licm_consumed_16: ref "core:prelude//List<bool>";
     let $licm_used_18: i32;
@@ -2488,8 +2488,8 @@ fn "core:args/core:args/ArgvDeserializer::take_value$sroa[return]"(self) {
     b154: block {
         l155: loop {
             if (if $hfs_pos_44 < $load_2 -> i32 {
-                $m1_26 = $hfs_pos_44;
-                if @unlikely(((0 <= $m1_26) & ($m1_26 < $licm_used_18)) == 0) {
+                $m_1_26 = $hfs_pos_44;
+                if @unlikely(((0 <= $m_1_26) & ($m_1_26 < $licm_used_18)) == 0) {
                     cold_path;
                     self.pos = $hfs_pos_44;
                     "core:args/core:args/ArgvDeserializer::skip_consumed$cold0$sroa[self.pos]"($hfs_pos_44, $licm_used_18);
@@ -2506,17 +2506,17 @@ fn "core:args/core:args/ArgvDeserializer::take_value$sroa[return]"(self) {
             continue l155;
         };
     };
-    if local.tee $m1_26(self.pos) >= local.tee $hfs_pos_44(local.tee $licm_tokens_15(self.tokens).used) {
-        return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: builtin::i64_extend_i32_s($m1_26), path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+    if local.tee $m_1_26(self.pos) >= local.tee $hfs_pos_44(local.tee $licm_tokens_15(self.tokens).used) {
+        return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: builtin::i64_extend_i32_s($m_1_26), path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     }
-    if @unlikely($m1_26 >=u $hfs_pos_44) {
+    if @unlikely($m_1_26 >=u $hfs_pos_44) {
         cold_path;
-        "core:args/core:args/ArgvDeserializer::take_value$cold0$sroa[self.pos]"($m1_26, $hfs_pos_44);
+        "core:args/core:args/ArgvDeserializer::take_value$cold0$sroa[self.pos]"($m_1_26, $hfs_pos_44);
         unreachable;
     }
-    $hfs_pos_44 = local.tee v_1(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m1_26)).used;
+    $hfs_pos_44 = local.tee v_1(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_tokens_15.repr, $m_1_26)).used;
     v_1 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = v_1.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($hfs_pos_44)), 0, $array_clone_src_1, 0, $hfs_pos_44); $array_clone_dst_2, used: $hfs_pos_44 };
-    self.pos = $m1_26 + 1;
+    self.pos = $m_1_26 + 1;
     return 0, v_1, ref.null none;
 }
 
@@ -4168,7 +4168,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
     let v_197: ref "core:prelude/string.wado//String";
     let v_198: ref "core:prelude/string.wado//String";
     let $licm_de_204: ref "core:args//ArgvDeserializer";
-    let $m1_207: i32;
+    let $m_1_207: i32;
     let $licm_tokens_231: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $licm_consumed_232: ref "core:prelude//List<bool>";
     let $licm_cur_name_233: ref "core:prelude/string.wado//String";
@@ -4197,8 +4197,8 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
             b412: block {
                 l413: loop {
                     if (if $hfs_pos_239 < $licm_used_235 -> i32 {
-                        $m1_207 = $hfs_pos_239;
-                        if @unlikely(((0 <= $m1_207) & ($m1_207 < $licm_used_237)) == 0) {
+                        $m_1_207 = $hfs_pos_239;
+                        if @unlikely(((0 <= $m_1_207) & ($m_1_207 < $licm_used_237)) == 0) {
                             cold_path;
                             $hfs_pos_240 = $hfs_pos_239;
                             $licm_de_204.pos = $hfs_pos_240;
@@ -4544,7 +4544,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
     let v_197: ref "core:prelude/string.wado//String";
     let v_198: ref "core:prelude/string.wado//String";
     let $licm_de_204: ref "core:args//ArgvDeserializer";
-    let $m1_207: i32;
+    let $m_1_207: i32;
     let $licm_tokens_280: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $licm_consumed_281: ref "core:prelude//List<bool>";
     let $licm_cur_name_282: ref "core:prelude/string.wado//String";
@@ -4573,8 +4573,8 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
             b461: block {
                 l462: loop {
                     if (if $hfs_pos_288 < $licm_used_284 -> i32 {
-                        $m1_207 = $hfs_pos_288;
-                        if @unlikely(((0 <= $m1_207) & ($m1_207 < $licm_used_286)) == 0) {
+                        $m_1_207 = $hfs_pos_288;
+                        if @unlikely(((0 <= $m_1_207) & ($m_1_207 < $licm_used_286)) == 0) {
                             cold_path;
                             $hfs_pos_289 = $hfs_pos_288;
                             $licm_de_204.pos = $hfs_pos_289;

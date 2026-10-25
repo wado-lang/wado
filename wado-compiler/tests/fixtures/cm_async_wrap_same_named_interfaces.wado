@@ -1,0 +1,24 @@
+// Two interfaces named `Fetch` each bind an async CM function `get`. Each
+// handled call repackages its result through its own function's wrapper.
+
+use a from "./sub/cm_async_wrap_same_named_a.wado";
+use b from "./sub/cm_async_wrap_same_named_b.wado";
+
+struct Short {}
+
+impl a::Fetch for Short {
+    fn get(&self, url: String) -> i32 { resume url.len(); }
+}
+
+struct Long {}
+
+impl b::Fetch for Long {
+    fn get(&self, url: String) -> i32 { resume url.len() * 10; }
+}
+
+test {
+    with a::Fetch => &Short {}, b::Fetch => &Long {} do {
+        assert a::get_a("/abc") == 4;
+        assert b::get_b("/abc") == 40;
+    }
+}

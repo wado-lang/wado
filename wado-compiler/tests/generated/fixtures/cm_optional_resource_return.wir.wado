@@ -18,9 +18,9 @@ struct core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(4)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(4)
 
-type "functype//wasi/wasi:demo/Device::adapter" = fn(i32, i32);  // TypeId(5)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#[method]device.adapter" = fn(i32, i32);  // TypeId(5)
 
 type "functype//cm_optional_resource_return.wado/run" = fn();  // TypeId(6)
 
@@ -32,13 +32,13 @@ type "functype//wasi/resource-drop:cm_optional_resource_return.wado#Device" = fn
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
-type "functype//cm_optional_resource_return.wado/$cm_binding__Gfx_get_device" = fn() -> i32;  // TypeId(11)
+type "functype//cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(11)
 
-type "functype//cm_optional_resource_return.wado/$cm_binding__Device_adapter" = fn(i32) -> ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(12)
+type "functype//cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter" = fn(i32) -> ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(12)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
-import fn wasi/wasi:demo/Device::adapter from "wasi/wasi:demo/Device::adapter";
+import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
+import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.adapter from "wasi/$wasi:demo/gfx@0.1.0#[method]device.adapter";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_optional_resource_return.wado#Adapter from "wasi/resource-drop:cm_optional_resource_return.wado#Adapter";
 import fn wasi/resource-drop:cm_optional_resource_return.wado#Device from "wasi/resource-drop:cm_optional_resource_return.wado#Device";
@@ -50,7 +50,7 @@ fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
     let device: i32;
     let $discarded_1: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
     let $drop_v_2: ref null "core:prelude//$Resource";
-    if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__Device_adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"()))).discriminant == 0 {
+    if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()))).discriminant == 0 {
     } else {
         $drop_v_2 = ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0;
         let $cm_handle_2: i32;
@@ -65,15 +65,15 @@ fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
     }
 }
 
-fn "cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return "wasi/wasi:demo/Gfx::get_device"();
+fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
+    return "wasi/$wasi:demo/gfx@0.1.0#get-device"();
 }
 
-fn "cm_optional_resource_return.wado/$cm_binding__Device_adapter"(self) with Device {
+fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(self) with Device {
     let $outptr: i32;
     let $option_result: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:demo/Device::adapter"(self, $outptr);
+    "wasi/$wasi:demo/gfx@0.1.0#[method]device.adapter"(self, $outptr);
     self = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0;
     if self != 0 {

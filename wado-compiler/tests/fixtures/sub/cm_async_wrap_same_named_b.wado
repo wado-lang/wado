@@ -1,0 +1,9 @@
+#[cm("example:b/fetch")]
+pub interface Fetch {
+    #[cm("example:b/fetch#get")]
+    async fn get(url: String) -> AsyncCall<i32>;
+}
+
+pub fn get_b(url: String) -> i32 with Fetch {
+    return Fetch::get(url).wait();
+}

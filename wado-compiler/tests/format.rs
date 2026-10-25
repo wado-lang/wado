@@ -1976,6 +1976,17 @@ fn test_format_use_multiple_items() {
 }
 
 #[test]
+fn test_format_use_keeps_a_string_named_import() {
+    let source = r#"use {"wasi:cli/stdout@0.3.0" as Out,println} from "wasi:cli";"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "use { \"wasi:cli/stdout@0.3.0\" as Out, println } from \"wasi:cli\";\n"
+    );
+    assert_format_preserves_ast(&formatted);
+}
+
+#[test]
 fn test_format_indentation() {
     let source = r"
 fn run() {
@@ -2059,6 +2070,17 @@ fn run() {
         formatted.contains("x += 5;"),
         "compound assignment should be preserved: {formatted}"
     );
+}
+
+#[test]
+fn test_format_keeps_destructuring_assignment() {
+    let source = "fn run() {\n    [a,b]=[b,a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn run() {\n    [a, b] = [b, a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n"
+    );
+    assert_format_preserves_ast(source);
 }
 
 #[test]

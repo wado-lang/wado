@@ -1154,6 +1154,9 @@ pub(crate) enum DesugarKind {
     /// `for let v of expr { body }` → `IntoIterator` / `next()` loop.
     /// Not recorded when the iterable fails the `IntoIterator` check.
     ForOfIterator,
+    /// `for let v of expr { body }` over a `!` iterable → `expr;`. No value
+    /// reaches the loop, so it never starts.
+    ForOfNever,
     /// `for (init; cond; update) { body }` → labeled-block + loop with
     /// init, conditional break, body, update (the C-style for desugar).
     CStyleFor,
@@ -1166,6 +1169,8 @@ pub(crate) enum DesugarKind {
     IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
+    /// `[a, b] = value` → `let [$da_0, $da_1] = value; a = $da_0; b = $da_1;`.
+    DestructuringAssign,
     /// `container[i].method()` → materialise `let $index_mut_val =
     /// &mut container[i];` + dispatch the method through it
     /// (`method_lookup.rs::try_resolve_index_mut_method_call`). Tagged

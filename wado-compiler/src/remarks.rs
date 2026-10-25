@@ -423,9 +423,10 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
 /// the fold did not reach. Read off the final IR, never off a refusal a pass
 /// recorded, so it retires itself as the fold reaches each shape.
 pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
-    let callees = build_callee_map(package, &Executor::default(), |_| false);
+    let in_order = Executor::default();
+    let callees = build_callee_map(package, &in_order, |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
-    let materializing = materializing_globals(package);
+    let materializing = materializing_globals(package, &in_order);
     let names = ctfe_runnable_names(package);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;

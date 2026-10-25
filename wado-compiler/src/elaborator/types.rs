@@ -1159,6 +1159,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` for `!` or a newtype over it, which holds every trait already
+    /// (spec-types.md § Trait Bounds on `!`).
+    ImplForNever {
+        type_name: String,
+        span: Span,
+    },
+
     /// An `impl` method takes a different number of parameters than the trait
     /// declares. Left unreported it reaches codegen as a call built to the
     /// trait's arity against a body of another.
@@ -1335,6 +1342,14 @@ pub enum TypeError {
     AmbiguousLiteralConversion {
         type_name: String,
         count: usize,
+        span: Span,
+    },
+
+    /// A destructuring assignment whose value is not a tuple of one element
+    /// per target.
+    DestructuringArity {
+        targets: usize,
+        found: String,
         span: Span,
     },
 
@@ -2606,6 +2621,13 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::ImplForNever { type_name, span } => (
+                Code::OrphanRule,
+                format!(
+                    "cannot write an `impl` for `{type_name}`: it has no values, so it holds every trait already"
+                ),
+                *span,
+            ),
             TypeError::TraitMethodArityMismatch {
                 trait_name,
                 method_name,
@@ -2877,6 +2899,18 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::DestructuringArity {
+                targets,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "a destructuring assignment to {targets} targets takes a tuple of \
+                     {targets} elements, found '{found}'"
+                ),
                 *span,
             ),
             TypeError::UnsupportedSynthesisTrait {
