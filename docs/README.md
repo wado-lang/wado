@@ -210,6 +210,7 @@
 - [A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
 - [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
+- [Refined Types — Types That Carry a Contract](./wep-2026-10-25-refined-types.md)
 
 ## Standard Library
 

@@ -1,0 +1,288 @@
+# WEP: Refined Types — Types That Carry a Contract
+
+## Context
+
+A value often has a permitted range that its type does not state: a user name
+of 1 to 64 characters, an age from 0 to 150, a page size that is a power of two.
+Today the range is checked in one of two places, and neither is the type.
+
+- A `contract` clause checks it where a function is called. Every function
+  that takes the value restates the clause.
+- A `struct` with a private field and a checked constructor holds it for good.
+  [Newtype](./spec-types.md#newtype) points there, and so does
+  [Contract Checks](./wep-2026-10-06-contract-checks.md#a-contract-states-inputs-only),
+  which leaves "a newtype that carries an invariant" to a proposal of its own.
+  The wrapper costs a declaration, a constructor and an accessor per type, and
+  it hides every method of the value it wraps.
+
+[Jade](./wep-2026-06-13-jade.md) adds a reader. A framework that serves HTTP
+from typed handlers, as FastAPI does, describes its request bodies as JSON
+Schema. `minLength: 1` has to come from the same place as the check, or the
+documented API and the served one drift apart. So the range must be enforced by
+the language and readable by a library.
+
+### What was tried first
+
+Three designs were tried while revising Jade. Each one failed in its own way.
+
+- A `Constrained` trait on a newtype. A library reads it, but nothing enforces
+  it: `"" as UserName` passes, and Jade cannot implement `Deserialize` for a
+  type it does not own.
+- A typed `#[metadata(…)]` attribute on a field. A library reads it, but only
+  that library enforces it, so it is a convention, not a guarantee.
+- A newtype that carries an invariant. Enforcing it took one rule per hole.
+  Mutating methods had to be removed, since `name.push_str(…)` breaks a length
+  bound. Results had to stop being retyped, since `age + age` would be an
+  `Age`. Traits that produce `Self` had to stop being inherited, since
+  `Default`, `FromStr` and `collect()` would mint an `Age` unchecked.
+
+The third design patched newtypes until they no longer behaved like newtypes.
+The patches had one cause. A newtype is a different type with the same values,
+and it inherits by substituting itself for its base. An invariant asks for the
+opposite: the same type with fewer values.
+
+### Prior art
+
+- Ada's subtypes are the nearest design. `subtype Age is Integer range 0 .. 150`
+  is an `Integer`, its arithmetic is `Integer`'s, and assigning to an `Age`
+  checks the range. Ada 2012 adds `Static_Predicate` and `Dynamic_Predicate`
+  for any condition. The known hole is that a predicate is not checked when a
+  component of a composite object is modified in place.
+- Racket uses one word, `contract`, for a function's arguments and for a value
+  bound to a name, and blames the side that broke it.
+- pydantic writes the range into the type
+  (`Annotated[str, StringConstraints(max_length=200)]`), so validation and the
+  JSON Schema read the same data. Validation runs at the model boundary, and an
+  assignment after construction goes unchecked unless `validate_assignment` is
+  turned on, which is a common surprise.
+- Liquid Haskell and F\* prove refinements statically. The proof is what makes
+  them heavy, and what their users struggle with.
+
+## Decision
+
+### A refined type is its base with contract clauses
+
+`B contract C` is the type of the values of `B` for which the clause `C` holds.
+It is written wherever a type is, and repeating `contract` adds clauses, all of
+which must hold:
+
+```text
+type UserName = String contract Length { min: 1, max: 64 };
+type Age = i32 contract 0..=150;
+type Handle = String contract Length { min: 3, max: 15 } contract self.is_ascii();
+
+struct CreateUser {
+    name: UserName,
+    bio: String contract Length { max: 200 },
+}
+```
+
+A refined value is represented as its base is, so the refinement costs nothing
+to hold. Only producing one costs a check.
+
+A refined type is not a newtype. `type UserName = String contract …` declares a
+newtype whose base is the refined type `String contract …`. The newtype gives
+the name its distinctness, and the refinement gives it its invariant. Neither
+construct changes the other.
+
+### `assert` and `contract`
+
+The language has two words for a condition that must hold. They split on who
+owes it:
+
+| Word                 | Who owes the condition         | Where it is checked     | `unchecked` |
+| -------------------- | ------------------------------ | ----------------------- | ----------- |
+| `assert`             | the code that states it        | where it stands         | no          |
+| `contract` on a `fn` | the caller                     | at the call             | yes         |
+| `contract` on a type | whoever produces a value of it | where a value enters it | yes         |
+
+A function's contract and a type's are one idea at two boundaries, a call and a
+value. They share their semantics: when a check runs, whom it blames, how
+`-f contract-checks` and `unchecked` treat it, and what a clause may do. A
+clause performs no effect, writes only the values it creates, and names nothing
+less visible than the declaration it guards.
+
+### A clause is a condition or a value
+
+A clause on a type takes one of two forms, told apart by the type of the clause:
+
+- A `bool` expression over `self`, the value being checked. It is enforced, and
+  a library cannot read it. A failed check reports the condition and its
+  operands, as `assert` does.
+- A value whose type implements `Refine<B>`. It is enforced, and reflection
+  hands the value to a library. The value is a constant expression, evaluated
+  as a global initializer is.
+
+```text
+pub trait Refine<T> with () {
+    fn holds(&self, value: &T) -> bool;
+    fn describe(&self) -> String;
+}
+```
+
+A range is such a value already: `RangeInclusive<i32>` implements
+`Refine<i32>`, so `i32 contract 0..=150` reads as Ada's `range 0 .. 150`.
+
+A function's contract takes the `bool` form only. It has no subject: a value
+clause there would not say which argument it binds. A condition on one argument
+is a refinement of that argument's type, and only a condition relating several
+arguments stays on the function:
+
+```text
+fn rename(user: &mut User, name: String contract Length { min: 1, max: 64 }) { ... }
+
+fn clamp(v: i32, lo: i32, hi: i32) -> i32
+    contract lo <= hi
+{ ... }
+```
+
+### Widening is free, and `&mut` does not widen
+
+A refined value is a value of its base. Two rules follow, and they are the ones
+[Resource Inheritance](./spec-components.md#subtyping) already states for
+`resource extends`:
+
+1. `R` converts to `B`, and `&R` to `&B`, implicitly, wherever a `B` is
+   expected. `as` may widen, and never narrows.
+2. `&mut R` never converts to `&mut B`. A write through the `&mut B` could
+   install a value outside `R`.
+
+Everything else follows from these two:
+
+- A method of `B` is called on an `R` by widening the receiver. Its signature is
+  `B`'s, so `age + age` is an `i32` and `name.trim()` is what it is on a
+  `String`. Nothing is retyped, so nothing mints an `R`.
+- A method taking `&mut self` cannot be called on an `R`, since the receiver
+  would have to widen as `&mut B`. The diagnostic says so, in the way a
+  [declared absence](./wep-2026-09-13-declared-absence.md) does, rather than
+  reporting no method of that name. A refined value changes only by being
+  replaced whole, and the replacement enters the type through a check.
+- A field of a refined struct is read through the widened value, and cannot be
+  assigned, for the same reason. The hole Ada leaves, a component modified in
+  place, does not exist here.
+- A newtype over a refined type inherits by the newtype rules, and its chain
+  ends at the refined link. The newtype's `as` reaches the refined type and
+  widens past it, but an `as` that would narrow into it is an error. Its
+  inherited methods are `B`'s, reached by widening, and their signatures never
+  name the refined type, so substitution leaves them returning `B`.
+
+Refined types also make immutability something a program can ask for: a refined
+`List` exposes every reading method and no mutating one.
+
+### A value enters a refined type through `from` or `try_from`
+
+The compiler provides two conversions from the base, and nothing else produces
+a refined value from an unrefined one:
+
+- `R::from(b)` returns the `R` under a contract that states the clauses. An
+  unmarked call traps on a failed clause, reporting it and blaming the caller.
+  `unchecked R::from(b)` vouches for them, and only a build that checks
+  contracts checks it.
+- `R::try_from(b)` returns a `Result`. Its error names the clause that failed,
+  through `Refine::describe` or the condition's text.
+
+Between two refined types over one base, a value converts by widening to the
+base and entering the other type, so the second type's clauses are always
+checked.
+
+### Serialization enforces the clauses
+
+`Serialize` writes a refined value as its base. `Deserialize` reads the base and
+enters the refined type through `try_from`. A failed clause is a
+`DeserializeError` carrying the path to the field. A field written
+`bio: String contract Length { max: 200 }` is therefore checked by the derived
+`Deserialize` of the struct holding it, with no library involved.
+
+### Reflection reads the clauses
+
+A refined type is a kind of its own in [Static Reflection](./spec-reflection.md).
+`ReflectRefined` carries `Base` and `contracts()`, a tuple with one handle per
+clause, in the order written. A value clause's handle returns the value at its
+own type, so a library dispatches on it with an ordinary trait bound. A
+condition clause's handle carries its source text and nothing to evaluate, so
+the library can report what it cannot describe. `TypeInfo`
+([Total Reflection](./wep-2026-09-05-total-reflection.md)) gains a `Refined`
+case.
+
+This is what Jade reads. `Length { min: 1, max: 64 }` becomes
+`minLength: 1, maxLength: 64` through Jade's own impl for `Length`, and a
+clause type that Jade does not know fails the derivation at compile time,
+rather than quietly leaving the keyword out.
+
+### Syntax
+
+`contract` in a type is the contextual keyword it is in a signature.
+
+A refined type in a return position is written in parentheses,
+`-> (String contract Length { max: 3 })`. Without them, the clause would read
+as the function's own `contract` clause. Any other place where a clause's end
+is ambiguous is resolved the same way.
+
+A function's clause is parsed as an `if` condition is, with no struct literal,
+because the body's `{` follows it. A type's clause is not followed by a body, so
+a value clause such as `Length { max: 3 }` needs no parentheses.
+
+## Open questions
+
+### Does a value narrow implicitly?
+
+A struct literal `CreateUser { bio: s, … }` with `s: String` has to enter the
+refined field type. If narrowing is implicit wherever a value is expected, as
+an unmarked contract call, that literal checks and traps. If narrowing is only
+`from` and `try_from`, the field's type has no name to call `from` on, and an
+inline refinement is hard to fill. Resource narrowing is never implicit: it is
+written as a type pattern. The same choice decides whether a type pattern
+(`let n: UserName = s else { … }`) narrows into a refined type.
+
+### What a type parameter is solved to, and which bounds `R` meets
+
+`max(a, b)` with two `Age`s solves `T` either to `Age` or to `i32`. Resources
+solve to the most specific type. That only works if `Age` meets `Ord`, and then
+the question is which of `i32`'s traits a refined type meets. A trait whose
+methods only read (`Eq`, `Ord`, `Display`, `Serialize`) admits a refined value
+safely. A trait that produces `Self` (`Default`, `FromStr`, `Add<Output = Self>`)
+would mint one unchecked. Solving to the base instead, as TypeScript widens a
+literal type, avoids the question but loses the refinement through every
+generic call.
+
+### A base that reaches shared state
+
+A clause is checked when a value enters the type. A base that holds a `&mut`,
+a resource or a function value can change through another path afterwards,
+and the clause does not see it. Such a base could be refused, or the guarantee
+could be stated as holding only for what the value itself contains.
+
+### When two refined types are one type
+
+`String contract Length { max: 200 }` written on two fields is either one type
+or two. If it is one, a value moves between the fields without a check. If it is
+two, the move checks a clause that cannot fail. Identity does not affect
+soundness, since every entry is checked; it decides what a program can name and
+what the check costs.
+
+### Checking a literal at compile time
+
+`let n: UserName = "";` holds a constant that fails its clause. The check could
+run at compile time, as `300 as u8` is rejected, or trap when the program runs.
+
+### Where the common clause types live
+
+`Length`, the ranges and a pattern match are the clauses most programs write.
+Which of them the standard library provides, and in which module, is open. A
+pattern clause needs a regular expression engine, which the standard library
+does not have. `Length` must also say what it counts: `String::len()` counts
+bytes, and JSON Schema's `minLength` counts code points.
+
+## Related WEPs
+
+- [Contract Checks](./wep-2026-10-06-contract-checks.md) — the `contract` and
+  `unchecked` this extends from calls to values
+- [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md) — the construct a
+  refined type is not
+- [Resource Inheritance](./wep-2026-04-28-resource-inheritance.md) — the
+  subtyping rules a refined type reuses
+- [Declared Absence](./wep-2026-09-13-declared-absence.md) — the diagnostic for a
+  mutating method a refined value cannot call
+- [Total Reflection](./wep-2026-09-05-total-reflection.md) — the `TypeInfo` case
+  a refined type adds
+- [Jade](./wep-2026-06-13-jade.md) — the first reader of the clauses
