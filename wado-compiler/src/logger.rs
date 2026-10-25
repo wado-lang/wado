@@ -58,7 +58,7 @@ pub struct Logger<'a, H: CompilerHost> {
     /// Each wasm asset's file -> the `use` where a diagnostic in its bindings
     /// is reported. The bindings are synthesized, so a location in them
     /// indexes no text.
-    bindings_origins: std::cell::RefCell<hashmap::IndexMap<String, DiagnosticSpan>>,
+    asset_origins: std::cell::RefCell<hashmap::IndexMap<String, DiagnosticSpan>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -83,16 +83,16 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
             parses: std::cell::RefCell::default(),
-            bindings_origins: std::cell::RefCell::default(),
+            asset_origins: std::cell::RefCell::default(),
         }
     }
 
-    /// Record where each asset's bindings report ([`crate::loader::LoadResult::bindings_origins`]).
-    pub fn register_bindings_origins(
+    /// Record where each asset's bindings report ([`crate::loader::LoadResult::asset_origins`]).
+    pub fn register_asset_origins(
         &self,
         origins: impl IntoIterator<Item = (String, DiagnosticSpan)>,
     ) {
-        self.bindings_origins.borrow_mut().extend(origins);
+        self.asset_origins.borrow_mut().extend(origins);
     }
 
     /// Record which module each loaded parse belongs to, so a diagnostic's span
@@ -194,16 +194,16 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         {
             span.file = file;
         }
-        self.at_bindings_origin(diag)
+        self.at_asset_origin(diag)
     }
 
     /// A diagnostic in an asset's bindings, moved to the `use` that imported
     /// the asset.
-    fn at_bindings_origin(&self, mut diag: Diagnostic) -> Diagnostic {
+    fn at_asset_origin(&self, mut diag: Diagnostic) -> Diagnostic {
         let Some(span) = diag.span.as_mut() else {
             return diag;
         };
-        if let Some(origin) = self.bindings_origins.borrow().get(&span.file) {
+        if let Some(origin) = self.asset_origins.borrow().get(&span.file) {
             diag.message = format!("in the bindings of `{}`: {}", span.file, diag.message);
             *span = origin.clone();
         }
@@ -718,7 +718,7 @@ mod tests {
     fn test_a_bindings_diagnostic_lands_on_the_use_that_imported_them() {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
-        logger.register_bindings_origins([(
+        logger.register_asset_origins([(
             "./c.wasm".to_string(),
             DiagnosticSpan {
                 file: "t.wado".to_string(),

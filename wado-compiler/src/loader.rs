@@ -91,6 +91,12 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
+    /// `error` raised loading a wasm asset, reported at the asset path of the
+    /// `use` that imported it.
+    InAsset {
+        at: DiagnosticSpan,
+        error: Box<LoadError>,
+    },
     /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing.
     StdlibIdentity {
         path: Option<String>,
@@ -212,6 +218,7 @@ impl std::fmt::Display for LoadError {
             } => {
                 write!(f, "wasm import error in {module_source}: {message}")
             }
+            LoadError::InAsset { error, .. } => error.fmt(f),
             LoadError::StdlibIdentity {
                 path,
                 file,
@@ -250,6 +257,7 @@ impl LoadError {
         match self {
             LoadError::BindError { .. } => Code::DuplicateDefinition,
             LoadError::WasmImport { .. } => Code::InvalidSyntax,
+            LoadError::InAsset { error, .. } => error.code(),
             LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
             LoadError::IoError { .. } | LoadError::IncludeNotFound { .. } => Code::FileReadError,
             LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
@@ -318,6 +326,10 @@ impl From<LoadError> for Diagnostic {
                     end_column: None,
                     space: AstIdSpace::FRESH,
                 }),
+            },
+            LoadError::InAsset { at, error } => Self {
+                span: Some(at),
+                ..Self::from(*error)
             },
             ref other => Self {
                 severity: Severity::Error,
@@ -497,9 +509,9 @@ pub struct LoadResult {
     /// The Wado modules each module's `use` declarations load, in order.
     pub imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
     /// Each wasm asset's file -> the asset path of the first `use` importing
-    /// it, where a diagnostic in its bindings is reported
-    /// ([`Logger::register_bindings_origins`]).
-    pub bindings_origins: IndexMap<String, DiagnosticSpan>,
+    /// it, where an error loading it ([`LoadError::InAsset`]) or a diagnostic in
+    /// its bindings ([`Logger::register_asset_origins`]) is reported.
+    pub asset_origins: IndexMap<String, DiagnosticSpan>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -1317,7 +1329,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     skip_generated_bodies: bool,
     skipped_bodies: IndexSet<ModuleSource>,
     imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
-    bindings_origins: IndexMap<String, DiagnosticSpan>,
+    asset_origins: IndexMap<String, DiagnosticSpan>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1347,7 +1359,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             skip_generated_bodies: false,
             skipped_bodies: IndexSet::default(),
             imports: IndexMap::default(),
-            bindings_origins: IndexMap::default(),
+            asset_origins: IndexMap::default(),
         }
     }
 
@@ -1592,7 +1604,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             interner: self.interner,
             skipped_bodies: self.skipped_bodies,
             imports: self.imports,
-            bindings_origins: self.bindings_origins,
+            asset_origins: self.asset_origins,
         })
     }
 
@@ -1629,7 +1641,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 // dependency) loads across the CM boundary, not as Wado source.
                 if let ModuleSource::Wasm { kind, .. } = &resolved {
                     let kind = *kind;
-                    self.note_bindings_origin(from_module_source, use_decl, &resolved);
+                    self.note_asset_origin(from_module_source, use_decl, &resolved);
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
@@ -1674,19 +1686,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
         let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)?;
         let source = self.interner.wasm(&path, kind);
-        self.note_bindings_origin(from_module_source, use_decl, &source);
+        self.note_asset_origin(from_module_source, use_decl, &source);
         self.handle_wasm_source(source, kind).await
     }
 
-    /// Report a diagnostic in `asset`'s bindings at the path `use_decl` names,
-    /// unless an earlier `use` imported it.
-    fn note_bindings_origin(
-        &mut self,
-        from: &ModuleSource,
-        use_decl: &UseDecl,
-        asset: &ModuleSource,
-    ) {
-        self.bindings_origins
+    /// Report an error loading `asset`, or a diagnostic in its bindings, at the
+    /// path `use_decl` names, unless an earlier `use` imported it.
+    fn note_asset_origin(&mut self, from: &ModuleSource, use_decl: &UseDecl, asset: &ModuleSource) {
+        self.asset_origins
             .entry(asset.source_path())
             .or_insert_with(|| {
                 DiagnosticSpan::from_span(&use_decl.source_span, Some(&from.source_path()))
@@ -1696,8 +1703,23 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Load a wasm asset from an already-resolved [`ModuleSource::Wasm`] — the
     /// shared body of [`Self::handle_wasm_import`], reused for a registry
     /// component dependency whose `.wasm` path is resolved from the dependency
-    /// index rather than a `with { type: "wasm" }` clause.
+    /// index rather than a `with { type: "wasm" }` clause. Both note the asset's
+    /// origin first, where an error loading it is reported.
     async fn handle_wasm_source(
+        &mut self,
+        source: ModuleSource,
+        kind: WasmAssetKind,
+    ) -> Result<(), LoadError> {
+        let at = self.asset_origins[&source.source_path()].clone();
+        self.load_wasm_source(source, kind)
+            .await
+            .map_err(|error| LoadError::InAsset {
+                at,
+                error: Box::new(error),
+            })
+    }
+
+    async fn load_wasm_source(
         &mut self,
         source: ModuleSource,
         kind: WasmAssetKind,
