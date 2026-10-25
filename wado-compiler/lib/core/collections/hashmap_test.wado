@@ -391,3 +391,23 @@ test "struct, variant and unit keys hash by their members" {
     let set = [(), ()] as HashSet<()>;
     assert set.len() == 1;
 }
+
+enum Tone {
+    Low,
+    High,
+}
+
+flags Access {
+    Read,
+    Write,
+}
+
+test "enum and flags keys hash by their case and bits" {
+    let tones = [Tone::Low, Tone::Low] as HashSet<Tone>;
+    assert tones.len() == 1;
+    assert !tones.contains(Tone::High);
+    let mut access = HashMap::<Access, i32>::new();
+    access[Access::Read | Access::Write] = 3;
+    assert access[Access::Write | Access::Read] == 3;
+    assert access.get(Access::Read) == null;
+}
