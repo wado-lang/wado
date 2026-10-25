@@ -107,6 +107,18 @@ impl Reached {
                 );
                 continue;
             }
+            // A `&mut` in a struct literal's field is the frame's place field,
+            // and reaches its place the way the reference alone would.
+            if let Some(e) = value.as_expr()
+                && let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind
+            {
+                for field in fields {
+                    if let Some((true, inner)) = referenced_place_operand(body, field.value) {
+                        self.record(body, inner, Reach::Write);
+                    }
+                }
+                continue;
+            }
             let Some((is_mut, inner)) = referenced_place_operand(body, *value) else {
                 continue;
             };

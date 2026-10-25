@@ -1,0 +1,46 @@
+// A struct literal holding a `&mut` over a local runs at compile time: a write
+// through the field lands in the local it names, so `through_field` folds to
+// its string. Repointing the field is a store the frame refuses, and the
+// program still prints what it computes.
+use { println, Stdout } from "core:cli";
+
+struct Sink {
+    out: &mut String,
+    n: i32,
+}
+
+fn put(s: &mut Sink, c: char) {
+    s.out.push(c);
+    s.n += 1;
+}
+
+fn through_field() -> String {
+    let mut out = "";
+    let mut s = Sink { out: &mut out, n: 0 };
+    put(&mut s, 'a');
+    put(&mut s, 'b');
+    let n = s.n;
+    out.push_str(`${n}`);
+    return out;
+}
+
+fn repointed() -> String {
+    let mut a = "";
+    let mut b = "";
+    let mut s = Sink { out: &mut a, n: 0 };
+    put(&mut s, 'x');
+    s.out = &mut b;
+    put(&mut s, 'y');
+    return `${a}|${b}`;
+}
+
+export fn run() with Stdout {
+    println(through_field());
+    println(repointed());
+}
+
+__DATA__
+{
+    "stdout": "ab2\nx|y\n",
+    "wir_expect:O2": ["array.new_fixed<u8>(97, 98, 50)"]
+}

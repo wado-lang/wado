@@ -75,6 +75,9 @@ impl Interpreter<'_> {
     /// unless nothing can write the place, where the reference reads as its
     /// referent's value just as `&place` itself does.
     fn local_lattice(&self, idx: u32) -> Lattice {
+        if self.frame.holds_place_field(idx, &[]) {
+            return Lattice::Unevaluated;
+        }
         if let Some((root, path)) = self.frame.place_aliases.get(&idx) {
             if !self.frame.const_views.contains(idx) {
                 return Lattice::Unevaluated;
@@ -138,7 +141,12 @@ impl Interpreter<'_> {
                 }
                 self.global_lattice(&key.0, &key.1)
             }
-            None => self.projected_lattice(body, inner),
+            None => {
+                if let Some(read) = self.place_field_read(body, inner, Some(field_index)) {
+                    return read;
+                }
+                self.projected_lattice(body, inner)
+            }
         };
         match receiver {
             Lattice::Const(receiver) => receiver
@@ -158,6 +166,9 @@ impl Interpreter<'_> {
     /// has no value for — and [`Self::expr_to_lattice`] leaves that
     /// unevaluated, so a rebind or a capture never turns into a copy.
     pub(super) fn projected_lattice(&self, body: &Body, op: Operand) -> Lattice {
+        if let Some(read) = self.place_field_read(body, op, None) {
+            return read;
+        }
         if let Some(index) = named_local(body, op)
             && let Some((root, path)) = self.frame.place_aliases.get(&index)
         {

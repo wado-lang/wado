@@ -514,6 +514,12 @@ struct FrameState {
     /// referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
+    /// Fields a frame's `let` bound to a `&mut` over a local place, keyed by the
+    /// local and the path to the field, and resolved as [`Self::place_aliases`]
+    /// are. The aggregate holds a placeholder there, so neither the field nor
+    /// anything enclosing it reads as a value; a read or a write through the
+    /// field reaches the place.
+    place_fields: IndexMap<(u32, Vec<u32>), (u32, Vec<u32>)>,
     /// Locals this frame bound to a reference, mapped to the local the referent
     /// lives in — `&mut xs[i]` reduces to a reference to an accessor result, which
     /// still names `xs` — or `None` where it resolved to nothing nameable.
@@ -861,6 +867,7 @@ impl<'a> Interpreter<'a> {
     /// displaces any place alias the index held, and never restores it.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
+        self.frame.place_fields.retain(|(root, _), _| *root != index);
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {
