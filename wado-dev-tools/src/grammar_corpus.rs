@@ -95,11 +95,10 @@ fn value(parser: &mut lexopt::Parser) -> String {
 /// `corpus`, and return the file holding what it printed. Its files live in
 /// `dir`, inside the repository: `wado run` reaches only the current directory.
 pub fn run_gale_side(dir: &Path, corpus: &[String], tool: &str) -> PathBuf {
-    match fs::remove_dir_all(dir) {
-        Err(e) if e.kind() != ErrorKind::NotFound => {
-            panic!("removing '{}': {e}", dir.display())
-        }
-        _ => {}
+    if let Err(e) = fs::remove_dir_all(dir)
+        && e.kind() != ErrorKind::NotFound
+    {
+        panic!("removing '{}': {e}", dir.display());
     }
     fs::create_dir_all(dir).unwrap_or_else(|e| panic!("creating '{}': {e}", dir.display()));
     let list = dir.join("corpus.txt");
