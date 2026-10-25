@@ -1470,12 +1470,13 @@ impl FunctionTranslator<'_, '_> {
         let Some(payload_expr) = payload else {
             return self.struct_new(struct_type_id, fields);
         };
-        let payload = self.translate_operand(payload_expr);
         if !carries_payload {
-            // A stackless payload (`Some(())`) has no slot; it runs for its
-            // effects only.
-            return WirInstr::Seq(vec![payload, self.struct_new(struct_type_id, fields)]);
+            let (prelude, values) = self.translate_args_erasing_unit(&[payload_expr], true);
+            fields.extend(values);
+            let construct = self.struct_new(struct_type_id, fields);
+            return self.wrap_call_with_prelude(prelude, construct, result_type, false);
         }
+        let payload = self.translate_operand(payload_expr);
         let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
         fields.push(self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr)));
         self.struct_new(struct_type_id, fields)
