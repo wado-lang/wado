@@ -222,50 +222,45 @@ A function's clause is parsed as an `if` condition is, with no struct literal,
 because the body's `{` follows it. A type's clause is not followed by a body, so
 a value clause such as `Length { max: 3 }` needs no parentheses.
 
-## Open questions
+## Known gaps
 
-### Does a value narrow implicitly?
+### Whether a value narrows implicitly
 
 A struct literal `CreateUser { bio: s, … }` with `s: String` has to enter the
-refined field type. If narrowing is implicit wherever a value is expected, as
-an unmarked contract call, that literal checks and traps. If narrowing is only
-`from` and `try_from`, the field's type has no name to call `from` on, and an
-inline refinement is hard to fill. Resource narrowing is never implicit: it is
-written as a type pattern. The same choice decides whether a type pattern
-(`let n: UserName = s else { … }`) narrows into a refined type.
+refined field type, and that type has no name to call `from` on. Resource
+narrowing is never implicit; it is written as a type pattern. Nothing states yet
+whether a refined type narrows wherever a value is expected, as an unmarked
+contract call would, or whether a type pattern (`let n: UserName = s else { … }`)
+narrows into one.
 
-### What a type parameter is solved to, and which bounds `R` meets
+### What a type parameter is solved to, and which bounds a refined type meets
 
-`max(a, b)` with two `Age`s solves `T` either to `Age` or to `i32`. Resources
-solve to the most specific type. That only works if `Age` meets `Ord`, and then
-the question is which of `i32`'s traits a refined type meets. A trait whose
-methods only read (`Eq`, `Ord`, `Display`, `Serialize`) admits a refined value
-safely. A trait that produces `Self` (`Default`, `FromStr`, `Add<Output = Self>`)
-would mint one unchecked. Solving to the base instead, as TypeScript widens a
-literal type, avoids the question but loses the refinement through every
-generic call.
+`max(a, b)` with two `Age`s solves `T` to `Age` or to `i32`. Resources solve to
+the most specific type, which needs `Age: Ord`. A trait whose methods only read,
+such as `Eq`, `Ord`, `Display` or `Serialize`, admits a refined value safely. A
+trait that produces `Self`, such as `Default`, `FromStr` or
+`Add<Output = Self>`, would mint one unchecked. Solving to the base loses the
+refinement through every generic call.
 
 ### A base that reaches shared state
 
 A clause is checked when a value enters the type. A base that holds a `&mut`,
-a resource or a function value can change through another path afterwards,
-and the clause does not see it. Such a base could be refused, or the guarantee
-could be stated as holding only for what the value itself contains.
+a resource or a function value can change through another path afterwards, and
+the clause does not see the change.
 
 ### When two refined types are one type
 
-`String contract Length { max: 200 }` written on two fields is either one type
-or two. If it is one, a value moves between the fields without a check. If it is
-two, the move checks a clause that cannot fail. Identity does not affect
-soundness, since every entry is checked; it decides what a program can name and
-what the check costs.
+`String contract Length { max: 200 }` written on two fields is one type or two.
+Every entry is checked, so the answer does not affect soundness. It decides
+what a program can name, and whether moving a value between the fields checks a
+clause that cannot fail.
 
-### Checking a literal at compile time
+### A literal that fails its clause
 
-`let n: UserName = "";` holds a constant that fails its clause. The check could
-run at compile time, as `300 as u8` is rejected, or trap when the program runs.
+`let n: UserName = "";` holds a constant that fails its clause. Nothing states
+whether that is a compile error, as `300 as u8` is, or a trap at run time.
 
-### Where the common clause types live
+### The common clause types
 
 `Length`, the ranges and a pattern match are the clauses most programs write.
 Which of them the standard library provides, and in which module, is open. A
