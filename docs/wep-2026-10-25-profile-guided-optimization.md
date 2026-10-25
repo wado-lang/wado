@@ -3,15 +3,14 @@
 ## Context
 
 The optimizer already leans on cold paths. `builtin::cold_path()` marks code
-that rarely runs, and four places act on it:
+that rarely runs, and three passes act on it:
 
 - `nir/cold_outline` moves the marked region into a function of its own.
 - `nir/inline` prices a callee without its cold tail. It does not inline at a
-  cold call site, nor anywhere in a function that only cold sites reach.
+  cold call site, nor anywhere in a function that runs only once a cold path
+  is taken (`cold_functions_of`).
 - `infer_branch_hints` turns the marker into a Wasm branch hint, and wasmtime
   lays out the cold side out of line.
-- `nir/inline`'s cold-function analysis (`cold_functions_of`) spreads the
-  coldness to every function that runs only once a cold path is taken.
 
 Every one of these marks is a guess. An author writes `cold_path()` where they
 believe a path is rare. `infer_branch_hints` adds the paths that end in a trap.
