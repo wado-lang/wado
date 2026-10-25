@@ -868,7 +868,7 @@ A bundled binding whose type implements no effect is a compile error. So is one 
 
 ### Handler State
 
-A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block.
+A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block. An affine handler written by value moves into the `with`, which drops it as the statement holding the `with` ends, on every path out of it.
 
 <!-- {"fixture":"spec_effects_handler_scope.wado"} -->
 

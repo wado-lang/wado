@@ -1723,9 +1723,14 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             expr: scrutinee,
             arms,
         } => elab_match(scrutinee, arms, cx),
+        // A handler installed by value is owned by the `with`, so it drops as
+        // the statement holding the `with` ends, as a referenced temporary does.
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
                 elab_expr(&mut binding.handler, true, cx);
+                if cx.carries_resource(binding.handler.type_id) {
+                    spill_temporary(&mut binding.handler, cx);
+                }
             }
             elab_block(body, cx.yields(type_id), cx);
         }
