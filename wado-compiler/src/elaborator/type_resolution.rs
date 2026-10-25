@@ -473,8 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
-            // `Interface::Type` names a type the interface declares, which the
-            // resolve walk answered for at the site.
+            // `Interface::Type` the resolve walk answered at the site.
             let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
                 self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)

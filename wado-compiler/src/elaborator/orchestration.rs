@@ -1851,16 +1851,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         let mut tt = type_table.borrow_mut();
         for symbol in symbols.all_symbols() {
-            let is_type_decl = matches!(
-                symbol.kind,
-                SymbolKind::Struct(_)
-                    | SymbolKind::Enum(_)
-                    | SymbolKind::Variant(_)
-                    | SymbolKind::Flags(_)
-                    | SymbolKind::Newtype(_)
-                    | SymbolKind::Resource(_)
-            );
-            if !is_type_decl {
+            if !symbol.kind.declares_type() {
                 continue;
             }
             let key = symbol.defined_at;

@@ -47,6 +47,21 @@ pub enum SymbolKind {
     Global(GlobalSymbol),
 }
 
+impl SymbolKind {
+    /// Whether the symbol declares a type with a definition of its own.
+    pub fn declares_type(&self) -> bool {
+        matches!(
+            self,
+            SymbolKind::Struct(_)
+                | SymbolKind::Enum(_)
+                | SymbolKind::Variant(_)
+                | SymbolKind::Flags(_)
+                | SymbolKind::Newtype(_)
+                | SymbolKind::Resource(_)
+        )
+    }
+}
+
 /// Function symbol data
 #[derive(Debug, Clone)]
 pub struct FunctionSymbol {
@@ -655,16 +670,7 @@ impl SymbolTable {
             owner.module_source(),
             &mangle_local_method(&owner.name, member),
         )?;
-        matches!(
-            symbol.kind,
-            SymbolKind::Struct(_)
-                | SymbolKind::Enum(_)
-                | SymbolKind::Variant(_)
-                | SymbolKind::Flags(_)
-                | SymbolKind::Newtype(_)
-                | SymbolKind::Resource(_)
-        )
-        .then_some(symbol)
+        symbol.kind.declares_type().then_some(symbol)
     }
 
     /// Whether `name` names a type every module reads without importing it:
@@ -672,16 +678,7 @@ impl SymbolTable {
     pub fn is_prelude_type(&self, name: &str) -> bool {
         let prelude = ModuleSource::prelude();
         if let Some(symbol) = self.lookup_in_module(&prelude, name) {
-            return matches!(
-                symbol.kind,
-                SymbolKind::Struct(_)
-                    | SymbolKind::Enum(_)
-                    | SymbolKind::Variant(_)
-                    | SymbolKind::Flags(_)
-                    | SymbolKind::Newtype(_)
-                    | SymbolKind::Resource(_)
-                    | SymbolKind::BuiltinType
-            );
+            return symbol.kind.declares_type() || matches!(symbol.kind, SymbolKind::BuiltinType);
         }
         self.prelude_builtin_types.contains_key(name)
     }

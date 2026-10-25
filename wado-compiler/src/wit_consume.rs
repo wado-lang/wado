@@ -244,14 +244,16 @@ fn interface_names(
     exports: &hashmap::IndexMap<String, String>,
     guest_imports: &[wit_parser::InterfaceId],
 ) -> InterfaceNames {
-    let defaults: hashmap::IndexSet<String> = exports
+    let declared: Vec<CmImport> = exports
         .keys()
-        .filter(|fq| {
-            CmImport::parse(fq)
-                .expect("interface FQ is well-formed")
-                .is_package_default()
-        })
         .cloned()
+        .chain(guest_imports.iter().map(|id| interface_fq(resolve, *id)))
+        .map(|fq| CmImport::parse(&fq).expect("interface FQ is well-formed"))
+        .collect();
+    let defaults: hashmap::IndexSet<String> = declared[..exports.len()]
+        .iter()
+        .filter(|cm| cm.is_package_default())
+        .map(CmImport::interface_path)
         .collect();
     let mut taken: hashmap::IndexSet<String> = hashmap::IndexSet::default();
     for item in resolve.worlds[world].exports.values() {
@@ -270,12 +272,6 @@ fn interface_names(
             WorldItem::Interface { .. } | WorldItem::Type { .. } => {}
         }
     }
-    let declared: Vec<CmImport> = exports
-        .keys()
-        .cloned()
-        .chain(guest_imports.iter().map(|id| interface_fq(resolve, *id)))
-        .map(|fq| CmImport::parse(&fq).expect("interface FQ is well-formed"))
-        .collect();
     let mut sharing: hashmap::IndexMap<String, usize> = hashmap::IndexMap::default();
     for cm in &declared {
         *sharing.entry(interface_basename(cm)).or_default() += 1;
@@ -336,7 +332,7 @@ impl Builder {
             Some(interface) if !self.names.defaults.contains(fq) => {
                 mangle_local_method(interface, &name)
             }
-            _ => name,
+            Some(_) | None => name,
         }
     }
 

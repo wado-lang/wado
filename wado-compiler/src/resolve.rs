@@ -824,9 +824,9 @@ impl Resolver<'_> {
     fn note_import(&mut self, key: &str, def: DefId) {
         if self.scopes.imported(self.module, key) == Some(def) {
             self.used_imports.insert(key.to_string());
-        } else if self.interface_type(key) == Some(def)
-            && let Some((owner, _)) = split_namespace_member(key)
+        } else if let Some((owner, _)) = split_namespace_member(key)
             && self.scopes.imported(self.module, owner).is_some()
+            && self.interface_type(key) == Some(def)
         {
             self.used_imports.insert(owner.to_string());
         }
