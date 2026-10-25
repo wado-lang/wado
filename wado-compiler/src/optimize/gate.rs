@@ -58,7 +58,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 20;
+    const COUNT: usize = 19;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
