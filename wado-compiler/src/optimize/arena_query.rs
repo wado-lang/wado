@@ -321,7 +321,7 @@ pub(super) fn collect_reads(body: &Body, out: &mut IndexSet<u32>) {
 
 /// Every local a pattern binds, appended to `out` if not already there.
 pub(super) fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Vec<u32>) {
-    body.for_each_live_node_under(NodeRef::Pat(pattern), |node| {
+    body.for_each_node_under(NodeRef::Pat(pattern), |node| {
         if let NodeRef::Pat(p) = node
             && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
             && !out.contains(local_index)
@@ -385,7 +385,6 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     };
     match body.values.opaque_source(*oid)? {
         OpaqueSource::Local(idx) => Some(idx),
-        OpaqueSource::Expr(_) => None,
     }
 }
 
@@ -435,7 +434,7 @@ pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
     let mut out = IndexSet::default();
     match op {
         Operand::Value(v) => body.values.collect_opaque_locals(v, &mut out),
-        Operand::Expr(e) => body.for_each_live_node_under(NodeRef::Expr(e), |n| {
+        Operand::Expr(e) => body.for_each_node_under(NodeRef::Expr(e), |n| {
             if let NodeRef::Expr(x) = n
                 && let ExprKind::Local { index, .. } = &body.exprs[x].kind
             {
@@ -493,7 +492,7 @@ pub(super) fn mentions_local_except(
 /// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
 /// (unlabeled-break capture guard).
 pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.find_in_live_node_under(NodeRef::Block(block), |n| {
+    body.find_in_nodes_under(NodeRef::Block(block), |n| {
         matches!(n, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
             .then_some(())
     })
@@ -532,7 +531,7 @@ pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
             return;
         };
         for &stmt in &stmts[marker..] {
-            body.for_each_live_node_under(NodeRef::Stmt(stmt), |n| {
+            body.for_each_node_under(NodeRef::Stmt(stmt), |n| {
                 if let NodeRef::Expr(e) = n {
                     out.insert(e);
                 }

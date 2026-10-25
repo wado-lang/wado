@@ -11,7 +11,6 @@ use std::ops::ControlFlow;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, prim_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::ExprId;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -542,14 +541,9 @@ pub struct ValuePool {
     /// creation; `None` until set.
     types: Vec<Option<TypeId>>,
     /// Skeleton source for an `Opaque`: how extraction re-emits the leaf the
-    /// graph cannot reconstruct. A `Local` opaque emits `local.get idx` (self-
-    /// contained — no skeleton node to keep alive); an `Expr` opaque lowers a
-    /// scheduled skeleton expression (a call result kept in the skeleton).
-    /// Empty for opaques minted without a recorded source.
+    /// graph cannot reconstruct. Empty for opaques minted without a recorded
+    /// source, which extraction refuses.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
-    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky: an
-    /// over-estimate costs a walk, a stale `false` would skip a live node.
-    expr_sources: bool,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
@@ -563,9 +557,6 @@ pub struct ValuePool {
 pub enum OpaqueSource {
     /// The runtime value of a local: extraction emits `local.get idx`.
     Local(u32),
-    /// Produced by a skeleton expression (a call result kept in the skeleton):
-    /// extraction lowers that expr.
-    Expr(ExprId),
 }
 
 impl ValuePool {
@@ -688,16 +679,8 @@ impl ValuePool {
     pub fn fresh_opaque_with_source(&mut self, source: OpaqueSource) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
-        self.expr_sources |= matches!(source, OpaqueSource::Expr(_));
         self.opaque_sources.insert(opaque, source);
         self.intern(ValueKind::Opaque(opaque))
-    }
-
-    /// Whether any operand can name a skeleton-external extraction source. False
-    /// lets a reachability walk stay on the skeleton.
-    #[inline]
-    pub fn has_expr_source(&self) -> bool {
-        self.expr_sources
     }
 
     /// The recorded extraction source of an `Opaque`, if any.
@@ -887,34 +870,6 @@ impl ValuePool {
         });
     }
 
-    /// Every expression the value tree at `v` names as an extraction source.
-    /// Those nodes produce this value's code and hang outside the skeleton, so
-    /// a reachability walk that skipped them would call them orphans and let a
-    /// rewrite pass by.
-    pub fn for_each_opaque_expr(
-        &self,
-        v: ValueId,
-        seen: &mut IndexSet<ValueId>,
-        mut f: impl FnMut(ExprId),
-    ) {
-        self.walk_opaques::<()>(v, seen, |src, _| {
-            if let Some(OpaqueSource::Expr(e)) = src {
-                f(e);
-            }
-            ControlFlow::Continue(())
-        });
-    }
-
-    /// Whether the value tree at `v` names an expression as an extraction
-    /// source, which extracting it runs.
-    pub fn names_extraction_source(&self, v: ValueId) -> bool {
-        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
-            Some(OpaqueSource::Expr(_)) => ControlFlow::Break(()),
-            _ => ControlFlow::Continue(()),
-        })
-        .is_some()
-    }
-
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(
@@ -963,7 +918,6 @@ impl ValuePool {
                 }
                 None => false,
             },
-            OpaqueSource::Expr(_) => true,
         });
     }
 

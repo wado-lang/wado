@@ -1154,7 +1154,7 @@ fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
             && !covered.contains(&st)
             && let StmtKind::Loop { body: b } = &body.stmts[st].kind
         {
-            body.for_each_live_node_under(NodeRef::Block(*b), |n| match n {
+            body.for_each_node_under(NodeRef::Block(*b), |n| match n {
                 NodeRef::Expr(e) => {
                     out.insert(e);
                 }
@@ -1826,7 +1826,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
 
 /// The callee of every `Call` site under `node`, once per site.
 fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         if let NodeRef::Expr(id) = n
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
@@ -3483,17 +3483,11 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
         },
         ValueKind::Opaque(oid) => {
             // Mint a fresh caller opaque, remapping its source local into the
-            // caller frame (a skeleton-`Expr` source splices that expr).
+            // caller frame.
             let new = match callee.values.opaque_source(oid) {
                 Some(OpaqueSource::Local(idx)) => caller
                     .values
                     .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
-                Some(OpaqueSource::Expr(e)) => {
-                    let spliced = splice_expr(caller, callee, e, ctx);
-                    caller
-                        .values
-                        .fresh_opaque_with_source(OpaqueSource::Expr(spliced))
-                }
                 None => caller.values.fresh_opaque(),
             };
             if let Some(t) = recorded_ty {

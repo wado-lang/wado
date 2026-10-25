@@ -2431,15 +2431,12 @@ impl FunctionTranslator<'_, '_> {
                         .is_some_and(|l| self.multi_value_split_locals.contains_key(&l))
             })
             .collect();
-        // Whether evaluating each argument runs code: a local read runs none,
-        // and a promoted value none unless its tree names an extraction source.
+        // Whether evaluating each argument runs code: a local read or a promoted
+        // value runs none.
         let runs_code: Vec<bool> = ordered
             .iter()
             .zip(&local_read)
-            .map(|(&op, &local)| match op {
-                Operand::Value(v) => self.body.values.names_extraction_source(v),
-                Operand::Expr(_) => !local,
-            })
+            .map(|(&op, &local)| op.as_expr().is_some() && !local)
             .collect();
         // A diverging argument stays in its place: the call after it is dead
         // code, which validates at any arity, and nothing to its right runs.
@@ -2537,9 +2534,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Whether evaluating `op` stores nothing: reads and arithmetic alone.
     fn writes_nothing(&self, op: Operand) -> bool {
-        let e = match op {
-            Operand::Value(v) => return !self.body.values.names_extraction_source(v),
-            Operand::Expr(e) => e,
+        let Operand::Expr(e) = op else {
+            return true;
         };
         match &self.body.exprs[e].kind {
             ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => {
@@ -2749,9 +2745,8 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for a leaf the graph cannot reconstruct (a
-            // local read, a call result). It is re-emitted from the recorded
-            // source the builder/lower scheduled for it.
+            // An `Opaque` stands for a leaf the graph cannot reconstruct. It is
+            // re-emitted from the source the builder/lower recorded for it.
             ValueKind::Opaque(id) => {
                 match self
                     .body
@@ -2760,7 +2755,6 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Opaque has no recorded extraction source")
                 {
                     OpaqueSource::Local(idx) => self.local_get(idx),
-                    OpaqueSource::Expr(e) => self.translate_expr_inner(e),
                 }
             }
             // A `Select` (control-merge of pure values) extracts as a

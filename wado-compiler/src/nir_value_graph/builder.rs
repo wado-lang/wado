@@ -833,14 +833,15 @@ impl<'a> Builder<'a> {
     }
 
     /// Name the array `array_new(len)` allocates, and remember its length. The
-    /// name is a fresh opaque, so two allocations never share one and nothing
-    /// re-emits it — only [`Builder::known_array_len`] reads it back.
-    fn allocated_array(&mut self, call: ExprId, len: Operand) -> Option<ValueId> {
+    /// name is a fresh opaque with no extraction source, so two allocations
+    /// never share one and no operand can be promoted to it — only
+    /// [`Builder::known_array_len`] reads it back.
+    fn allocated_array(&mut self, len: Operand) -> Option<ValueId> {
         let len = self.walked_value(len)?;
         if !is_const_value(&self.pool, len) {
             return None;
         }
-        let array = self.pool.fresh_opaque_with_source(OpaqueSource::Expr(call));
+        let array = self.pool.fresh_opaque();
         compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
         self.array_lengths.insert(array, len);
         Some(array)
@@ -1515,7 +1516,7 @@ impl<'a> Builder<'a> {
                 }
                 self.bump_call_effects(expr);
                 match (builtin, arg) {
-                    (Some(CtfeBuiltin::ArrayNew), Some(len)) => self.allocated_array(expr, len),
+                    (Some(CtfeBuiltin::ArrayNew), Some(len)) => self.allocated_array(len),
                     (Some(CtfeBuiltin::ArrayLen), Some(array)) => self.known_array_len(array),
                     (Some(CtfeBuiltin::IsMoved), Some(place)) => self.known_moved(place),
                     _ => None,

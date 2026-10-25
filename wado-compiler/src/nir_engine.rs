@@ -1073,23 +1073,7 @@ impl<'a> Engine<'a> {
             return;
         }
         match op {
-            Operand::Value(v) => {
-                self.census_add_value(v);
-                // The value's extraction sources are skeleton nodes carrying
-                // operands of their own; reaching the value reaches them, as
-                // `Body::for_each_live_node_under` counts them. A constant names
-                // none, and nearly every promoted operand is one.
-                if !self.body.values.kind(v).is_operand_constant() {
-                    let mut seen = IndexSet::default();
-                    let mut sourced = Vec::new();
-                    self.body
-                        .values
-                        .for_each_opaque_expr(v, &mut seen, |e| sourced.push(e));
-                    for e in sourced {
-                        self.census_add_subtree(NodeRef::Expr(e));
-                    }
-                }
-            }
+            Operand::Value(v) => self.census_add_value(v),
             // An `Operand::Expr` attaches a subtree whose own operands may name
             // locals; the walk is over the subtree, not the body.
             Operand::Expr(e) => self.census_add_subtree(NodeRef::Expr(e)),
@@ -1097,14 +1081,14 @@ impl<'a> Engine<'a> {
     }
 
     /// Add every local named by a value under `node` to the census. Walks what
-    /// [`Body::promoted_read_counts`] walks — pool extraction sources included —
-    /// so the memo can only over-count against a fresh census, never under.
+    /// [`Body::promoted_read_counts`] walks, so the memo can only over-count
+    /// against a fresh census, never under.
     fn census_add_subtree(&mut self, node: NodeRef) {
         if self.promoted_reads.get().is_none() {
             return;
         }
         let mut values = Vec::new();
-        self.body.for_each_live_node_under(node, |n| {
+        self.body.for_each_node_under(node, |n| {
             self.body.for_each_operand(n, |op| {
                 if let Some(v) = op.as_value() {
                     values.push(v);

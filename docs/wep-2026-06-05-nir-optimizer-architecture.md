@@ -233,13 +233,13 @@ These are settled by measurement and re-derived at a cost.
   local is unused, or rewrites every read of one, must count the pool's reads as
   well. The count is scoped to the operands the skeleton still carries, since the
   pool is append-only and also holds reads that folded away.
-- A whole-body walk is `for_each_reachable_node`, which covers the skeleton and
-  what a promoted operand names as its extraction source. `for_each_node_under`
-  walks a subtree, and asserts it is not handed the root block: every bridge
-  miscompile came from a census reaching for the skeleton walk because its name
-  is the obvious one. The pool records whether an extraction source exists at
-  all, so a body with none takes the plain skeleton walk and the coverage costs
-  nothing.
+- A promoted operand names no skeleton node. Its leaves are constants and local
+  reads, and an opaque with any other origin has no extraction source, so
+  extraction refuses it. The skeleton is therefore all a node walk reaches, and
+  `for_each_reachable_node` is `for_each_node_under` from the root block. An
+  earlier opaque re-emitted a skeleton expression, so every node walk had to
+  follow it out of the skeleton. No promotion ever planted one, and dropping it
+  left one node walk.
 - That census is session-scoped, never per-application. It walks the whole
   body, so recomputing it per rule application is quadratic. It is memoized, and
   the memo is maintained across edits rather than dropped: an operand becoming

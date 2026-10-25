@@ -1151,7 +1151,6 @@ impl HeapFrame {
                 for_each_value_source(body, v, &mut |source| {
                     leaves.push(match source {
                         Some(OpaqueSource::Local(l)) => self.local_node(l),
-                        Some(OpaqueSource::Expr(e)) => self.expr_node(e).unwrap_or(ELSEWHERE),
                         None => ELSEWHERE,
                     });
                 });
@@ -1638,9 +1637,6 @@ impl HeapFrame {
                 for_each_value_source(body, v, &mut |source| {
                     let root = match source {
                         Some(OpaqueSource::Local(l)) => self.local_root(l),
-                        Some(OpaqueSource::Expr(e)) => {
-                            self.expr_node(e).map(|n| self.classes.root(n))
-                        }
                         None => Some(self.classes.root(ELSEWHERE)),
                     };
                     match root {

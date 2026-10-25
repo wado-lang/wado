@@ -256,8 +256,8 @@ struct BindWalk<'e, 'a> {
 }
 
 impl BindWalk<'_, '_> {
-    /// Visit `n`: a promoted operand's source runs first and its reads last, so
-    /// ordering errs toward a write preceding a read.
+    /// Visit `n`: a promoted operand's reads come last, so ordering errs toward
+    /// a write preceding a read.
     fn node(&mut self, n: NodeRef) {
         let body = &*self.engine.body;
         if let NodeRef::Stmt(s) = n {
@@ -265,7 +265,7 @@ impl BindWalk<'_, '_> {
                 // The back edge runs a loop's writes before each read in it.
                 StmtKind::Loop { .. } => {
                     let mut writes = Vec::new();
-                    body.for_each_live_node_under(n, |m| node_writes(self.engine, m, &mut writes));
+                    body.for_each_node_under(n, |m| node_writes(self.engine, m, &mut writes));
                     for w in writes {
                         self.write(w);
                     }
@@ -276,19 +276,12 @@ impl BindWalk<'_, '_> {
                 _ => {}
             }
         }
-        let mut sourced = Vec::new();
         let mut promoted_reads = hashmap::IndexSet::default();
-        let mut seen = hashmap::IndexSet::default();
         body.for_each_operand(n, |op| {
             if let Some(v) = op.as_value() {
-                body.values
-                    .for_each_opaque_expr(v, &mut seen, |e| sourced.push(e));
                 body.values.collect_opaque_locals(v, &mut promoted_reads);
             }
         });
-        for e in sourced {
-            self.node(NodeRef::Expr(e));
-        }
         let mut children = Vec::new();
         body.for_each_child(n, |c| children.push(c));
         for c in children {
@@ -388,20 +381,10 @@ fn operand_reads_global(body: &nir_arena::Body, op: Operand) -> bool {
         matches!(n, NodeRef::Expr(x) if matches!(body.exprs[x].kind, ExprKind::GlobalVarGet { .. }))
             .then_some(())
     };
-    match op {
-        Operand::Expr(e) => body
-            .find_in_live_node_under(NodeRef::Expr(e), is_global_read)
-            .is_some(),
-        Operand::Value(v) => {
-            let mut sources = Vec::new();
-            body.values
-                .for_each_opaque_expr(v, &mut hashmap::IndexSet::default(), |e| sources.push(e));
-            sources.into_iter().any(|e| {
-                body.find_in_live_node_under(NodeRef::Expr(e), is_global_read)
-                    .is_some()
-            })
-        }
-    }
+    op.as_expr().is_some_and(|e| {
+        body.find_in_nodes_under(NodeRef::Expr(e), is_global_read)
+            .is_some()
+    })
 }
 
 /// Cap on how many copy-temp / block-tail hops a bounded resolution chain
@@ -1159,18 +1142,18 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
 pub(super) fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     let body = &*engine.body;
     let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         if let NodeRef::Block(b) = n
             && panics_before_any_exit(engine, b)
         {
-            body.for_each_live_node_under(n, |m| {
+            body.for_each_node_under(n, |m| {
                 if let NodeRef::Expr(e) = m {
                     diverging.insert(e);
                 }
             });
         }
     });
-    body.find_in_live_node_under(node, |n| {
+    body.find_in_nodes_under(node, |n| {
         let NodeRef::Expr(e) = n else { return None };
         if diverging.contains(&e) {
             return None;
@@ -1195,7 +1178,7 @@ fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
             return true;
         }
         let jumps = body
-            .find_in_live_node_under(NodeRef::Stmt(s), |n| match n {
+            .find_in_nodes_under(NodeRef::Stmt(s), |n| match n {
                 NodeRef::Stmt(t) => body.stmts[t].kind.is_jump().then_some(()),
                 NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
             })
@@ -1336,7 +1319,7 @@ fn structural_loop_guard(
 /// step tests `current == T::MAX` under a guard that already rules it out.
 fn refute_past_cap(engine: &mut Engine, node: NodeRef, binds: &Binds, var: u32, cap: i64) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    engine.body.for_each_live_node_under(node, |n| {
+    engine.body.for_each_node_under(node, |n| {
         let Some((cond, ..)) = if_parts(engine, n) else {
             return;
         };
@@ -1422,7 +1405,7 @@ fn refute_panic_checks(
     let floor_alone = floor.filter(|f| f.alone);
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
     let mut proven_conjuncts: Vec<ConjunctSlot> = Vec::new();
-    engine.body.for_each_live_node_under(node, |n| {
+    engine.body.for_each_node_under(node, |n| {
         // Driving the condition to `false` drops the expression with it, so a
         // condition that writes — an `assert`'s operand capture spliced into
         // the comparison — would lose a store the surviving path still makes.
@@ -2445,7 +2428,7 @@ fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
 /// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
 fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         quiet &= match n {
             NodeRef::Expr(e) => match &body.exprs[e].kind {
                 ExprKind::Call { func_id, .. } => quiet_call(*func_id),
@@ -2822,7 +2805,7 @@ fn sole_unconditional_write(
 /// expression node for.
 fn write_count(engine: &Engine, s: StmtId, var: u32) -> usize {
     let mut writes = 0;
-    engine.body.for_each_live_node_under(NodeRef::Stmt(s), |n| {
+    engine.body.for_each_node_under(NodeRef::Stmt(s), |n| {
         let binds_var = match n {
             NodeRef::Stmt(i) => match &engine.body.stmts[i].kind {
                 StmtKind::Let { local_index, .. } => *local_index == var,
