@@ -241,7 +241,7 @@ well.
   destructuring assignment, and report an affine fallback as the compile error
   carrying the same note. Fixtures cover each cause, for the remark and for
   the error.
-- [ ] Write `IndexSwap` and its dispatch into `spec-standard-traits.md`, and
+- [x] Write `IndexSwap` and its dispatch into `spec-standard-traits.md`, and
   add it to the cheatsheet.
 
 ## Known gaps
