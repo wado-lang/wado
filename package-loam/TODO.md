@@ -254,6 +254,11 @@ A node after the `If` that reads that length stops the build.
 
 A condition the build knows still compiles both branches.
 
+A join one branch makes holds in the other, since the branches share their
+classes. A merged decoder's branch without a past joins its keys with its
+queries, so in the branch with one a key and a query are one type, and so are
+the mask and the input ids at the boundary.
+
 An initializer naming its own data file stops the build, naming the tensor. The
 textual format lets one carry a `["location": ...]` list, the protobuf form an
 `external_data` entry, and Loam takes its weights from the checkpoint the
