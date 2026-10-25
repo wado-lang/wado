@@ -161,7 +161,7 @@
       </div>
       <div class="header-item">
         <strong>Note:</strong>
-        <span>The graphs show wasm binary size, so smaller is better.</span>
+        <span>The graphs show wasm binary size, so smaller is better. They draw the latest <span id="max-commits"></span> commits; the data download holds every one.</span>
       </div>
     </header>
     <main id="main"></main>
@@ -190,6 +190,7 @@
           const data = window.BENCHMARK_DATA;
 
           document.getElementById('last-update').textContent = new Date(data.lastUpdate).toString();
+          document.getElementById('max-commits').textContent = MAX_COMMITS;
           const repoLink = document.getElementById('repository-link');
           repoLink.href = data.repoUrl;
           repoLink.textContent = data.repoUrl;
@@ -235,24 +236,17 @@
           return groups;
         }
 
-        // Every commit gets a horizontal slot, so the chart grows as wide as it
-        // needs and the container scrolls horizontally. How many points are
-        // visible at once therefore depends on the viewport width.
+        // Every commit gets a fixed horizontal slot, so the chart grows as wide
+        // as it needs and the container scrolls horizontally. How many points
+        // are visible at once therefore depends on the viewport width.
         const PX_PER_POINT = 16;
 
-        // A canvas past a browser's limits stays blank: 32767 device pixels a
-        // side in Chrome, Firefox and Safari, and 16777216 in area on iOS. A
-        // history whose slots would cross either narrows them instead, so the
-        // whole history still draws. 1647 commits at 16px crossed the width
-        // on a 2x display.
-        const MAX_CANVAS_SIDE = 32767;
-        const MAX_CANVAS_AREA = 16777216;
-
-        function chartWidth(points, cssHeight) {
-          const dpr = window.devicePixelRatio || 1;
-          const limit = Math.min(MAX_CANVAS_SIDE / dpr, MAX_CANVAS_AREA / (cssHeight * dpr * dpr));
-          return Math.floor(Math.min(points * PX_PER_POINT, limit));
-        }
+        // Only the latest commits are drawn; data.js keeps every one. A canvas
+        // past a browser's limits stays blank (32767 device pixels a side, and
+        // 16777216 in area on iOS), and the whole history crossed them: 1647
+        // commits at 16px on a 2x display. 256 commits fit a 400px-high chart
+        // on a 3x display.
+        const MAX_COMMITS = 256;
 
         function renderCombinedGraph(parent, baseName, optLevelMap) {
           // Column wrapper so the fixed title sits above the scrollable chart.
@@ -302,7 +296,7 @@
           chartWrap.appendChild(axisOverlay);
 
           // Find all unique commit IDs across all optimization levels, preserving order
-          const commitIds = [];
+          const allCommitIds = [];
           const commitSet = new Set();
           const commitMeta = new Map();
           for (const results of optLevelMap.values()) {
@@ -310,16 +304,18 @@
               const id = r.commit.id;
               if (!commitSet.has(id)) {
                 commitSet.add(id);
-                commitIds.push(id);
+                allCommitIds.push(id);
                 commitMeta.set(id, r);
               }
             }
           }
+          const commitIds = allCommitIds.slice(-MAX_COMMITS);
 
-          // CSS min-width keeps the box filling the viewport when there are only
-          // a few points, so the chart never looks cramped on the left; once it
-          // grows past the viewport the container scrolls instead.
-          canvasBox.style.width = chartWidth(commitIds.length, canvasBox.clientHeight) + 'px';
+          // Give every commit PX_PER_POINT of width. CSS min-width keeps the box
+          // filling the viewport when there are only a few points, so the chart
+          // never looks cramped on the left; once it grows past the viewport the
+          // container scrolls instead.
+          canvasBox.style.width = (commitIds.length * PX_PER_POINT) + 'px';
 
           // Sort optimization levels
           const sortedOpts = [...optLevelMap.keys()].sort();
