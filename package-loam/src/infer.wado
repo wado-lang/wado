@@ -359,15 +359,28 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         owed: [],
     };
     checked_graph(graph, &mut scope, schema)?;
+    let axes = scope.axes;
     let mut naming = Naming { names: HashMap::new(), taken: module_idents(), words: HashMap::new() };
-    claim_words(&scope, &mut naming);
-    named(graph, &mut scope, &mut naming)?;
+    // The tensor each `layout` word was first given at, so a second class it
+    // reaches is refused.
+    let mut authored = HashMap::<String, String>::new();
+    for let root of axes.roots() {
+        if let Some(w) = axes.word(&root) && w.from_layout {
+            if let Some(first) = authored.get(w.word) {
+                builtin::cold_path();
+                return Result::Err(InferError::Apart(ApartConflict { word: w.word, left: first, right: w.tensor }));
+            }
+            authored[w.word] = w.tensor;
+            naming.taken.insert(w.word);
+        }
+    }
+    name_axes(graph, &mut scope, &axes, &mut naming);
     return Result::Ok(scope);
 }
 
-/// The names given to the classes of every scope: one minted for a class,
-/// the one each `dim_param` takes, and every name taken so far, the generated
-/// module's own and every `layout` word among them.
+/// The name each class took, from whichever scope reached it first, the one
+/// each `dim_param` takes, and every name taken so far, the generated module's
+/// own and every `layout` word among them.
 struct Naming {
     names: HashMap<String, String>,
     taken: HashSet<String>,
@@ -416,46 +429,11 @@ fn pascal(text: &String) -> String {
     return out;
 }
 
-/// Every `layout` word `scope` and its branches give a class, which no minted
-/// name may take.
-fn claim_words(scope: &Checked, naming: &mut Naming) {
-    for let root of scope.axes.roots() {
-        if let Some(w) = scope.axes.word(&root) && w.from_layout {
-            naming.taken.insert(w.word);
-        }
-    }
-    for let [_, pair] of scope.branches.entries() {
-        claim_words(&pair.0, naming);
-        claim_words(&pair.1, naming);
-    }
-}
-
-/// Name each class `scope` solved, then rewrite each shape it holds, and its
-/// branches', in those names. See WEP 2026-09-20 § "Axis Names Are Inferred
-/// From the Graph".
-fn named(graph: &Graph, scope: &mut Checked, naming: &mut Naming) -> Result<(), InferError> {
-    let classes = scope.axes;
-    let mut names = HashMap::<String, String>::new();
+/// Name each class `scope`'s tensors reach that no scope has named yet, then
+/// rewrite each shape it holds, and its branches', in those names. See WEP
+/// 2026-09-20 § "Axis Names Are Inferred From the Graph".
+fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, naming: &mut Naming) {
     let mut sources: List<AxisName> = [];
-    // The word each `layout` word was first given at, so a second class it
-    // reaches is refused.
-    let mut authored = HashMap::<String, String>::new();
-    for let root of classes.roots() {
-        let Some(w) = classes.word(&root) else {
-            continue;
-        };
-        if w.from_layout {
-            if let Some(first) = authored.get(w.word) {
-                builtin::cold_path();
-                return Result::Err(InferError::Apart(ApartConflict { word: w.word, left: first, right: w.tensor }));
-            }
-            authored[w.word] = w.tensor;
-        }
-        let name = if w.from_layout { w.word } else { naming.param(&w.word) };
-        let kind = if w.from_layout { "layout" } else { "dim_param" };
-        sources.push(AxisName { name, source: `${kind} ${w.word} at ${w.tensor}` });
-        names[root] = name;
-    }
     let mut tensors: List<String> = [];
     for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
         for let vi of *declared {
@@ -470,15 +448,29 @@ fn named(graph: &Graph, scope: &mut Checked, naming: &mut Naming) -> Result<(), 
             continue;
         };
         for let [i, axis] of shape.axes.into_iter().enumerate() {
-            mint_for(&classes.read(&axis), `${tensor}[${i}]`, &mut names, &mut sources, naming);
+            name_class(&axes.read(&axis), `${tensor}[${i}]`, axes, &mut sources, naming);
         }
     }
-    for let root of classes.roots() {
-        mint_for(&classes.read(&Axis { name: root, extent: Extent::Static(1) }), classes.origin(&root), &mut names, &mut sources, naming);
+    // What else the scope holds, a constant hoisted out of a branch among
+    // them, is named from where its class was first reached.
+    let mut reached = HashSet::<String>::new();
+    for let [_, shape] of scope.shapes.entries() {
+        for let axis of shape.axes {
+            let read = axes.read(&axis);
+            let parts = if read.parts.is_empty() { [read] as List<Axis> } else { read.parts };
+            for let part of parts {
+                reached.insert(part.name);
+            }
+        }
+    }
+    for let root of axes.roots() {
+        if reached.contains(root) {
+            name_class(&axes.read(&Axis { name: root, extent: Extent::Unstated }), axes.origin(&root), axes, &mut sources, naming);
+        }
     }
     for let [tensor, shape] of scope.shapes.entries() {
-        let axes: List<Axis> = shape.axes.into_iter().map(|a| in_names(&classes.read(&a), &names)).collect();
-        scope.shapes[*tensor] = Shape { axes };
+        let named: List<Axis> = shape.axes.into_iter().map(|a| in_names(&axes.read(&a), &naming.names)).collect();
+        scope.shapes[*tensor] = Shape { axes: named };
     }
     scope.axis_names = sources;
     for let node of &graph.nodes {
@@ -486,11 +478,10 @@ fn named(graph: &Graph, scope: &mut Checked, naming: &mut Naming) -> Result<(), 
             continue;
         };
         let [mut then_scope, mut else_scope] = pair;
-        named(&branch_graph(node, "then_branch"), &mut then_scope, naming)?;
-        named(&branch_graph(node, "else_branch"), &mut else_scope, naming)?;
+        name_axes(&branch_graph(node, "then_branch"), &mut then_scope, axes, naming);
+        name_axes(&branch_graph(node, "else_branch"), &mut else_scope, axes, naming);
         scope.branches[node.outputs[0]] = [then_scope, else_scope];
     }
-    return Result::Ok(());
 }
 
 /// The graph an `If` holds as `attr`, which `checked_branch` has read.
@@ -498,35 +489,26 @@ fn branch_graph(node: &Node, attr: String) -> Graph {
     return node.attr(attr).unwrap().graph.unwrap();
 }
 
-/// Give `axis`'s class, read as `Axes::read` reads it, the name minted from
-/// `origin`, the tensor axis it is reached at, unless it has one. A merge's
-/// parts are named in its stead.
-fn mint_for(
-    axis: &Axis,
-    origin: String,
-    names: &mut HashMap<String, String>,
-    sources: &mut List<AxisName>,
-    naming: &mut Naming,
-) {
+/// Name `axis`'s class, read as `Axes::read` reads it, unless a scope has: by
+/// its `layout` word, else its first `dim_param`, else minted from `origin`,
+/// the tensor axis it is reached at. A merge's parts are named in its stead.
+fn name_class(axis: &Axis, origin: String, axes: &Axes, sources: &mut List<AxisName>, naming: &mut Naming) {
     if !axis.parts.is_empty() {
         for let [k, part] of axis.parts.into_iter().enumerate() {
-            mint_for(&part, `${origin}.${k}`, names, sources, naming);
+            name_class(&part, `${origin}.${k}`, axes, sources, naming);
         }
         return;
     }
-    if names.contains_key(axis.name) {
+    if naming.names.contains_key(axis.name) {
         return;
     }
-    let name = match naming.names.get(axis.name) {
-        Some(given) => given,
-        None => {
-            let minted = naming.take(pascal(&origin));
-            naming.names[axis.name] = minted;
-            minted;
-        },
+    let [name, source] = match axes.word(&axis.name) {
+        Some(w) && w.from_layout => [w.word, `layout ${w.word} at ${w.tensor}`],
+        Some(w) => [naming.param(&w.word), `dim_param ${w.word} at ${w.tensor}`],
+        None => [naming.take(pascal(&origin)), `minted from ${origin}`],
     };
-    sources.push(AxisName { name, source: `minted from ${origin}` });
-    names[axis.name] = name;
+    naming.names[axis.name] = name;
+    sources.push(AxisName { name, source });
 }
 
 /// `axis`, read as `Axes::read` reads it, under the names its classes took.
@@ -678,10 +660,11 @@ fn checked_node(
 fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -> Result<(), InferError> {
     branch_condition(node, scope)?;
     let [then_graph, then_scope] = checked_branch(node, "then_branch", scope, schema)?;
-    // Each branch mints past the other's, so a key names one class in both.
-    scope.axes.next = then_scope.axes.next;
+    // The branches and the graph around them solve one set of classes, so a
+    // weight a branch reads is named as the graph holds it.
+    scope.axes = then_scope.axes;
     let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
-    scope.axes.next = else_scope.axes.next;
+    scope.axes = else_scope.axes;
     for let [i, output] of node.outputs.into_iter().enumerate() {
         let t = then_scope.shapes[then_graph.outputs[i].name];
         let e = else_scope.shapes[else_graph.outputs[i].name];
@@ -701,7 +684,7 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
         }
         let mut axes: List<Axis> = [];
         for let j of 0..<t.rank() {
-            let [a, b] = [then_scope.axes.read(&t.axes[j]), else_scope.axes.read(&e.axes[j])];
+            let [a, b] = [scope.axes.read(&t.axes[j]), scope.axes.read(&e.axes[j])];
             let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
             axes.push(if a.name == b.name {
                 Axis { ..a, extent };
@@ -721,13 +704,19 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
     return Result::Ok(());
 }
 
-/// Give `scope` a shape, under its own layout, for each of its constants
-/// `branch` read, so the constant is spelled once around the branches and each
-/// branch relabels it to the axes it read it under.
+/// Give `scope` a shape for each of its constants `branch` read, so the
+/// constant is spelled once around the branches and each branch relabels it to
+/// the axes it read it under: the one `scope`'s layout gives it, else the first
+/// branch's.
 fn hoist_constants(scope: &mut Checked, branch: &Checked, local: &Schema) -> Result<(), InferError> {
-    for let [name, _] of branch.shapes.entries() {
-        if scope.known.contains_key(*name) {
+    for let [name, shape] of branch.shapes.entries() {
+        if !scope.known.contains_key(*name) || scope.shapes.contains_key(*name) {
+            continue;
+        }
+        if local.axes_for(name) matches { Some(_) } {
             materialize(name, &scope.known, &mut scope.shapes, local, &mut scope.axes)?;
+        } else {
+            scope.shapes[*name] = *shape;
         }
     }
     return Result::Ok(());
@@ -1651,11 +1640,11 @@ fn attention(
         return Result::Err(refusal(node, "the head's extent must be a number"));
     };
     // Wide, since heads times the head may pass any extent.
-    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>, classes: &mut Axes| -> Result<(), InferError> {
+    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>, solving: &mut Axes| -> Result<(), InferError> {
         let Some(e) = Extent::of(Poly::constant(extent)) else {
-            return Result::Err(refusal(node, `axis ${classes.label(axis)} would be ${extent} long, which no axis is`));
+            return Result::Err(refusal(node, `axis ${solving.label(axis)} would be ${extent} long, which no axis is`));
         };
-        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into, classes);
+        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into, solving);
     };
     stated(&q.axes[2], options.heads as i64 * dim as i64, owed, classes)?;
     stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed, classes)?;

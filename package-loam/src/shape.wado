@@ -107,9 +107,8 @@ pub struct Axes {
     declared: HashMap<String, String> = HashMap::new(),
     /// How many `dim_param`s the graph has declared so far.
     declarations: i32 = 0,
-    /// The next variable's serial. A branch's copy hands its own on, so two
-    /// branches never mint one key for two classes.
-    pub next: i32 = 0,
+    /// The next variable's serial.
+    next: i32 = 0,
 }
 
 /// The key of variable `serial`, which no `layout` word or `dim_param` spells.
@@ -215,6 +214,9 @@ impl Axes {
     pub fn unify(&mut self, left: &Axis, right: &Axis) -> bool {
         let [l, r] = [self.read(left), self.read(right)];
         if l.parts.is_empty() && r.parts.is_empty() {
+            if !is_variable(&l.name) || !is_variable(&r.name) {
+                return l.name == r.name;
+            }
             return self.join(&l.name, &r.name);
         }
         if l.parts.is_empty() {

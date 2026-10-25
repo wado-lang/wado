@@ -152,10 +152,6 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
                 axes: ["Embed", "Vocab"],
             },
             LayoutRule {
-                pattern: "U",
-                axes: ["Batch", "Seq", "Embed"],
-            },
-            LayoutRule {
                 pattern: "B",
                 axes: ["Batch", "Embed", "Vocab"],
             },
@@ -258,7 +254,7 @@ test "a value stage 0 folds stays whole where a cut node reads it" {
             Y = Add(X, U)
         }`,
     ).unwrap();
-    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Seq,Embed";
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y Batch,Y1,Embed";
 }
 
 test "an output whose producer reads across the positions is cut where it is written" {

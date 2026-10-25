@@ -232,6 +232,10 @@ test "dump reports each node's lowering and each tensor's shape" {
     let dir = scratch("dump");
     let report = on_graph("dump", &dir, []).unwrap();
     assert report == "graph g (opset 13)
+axes
+    Batch: layout Batch at X
+    In: layout In at X
+    Out: layout Out at W
 inputs
     X: f32 [Batch=N, In=2]
 weights
@@ -258,39 +262,37 @@ outputs
 }
 
 test "dump reports each branch of an If as a scope of its own, with what it owes" {
-    let dir = scratch("dump-branch");
-    let options = "{\"layout\": [
-        {\"pattern\": \"C\", \"axes\": [\"One\"]},
-        {\"pattern\": \"X\", \"axes\": [\"Seq\", \"Embed\"]},
-        {\"pattern\": \"V\", \"axes\": [\"Seq\", \"Embed\"]},
-        {\"pattern\": \"P\", \"axes\": [\"Past\", \"Embed\"]},
-        {\"pattern\": \"K\", \"axes\": [\"Embed\"]},
-        {\"pattern\": \"W\", \"axes\": [\"Embed\"]},
-        {\"pattern\": \"T\", \"axes\": [\"Total\", \"Embed\"], \"graph\": \"with_past\"},
-        {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
-    ]}";
-    fs::write(`${dir}/options.json`, &options).unwrap();
-    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
-    );
+    let report = loam(["dump", "--type", "onnxtext", "conformance/branch.onnxtext"]).unwrap();
+    assert report.starts_with("graph branch (opset 13)
+axes
+    C0: minted from C[0]
+    N: dim_param N at X
+    X1: minted from X[1]
+    M: dim_param M at P
+    Y0: minted from Y[0]
+");
+    // A branch lists the axes only it reaches.
     assert report.contains("
     branch    Y, Z = If(C)
-        Y: f32 [Total=\"Y[0]\", Embed=2]
-        Z: f32 [Seq=N, Embed=2]
+        Y: f32 [Y0=\"Y[0]\", X1=2]
+        Z: f32 [N=N, X1=2]
         then_branch
+            axes
+                T0: minted from T[0]
             nodes
                 kernel    T = Concat(P, X)
-                    T: f32 [Total=M + N, Embed=2]
+                    T: f32 [T0=M + N, X1=2]
                     written: a regrouping takes in no operator after it
 ");
     assert report.contains("
                 kernel    TZ = Mul(SK, W)
-                    TZ: f32 [Seq=N, Embed=2]
+                    TZ: f32 [N=N, X1=2]
                     written: the scope returns it
                     takes in S, SK, keeping 16 * N bytes out of memory
 ");
     assert report.contains("
             owed
-                Add: axis Seq is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
+                Add: axis N is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
 ");
     assert report.contains("
         else_branch
