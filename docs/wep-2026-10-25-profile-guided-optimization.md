@@ -160,8 +160,10 @@ becoming `!`-typed starts or ends a region, and `#[coverage(off)]` on the
 enclosing `impl` or module removes them all.
 
 A function whose hash differs is compiled as if no profile existed. A stale
-profile therefore costs only the gain on what changed, and it never marks a
-region from counts that no longer describe it.
+profile therefore costs only the gain on what changed, and it never applies
+counts to a region they were not recorded for. Counts still go stale through an
+edit elsewhere, such as a caller that now passes other values, and only
+recording again refreshes them.
 
 A compile that discards a function's counts says so at `--log-level info`, so
 an author learns when to record again.
