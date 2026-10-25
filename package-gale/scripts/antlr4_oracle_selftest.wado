@@ -1,0 +1,321 @@
+#!/usr/bin/env wado
+//! Exercises `antlr4_oracle.wado` against the corpus grammars. Not a CI job: it
+//! needs java and javac, as `regen_oracle.wado` does. Run it after touching the
+//! oracle, from the repository root: what a generated fixture pins comes from
+//! the oracle, and nothing else checks it.
+//!
+//! ```sh
+//! wado run package-gale/scripts/antlr4_oracle_selftest.wado
+//! ```
+
+use { env, println, eprint, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+use { ensure_jar, parse_request, run_request, Jar, Ran } from "./antlr4_oracle.wado";
+
+global GRAMMARS: String = "package-gale/tests/grammars";
+global FIXTURES: String = "package-gale/build/oracle-selftest";
+
+/// One oracle run and what it must answer. An empty `stdout` asserts stdout is
+/// empty: a refused run must not leave a caller anything to pin. `stderr` is
+/// one required substring each. Each probe run is four JVM starts, so a check
+/// asserts everything its run should say rather than repeating the run.
+struct Check {
+    name: String,
+    input: String,
+    code: u8,
+    stdout: String,
+    stderr: List<String> = [],
+    args: List<String>,
+}
+
+fn grammar(name: String) -> String {
+    return `${GRAMMARS}/${name}`;
+}
+
+fn oracle(jar: &Jar, arguments: List<String>, input: &String) -> Ran with (Process, Preopens, Random) {
+    return match parse_request(arguments) {
+        Ok(request) => run_request(jar, &request, input, false),
+        Err(message) => Ran { code: 1, stdout: [], stderr: message },
+    };
+}
+
+/// The failure `check` describes, if any.
+fn mismatch(check: &Check, ran: &Ran) -> Option<String> {
+    if ran.code != check.code {
+        return Some(`exit ${ran.code}, want ${check.code}\n${ran.stderr}`);
+    }
+    for let want of &check.stderr {
+        if !ran.stderr.contains(want) {
+            return Some(`stderr lacks '${*want}'\n${ran.stderr}`);
+        }
+    }
+    let out = String::from_utf8_lossy(&ran.stdout);
+    if check.stdout.is_empty() && !out.is_empty() {
+        return Some(`expected no stdout, got: ${out}`);
+    }
+    if !out.contains(&check.stdout) {
+        return Some(`stdout lacks '${check.stdout}'\n  got: ${out}`);
+    }
+    return null;
+}
+
+fn checks() -> List<Check> {
+    let rust_base = grammar("java/RustLexerBase.java");
+    let ts_lexer_base = grammar("java/TypeScriptLexerBase.java");
+    let ts_parser_base = grammar("java/TypeScriptParserBase.java");
+    return [
+        // Grammars with no superClass keep working unchanged.
+        Check {
+            name: "json tree",
+            input: "{\"a\":[1,2]}",
+            code: 0,
+            stdout: "(json (value (obj {",
+            args: [grammar("JSON.g4"), "json"],
+        },
+        Check {
+            name: "json parse error",
+            input: "{\"a\":",
+            code: 2,
+            stdout: "(json",
+            args: [grammar("JSON.g4"), "json"],
+        },
+        Check {
+            name: "json tokens",
+            input: "{\"a\":1}",
+            code: 0,
+            stdout: "[@0,0:0='{'",
+            args: ["--tokens", grammar("JSON.g4")],
+        },
+        // A superClass grammar with no base class is refused, not compiled and failed.
+        Check {
+            name: "superClass unsupplied",
+            input: "0x1f",
+            code: 1,
+            stdout: "",
+            stderr: ["declares 'options { superClass = RustLexerBase; }'"],
+            args: ["--tokens", grammar("RustLexer.g4")],
+        },
+        Check {
+            name: "probe-super without superClass",
+            input: "{\"a\":1}",
+            code: 1,
+            stdout: "",
+            stderr: ["declares no superClass"],
+            args: ["--tokens", "--probe-super", grammar("JSON.g4")],
+        },
+        Check {
+            name: "super and probe-super conflict",
+            input: "0x1f",
+            code: 1,
+            stdout: "",
+            stderr: ["mutually exclusive"],
+            args: ["--tokens", "--probe-super", "--super", rust_base, grammar("RustLexer.g4")],
+        },
+        // --super is the only path that answers. `1.` is the case the base
+        // class decides: FLOAT_LITERAL only because FloatDotPossible() says so.
+        Check {
+            name: "super 0x1f",
+            input: "0x1f",
+            code: 0,
+            stdout: "'0x1f',<INTEGER_LITERAL>",
+            args: ["--tokens", "--super", rust_base, grammar("RustLexer.g4")],
+        },
+        Check {
+            name: "super float dot",
+            input: "1.",
+            code: 0,
+            stdout: "'1.',<FLOAT_LITERAL>",
+            args: ["--tokens", "--super", rust_base, grammar("RustLexer.g4")],
+        },
+        // --probe-super reports, never answers: exit 3 and empty stdout every
+        // time, so no caller can pin it.
+        Check {
+            name: "probe reports a polarity split",
+            input: "1.",
+            code: 3,
+            stdout: "",
+            stderr: ["NOT an oracle", "FloatDotPossible", "with every predicate true", "with every predicate false"],
+            args: ["--tokens", "--probe-super", grammar("RustLexer.g4")],
+        },
+        Check {
+            name: "probe reports agreement",
+            input: "0x1f",
+            code: 3,
+            stdout: "",
+            stderr: ["same answer under both predicate polarities"],
+            args: ["--tokens", "--probe-super", grammar("RustLexer.g4")],
+        },
+        Check {
+            name: "probe reports reached members",
+            input: "function f() {}",
+            code: 3,
+            stdout: "",
+            stderr: ["ProcessOpenBrace"],
+            args: ["--tokens", "--probe-super", grammar("TypeScriptLexer.g4")],
+        },
+        // The only corpus case that reaches no base-class member and agrees
+        // under both polarities: the shape that invites an exit-0 shortcut.
+        // Taking it would be wrong exactly here; see "Oracling a superClass
+        // grammar" in antlr4-compatibility.md.
+        Check {
+            name: "a clean-looking probe is still refused",
+            input: "A : B ;",
+            code: 3,
+            stdout: "",
+            stderr: ["base-class members this input reached: none", "same answer under both predicate polarities"],
+            args: ["--tokens", "--probe-super", grammar("ANTLRv4Lexer.g4")],
+        },
+        // A split pair answers through --lexer, each half against its own base.
+        // The jar reads `if (a)` as a call of an identifier `if`, since
+        // expressionStatement precedes ifStatement and both readings parse.
+        Check {
+            name: "split pair tree",
+            input: "if (a) { b; }",
+            code: 0,
+            stdout: "(expressionSequence (singleExpression (identifierName (reservedWord (keyword if)))",
+            args: [
+                "--lexer",
+                grammar("TypeScriptLexer.g4"),
+                "--super",
+                ts_lexer_base,
+                "--super",
+                ts_parser_base,
+                grammar("TypeScriptParser.g4"),
+                "program",
+            ],
+        },
+        Check {
+            name: "split pair misnamed",
+            input: "x",
+            code: 1,
+            stdout: "",
+            stderr: ["must be named <N>Parser and <N>Lexer"],
+            args: [
+                "--lexer",
+                grammar("JSON.g4"),
+                "--super",
+                ts_parser_base,
+                grammar("TypeScriptParser.g4"),
+                "program",
+            ],
+        },
+        Check {
+            name: "split pair takes no --tokens",
+            input: "x",
+            code: 1,
+            stdout: "",
+            stderr: ["takes neither --tokens"],
+            args: [
+                "--tokens",
+                "--lexer",
+                grammar("TypeScriptLexer.g4"),
+                grammar("TypeScriptParser.g4"),
+            ],
+        },
+        // Stub-generation shapes no corpus grammar reaches today. Each is one
+        // `.g4` line away, so they are pinned here rather than in tests/grammars/.
+        //
+        // Two call sites, one Java signature. Emitting both is a javac "already
+        // defined", which would exit 1 before any run, so reaching a report at
+        // all is the assertion. TypeScriptParser.g4 already has this shape.
+        Check {
+            name: "duplicate call sites collapse",
+            input: "get",
+            code: 3,
+            stdout: "",
+            stderr: ["'get',<GET>"],
+            args: ["--tokens", "--probe-super", `${FIXTURES}/DupLex.g4`],
+        },
+        // `f` is a predicate and an action. A boolean stub that did not record
+        // itself would run the action side invisibly.
+        Check {
+            name: "dual-role member is recorded",
+            input: "12",
+            code: 3,
+            stdout: "",
+            stderr: ["oracle:   f"],
+            args: ["--tokens", "--probe-super", `${FIXTURES}/DualLex.g4`],
+        },
+        Check {
+            name: "non-literal argument refused",
+            input: "abc",
+            code: 1,
+            stdout: "",
+            stderr: ["cannot infer a signature"],
+            args: ["--tokens", "--probe-super", `${FIXTURES}/OpaqueLex.g4`],
+        },
+    ];
+}
+
+fn write_fixtures() -> Result<(), String> with Preopens {
+    let fixtures: List<[String, String]> = [
+        [
+            "DupLex.g4", "lexer grammar DupLex;
+options { superClass = DupBase; }
+GET : {this.n(\"get\")}? 'get' ;
+SET : {this.n(\"set\")}? 'set' ;
+",
+        ],
+        [
+            "DualLex.g4", "lexer grammar DualLex;
+options { superClass = DualBase; }
+KW  : {this.f()}? 'kw' ;
+NUM : [0-9]+ {this.f();} ;
+",
+        ],
+        [
+            "OpaqueLex.g4", "lexer grammar OpaqueLex;
+options { superClass = OpaqueBase; }
+ID : [a-z]+ {this.f(getText());} ;
+",
+        ],
+    ];
+    if let Err(e) = fs::create_dir_all(FIXTURES) {
+        return Err(`${e}`);
+    }
+    for let [name, text] of fixtures {
+        if let Err(e) = fs::write(fs::join(FIXTURES, name), &text) {
+            return Err(`${e}`);
+        }
+    }
+    return Ok(());
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, SystemClock, Random) {
+    let pinned = match env("ANTLR4_VERSION") {
+        Some(v) => v,
+        None => "4.13.2",
+    };
+    let jar = match ensure_jar(Some(pinned)) {
+        Ok(jar) => jar,
+        Err(message) => {
+            eprintln(`oracle: ${message}`);
+            exit(1);
+        },
+    };
+    if let Err(message) = write_fixtures() {
+        eprintln(`selftest: ${message}`);
+        exit(1);
+    }
+    let mut failed = 0;
+    for let check of checks() {
+        let ran = oracle(&jar, check.args, &check.input);
+        match mismatch(&check, &ran) {
+            Some(why) => {
+                failed += 1;
+                eprint(`FAIL ${check.name}: ${why}\n`);
+            },
+            None => println(`ok   ${check.name}`),
+        }
+    }
+    let _ = fs::remove_dir_all(FIXTURES);
+    if failed != 0 {
+        eprintln(`${failed} check(s) failed`);
+        exit(1);
+    }
+    println("all checks passed");
+}

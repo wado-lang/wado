@@ -1,0 +1,81 @@
+#!/usr/bin/env wado
+//! Compares the parse tree Gale's TypeScript parser builds for one file with
+//! the ANTLR4 jar's, and lists where they disagree. See "Comparing a whole
+//! TypeScript file" in antlr4-compatibility.md. As with `diff`, it exits 1
+//! where the trees disagree.
+//!
+//! ```sh
+//! mise run oracle-gale-typescript [file.ts]
+//! ```
+//!
+//! The path is relative to the repository root, and defaults to the Gale
+//! TypeScript benchmark input. Both trees are kept under
+//! `package-gale/build/oracle-typescript/`.
+
+use { args, env, eprint, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+use { ensure_jar, parse_request, run_request } from "../scripts/antlr4_oracle.wado";
+use { gale_tree } from "./typescript_tree.wado";
+use { parse_tree, report_divergences } from "./tree_diff.wado";
+
+global GRAMMARS: String = "package-gale/tests/grammars";
+global OUT_DIR: String = "package-gale/build/oracle-typescript";
+
+fn write_or_exit(path: String, text: &String) with (Preopens, Stderr, Exit) {
+    if let Err(e) = fs::write(&path, text) {
+        eprintln(`oracle-typescript: ${e}`);
+        exit(1);
+    }
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, SystemClock, Random) {
+    let arguments = args();
+    let input = if arguments.is_empty() { "package-gale/benchmark/typescript/input.ts" } else { arguments[0] };
+    let source = match fs::read_to_string(&input) {
+        Ok(source) => source,
+        Err(e) => {
+            eprintln(`oracle-typescript: ${e}`);
+            exit(1);
+        },
+    };
+    if let Err(e) = fs::create_dir_all(OUT_DIR) {
+        eprintln(`oracle-typescript: ${e}`);
+        exit(1);
+    }
+
+    let request = match parse_request([
+        "--lexer", `${GRAMMARS}/TypeScriptLexer.g4`, "--super", `${GRAMMARS}/java/TypeScriptLexerBase.java`, "--super",
+        `${GRAMMARS}/java/TypeScriptParserBase.java`, `${GRAMMARS}/TypeScriptParser.g4`, "program",
+    ]) {
+        Ok(request) => request,
+        Err(message) => {
+            eprint(message);
+            exit(1);
+        },
+    };
+    let jar = match ensure_jar(env("ANTLR4_VERSION")) {
+        Ok(jar) => jar,
+        Err(message) => {
+            eprintln(`oracle: ${message}`);
+            exit(1);
+        },
+    };
+    let ran = run_request(&jar, &request, &source, false);
+    eprint(ran.stderr);
+    if ran.code != 0 {
+        eprintln(`oracle-typescript: the jar did not parse ${input} (exit ${ran.code})`);
+        exit(1);
+    }
+    let jar_tree = String::from_utf8_lossy(&ran.stdout);
+    let gale = gale_tree(&input, &source);
+    write_or_exit(fs::join(OUT_DIR, "jar.tree"), &jar_tree);
+    write_or_exit(fs::join(OUT_DIR, "gale.tree"), &gale);
+
+    if !report_divergences(&parse_tree(&jar_tree), &parse_tree(&gale)) {
+        exit(1);
+    }
+}
