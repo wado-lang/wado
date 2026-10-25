@@ -486,12 +486,16 @@ cannot be taken back.
   `wado test`. Done when a fixture can spawn.
 - [ ] Spawning under a guest directory granted at a different host path, which
   turns spawning off. Done when the child sees the guest's view of it.
-- [ ] A pseudo-terminal. A child that needs one (a full-screen editor) gets the
-  inherited terminal or none. Done when such a child runs under one.
 - [ ] Filtering the network per host through a proxy, for the guest and the
   child together.
 
 ## Known gaps
+
+- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
+  inherited terminal or none.
+- On macOS, whether a child can change the mode of an inherited terminal is
+  untested. The profile allows no `file-ioctl`, and `tcsetattr` is an `ioctl`,
+  so a full-screen editor under `inherit_stdio` may fail there.
 
 - WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
   tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:
