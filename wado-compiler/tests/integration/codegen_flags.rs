@@ -2,7 +2,7 @@
 //! [`CompilerOptions::codegen_flags`].
 //!
 //! Covers `branch-hinting`, `bare-asserts` and `wide-arithmetic`; the
-//! `contract-checks` fixtures state theirs. Each test
+//! `contract-checks` and `cold-paths` fixtures state theirs. Each test
 //! asserts on the disassembled WAT (or the run output) so it pins the actual
 //! codegen difference rather than an internal detail.
 

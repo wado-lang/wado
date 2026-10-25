@@ -209,20 +209,19 @@ A test checks what a program computes, which a profile never changes, so the
 test world has no use for one by default. `-f pgo` turns it on there, mainly for
 fuzzing the application of profiles.
 
-`-f no-cold-paths` ignores every `cold_path()` the author or the profile put
-there. It drops the markers before any pass reads them, so no pass sees one.
-The two flags give three builds of one program: `-f no-cold-paths` has no
-markers, `-f no-pgo` has the author's only, and the default has the author's
-and the profile's.
+`-f no-cold-paths` drops every marker before any pass reads one: the author's,
+the profile's, and the compiler's, ahead of a trap, past a global's once-guard,
+and in the default arm `match_to_switch` writes. A build with it shows what the
+optimizer does with no marker to go on. The hints `infer_branch_hints` derives
+from traps stay, since they read no marker. The two flags give three builds of
+one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
+and the compiler's, and the default adds the profile's.
 
-`-f no-cold-paths` leaves alone what the compiler knows from traps: the hints
-`infer_branch_hints` derives and the markers `match_to_switch` writes. Those
-follow from what the program does, not from a guess. Reify and lowering write
-such a marker as `builtin::known_cold_path()`, ahead of a trap or past a
-global's once-guard, so the flag can tell it from the author's until NIR, which
-has one marker. The marker on a `?` propagating a failure is a guess and is
-written as the author's. An author's marker ahead of a trap stands in for the
-compiler's, so dropping it leaves the compiler's in its place.
+Reify and lowering write the compiler's marker as `builtin::known_cold_path()`,
+so the conflict remark can tell it from the author's until NIR, which has one
+marker: a global's once-guard runs once, and its marker states no guess to
+audit. The marker on a `?` propagating a failure is a guess and is written as
+the author's.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
@@ -251,7 +250,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo`, `-f no-pgo` and `-f no-cold-paths`.
+5. [ ] `-f pgo` and `-f no-pgo`.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the

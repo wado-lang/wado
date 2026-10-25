@@ -112,14 +112,14 @@ fn run_globals(
 
 pub(super) struct MatchToSwitchRule<'t> {
     type_table: &'t TypeTable,
-    cold_path_id: FuncId,
+    cold_path_id: Option<FuncId>,
     unreachable_id: FuncId,
 }
 
 impl<'t> MatchToSwitchRule<'t> {
     pub(super) fn new(
         type_table: &'t TypeTable,
-        cold_path_id: FuncId,
+        cold_path_id: Option<FuncId>,
         unreachable_id: FuncId,
     ) -> Self {
         Self {
@@ -132,13 +132,15 @@ impl<'t> MatchToSwitchRule<'t> {
 
 /// Intern the `cold_path` / `unreachable` builtins this pass synthesizes for the
 /// default arm of an exhaustive match, returning their `FuncId`s so the
-/// synthesized calls are born resolved.
-pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (FuncId, FuncId) {
-    let cold_path_id = project.intern_extern(&FunctionRef {
-        module_source: ModuleSource::builtin(),
-        name: COLD_PATH_INTRINSIC.to_string(),
-        monomorph_info: None,
-        method_info: None,
+/// synthesized calls are born resolved. No `cold_path` under `-f no-cold-paths`.
+pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (Option<FuncId>, FuncId) {
+    let cold_path_id = project.codegen_flags.cold_paths.then(|| {
+        project.intern_extern(&FunctionRef {
+            module_source: ModuleSource::builtin(),
+            name: COLD_PATH_INTRINSIC.to_string(),
+            monomorph_info: None,
+            method_info: None,
+        })
     });
     let unreachable_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -345,7 +347,7 @@ fn build_switch(
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
-    cold_path_id: FuncId,
+    cold_path_id: Option<FuncId>,
     unreachable_id: FuncId,
 ) -> ExprKind {
     let mut switch_arm_of: Vec<Option<usize>> = vec![None; arms.len()];
@@ -372,16 +374,21 @@ fn build_switch(
         // The default of an exhaustive match is the unreachable arm. Mark it
         // `cold_path()` so the inliner skips it and codegen hints it unlikely,
         // matching the other compiler-synthesized cold branches.
-        let cold_call = engine.alloc_expr(
-            ExprKind::Call {
-                func_id: cold_path_id,
-                args: CallArgs::free(vec![]),
-                type_args: vec![],
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span);
+        let mut stmts: Vec<_> = cold_path_id
+            .map(|func_id| {
+                let cold_call = engine.alloc_expr(
+                    ExprKind::Call {
+                        func_id,
+                        args: CallArgs::free(vec![]),
+                        type_args: vec![],
+                    },
+                    TypeTable::UNIT,
+                    span,
+                );
+                engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span)
+            })
+            .into_iter()
+            .collect();
         // Call `builtin::unreachable` rather than
         // `core:rt/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
@@ -397,8 +404,8 @@ fn build_switch(
             TypeTable::NEVER,
             span,
         );
-        let stmt = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
-        engine.alloc_block(vec![cold_stmt, stmt], span)
+        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
+        engine.alloc_block(stmts, span)
     };
 
     ExprKind::Switch {

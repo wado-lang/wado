@@ -30,7 +30,7 @@ use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
+use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
     COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
     case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
@@ -75,6 +75,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         closure,
         value_copy,
     } = plan;
+    // After the plan, whose global once-guards place a marker of their own.
+    if !flat.codegen_flags.cold_paths {
+        cold_paths::drop_markers(&flat);
+    }
     // Before pattern lowering, which keeps a destructure of a multi-value
     // builtin whole: a software form returns its tuple like any call, and its
     // destructure is lowered like any other.

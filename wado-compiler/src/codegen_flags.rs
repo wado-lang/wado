@@ -22,6 +22,12 @@ pub struct CodegenFlags {
     /// isolates what the hints are worth to the engine.
     pub branch_hinting: bool,
 
+    /// Keep the cold markers (the default); `-f no-cold-paths` drops every one
+    /// before any pass reads it, the compiler's included, to measure what they
+    /// are worth to the whole pipeline. The hints `infer_branch_hints` derives
+    /// from traps stay.
+    pub cold_paths: bool,
+
     /// Lower an assertion failure to a bare `unreachable` trap instead of the
     /// power-assert diagnostic. The check and trap always stay; only the
     /// *message* goes, taking with it the `Formatter` / `Inspect` / `String`
@@ -46,6 +52,7 @@ impl Default for CodegenFlags {
     fn default() -> Self {
         Self {
             branch_hinting: true,
+            cold_paths: true,
             bare_asserts: false,
             wide_arithmetic: true,
             contract_checks: false,
@@ -73,6 +80,7 @@ impl CodegenFlags {
     /// so a new flag cannot be added and left undiscoverable.
     pub const SUPPORTED: &'static [&'static str] = &[
         "branch-hinting",
+        "cold-paths",
         "bare-asserts",
         "wide-arithmetic",
         "contract-checks",
@@ -113,6 +121,7 @@ impl CodegenFlags {
             };
             match name {
                 "branch-hinting" => result.branch_hinting = enabled,
+                "cold-paths" => result.cold_paths = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
                 "wide-arithmetic" => result.wide_arithmetic = enabled,
                 "contract-checks" => result.contract_checks = enabled,

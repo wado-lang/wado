@@ -234,7 +234,9 @@ A `#![wasm_module(...)]` core module, such as the allocator, runs the same list
 on its own, with its passes named `wir/<module>:<pass>`.
 
 wasmtime lays out the cold side of a hinted branch out of line.
-`-f no-branch-hinting` disables hints for benchmarking.
+`-f no-branch-hinting` disables hints for benchmarking, and `-f no-cold-paths`
+drops every `cold_path()` marker, the compiler's included, before any pass
+reads one.
 
 ## Profile-Guided Optimization
 
