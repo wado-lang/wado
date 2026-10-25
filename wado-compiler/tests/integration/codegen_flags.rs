@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crate::common::{compile_source_with_compiler_options, run_wasm};
 use wado_compiler::{CompilerOptions, OptLevel};
+use wasmparser::{Parser, Payload};
 
 /// Sources covering every branch-hint producer: an explicit `cold_path()`
 /// marker, a synthesized one (`assert`), and a trap branch that the WIR-level
@@ -34,6 +35,10 @@ export fn run() {
 "#;
 
 fn compile_branch_hints(codegen_flags: Vec<String>) -> Vec<u8> {
+    compile_at_o2(BRANCH_HINT_SOURCE, codegen_flags)
+}
+
+fn compile_at_o2(source: &str, codegen_flags: Vec<String>) -> Vec<u8> {
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         codegen_flags,
@@ -41,11 +46,25 @@ fn compile_branch_hints(codegen_flags: Vec<String>) -> Vec<u8> {
     };
     compile_source_with_compiler_options(
         Path::new("codegen_flags_branch_hint_test.wado"),
-        BRANCH_HINT_SOURCE,
+        source,
         options,
     )
     .expect("compilation should succeed")
     .wasm
+}
+
+/// The function bodies of every core module in `wasm`, in order.
+fn function_bodies(wasm: &[u8]) -> Vec<&[u8]> {
+    Parser::new(0)
+        .parse_all(wasm)
+        .filter_map(|payload| match payload.expect("output should parse") {
+            Payload::CodeSectionEntry(body) => {
+                let range = body.range();
+                Some(&wasm[range.start as usize..range.end as usize])
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn has_branch_hint_section(wasm: &[u8]) -> bool {
@@ -67,9 +86,19 @@ fn no_branch_hinting_flag_drops_every_hint() {
     let wasm = compile_branch_hints(vec!["no-branch-hinting".to_string()]);
     assert!(
         !has_branch_hint_section(&wasm),
-        "`-f no-branch-hinting` must drop cold_path markers and disable hint \
-         inference, so no metadata.code.branch_hint section is emitted"
+        "`-f no-branch-hinting` must emit no metadata.code.branch_hint section"
     );
+}
+
+/// The flag measures what the hints are worth to the engine, so it must leave
+/// every pass alone. `reuse_loads` reads the marker in a cold arm.
+#[test]
+fn no_branch_hinting_flag_changes_no_function_body() {
+    let source = include_str!("../fixtures/wir_reuse_struct_load_across_call.wado");
+    let hinted = compile_at_o2(source, Vec::new());
+    let unhinted = compile_at_o2(source, vec!["no-branch-hinting".to_string()]);
+    assert!(has_branch_hint_section(&hinted));
+    assert_eq!(function_bodies(&hinted), function_bodies(&unhinted));
 }
 
 /// Indexing a `List` lowers to `assert i < used`, whose failure path formats

@@ -839,18 +839,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "unreachable" => Some(WirInstr::Unreachable),
-            "cold_path" => {
-                // Under `-f no-branch-hinting` the marker lowers to a plain
-                // no-op: no `ColdPath` reaches WIR, so `apply_cold_path_hints`
-                // synthesizes nothing. Dropping it here (not at NIR) keeps the
-                // inliner's cold-path cost exclusion identical in both
-                // configurations — see `CodegenFlags::branch_hinting`.
-                if self.ctx.package.codegen_flags.branch_hinting {
-                    Some(WirInstr::ColdPath)
-                } else {
-                    Some(WirInstr::Nop)
-                }
-            }
+            "cold_path" => Some(WirInstr::ColdPath),
             "select" => {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);

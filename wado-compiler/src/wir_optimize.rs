@@ -123,11 +123,9 @@ fn optimize_scoped(
 
     if opt_level == OptLevel::O0 {
         // Branch hints are independent of `-O`, like build-time cold-path hints.
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
+        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
+            infer_branch_hints(m);
+        });
         dce::compact_dead_items(module);
         finalize_locals(module);
         return;
@@ -281,11 +279,9 @@ fn optimize_scoped(
         wir_pass(scope, "elide_empty_work", module, profiler, |m| {
             elide_empty_work(m);
         });
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
+        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
+            infer_branch_hints(m);
+        });
     });
 
     // Phase 8: mark functions/types/globals orphaned by earlier passes dead,

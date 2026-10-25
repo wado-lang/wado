@@ -1612,7 +1612,7 @@ pub enum WirInstr {
     /// `apply_cold_path_hints` consumes it during WIR finalization, wrapping
     /// the enclosing conditional's condition in a `BranchHint` so the side
     /// reaching the marker is hinted cold (see that pass for the recognized
-    /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
+    /// shapes).
     ColdPath,
     /// Optimization barrier for `builtin::black_box(value)`: every WIR pass
     /// reads it as an unknown value, and codegen emits the operand in its place.

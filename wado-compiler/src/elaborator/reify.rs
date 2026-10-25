@@ -3279,9 +3279,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         spliced
     }
 
-    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
-    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
-    /// Mirrors [`super::Elaborator::desugar_assert`].
     /// Build a `builtin::cold_path()` marker statement for a compiler-synthesized
     /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
     /// then hints the enclosing branch unlikely and the inliner skips the branch.
@@ -3397,6 +3394,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (choice, None)
     }
 
+    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
+    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
+    /// Mirrors [`super::Elaborator::desugar_assert`].
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,

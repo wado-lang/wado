@@ -219,10 +219,11 @@ and the profile's.
 `infer_branch_hints` derives and the markers `match_to_switch` writes. Those
 follow from what the program does, not from a guess.
 
-The existing `-f no-branch-hinting` is a different cut. It drops the markers
-only at WIR build, after every NIR pass has read them, and it also skips the
-hints derived from traps. It answers what branch hints are worth to wasmtime;
-`-f no-cold-paths` answers what the markers are worth to the whole pipeline.
+The existing `-f no-branch-hinting` is a different cut. Every pass sees the
+same markers and hints with it as without, and only the emitter leaves out the
+hint section, the trap-derived hints included. It answers what branch hints are
+worth to wasmtime; `-f no-cold-paths` answers what the markers are worth to the
+whole pipeline.
 
 ### A profile changes no output
 
