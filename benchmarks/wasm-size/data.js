@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792939343413,
+  "lastUpdate": 1792941283988,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70897,6 +70897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ee1f04082ae7d10d153697bca31eceef226b81ce"
         },
         "date": 1792939342674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "124fbfdb1b4073a366a2b4438d4cf73d1a8e07f8",
+          "message": "Merge pull request #2458 from wado-lang/ccr-2c9a4cb3-dj0a9s\n\nfeat(benchmark): hold every pull request to exact, deterministic fuel per benchmark phase",
+          "timestamp": "2026-10-26T00:01:35+09:00",
+          "tree_id": "b9f20407aecf39287e4223cbfc9f7274bcc0e1c6",
+          "url": "https://github.com/wado-lang/wado/commit/124fbfdb1b4073a366a2b4438d4cf73d1a8e07f8"
+        },
+        "date": 1792941283329,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
