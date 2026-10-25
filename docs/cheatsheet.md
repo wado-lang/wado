@@ -594,7 +594,7 @@ assert rw as u32 == 3;     // cast to/from u32
 
 A resource is move-only, and so is anything holding one: such a type is
 declared `affine`. A value of it drops once, where its scope ends, unless it
-moved. See [the spec](./spec-types.md#affine-types).
+moved. See [the spec](./spec-affine.md).
 
 ```wado
 affine struct Conn { socket: TcpSocket, retries: i32 }

@@ -26,6 +26,7 @@
 - [Memory Model](./spec-memory.md)
 - [Traits](./spec-traits.md)
 - [Standard Traits](./spec-standard-traits.md)
+- [Affine Types](./spec-affine.md)
 - [Static Reflection](./spec-reflection.md)
 - [Effect System](./spec-effects.md)
 - [Module System](./spec-modules.md)
