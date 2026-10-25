@@ -249,7 +249,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on an [affine type](./spec-affine.md), or on a generic type, since its type arguments may be affine (`Option<T>::unwrap(self)`):
+A method receiver is `&self`, `&mut self` or `self`. Bare `self` (by value) is allowed only on an [affine type](./spec-affine.md), or on a generic type, since its type arguments may be affine (`Option<T>::unwrap(self)`):
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
