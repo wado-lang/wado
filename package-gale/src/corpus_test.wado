@@ -46,6 +46,14 @@ test "a list that cannot be read is reported and kept as a path" {
 }
 
 #[expect_trap]
+test "a run that names no path stops rather than checking nothing" {
+    let list = `${scratch(SUITE, "paths-from-empty")}/paths.txt`;
+    let text: String = "\n";
+    fs::write(&list, &text).unwrap();
+    collect(["--paths-from", list, "--update"], ["--update"]);
+}
+
+#[expect_trap]
 test "an argument that is neither a path nor a flag stops the run" {
     collect(["--verbose"], []);
 }
