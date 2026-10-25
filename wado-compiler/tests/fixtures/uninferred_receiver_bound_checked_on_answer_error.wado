@@ -1,0 +1,34 @@
+// An inherent method called on a value whose type parameter awaits its answer
+// is found whatever the parameter becomes, and its impl's bounds are checked
+// against the answer. Here a sibling branch answers `T` with a type that is not
+// `Ord`, which `impl<T: Ord> V<T>` requires of `me`.
+
+variant V<T> {
+    A,
+    B(T),
+}
+
+impl<T: Ord> V<T> {
+    fn me(&self) -> V<T> {
+        return *self;
+    }
+}
+
+struct NoOrd {
+    f: fn() -> i32,
+}
+
+fn one() -> i32 {
+    return 1;
+}
+
+test {
+    let c = builtin::black_box(true);
+    let x = if c { V::A.me() } else { V::B(NoOrd { f: one }) };
+    assert x matches { A };
+}
+
+__DATA__
+{
+    "compile_error": "27:20: analysis error: type 'NoOrd' does not implement trait 'Ord' required by bound on 'T'"
+}

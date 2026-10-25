@@ -3437,7 +3437,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `fn`-bound one hold no slot. Defaulted parameters (already filled) and
     /// ones bound to an outer-scope `TypeParam` (the caller forwarding its own
     /// generics) are excluded. A slot it reports is the error type from then
-    /// on, as [`Self::report_uninferred_static_method_type_args`] leaves one.
+    /// on, as [`Self::defer_or_report_uninferred_static_method_type_args`]
+    /// leaves one.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -3613,7 +3614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// [`Self::report_uninferred_static_method_type_args`] for a derived method,
+    /// [`Self::defer_or_report_uninferred_static_method_type_args`] for a derived method,
     /// whose slots are its type's own parameters.
     fn report_uninferred_derived_type_args(
         &mut self,

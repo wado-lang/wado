@@ -551,6 +551,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver, method_name);
+            if let Some(def) = method_info.as_ref().and_then(|info| info.impl_block) {
+                self.defer_awaited_impl_bounds(def, base_type_id, span);
+            }
         }
 
         // Fall back to base type trait methods

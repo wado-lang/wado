@@ -286,20 +286,6 @@ impl Scope {
             })
     }
 
-    /// Whether every variable `ty` names stands behind a deferred report: a
-    /// bound on `ty` then holds for now, as one on the error type a report
-    /// leaves does, and is asked of the answer.
-    pub(super) fn awaits_report(&self, tt: &TypeTable, ty: TypeId) -> bool {
-        if self.reported_holes.is_empty() {
-            return false;
-        }
-        let vars = tt.infer_vars_in(ty);
-        !vars.is_empty()
-            && vars
-                .iter()
-                .all(|&var| self.reported_holes.contains(&tt.type_key(var)))
-    }
-
     /// Whether a pending call holds literals waiting at the variable `var`.
     pub(super) fn literals_wait_at(&self, var: TypeId) -> bool {
         self.pending_literals

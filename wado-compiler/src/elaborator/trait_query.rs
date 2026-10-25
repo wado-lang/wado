@@ -977,12 +977,10 @@ impl TypeSystem {
         type_id: TypeId,
         bounds: &[FqTraitName],
     ) -> bool {
-        let tt = self.type_table.borrow();
-        let open = ctx.awaits_pending_call(&tt, type_id) || ctx.awaits_report(&tt, type_id);
-        drop(tt);
-        open || bounds
-            .iter()
-            .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
+        ctx.awaits_pending_call(&self.type_table.borrow(), type_id)
+            || bounds
+                .iter()
+                .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
     /// `answer` under the recursion guard. A question already open does not

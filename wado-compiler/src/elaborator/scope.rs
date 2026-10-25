@@ -413,10 +413,6 @@ pub(super) struct Scope {
     /// call's open variables, one entry per call nested in another's argument,
     /// innermost last. See [`PendingLiterals`].
     pub(super) pending_literals: Vec<PendingLiterals>,
-    /// The inference variables a deferred "cannot infer" stands behind: each
-    /// is reported if nothing answers it, and its slot's bounds are checked
-    /// against the answer if something does.
-    pub(super) reported_holes: IndexSet<TypeKey>,
     /// Set while what answers the bounds the types resolved meanwhile owe is
     /// not yet in place. See [`Elaborator::holding_bounds`].
     pub(super) held_bounds: Option<Vec<PendingBounds>>,

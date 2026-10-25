@@ -965,14 +965,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
+        // An argument awaiting its report meets every bound here, as the error
+        // type a report leaves does; the call committing to the impl checks
+        // the bounds against its answer (`Self::defer_awaited_impl_bounds`).
+        let bounded: Option<Vec<TypeId>> = receiver_type_args.map(|args| {
+            let tt = self.tysys.type_table.borrow();
+            args.iter()
+                .map(|&arg| if self.awaits_report(&tt, arg) { TypeTable::ERROR } else { arg })
+                .collect()
+        });
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 def,
                 Some(receiver),
-                receiver_type_args,
+                bounded.as_deref(),
             )
+    }
+
+    /// Check the bounds impl `def` places on `receiver`'s arguments still
+    /// awaiting their report against what answers them, as
+    /// [`Self::inherent_impl_applies`] let them meet every bound.
+    pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
+        let binding = {
+            let tt = self.tysys.type_table.borrow();
+            let (ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. }) = tt.get(receiver)
+            else {
+                return;
+            };
+            if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
+                return;
+            }
+            let open = |ty: TypeId| self.awaits_report(&tt, ty);
+            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &open)
+        };
+        if let Some(binding) = binding {
+            self.defer_open_impl_bounds(def, &binding.slots, span);
+        }
     }
 
     /// Whether a call of `method_name` on `receiver` may wait for the
@@ -1039,8 +1070,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param = names
                 .name_of(slot)
                 .and_then(|name| header.type_params.iter().find(|p| p.name == name));
+            let open = self.awaits_pending_call(arg)
+                || self.awaits_report(&self.tysys.type_table.borrow(), arg);
             if let Some(param) = param
-                && self.awaits_pending_call(arg)
+                && open
             {
                 self.defer_bounds_to_answer(param, arg, None, &[], span);
             }
