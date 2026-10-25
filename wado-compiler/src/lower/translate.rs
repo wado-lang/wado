@@ -1047,12 +1047,14 @@ impl FunctionTranslator<'_, '_> {
             for field in this.aggregate_fields(ty) {
                 let field_type = field.2;
                 path.push(field);
-                if this
-                    .base
-                    .type_table
-                    .borrow()
-                    .is_in_place_aggregate(field_type)
-                {
+                // An affine field holds an object, which the write moves as a
+                // whole: the drop before the write has nulled the old one
+                // (WEP: Affine Types).
+                let descends = {
+                    let tt = this.base.type_table.borrow();
+                    tt.is_in_place_aggregate(field_type) && !tt.holds_affine_resource(field_type)
+                };
+                if descends {
                     collect(this, field_type, path, out);
                 } else {
                     out.push(path.clone());
