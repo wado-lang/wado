@@ -2578,9 +2578,11 @@ impl ImportAttributes {
     /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file
     /// compiled on-demand into a component that satisfies the imported
     /// dependency's guest-effect imports (research-cm-boundary-callbacks.md).
+    /// The path comes with the span it is written at.
     #[must_use]
-    pub fn provider_path(&self) -> Option<&str> {
-        self.get("provider").and_then(AttrValue::as_str)
+    pub fn provider_path(&self) -> Option<(&str, Span)> {
+        let entry = self.entries.get("provider")?;
+        Some((entry.value.as_str()?, entry.value_span))
     }
 
     /// Raw lookup for any top-level attribute.

@@ -1397,23 +1397,33 @@ async fn resolve_inline_providers<H: CompilerHost>(
     let entry_source = load_result.entry_module_source.clone();
     let entry_dir = entry_dir_of(Some(&entry_source));
 
-    // (importing module source, use decl, provider path) for every provider
-    // directive, collected before the on-demand compiles below.
-    let mut jobs: Vec<(ModuleSource, UseDecl, String)> = Vec::new();
+    // (importing module source, use decl, provider path, where the path is
+    // written) for every provider directive, collected before the on-demand
+    // compiles below.
+    let mut jobs: Vec<(ModuleSource, UseDecl, String, DiagnosticSpan)> = Vec::new();
     for (src, module) in &load_result.modules {
         for item in &module.items {
             if let Item::Use(use_decl) = item
-                && let Some(path) = use_decl.attributes.as_ref().and_then(|a| a.provider_path())
+                && let Some((path, span)) =
+                    use_decl.attributes.as_ref().and_then(|a| a.provider_path())
             {
-                jobs.push((src.clone(), use_decl.clone(), path.to_string()));
+                let at = DiagnosticSpan::from_span(&span, Some(&src.source_path()));
+                jobs.push((src.clone(), use_decl.clone(), path.to_string(), at));
             }
         }
     }
 
-    let bail = |msg: String| bail_with(logger, Code::ModuleNotFound, msg);
-
     let mut providers = Vec::new();
-    for (src, use_decl, prov_path) in jobs {
+    for (src, use_decl, prov_path, at) in jobs {
+        let bail = |message: String| {
+            let _ = logger.error(Diagnostic {
+                severity: Severity::Error,
+                code: Code::ModuleNotFound,
+                message,
+                span: Some(at.clone()),
+            });
+            Bail
+        };
         // Resolve against the loader's own interner so the `ModuleSource`'s
         // interned strings match the loaded binding module's key (identity, not
         // string, equality).
