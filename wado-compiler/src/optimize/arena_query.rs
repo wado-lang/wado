@@ -498,7 +498,7 @@ pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
 }
 
 /// The `FuncId` of `builtin::cold_path`, if the package resolved one.
-pub(super) fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
+pub(crate) fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
     descriptors
         .iter()
         .position(|d| d.is_builtin_named("cold_path"))
@@ -518,7 +518,7 @@ pub(super) fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
 
 /// Every expression a `cold_path()` marker makes cold: those under the marker's
 /// statement and the ones after it in its block.
-pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
+pub(crate) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
     let mut out = IndexSet::default();
     body.for_each_reachable_node(|node| {
         let NodeRef::Block(block) = node else {

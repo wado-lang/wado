@@ -70,9 +70,7 @@ pub fn outline_cold_regions(
         // A helper this pass made has the one site that replaced its region.
         let root_copied = sites.get(fi).is_some_and(|&n| n > 1);
         let mut ordinal = 0;
-        while let Some(region) =
-            find_region(project, fi, cold, exits, root_copied, descriptor_cache)
-        {
+        while let Some(region) = find_region(project, fi, cold, exits, root_copied) {
             outline(project, fi, region, ordinal);
             ordinal += 1;
             changed = true;
@@ -140,7 +138,6 @@ fn find_region(
     cold: FuncId,
     exits: Exits,
     root_copied: bool,
-    descriptor_cache: &mut DescriptorCache,
 ) -> Option<Region> {
     let func = project.functions[fi].borrow();
     if func.is_dead || !is_splittable(&func) {
@@ -148,8 +145,7 @@ fn find_region(
     }
     let body = func.body.as_ref()?;
     // Nearly every function has no marker, so settle that with one linear scan
-    // of the arena before classifying its blocks. The descriptor table is read
-    // after it, since only the pricing below needs one.
+    // of the arena before classifying its blocks.
     if !body
         .exprs
         .values()
@@ -157,7 +153,6 @@ fn find_region(
     {
         return None;
     }
-    let descriptors = descriptor_cache.descriptors(project);
     let params = func.params.len();
     let type_table = project.type_table.borrow();
     let root = root_copied.then_some((body.root(), false));
@@ -167,7 +162,7 @@ fn find_region(
             continue;
         };
         let region: Vec<StmtId> = stmts[marker + 1..].to_vec();
-        if buys_nothing(body, &type_table, descriptors, &region, params) {
+        if buys_nothing(body, &type_table, cold, &region, params) {
             continue;
         }
         compiler_trace!(
@@ -175,7 +170,7 @@ fn find_region(
             "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
-            region_size(body, &type_table, descriptors, &region),
+            region_size(body, &type_table, Some(cold), &region),
         );
         if let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
         {
@@ -253,12 +248,12 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
 fn buys_nothing(
     body: &Body,
     type_table: &TypeTable,
-    descriptors: &[FunctionRef],
+    cold: FuncId,
     region: &[StmtId],
     param_count: usize,
 ) -> bool {
     region.is_empty()
-        || region_size(body, type_table, descriptors, region) <= call_site_size(param_count)
+        || region_size(body, type_table, Some(cold), region) <= call_site_size(param_count)
 }
 
 /// How one local the region mentions gets to the helper.

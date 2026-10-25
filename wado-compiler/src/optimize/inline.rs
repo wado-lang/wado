@@ -35,9 +35,8 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, cold_path_id, unreached_through};
+use super::arena_query::{self, cold_exprs, cold_path_id, is_cold_marker, unreached_through};
 use super::body_memo::BodyMemo;
-use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
@@ -133,15 +132,6 @@ fn is_zero_extension(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
     unsigned && wasm_shape(type_table, to) == Some(PrimitiveType::I64)
 }
 
-/// True when an expression is a `builtin::cold_path()` marker call.
-fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bool {
-    matches!(
-        &body.exprs[id].kind,
-        ExprKind::Call { func_id, .. }
-            if callee_descriptor(descriptors, *func_id).is_builtin_named("cold_path")
-    )
-}
-
 /// How a statement ends the reachable, hot portion of its block, for the inline
 /// cost walk in [`CostWalk::block`].
 enum BlockCut {
@@ -158,19 +148,11 @@ enum BlockCut {
 
 /// Classify whether a statement cuts off the rest of its block from the inline
 /// cost estimate.
-fn block_cut(
-    body: &Body,
-    stmt: StmtId,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-) -> BlockCut {
+fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable, cold: Option<FuncId>) -> BlockCut {
+    if cold.is_some_and(|cold| is_cold_marker(body, stmt, cold)) {
+        return BlockCut::Cold;
+    }
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e)
-            if e.as_expr()
-                .is_some_and(|e| is_cold_path_call(body, e, descriptors)) =>
-        {
-            BlockCut::Cold
-        }
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
         StmtKind::Expr(e)
             if e.as_expr()
@@ -205,7 +187,7 @@ enum Price {
 struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
-    descriptors: &'a [FunctionRef],
+    cold: Option<FuncId>,
     price: Price,
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
@@ -228,16 +210,11 @@ pub(super) struct ConstView<'a> {
 type SeenValues = IndexSet<ValueId>;
 
 impl<'a> CostWalk<'a> {
-    fn new(
-        body: &'a Body,
-        type_table: &'a TypeTable,
-        descriptors: &'a [FunctionRef],
-        price: Price,
-    ) -> Self {
+    fn new(body: &'a Body, type_table: &'a TypeTable, cold: Option<FuncId>, price: Price) -> Self {
         Self {
             body,
             type_table,
-            descriptors,
+            cold,
             price,
             consts: None,
             spliced: &[],
@@ -411,7 +388,7 @@ impl<'a> CostWalk<'a> {
                 .first()
                 .is_some_and(|&s| {
                     matches!(
-                        block_cut(self.body, s, self.type_table, self.descriptors),
+                        block_cut(self.body, s, self.type_table, self.cold),
                         BlockCut::Cold
                     )
                 });
@@ -427,7 +404,7 @@ impl<'a> CostWalk<'a> {
     fn block(&self, block: BlockId, seen: &mut SeenValues) -> usize {
         let mut total = 0;
         for &stmt in &self.body.blocks[block].stmts {
-            match block_cut(self.body, stmt, self.type_table, self.descriptors) {
+            match block_cut(self.body, stmt, self.type_table, self.cold) {
                 BlockCut::Cold if self.price == Price::Hot => break,
                 BlockCut::Cold => {}
                 BlockCut::Diverges => {
@@ -720,10 +697,10 @@ const FREE_ARITY: usize = 2;
 fn inline_cost(
     body: &Body,
     type_table: &TypeTable,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     spliced: &[usize],
 ) -> usize {
-    CostWalk::new(body, type_table, descriptors, Price::Hot)
+    CostWalk::new(body, type_table, cold, Price::Hot)
         .splicing(spliced)
         .whole_body()
 }
@@ -733,8 +710,8 @@ fn inline_cost(
 /// store, so this parts company with [`inline_cost`] exactly where a callee
 /// keeps a rare heavy arm: `TreeBuilder::push_row` in the Gale runtime prices at
 /// 27 hot and 166 by size.
-fn inline_size(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    CostWalk::new(body, type_table, descriptors, Price::Size).whole_body()
+fn inline_size(body: &Body, type_table: &TypeTable, cold: Option<FuncId>) -> usize {
+    CostWalk::new(body, type_table, cold, Price::Size).whole_body()
 }
 
 /// What a run of statements occupies, on the same terms as [`inline_size`].
@@ -744,10 +721,10 @@ fn inline_size(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef])
 pub(super) fn region_size(
     body: &Body,
     type_table: &TypeTable,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     stmts: &[StmtId],
 ) -> usize {
-    let walk = CostWalk::new(body, type_table, descriptors, Price::Size);
+    let walk = CostWalk::new(body, type_table, cold, Price::Size);
     let mut seen = SeenValues::default();
     stmts.iter().map(|&s| walk.stmt(s, &mut seen)).sum()
 }
@@ -778,11 +755,11 @@ fn net_cost(gross: usize, param_count: usize) -> usize {
 fn inline_cost_folded(
     body: &Body,
     type_table: &TypeTable,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     view: &ConstView<'_>,
     spliced: &[usize],
 ) -> usize {
-    CostWalk::new(body, type_table, descriptors, Price::Hot)
+    CostWalk::new(body, type_table, cold, Price::Hot)
         .under(view)
         .splicing(spliced)
         .whole_body()
@@ -909,19 +886,19 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     safepoint_calls: &[bool],
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
-        descriptors: &'a [FunctionRef],
+        cold: Option<FuncId>,
         safepoint_calls: &'a [bool],
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
             for &stmt in &self.body.blocks[block].stmts {
-                match block_cut(self.body, stmt, self.type_table, self.descriptors) {
+                match block_cut(self.body, stmt, self.type_table, self.cold) {
                     BlockCut::Cold => return false,
                     BlockCut::Diverges => return self.node(NodeRef::Stmt(stmt)),
                     BlockCut::None if self.node(NodeRef::Stmt(stmt)) => return true,
@@ -981,7 +958,7 @@ fn has_safepoint(
     Walk {
         body,
         type_table,
-        descriptors,
+        cold,
         safepoint_calls,
     }
     .block(body.root())
@@ -1611,7 +1588,7 @@ fn classify_callee(
     barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     foldable: &[bool],
     loopy: &[bool],
     safepoint_calls: &[bool],
@@ -1641,7 +1618,7 @@ fn classify_callee(
     let effective_threshold = effective_threshold(func, inline_threshold);
 
     let params = func.params.len();
-    let plain = inline_cost(body, type_table, descriptors, spliced);
+    let plain = inline_cost(body, type_table, cold, spliced);
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
             hot: plain,
@@ -1653,11 +1630,11 @@ fn classify_callee(
     // Over budget as written, but the caller's constants may still fold it
     // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
-        let folded = inline_cost_folded(body, type_table, descriptors, view, spliced);
+        let folded = inline_cost_folded(body, type_table, cold, view, spliced);
         if net_cost(folded, params) > effective_threshold {
             return (false, false);
         }
-        let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
+        let walk = CostWalk::new(body, type_table, cold, Price::Hot).under(view);
         (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
 
@@ -1690,7 +1667,7 @@ fn classify_callee(
     let reach = if folds {
         Reach::Everywhere
     } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR
-        || has_safepoint(body, type_table, descriptors, safepoint_calls)
+        || has_safepoint(body, type_table, cold, safepoint_calls)
     {
         Reach::Nowhere
     } else if sites == 1 {
@@ -2138,9 +2115,9 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let cold_path = cold_path_id(descriptors);
+    let cold = cold_path_id(descriptors);
     let InlineScans { bodies, read } = scans;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold));
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
@@ -2155,11 +2132,11 @@ pub fn inline_functions(
             }
         }
     };
-    let cold = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
+    let cold_functions = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
     let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
-    let called_cold = called_cold(scans, &live, &cold);
+    let called_cold = called_cold(scans, &live, &cold_functions);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2255,7 +2232,7 @@ pub fn inline_functions(
         {
             return 0;
         }
-        let gross = inline_cost(body, type_table, descriptors, &[]);
+        let gross = inline_cost(body, type_table, cold, &[]);
         if func.inline_hint == InlineHint::Always
             || net_cost(gross, func.params.len()) <= effective_threshold(&func, inline_threshold)
         {
@@ -2267,7 +2244,7 @@ pub fn inline_functions(
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let size = match func.body.as_ref() {
-            Some(b) if pricing => inline_size(b, type_table, descriptors),
+            Some(b) if pricing => inline_size(b, type_table, cold),
             _ => 0,
         };
         let view = func
@@ -2284,7 +2261,7 @@ pub fn inline_functions(
             &barred_cycle_members,
             type_table,
             inline_threshold,
-            descriptors,
+            cold,
             &foldable,
             &loopy,
             &safepoint_calls,
@@ -2304,14 +2281,14 @@ pub fn inline_functions(
         let candidate = (verdict.reach != Reach::Nowhere).then(|| {
             let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(body, type_table, descriptors, &spliced),
+                InlineHint::Always => inline_cost(body, type_table, cold, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
             let shrinks = called_cold[i] && {
                 let written = if pricing {
                     size
                 } else {
-                    inline_size(body, type_table, descriptors)
+                    inline_size(body, type_table, cold)
                 };
                 net_cost(written, func.params.len()) == 0
             };
@@ -2432,7 +2409,7 @@ pub fn inline_functions(
             SweepRead {
                 reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
                 shrinks: shrinking.contains(&id),
-                entry: if cold[i] {
+                entry: if cold_functions[i] {
                     Site::Cold
                 } else if looped[i] {
                     Site::Loop
@@ -2512,7 +2489,7 @@ pub fn inline_functions(
                 body,
                 root,
                 candidates,
-                descriptors,
+                cold,
                 &mut frame,
                 type_table,
                 &mut inlined_funcs,
@@ -2707,7 +2684,7 @@ fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
     candidates: Candidates<'_>,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -2723,9 +2700,7 @@ fn inline_calls_in_block(
         None,
     }
     for stmt_id in body.blocks[block].stmts.clone() {
-        if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt_id].kind
-            && is_cold_path_call(body, *e, descriptors)
-        {
+        if cold.is_some_and(|cold| is_cold_marker(body, stmt_id, cold)) {
             site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
@@ -2750,7 +2725,7 @@ fn inline_calls_in_block(
                 body,
                 value,
                 candidates,
-                descriptors,
+                cold,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2764,7 +2739,7 @@ fn inline_calls_in_block(
                         body,
                         cond,
                         candidates,
-                        descriptors,
+                        cold,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2777,7 +2752,7 @@ fn inline_calls_in_block(
                     body,
                     tb,
                     candidates,
-                    descriptors,
+                    cold,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -2790,7 +2765,7 @@ fn inline_calls_in_block(
                         body,
                         eb,
                         candidates,
-                        descriptors,
+                        cold,
                         frame,
                         type_table,
                         inlined_funcs,
@@ -2804,7 +2779,7 @@ fn inline_calls_in_block(
                 body,
                 b,
                 candidates,
-                descriptors,
+                cold,
                 frame,
                 type_table,
                 inlined_funcs,
@@ -2820,7 +2795,7 @@ fn inline_calls_in_block(
                     body,
                     b,
                     candidates,
-                    descriptors,
+                    cold,
                     frame,
                     type_table,
                     inlined_funcs,
@@ -3800,7 +3775,7 @@ fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
     candidates: Candidates<'_>,
-    descriptors: &[FunctionRef],
+    cold: Option<FuncId>,
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
@@ -3833,7 +3808,7 @@ fn inline_calls_in_expr(
             body,
             e,
             candidates.rescanning(&left),
-            descriptors,
+            cold,
             frame,
             type_table,
             inlined_funcs,
@@ -3849,7 +3824,7 @@ fn inline_calls_in_expr(
             body,
             ex,
             candidates,
-            descriptors,
+            cold,
             frame,
             type_table,
             inlined_funcs,
@@ -3863,7 +3838,7 @@ fn inline_calls_in_expr(
             body,
             b,
             candidates,
-            descriptors,
+            cold,
             frame,
             type_table,
             inlined_funcs,

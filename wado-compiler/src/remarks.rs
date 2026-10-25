@@ -10,16 +10,17 @@
 use cranelift_entity::EntityRef;
 
 use crate::hashmap;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::diagnostic_function_name;
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
-    materializing_globals, region_queries,
+    build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
+    region_queries,
 };
+use crate::optimize::arena_query::{cold_exprs, cold_path_id};
 use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -428,6 +429,8 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
     let ctfe_builtins = build_ctfe_builtin_map(package);
     let materializing = materializing_globals(package, &in_order);
     let names = ctfe_runnable_names(package);
+    let descriptors: Vec<FunctionRef> = package.callee_descriptors_from(0).collect();
+    let cold_path = cold_path_id(&descriptors);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
 
@@ -440,13 +443,14 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
+        let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // Reading an outer local means no constant to miss; writing one
             // means an inner block of a template, reported through its parent.
             if region.reads_outer || region.writes_outer {
                 continue;
             }
-            let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
+            let surviving = surviving_calls(body, region.expr, &names, &cold);
             let cause = match (region.refusal, surviving.is_empty()) {
                 (Some(refusal), _) => refusal.describe().to_string(),
                 (None, false) => format!(
@@ -479,40 +483,22 @@ fn surviving_calls(
     body: &Body,
     region: ExprId,
     names: &[Option<String>],
-    ctfe_builtins: &CtfeBuiltinMap,
+    cold: &IndexSet<ExprId>,
 ) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let mut stack = vec![(NodeRef::Expr(region), false)];
-    while let Some((node, in_cold)) = stack.pop() {
-        let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
-        if !in_cold
-            && let NodeRef::Expr(e) = node
+    let mut stack = vec![NodeRef::Expr(region)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && !cold.contains(&e)
             && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
             && let Some(Some(name)) = names.get(func_id.index())
             && !out.contains(name)
         {
             out.push(name.clone());
         }
-        body.for_each_child(node, |c| stack.push((c, in_cold)));
+        body.for_each_child(node, |c| stack.push(c));
     }
     out
-}
-
-/// Whether `node` is a block the program itself marks unlikely, which the
-/// optimizer spells as a `cold_path` call among its statements.
-fn block_is_cold(body: &Body, node: NodeRef, ctfe_builtins: &CtfeBuiltinMap) -> bool {
-    let NodeRef::Block(b) = node else {
-        return false;
-    };
-    body.blocks[b].stmts.iter().any(|s| {
-        let StmtKind::Expr(op) = &body.stmts[*s].kind else {
-            return false;
-        };
-        op.as_expr().is_some_and(|e| {
-            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
-                if ctfe_builtins.get(func_id) == Some(&CtfeBuiltin::ColdPath))
-        })
-    })
 }
 
 /// Display name per `func_id`, for the functions a compile-time frame can run.

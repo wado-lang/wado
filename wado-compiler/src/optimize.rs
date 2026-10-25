@@ -6,7 +6,7 @@
 
 mod aggregate_forward;
 mod alias;
-mod arena_query;
+pub(crate) mod arena_query;
 mod body_memo;
 mod bounds;
 mod census;
