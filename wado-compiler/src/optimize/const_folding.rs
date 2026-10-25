@@ -980,7 +980,7 @@ impl ConstFoldVisitor<'_> {
             // drop the stale entry for every local the pattern binds; otherwise a
             // reused index keeps the earlier `let`'s constant.
             StmtKind::LetDestructure { pattern, .. } => {
-                body.for_each_live_node_under(NodeRef::Pat(*pattern), |node| {
+                body.for_each_node_under(NodeRef::Pat(*pattern), |node| {
                     if let NodeRef::Pat(p) = node
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {

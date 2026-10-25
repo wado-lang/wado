@@ -14,7 +14,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{EffectRef, ResolvedType};
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_with_row_into;
@@ -570,12 +570,12 @@ impl<'a> NirUnparser<'a> {
     /// form (a flow merge, a heap read whose receiver is itself opaque).
     fn unparse_value(&mut self, body: &Body, v: ValueId) {
         match body.values.kind(v).clone() {
-            ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
-                Some(OpaqueSource::Local(idx)) => match self.locals.get(idx as usize) {
+            ValueKind::Opaque(oid) => match body.values.opaque_local(oid) {
+                Some(idx) => match self.locals.get(idx as usize) {
                     Some(local) => self.output.push_str(&local.name),
                     None => self.output.push_str(&format!("$local_{idx}")),
                 },
-                _ => self.output.push_str(&format!("%{}", v.index())),
+                None => self.output.push_str(&format!("%{}", v.index())),
             },
             ValueKind::Binary { op, lhs, rhs, .. } => {
                 self.output.push('(');
