@@ -183,15 +183,14 @@ checks `a` before `b`, the reverse of the desugaring's order.
 
 ### `unchecked` goes on the reads
 
-`unchecked xs[i]` vouches for a read's contract, and a transposition makes no
-read: its right side names the arguments of `index_swap`. Marking the reads is
-where a reader looks, and keeps the statement in TypeScript's shape, so a read
-marked `unchecked` still counts as naming its place, and the mark vouches for
-the `index_swap` call instead. The call's contract is the conjunction of the
-two reads', so `[xs[i], xs[j]] = [unchecked xs[j], unchecked xs[i]]` calls the
-unchecked twin, and a statement marking one read calls the checked one. Either
-way it still swaps rather than falling back, and `unchecked` on a call to an
-`index_swap` with no `contract` clause is the error it is on any call.
+A transposition makes no read: its right side names the arguments of
+`index_swap`. The reads are still where a reader marks `unchecked`, so a marked
+read still names its place, and the mark vouches for the `index_swap` call. Its
+contract is the conjunction of the two reads', so
+`[xs[i], xs[j]] = [unchecked xs[j], unchecked xs[i]]` calls the unchecked twin,
+and marking one read keeps the checked call. Either way the statement swaps
+rather than falling back. On an `index_swap` with no `contract` clause, the
+mark is the error it is on any call.
 
 ### What is not guaranteed, and why
 

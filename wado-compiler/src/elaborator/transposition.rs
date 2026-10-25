@@ -5,8 +5,8 @@
 //! global, and that the type implements `IndexSwap`.
 
 use crate::ast::{
-    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, IndexExpr, Item,
-    Literal, Module, Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
+    AssignExpr, AssignTarget, AstId, AstVisitor, BinaryOp, Expr, Function, Item, Literal, Module,
+    Pattern, UnaryOp, walk_expr, walk_function, walk_pattern,
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -97,8 +97,8 @@ pub(super) struct Transposition<'a> {
     pub(super) container: &'a Expr,
     pub(super) i: &'a Expr,
     pub(super) j: &'a Expr,
-    /// Whether the right side marks both reads `unchecked`, which together
-    /// vouch for `index_swap`'s contract: the conjunction of theirs.
+    /// Whether both reads are `unchecked`: `index_swap`'s contract is the
+    /// conjunction of theirs.
     pub(super) vouched: bool,
 }
 
@@ -253,12 +253,6 @@ impl<'ast> AstVisitor<'ast> for Scan<'ast> {
     }
 }
 
-/// `unchecked` vouches for a read, and the read names the same place.
-fn same_subscript(a: &IndexExpr, b: &IndexExpr) -> bool {
-    same(&a.expr, &b.expr)
-        && same(&a.index, &b.index)
-}
-
 /// Whether `a` and `b` spell one place or index: a name, a literal, arithmetic,
 /// a field, a dereference or a subscript of them. Anything else spells none.
 fn same(a: &Expr, b: &Expr) -> bool {
@@ -274,7 +268,8 @@ fn same(a: &Expr, b: &Expr) -> bool {
         (Expr::FieldAccess(a), Expr::FieldAccess(b)) => {
             a.field == b.field && same(&a.expr, &b.expr)
         }
-        (Expr::Index(a), Expr::Index(b)) => same_subscript(a, b),
+        // `unchecked` vouches for a read; the place it reads is the same.
+        (Expr::Index(a), Expr::Index(b)) => same(&a.expr, &b.expr) && same(&a.index, &b.index),
         _ => false,
     }
 }
