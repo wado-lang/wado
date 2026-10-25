@@ -223,7 +223,7 @@ impl NodeLookup {
 /// Collect `(AstId, Span)` for every id-bearing node reached from `module`.
 fn collect_node_spans(module: &Module) -> Vec<(AstId, Span)> {
     struct Collector(Vec<(AstId, Span)>);
-    impl AstVisitor for Collector {
+    impl AstVisitor<'_> for Collector {
         fn visit_id(&mut self, id: AstId, span: Span) {
             self.0.push((id, span));
         }
@@ -265,7 +265,7 @@ fn inner_tail_owner(c: &Comment, blocks: &[(AstId, usize, usize)]) -> Option<Ast
 /// closing brace.
 fn collect_block_ranges(module: &Module) -> Vec<(AstId, usize, usize)> {
     struct Collector(Vec<(AstId, usize, usize)>);
-    impl AstVisitor for Collector {
+    impl AstVisitor<'_> for Collector {
         fn visit_block(&mut self, b: &Block) {
             let after = b.stmts.last().map_or(b.span.start, |last| last.span().end);
             self.0.push((b.id, after, b.span.end));

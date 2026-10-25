@@ -692,8 +692,7 @@ fn build_sll_node(
     let common = sll_find_common_terminal(&closed);
     if let Some(elem) = common {
         // Advance all configs past this shared terminal.
-        let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect(
-        );
+        let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect();
         let child = build_sll_node(&advanced, depth, max_depth, analysis, end_follow);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }

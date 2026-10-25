@@ -1,0 +1,28 @@
+//! Gemma 3 (270M) as `../generate.wado` drives it: the first token reads the
+//! prompt, and each one after it only itself against the attention cache.
+//! `onnxruntime.cpp` and `llama_cpp.cpp` are the same program over those
+//! runtimes.
+
+use { Backend } from "lib:loam";
+use { Generator } from "../generate.wado";
+use { Model, Tokenizer } from "../../example/gemma3-270m/model.wado";
+
+pub use { timed } from "../generate.wado";
+
+impl<affine Bk: Backend> Generator for Model<Bk> {
+    fn reset(&mut self) {
+        self.forget();
+    }
+
+    fn step(&mut self, ids: &List<i32>) -> i32 with _ {
+        return self.next_token(ids);
+    }
+
+    fn encode(text: &String) -> List<i32> {
+        return Tokenizer::encode(text);
+    }
+
+    fn decode(ids: &List<i32>) -> String {
+        return Tokenizer::decode(ids);
+    }
+}

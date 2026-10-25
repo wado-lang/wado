@@ -58,45 +58,41 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(19)
+type "functype//wasi/$wasi:random/random@0.3.0#get-random-bytes" = fn(i64, i32);  // TypeId(19)
 
 type "functype//effect_with_clause_renamed_import.wado/run" = fn();  // TypeId(20)
 
-type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(21)
+type "functype//effect_with_clause_renamed_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(21)
 
 type "functype//effect_with_clause_renamed_import.wado/$cm_export__run" = fn();  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(23)
+type "functype//core:rt/unreachable" = fn();  // TypeId(23)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(24)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(25)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
+type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_0::$call" = fn(ref "effect_with_clause_renamed_import.wado//$Closure_0", u64) -> ref "core:prelude//List<u8>";  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(29)
+type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(29)
 
-type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_0::$call" = fn(ref "effect_with_clause_renamed_import.wado//$Closure_0", u64) -> ref "core:prelude//List<u8>";  // TypeId(30)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
-type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(31)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(33)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
+type "functype//effect_with_clause_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
-
-type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -104,8 +100,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/wasi:random/Random::get_random_bytes from "wasi/wasi:random/Random::get_random_bytes";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
+import fn wasi/$wasi:random/random@0.3.0#get-random-bytes from "wasi/$wasi:random/random@0.3.0#get-random-bytes";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -118,63 +114,143 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let fixed: ref "effect_with_clause_renamed_import.wado//FixedRandom";
     let $local_1_1: ref "core:prelude/string.wado//String";
     let $save_wasi:random/random.wado/Random: ref null "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
-    let $d_wasi:random/random.wado/Random: ref "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
     let self_8: i32;
     let $local_1_12: ref null "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_2_13: ref "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_3: ref "core:prelude//List<u8>";
     let is_negative_19: bool;
     let x: i64;
-    let start_76: i32;
+    let arr: ref Array<u8>;
+    let q: u64;
+    let tens: i32;
+    let start_86: i32;
     fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
-    global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random(struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } });
+    global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_19 = local.tee self_8(local.tee $local_3($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_6: block -> ref "core:prelude//List<u8>" {
+    is_negative_19 = local.tee self_8($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_6: block -> ref "core:prelude//List<u8>" {
         if ref.is_null(local.tee $local_1_12(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random)) == 0 {
-            global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random(ref.as_non_null($local_1_12)).outer;
+            global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_13(ref.as_non_null($local_1_12)).outer;
             $local_3 = block -> ref "core:prelude//List<u8>" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_wasi:random/random.wado/Random.op_get_random_bytes)).env, 4_i64);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_13.op_get_random_bytes)).env, 4_i64);
             };
             global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $local_1_12;
             break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_6: $local_3;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_6: "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"(4_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_6: "effect_with_clause_renamed_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(4_i64);
         }
         unreachable;
-    }).used) < 0;
-    self_8 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_8); select i64(x < 0_i64, 0_i64 - x, x)));
+    }.used) < 0;
+    x = builtin::i64_extend_i32_s(self_8);
+    x = select i64(x < 0_i64, 0_i64 - x, x);
+    self_8 = $inline_count_digits_u64_2: block -> i32 {
+        if x <u 100000_i64 {
+            if x <u 100_i64 {
+                if x <u 10_i64 {
+                    break $inline_count_digits_u64_2: 1;
+                }
+                break $inline_count_digits_u64_2: 2;
+            }
+            if x <u 1000_i64 {
+                break $inline_count_digits_u64_2: 3;
+            }
+            if x <u 10000_i64 {
+                break $inline_count_digits_u64_2: 4;
+            }
+            break $inline_count_digits_u64_2: 5;
+        }
+        if x <u 10000000000_i64 {
+            if x <u 10000000_i64 {
+                if x <u 1000000_i64 {
+                    break $inline_count_digits_u64_2: 6;
+                }
+                break $inline_count_digits_u64_2: 7;
+            }
+            if x <u 100000000_i64 {
+                break $inline_count_digits_u64_2: 8;
+            }
+            if x <u 1000000000_i64 {
+                break $inline_count_digits_u64_2: 9;
+            }
+            break $inline_count_digits_u64_2: 10;
+        }
+        if x <u 1000000000000000_i64 {
+            if x <u 1000000000000_i64 {
+                if x <u 100000000000_i64 {
+                    break $inline_count_digits_u64_2: 11;
+                }
+                break $inline_count_digits_u64_2: 12;
+            }
+            if x <u 10000000000000_i64 {
+                break $inline_count_digits_u64_2: 13;
+            }
+            if x <u 100000000000000_i64 {
+                break $inline_count_digits_u64_2: 14;
+            }
+            break $inline_count_digits_u64_2: 15;
+        }
+        if x <u 100000000000000000_i64 {
+            if x <u 10000000000000000_i64 {
+                break $inline_count_digits_u64_2: 16;
+            }
+            break $inline_count_digits_u64_2: 17;
+        }
+        if x <u 1000000000000000000_i64 {
+            break $inline_count_digits_u64_2: 18;
+        }
+        if x <u -8446744073709551616_i64 {
+            break $inline_count_digits_u64_2: 19;
+        }
+        break $inline_count_digits_u64_2: 20;
+    };
     if is_negative_19 {
         if @unlikely(local.tee is_negative_19(0 + 1) > builtin::array_len($local_1_1.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, is_negative_19);
         }
-        start_76 = $local_1_1.used;
+        start_86 = $local_1_1.used;
         $local_1_1.used = is_negative_19;
-        builtin::array_set_u8($local_1_1.repr, start_76, 45);
+        builtin::array_set_u8($local_1_1.repr, start_86, 45);
     } else {
     }
-    if @unlikely(local.tee start_76($local_1_1.used + self_8) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee start_86($local_1_1.used + self_8) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_76);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_86);
     }
     is_negative_19 = $local_1_1.used;
-    $local_1_1.used = start_76;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_19, x, self_8);
-    self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    start_76 = "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(start_76 = self_8; self_8 = 0; start_76);
-    self_8 = is_negative_19;
-    is_negative_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_19 = self_8; self_8 = 0; is_negative_19, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_19 = start_76; start_76 = 0; is_negative_19);
+    $local_1_1.used = start_86;
+    arr = $local_1_1.repr;
+    self_8 = is_negative_19 + self_8;
+    b24: block {
+        l25: loop {
+            break_if b24 (self_8 - is_negative_19) < 2;
+            q = x /u 100_i64;
+            tens = local.tee start_86(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, self_8 - 1, ((48 + start_86) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, self_8 - 2, (48 + tens) & 255);
+            self_8 = self_8 - 2;
+            x = q;
+            continue l25;
+        };
+    };
+    if self_8 > is_negative_19 {
+        builtin::array_set_u8(arr, is_negative_19, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+    }
+    is_negative_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    self_8 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_86 = "effect_with_clause_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_86 = is_negative_19; is_negative_19 = 0; start_86);
+    is_negative_19 = self_8;
+    self_8 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_19, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_19 = start_86; start_86 = 0; is_negative_19);
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
 }
 
-fn "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_with_clause_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
-fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
+fn "effect_with_clause_renamed_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(max_len) with Random {
     let $outptr: i32;
     let $base: i32;
     let $count: i32;
@@ -183,13 +259,13 @@ fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"
     let value_9: u8;
     let used: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:random/Random::get_random_bytes"(max_len, $outptr);
+    "wasi/$wasi:random/random@0.3.0#get-random-bytes"(max_len, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
-    b5: block {
-        l6: loop {
-            break_if b5 $i >= $count;
+    b27: block {
+        l28: loop {
+            break_if b27 $i >= $count;
             value_9 = builtin::load_u8($base + $i);
             if @unlikely(local.tee used($result.used) >= builtin::array_len($result.repr)) {
                 cold_path;
@@ -198,7 +274,7 @@ fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"
             builtin::array_set_u8($result.repr, used, value_9);
             $result.used = used + 1;
             $i = $i + 1;
-            continue l6;
+            continue l28;
         };
     };
     if $count > 0 {
@@ -211,89 +287,6 @@ fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"
 fn "effect_with_clause_renamed_import.wado/$cm_export__run"() {
     "effect_with_clause_renamed_import.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b9: block {
-        l10: loop {
-            break_if b9 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l10;
-        };
-    };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
-    }
-}
-
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
-    }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

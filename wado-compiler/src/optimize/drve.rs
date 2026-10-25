@@ -27,7 +27,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
         let functions = &project.functions;
         exec.filter_map(&dirty, |fid| {
             let func = functions[fid.index()].borrow();
-            if !is_eligible(&func) {
+            if !is_eligible(&func, type_table) {
                 return None;
             }
             let body = func.body.as_ref()?;
@@ -55,7 +55,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     true
 }
 
-fn is_eligible(func: &NirFunction) -> bool {
+fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -75,7 +75,7 @@ fn is_eligible(func: &NirFunction) -> bool {
     if func.module_source.is_builtin() {
         return false;
     }
-    if func.return_type == TypeTable::UNIT || func.return_type == TypeTable::NEVER {
+    if type_table.is_stackless(func.return_type) {
         return false;
     }
     // A concrete trait-impl method is a plain function after monomorphization:
@@ -100,7 +100,7 @@ fn has_only_pure_returns(body: &Body, type_table: &TypeTable) -> bool {
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.
-    body.find_in_live_node_under(NodeRef::Block(root), |node| {
+    body.find_in_nodes_under(NodeRef::Block(root), |node| {
         let NodeRef::Stmt(s) = node else { return None };
         match &body.stmts[s].kind {
             StmtKind::Return { value: None } => Some(()),
@@ -279,7 +279,7 @@ fn apply_drve(
     }
     // Step C: name each voided function for its signature. One voided into a
     // function that already stands, reached by another route, is that one.
-    touched.extend(project.rename_reshaped(confirmed.iter().copied()));
+    touched.extend(project.rename_reshaped(confirmed.iter().copied(), exec));
     touched.into_iter().collect()
 }
 

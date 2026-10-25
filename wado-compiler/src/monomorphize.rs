@@ -7,6 +7,7 @@ mod call_instance;
 mod call_rewrite;
 mod func_inst;
 mod instance_patterns;
+mod never_dispatch;
 mod state;
 mod struct_inst;
 mod substitute;
@@ -23,8 +24,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
-use crate::synthesis::resource_cleanup;
-use crate::synthesis::resource_cleanup::Generics;
+use crate::synthesis::affine_drop;
+use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
@@ -187,7 +188,7 @@ impl Monomorphization {
         write_back(flat, temp_module);
         // A generic body's drops are elaborated once its types are known
         // (WEP: Affine Types).
-        resource_cleanup::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
+        affine_drop::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
         self.elaborated_functions = flat.functions.len();
     }
 }
@@ -233,7 +234,7 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
-        ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { .. }
         | ResolvedType::GenericInstance { .. }
@@ -502,6 +503,7 @@ impl Monomorphizer {
 
         // Phase 12.5: Lower the comparisons on non-primitive types left to trait calls
         func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_env);
+        never_dispatch::trap_never_dispatch_in_module(&mut module);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
         self.rewrite_types_in_module(&mut module);

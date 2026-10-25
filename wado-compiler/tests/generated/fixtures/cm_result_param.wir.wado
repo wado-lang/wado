@@ -24,25 +24,27 @@ variant core:prelude/types.wado//Result<(),()> {  // TypeId(3)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/wasi:demo/Api::settle" = fn(i32, i32);  // TypeId(5)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#settle" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/wasi:demo/Api::finish" = fn(i32);  // TypeId(6)
+type "functype//wasi/$wasi:demo/gfx@0.1.0#finish" = fn(i32);  // TypeId(6)
 
-type "functype//cm_result_param.wado/$cm_binding__Api_settle" = fn(ref "core:prelude/types.wado//Result<u32,u32>");  // TypeId(7)
+type "functype//cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle" = fn(ref "core:prelude/types.wado//Result<u32,u32>");  // TypeId(7)
 
-type "functype//cm_result_param.wado/$cm_binding__Api_finish" = fn(ref "core:prelude/types.wado//Result<(),()>");  // TypeId(8)
+type "functype//cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish" = fn(ref "core:prelude/types.wado//Result<(),()>");  // TypeId(8)
 
 type "functype//cm_result_param.wado/$cm_export__run" = fn();  // TypeId(9)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/wasi:demo/Api::settle from "wasi/wasi:demo/Api::settle";
-import fn wasi/wasi:demo/Api::finish from "wasi/wasi:demo/Api::finish";
+import fn wasi/$wasi:demo/gfx@0.1.0#settle from "wasi/$wasi:demo/gfx@0.1.0#settle";
+import fn wasi/$wasi:demo/gfx@0.1.0#finish from "wasi/$wasi:demo/gfx@0.1.0#finish";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cm_result_param.wado/$cm_binding__Api_settle"(outcome) with Api {
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0: ref "core:prelude/types.wado//Result<(),()>" = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
+
+fn "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(outcome) with Api {
     let $outcome_disc: i32;
     let $outcome_p0: i32;
     $outcome_disc = outcome.discriminant;
@@ -52,17 +54,17 @@ fn "cm_result_param.wado/$cm_binding__Api_settle"(outcome) with Api {
     } else {
         $outcome_p0 = ref.cast "core:prelude/types.wado//Result<u32,u32>::Err"(outcome).payload_0;
     }
-    "wasi/wasi:demo/Api::settle"($outcome_disc, $outcome_p0);
+    "wasi/$wasi:demo/gfx@0.1.0#settle"($outcome_disc, $outcome_p0);
 }
 
-fn "cm_result_param.wado/$cm_binding__Api_finish"(outcome) with Api {
-    "wasi/wasi:demo/Api::finish"(outcome.discriminant);
+fn "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish"(outcome) with Api {
+    "wasi/$wasi:demo/gfx@0.1.0#finish"(outcome.discriminant);
 }
 
 fn "cm_result_param.wado/$cm_export__run"() {
-    "cm_result_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Ok" { discriminant: 0, payload_0: 1 });
-    "cm_result_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Err" { discriminant: 1, payload_0: 2 });
-    "cm_result_param.wado/$cm_binding__Api_finish"(struct.new "core:prelude/types.wado//Result<(),()>" { 0, nop });
+    "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Ok" { discriminant: 0, payload_0: 1 });
+    "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<u32,u32>::Err" { discriminant: 1, payload_0: 2 });
+    "cm_result_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#finish"(global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0);
     "wasi/task-return"(0);
 }
 

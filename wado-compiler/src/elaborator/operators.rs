@@ -5,7 +5,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{
+    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, minted_name,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId};
 use crate::token::Span;
@@ -21,13 +23,16 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
+use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
-use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
+use crate::elaborator::sem::types::{
+    AssignPlace, DestructuringFallback, DesugarKind, FallbackSite, OperatorDispatch,
+};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
@@ -70,6 +75,44 @@ impl AssignValue<'_> {
             Self::Resolved { span, .. } => *span,
         }
     }
+}
+
+/// Where an assignment writes, resolved before the value it takes.
+enum WritePlace {
+    /// `recv[i] = v` through `IndexAssign`, its dispatch already recorded.
+    IndexAssign {
+        output_type: TypeId,
+    },
+    Place {
+        target_type: TypeId,
+    },
+}
+
+impl WritePlace {
+    fn value_type(&self) -> TypeId {
+        match self {
+            Self::IndexAssign { output_type } => *output_type,
+            Self::Place { target_type } => *target_type,
+        }
+    }
+}
+
+/// What `check_write` finds an assignment target to be, past the checks
+/// that return early.
+enum Lvalue {
+    Place,
+    NotAPlace,
+    ThroughImmutableRef,
+    /// Not a place, and its error is reported already.
+    Reported,
+}
+
+/// The type the value written to `place` is resolved against. A refused place
+/// still has its value resolved, so the value's own errors are reported too.
+fn write_place_value_type(place: &Result<WritePlace, ()>) -> TypeId {
+    place
+        .as_ref()
+        .map_or(TypeTable::ERROR, WritePlace::value_type)
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -398,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
             ) && self.tysys.ord_withheld_by(left).is_some()
             {
-                return self.operator_not_implemented(op, left, span);
+                return self.operator_not_implemented(op, left, right, span);
             }
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
@@ -475,7 +518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Some(&ArgClass::Exact(right)),
                     ) else {
-                        return self.operator_not_implemented(op, left, span);
+                        return self.operator_not_implemented(op, left, right, span);
                     };
                     // Reify rebuilds the `!` wrapper for `!=`.
                     return self.dispatch_trait_op_method(
@@ -499,7 +542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         None,
                     ) else {
-                        return self.operator_not_implemented(op, left, span);
+                        return self.operator_not_implemented(op, left, right, span);
                     };
                     let call = self.dispatch_trait_op_method(
                         left,
@@ -742,7 +785,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
                     // trait impl (e.g. `Point - Point` with no `Sub`).
-                    return self.operator_not_implemented(op, left, span);
+                    return self.operator_not_implemented(op, left, right, span);
+                }
+                if let Some(item) = operator_compiler_item(&op)
+                    && self.report_unmet_trait_impl_bound(left, &[item], Some(right), span)
+                {
+                    return TypeTable::ERROR;
                 }
                 // Mixed operand types that cannot combine under this
                 // operator (e.g. `i32 - List<i32>`). Reported the same
@@ -959,6 +1007,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 panic!("only `-` and `~` dispatch through a trait")
             }
         };
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            return Some(expr_type);
+        }
         let trait_name = self
             .tysys
             .type_table
@@ -1006,6 +1057,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // No impl answered, and the WIR lowering has no opcode for this
         // operand, so reject here: `scalar_kind` would panic instead.
         if expr_type != TypeTable::ERROR && self.tysys.unary_operand_requires_trait(op, expr_type) {
+            if self.report_unmet_trait_impl_bound(expr_type, &[item], None, span) {
+                return Some(TypeTable::ERROR);
+            }
             let operand = self.tysys.type_table.borrow().type_name(expr_type);
             let _ = self.emit(TypeError::OperatorNotApplicable {
                 op: op_symbol.to_string(),
@@ -1024,7 +1078,294 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
+        match &assign.target {
+            ast::AssignTarget::Place(target) => {
+                self.assign_to_target(target, AssignValue::Ast(&assign.value), ctx)
+            }
+            ast::AssignTarget::Destructuring { places, .. } => {
+                self.resolve_destructuring_assign(assign, places, ctx)
+            }
+        }
+    }
+
+    /// Resolve `[t0, t1, …] = value` as `let [$da_0, $da_1, …] = value;` and
+    /// then `t0 = $da_0; t1 = $da_1; …`. The tuple of the types the target
+    /// places take is the value's expected type.
+    fn resolve_destructuring_assign(
+        &mut self,
+        assign: &ast::AssignExpr,
+        targets: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        self.record_desugar(assign.id, DesugarKind::DestructuringAssign);
+        let cause = match Reading::of(assign) {
+            Reading::Transposition(transposition) => {
+                match self.transpositions.get(&assign.id).copied() {
+                    None => Some(DestructuringFallback::Rebindable),
+                    Some(clean) => {
+                        match self.resolve_index_swap(assign, &transposition, clean, ctx) {
+                            Ok(()) => return TypeTable::UNIT,
+                            Err(cause) => cause,
+                        }
+                    }
+                }
+            }
+            Reading::NotAPermutation => Some(DestructuringFallback::NotAPermutation),
+            Reading::OtherContainers => Some(DestructuringFallback::OtherContainer),
+            Reading::UnplainIndex => Some(DestructuringFallback::UnplainIndex),
+            Reading::Permutation if targets.iter().all(|t| self.is_owned_place(t, ctx)) => {
+                Some(DestructuringFallback::ReferenceReadable)
+            }
+            Reading::Permutation => Some(DestructuringFallback::NotOwned),
+        };
+        self.sem.types.destructuring_fallbacks.insert(
+            assign.span,
+            FallbackSite {
+                cause,
+                target_reads: target_reads(assign),
+            },
+        );
+        let places: Vec<Result<WritePlace, ()>> = targets
+            .iter()
+            .map(|target| self.resolve_write_place(target, ctx))
+            .collect();
+        let expected = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_tuple(places.iter().map(write_place_value_type).collect());
+        let value_type = self.resolve_expr(&assign.value, ctx, Some(expected));
+        let Ok(places) = places.into_iter().collect::<Result<Vec<_>, ()>>() else {
+            return TypeTable::ERROR;
+        };
+        if value_type == TypeTable::ERROR {
+            return TypeTable::ERROR;
+        }
+        let element_types = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_tuple(value_type)
+            .filter(|elements| elements.len() == targets.len());
+        let Some(element_types) = element_types else {
+            let found = self.tysys.type_table.borrow().type_name(value_type);
+            let _ = self.emit(TypeError::DestructuringArity {
+                targets: targets.len(),
+                found,
+                span: assign.value.span(),
+            });
+            return TypeTable::ERROR;
+        };
+        // Reserve reify's `$da_N` locals, so both walks allocate the same frame.
+        let ctx = &mut ctx.enter_scope();
+        for &type_id in &element_types {
+            let name = minted_name("da", ctx.fresh_serial());
+            let _local_index = ctx.add_local(name, type_id, false, None);
+        }
+        let element_spans: Vec<Span> = match &assign.value {
+            ast::Expr::TupleLiteral(tuple) if tuple.elements.len() == targets.len() => {
+                tuple.elements.iter().map(ast::Expr::span).collect()
+            }
+            value => vec![value.span(); targets.len()],
+        };
+        for (((target, place), type_id), span) in targets
+            .iter()
+            .zip(&places)
+            .zip(element_types)
+            .zip(element_spans)
+        {
+            self.check_write(target, place, type_id, span, ctx);
+        }
+        TypeTable::UNIT
+    }
+
+    /// Resolve a transposition as its container's `index_swap`, recording the
+    /// dispatch reify replays. `Err` falls back to the desugaring, with no
+    /// dispatch recorded and no local taken, and says why where the desugaring
+    /// does not report an error. The desugaring resolves again what this
+    /// resolved: its facts replace these, and the logger reports a repeated
+    /// diagnostic once.
+    fn resolve_index_swap(
+        &mut self,
+        assign: &ast::AssignExpr,
+        transposition: &Transposition<'_>,
+        clean: Clean,
+        ctx: &mut FunctionContext,
+    ) -> Result<(), Option<DestructuringFallback>> {
+        let container = transposition.container;
+        let Some(root) = ctx.binding(transposition.container_root()) else {
+            return Err(Some(DestructuringFallback::ContainerNotLocal));
+        };
+        let rebindable_root = clean.container_root_referenced && root.is_mut;
+        let root_type = root.type_id;
+        let container_type = self.resolve_expr(container, ctx, None);
+        if container_type == TypeTable::ERROR {
+            return Err(None);
+        }
+        if self.holds_rebindable_reference(
+            &transposition.container_path(),
+            root_type,
+            rebindable_root,
+        ) {
+            return Err(Some(DestructuringFallback::Rebindable));
+        }
+        if matches!(
+            self.tysys.type_table.borrow().get(container_type),
+            ResolvedType::Ref(_)
+        ) || self.place_roots_at_immutable_ref(container)
+            || self
+                .place_roots_at_immutable_binding(container, ctx)
+                .is_some()
+        {
+            return Err(None);
+        }
+        let base_type_id = self.tysys.through_ref(container_type);
+        let no_index_swap = |this: &Self, key: Option<TypeId>| {
+            let tt = this.tysys.type_table.borrow();
+            Err(Some(DestructuringFallback::NoIndexSwap {
+                container: tt.type_name(base_type_id),
+                key: key.map(|key| tt.type_name(key)),
+            }))
+        };
+        let Some(head) = self.index_dispatch_head(base_type_id) else {
+            return no_index_swap(self, None);
+        };
+        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
+        let lookup = |this: &mut Self, key: Option<TypeId>| {
+            this.index_lookup_or_newtype_base(
+                &head,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_swap_trait_impl(n, t, key),
+            )
+        };
+        // The impl is the one at the key a read of `c[i]` selects.
+        let key_class = self.synthesize_arg_class(transposition.i, ctx);
+        let key = self.index_key_type(container_type, &key_class);
+        let Some((info, _)) = lookup(self, key) else {
+            return no_index_swap(self, key);
+        };
+        let index_type = info.index_type;
+        let i_type = self.resolve_expr(transposition.i, ctx, index_type);
+        let j_type = self.resolve_expr(transposition.j, ctx, index_type);
+        if j_type == TypeTable::ERROR || i_type == TypeTable::ERROR {
+            return Err(None);
+        }
+        // The desugaring's first write could change a mutable global.
+        if transposition.index_reads().into_iter().any(|read| {
+            matches!(
+                self.assign_place_of(read.id),
+                Some(AssignPlace::Global { mutable: true, .. })
+            )
+        }) {
+            return Err(Some(DestructuringFallback::Rebindable));
+        }
+        if let Some(index_type) = index_type {
+            self.typecheck(i_type, index_type, transposition.i.span());
+            self.typecheck(j_type, index_type, transposition.j.span());
+        }
+        self.resolve_unread_subscripts(assign, index_type, ctx);
+        // Reserve reify's `$da_N` for the second index, so both walks allocate
+        // the same frame.
+        let ctx = &mut ctx.enter_scope();
+        let name = minted_name("da", ctx.fresh_serial());
+        let _local_index = ctx.add_local(name, j_type, false, None);
+        let function_ref = self.indexing_function_ref(&info, "index_swap");
+        self.sem.types.index_swap_dispatch.insert(
+            assign.id,
+            OperatorDispatch {
+                function_ref,
+                method_def: Some(info.method_def),
+                self_kind: info.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+        );
+        Ok(())
+    }
+
+    /// Resolve the parts of a transposition `index_swap` reads none of: the
+    /// second target's container, and the right side, its indices at
+    /// `index_type` as the targets'. A name there is still a reference, and a
+    /// subscript there is a place, not an element read.
+    fn resolve_unread_subscripts(
+        &mut self,
+        assign: &ast::AssignExpr,
+        index_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) {
+        let (ast::AssignTarget::Destructuring { places, .. }, ast::Expr::TupleLiteral(value)) =
+            (&assign.target, &assign.value)
+        else {
+            unreachable!("a transposition assigns a tuple to two targets");
+        };
+        let ast::Expr::Index(second) = &places[1] else {
+            unreachable!("a transposition's targets are subscripts");
+        };
+        self.resolve_expr(&second.expr, ctx, None);
+        for element in &value.elements {
+            let ast::Expr::Index(subscript) = element else {
+                unreachable!("a transposition reads two subscripts");
+            };
+            self.resolve_expr(&subscript.expr, ctx, None);
+            self.resolve_expr(&subscript.index, ctx, index_type);
+        }
+    }
+
+    /// Whether `place` is owned: a local, or a field path from one, reached
+    /// through no reference and no subscript.
+    fn is_owned_place(&self, place: &ast::Expr, ctx: &FunctionContext) -> bool {
+        field_path(place).is_some_and(|path| {
+            ctx.lookup(&path.root.name)
+                .is_some_and(|local| self.tysys.pointee_of(local.type_id).is_none())
+        })
+    }
+
+    /// Whether a place on `path` that something else may write holds a
+    /// reference, so the desugaring's first write could change which container
+    /// the second names. The root is such a place where `root_writable`, and so
+    /// is every place reached through a reference.
+    fn holds_rebindable_reference(
+        &mut self,
+        path: &Path<'_>,
+        root_type: TypeId,
+        root_writable: bool,
+    ) -> bool {
+        let mut writable = root_writable;
+        let mut place_type = root_type;
+        for step in &path.steps {
+            if let Some(pointee) = self.tysys.pointee_of(place_type) {
+                if writable {
+                    return true;
+                }
+                writable = true;
+                place_type = pointee;
+            }
+            if let Step::Field(field) = step {
+                place_type = self
+                    .lookup_field_type(place_type, &field.field, field.span)
+                    .1;
+            }
+        }
+        writable && self.tysys.pointee_of(place_type).is_some()
+    }
+
+    /// The name an indexing trait impl on `base_type_id` is looked up under,
+    /// or `None` for a type no such impl can be written for.
+    fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(base_type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
+            // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the
+            // base name "Array".
+            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
+            _ => None,
+        }
     }
 
     /// Resolve `expr` with every subscript `target` projects through standing as
@@ -1067,70 +1408,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .then_some("cannot assign through immutable reference")
     }
 
-    /// Whether an `Index` assignment target reaching `assign_to_target`'s general
-    /// path is an assignable place — index-assignable receivers already returned
-    /// above. A read-only `Index` access lowers to `*recv.index(i)` over
-    /// `&Output`, so writing through it is an immutable-reference error; an
+    /// What an `Index` target reaching `check_write`'s general path is: a tuple
+    /// index is a place. A read-only `Index` access lowers to `*recv.index(i)`
+    /// over `&Output`, so writing through it is an immutable-reference error; an
     /// `IndexValue` access is a by-value call and no place at all.
-    fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
-        let needs_deref = self
-            .sem
-            .types
-            .operator_dispatch
-            .get(&index_expr.id)
-            .map(|d| d.needs_deref);
-        if let Some(needs_deref) = needs_deref {
-            if needs_deref {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: "cannot assign through immutable reference".to_string(),
-                    span: index_expr.span,
-                });
-            }
-            return false;
+    fn index_target_lvalue(&self, index_expr: &ast::IndexExpr) -> Lvalue {
+        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index_expr.id) {
+            return if dispatch.needs_deref {
+                Lvalue::ThroughImmutableRef
+            } else {
+                Lvalue::NotAPlace
+            };
         }
-        let Some(recv_type) = self
-            .sem
-            .types
-            .expression_types
-            .get(&index_expr.expr.id())
-            .copied()
-        else {
-            return false;
+        // An unrecorded receiver is an unindexable one, which `resolve_index`
+        // diagnosed.
+        let Some(&recv_type) = self.sem.types.expression_types.get(&index_expr.expr.id()) else {
+            return Lvalue::Reported;
         };
         let base = self.tysys.through_ref(recv_type);
-        self.tysys.type_table.borrow().is_tuple(base)
+        if self.tysys.type_table.borrow().is_tuple(base) {
+            Lvalue::Place
+        } else {
+            Lvalue::NotAPlace
+        }
     }
 
-    /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
-    /// is an immutable reference (`&T`), where the write through it is
-    /// diagnosed here. `operand`'s type is read from `expression_types`.
-    /// Inspecting the *operand*
-    /// type means `*5 = v` (operand `5: i32`, already diagnosed by
-    /// `resolve_unary`) is not re-flagged here.
-    fn deref_target_assignable(&mut self, unary: &ast::UnaryExpr, span: Span) -> bool {
-        let Some(operand_type) = self
-            .sem
-            .types
-            .expression_types
-            .get(&unary.expr.id())
-            .copied()
-        else {
-            // ERROR-typed operand (not recorded): lenient, like the old
-            // `get(ERROR)` arm that did not match `Ref`.
-            return true;
+    /// What `*operand` is as a write target: a place, unless `operand` is an
+    /// immutable reference (`&T`). Inspecting the *operand* type means
+    /// `*5 = v` (operand `5: i32`, already diagnosed by `resolve_unary`) is
+    /// not re-flagged here.
+    fn deref_target_lvalue(&self, unary: &ast::UnaryExpr) -> Lvalue {
+        // An ERROR-typed operand is not recorded, and was diagnosed already.
+        let Some(&operand_type) = self.sem.types.expression_types.get(&unary.expr.id()) else {
+            return Lvalue::Reported;
         };
-        let is_immutable_ref = matches!(
+        if matches!(
             self.tysys.type_table.borrow().get(operand_type),
             ResolvedType::Ref(_)
-        );
-        if is_immutable_ref {
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign through immutable reference".to_string(),
-                span,
-            });
-            false
+        ) {
+            Lvalue::ThroughImmutableRef
         } else {
-            true
+            Lvalue::Place
         }
     }
 
@@ -1148,12 +1466,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         value: AssignValue<'_>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let place = self.resolve_write_place(target_ast, ctx);
+        let value_span = value.span();
+        let value_type = match value {
+            AssignValue::Ast(expr) => {
+                self.resolve_expr(expr, ctx, Some(write_place_value_type(&place)))
+            }
+            AssignValue::Resolved { type_id, .. } => type_id,
+        };
+        let Ok(place) = place else {
+            return TypeTable::ERROR;
+        };
+        self.check_write(target_ast, &place, value_type, value_span, ctx)
+    }
+
+    /// Resolve the place `target_ast` names, ahead of the value written to it.
+    /// `Err` is the refusal, already reported.
+    fn resolve_write_place(
+        &mut self,
+        target_ast: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> Result<WritePlace, ()> {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
-            let Ok(indexed_type) = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)
-            else {
-                return TypeTable::ERROR;
-            };
+            let indexed_type = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)?;
 
             let indexed_immutable = matches!(
                 self.tysys.type_table.borrow().get(indexed_type),
@@ -1164,42 +1500,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     message: "cannot assign through immutable reference".to_string(),
                     span: target_ast.span(),
                 });
-                return TypeTable::ERROR;
+                return Err(());
             }
             if let Some(binding) = self.place_roots_at_immutable_binding(&index_expr.expr, ctx) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot assign into immutable '{binding}'"),
                     span: target_ast.span(),
                 });
-                return TypeTable::ERROR;
+                return Err(());
             }
 
             // Get base type (unwrap reference if needed)
             let base_type_id = self.tysys.through_ref(indexed_type);
 
-            // Check for IndexAssign trait implementation
-            // Arrays now use IndexAssign trait like other types
             {
-                // Check for IndexAssign trait implementation
-                let struct_name = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(base_type_id) {
-                        ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Newtype { .. }
-                        | ResolvedType::Flags { .. } => tt.base_type_name(base_type_id),
-                        // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
-                        // keyed by the base name "Array".
-                        ResolvedType::BuiltinArray(_) => ARRAY_TYPE_NAME.to_string(),
-                        _ => String::new(),
-                    }
-                };
-
-                // For newtypes, resolve the base type name for trait impl lookup
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-
-                if !struct_name.is_empty() {
+                if let Some(struct_name) = self.index_dispatch_head(base_type_id) {
+                    // For newtypes, resolve the base type name for trait impl lookup
+                    let (lookup_name, lookup_type_id) =
+                        self.tysys.newtype_base_lookup(&struct_name, base_type_id);
                     let assign_info = self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
@@ -1216,41 +1534,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     if let Some((trait_info, _)) = assign_info {
-                        // Generate: expr.index_assign(index, value)
-                        let value_span = value.span();
-                        let value_type = match value {
-                            AssignValue::Ast(expr) => {
-                                self.resolve_expr(expr, ctx, Some(trait_info.output_type))
-                            }
-                            AssignValue::Resolved { type_id, .. } => type_id,
-                        };
-
-                        // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value_type, trait_info.output_type, value_span);
-
-                        // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let receiver = trait_info.receiver.clone();
-                        let mangled_method_name = MethodName::format_local(
-                            &receiver,
-                            Some(&trait_info.trait_name),
-                            "index_assign",
-                        );
-
-                        let func = FunctionRef {
-                            module_source: trait_info.impl_module_source.clone(),
-                            name: mangled_method_name,
-                            template: Some(
-                                self.tysys
-                                    .signatures
-                                    .declared_template(trait_info.method_def),
-                            ),
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                receiver,
-                                Some(trait_info.trait_name),
-                                "index_assign".to_string(),
-                            )),
-                        };
+                        let output_type = trait_info.output_type;
+                        let func = self.indexing_function_ref(&trait_info, "index_assign");
 
                         // Record the
                         // resolved `IndexAssign` dispatch keyed by
@@ -1270,31 +1555,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             },
                         );
 
-                        // Reify rebuilds `arr.index_assign(idx,
-                        // value)` from the recorded `index_assign_dispatch` +
-                        // AST; project only the (unit) result type. `index_type`
-                        // / `value_type` were resolved above for their
-                        // fact-recording side effects.
-                        return TypeTable::UNIT;
+                        return Ok(WritePlace::IndexAssign { output_type });
+                    }
+                    // Where no `IndexRefMut` writes through instead, an
+                    // `IndexAssign` impl missing only its bound says why.
+                    if self
+                        .index_lookup_or_newtype_base(
+                            &struct_name,
+                            base_type_id,
+                            &lookup_name,
+                            lookup_type_id,
+                            Elaborator::find_index_mut_trait_impl,
+                        )
+                        .is_none()
+                        && self.report_unmet_trait_impl_bound(
+                            base_type_id,
+                            &[CompilerItem::IndexAssign],
+                            Some(index_type),
+                            target_ast.span(),
+                        )
+                    {
+                        return Err(());
                     }
                 }
             }
         }
 
-        // Standard assignment handling. Fall through here happens when the
-        // target isn't `Expr::Index`, or when the IndexAssign trait lookup
-        // returned None — `value` was not consumed on either of those paths.
-        let Ok(target_type) = self.resolve_place_receiver(target_ast, target_ast, ctx) else {
-            return TypeTable::ERROR;
-        };
-        let value_span = value.span();
-        let value_type = match value {
-            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
-            AssignValue::Resolved { type_id, .. } => type_id,
-        };
+        // Standard assignment handling: the target isn't `Expr::Index`, or the
+        // IndexAssign trait lookup returned None.
+        let target_type = self.resolve_place_receiver(target_ast, target_ast, ctx)?;
+        Ok(WritePlace::Place { target_type })
+    }
 
+    /// Check that `target_ast`, resolved to `place`, takes a value of
+    /// `value_type`.
+    fn check_write(
+        &mut self,
+        target_ast: &ast::Expr,
+        place: &WritePlace,
+        value_type: TypeId,
+        value_span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
         // Reject &T assigned where non-ref T expected
-        self.typecheck(value_type, target_type, value_span);
+        self.typecheck(value_type, place.value_type(), value_span);
+        // Reify rebuilds `arr.index_assign(idx, value)` from the recorded
+        // `index_assign_dispatch` and the AST.
+        if let WritePlace::IndexAssign { .. } = place {
+            return TypeTable::UNIT;
+        }
 
         // Handle assignment to global variables. The global is recognised
         // from the recorded `AssignPlace::Global` on the target ident, which
@@ -1343,61 +1652,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Validate that the target is a valid l-value: each target shape is
         // classified from the AST + recorded facts.
-        let is_valid_lvalue = match target_ast {
-            ast::Expr::FieldAccess(_) => true,
-            // The IndexAssign path at the top of `assign_to_target` already
-            // returned for index-assignable receivers, so an `Index` target
-            // here is a tuple index (a place), a read-only `Index` /
-            // `IndexValue` trait access (not a place), or an unindexable
-            // receiver (already diagnosed by `resolve_index`).
-            ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
-            // `*x = v`: valid only through a mutable reference. The operand's
-            // type rides on `expression_types`.
-            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-                self.deref_target_assignable(u, target_ast.span())
-            }
+        let lvalue = match target_ast {
+            ast::Expr::FieldAccess(_) => Lvalue::Place,
+            ast::Expr::Index(index_expr) => self.index_target_lvalue(index_expr),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.deref_target_lvalue(u),
             // An identifier target classified by the place fact `resolve_ident`
             // recorded: a function-frame `Local`, or a `&mut`-captured ident
             // (`*$ref` deref-capture, assignable iff the captured ref is
             // `&mut`). Globals returned above; anything else (function /
             // variant / enum / const ident, or a non-ident expression) is not
             // a place.
-            ast::Expr::Ident(id) => {
-                // Clone to release the `&self` borrow before the diagnostic's
-                // `&mut self.logger` use.
-                match self.assign_place_of(id.id).cloned() {
-                    Some(AssignPlace::Local) => true,
-                    Some(AssignPlace::DerefCapture { through_mut_ref }) => {
-                        if through_mut_ref {
-                            true
-                        } else {
-                            let _ = self.emit(TypeError::CannotMutate {
-                                message: "cannot assign through immutable reference".to_string(),
-                                span: target_ast.span(),
-                            });
-                            false
-                        }
-                    }
-                    _ => false,
-                }
-            }
-            _ => false,
+            ast::Expr::Ident(id) => match self.assign_place_of(id.id) {
+                Some(
+                    AssignPlace::Local
+                    | AssignPlace::DerefCapture {
+                        through_mut_ref: true,
+                    },
+                ) => Lvalue::Place,
+                Some(AssignPlace::DerefCapture {
+                    through_mut_ref: false,
+                }) => Lvalue::ThroughImmutableRef,
+                _ => Lvalue::NotAPlace,
+            },
+            _ => Lvalue::NotAPlace,
         };
-
-        if !is_valid_lvalue {
-            // Report error for invalid assignment target
-            let _ = self.emit(TypeError::CannotMutate {
-                message: "cannot assign to an expression that is not a place".to_string(),
-                span: target_ast.span(),
-            });
-            return TypeTable::ERROR;
-        }
-
-        // Reify rebuilds the `Assign` from the AST + recorded
-        // target / value types; project only the (unit) result type. The
-        // target + value were resolved above for their side effects, and the
-        // l-value validation / global-mutability checks already ran.
-        TypeTable::UNIT
+        let message = match lvalue {
+            // Reify rebuilds the `Assign` from the AST and the recorded types.
+            Lvalue::Place => return TypeTable::UNIT,
+            Lvalue::Reported => return TypeTable::ERROR,
+            // An `ERROR` target was diagnosed where it was resolved.
+            Lvalue::NotAPlace if place.value_type() == TypeTable::ERROR => {
+                return TypeTable::ERROR;
+            }
+            Lvalue::ThroughImmutableRef => "cannot assign through immutable reference",
+            Lvalue::NotAPlace => "cannot assign to an expression that is not a place",
+        };
+        let _ = self.emit(TypeError::CannotMutate {
+            message: message.to_string(),
+            span: target_ast.span(),
+        });
+        TypeTable::ERROR
     }
 
     /// Resolve `target op= value` as `target = target op value`, TIR-direct. The
@@ -1423,7 +1717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        // Reserve reify's `$caN` locals, resolving each impure sub-piece once
+        // Reserve reify's `$ca_N` locals, resolving each impure sub-piece once
         // (a subscript against its index key type) so the annotate and reify
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
@@ -1435,12 +1729,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut *frame;
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
-        for (idx, hoist) in hoists.iter().enumerate() {
+        for hoist in &hoists {
             let expected = hoist
                 .index_ctx
                 .and_then(|ix| self.compound_index_key_type(ix, ctx));
             let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
-            let _local_index = ctx.add_local(format!("$ca{idx}"), piece_type, false, None);
+            let name = minted_name("ca", ctx.fresh_serial());
+            let _local_index = ctx.add_local(name, piece_type, false, None);
             ctx.compound_hoist_types
                 .insert(hoist.piece.id(), piece_type);
         }
@@ -1472,7 +1767,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `a OP1 b OP2 c …` as `(a OP1 b) & (b OP2 c) …`, every operand
-    /// but the last bound once to a `$mK` local, so each evaluates left to right.
+    /// but the last bound once to a `$m_K` local, so each evaluates left to right.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1484,7 +1779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
-        // Enter a fresh scope for the `$mK` bindings so they don't leak
+        // Enter a fresh scope for the `$m_K` bindings so they don't leak
         // into the surrounding function's local namespace.
         let ctx = &mut ctx.enter_scope();
 
@@ -1499,8 +1794,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         );
 
-        self.bind_chain_operand(0, first_tir, ctx);
-        self.bind_chain_operand(1, right0_tir, ctx);
+        Self::bind_chain_operand(first_tir, ctx);
+        Self::bind_chain_operand(right0_tir, ctx);
         let mut acc = self.resolve_binary_op(
             first_tir,
             cmp0.op,
@@ -1519,7 +1814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // can't help).
             let right = self.resolve_expr(&cmp.right, ctx, Some(prev));
             if idx != last_idx {
-                self.bind_chain_operand(idx + 1, right, ctx);
+                Self::bind_chain_operand(right, ctx);
             }
             let cmp_type = self.resolve_binary_op(
                 prev,
@@ -1545,10 +1840,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `$mK` local for a comparison-chain operand, in walk order;
+    /// Allocate a `$m_K` local for a comparison-chain operand, in walk order;
     /// reify rebuilds the `Let` itself.
-    fn bind_chain_operand(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
-        let name = format!("$m{idx}");
+    fn bind_chain_operand(type_id: TypeId, ctx: &mut FunctionContext) {
+        let name = minted_name("m", ctx.fresh_serial());
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 
@@ -1580,8 +1875,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report that `left` does not implement the trait `op` dispatches to, with
     /// the reason chain saying why. Under `#![no_prelude]` the trait is absent,
     /// and no chain explains its absence.
-    fn operator_not_implemented(&mut self, op: BinaryOp, left: TypeId, span: Span) -> TypeId {
+    fn operator_not_implemented(
+        &mut self,
+        op: BinaryOp,
+        left: TypeId,
+        right: TypeId,
+        span: Span,
+    ) -> TypeId {
         let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+        if self.report_unmet_trait_impl_bound(left, &[item], Some(right), span) {
+            return TypeTable::ERROR;
+        }
         let trait_name = self
             .tysys
             .type_table

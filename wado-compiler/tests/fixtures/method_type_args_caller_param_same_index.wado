@@ -1,0 +1,86 @@
+// A method's own type parameters are filled after the receiver fills its
+// impl's, so a caller's own parameter the receiver brings in sits beside them.
+// Filled by index, the method's `M` at index 1 reached the caller's `B` at
+// index 1 too: `host.pick(1, t)` read `m` as a `B`. The same held for a
+// method's pack, answered or named by a turbofish, for a trait method, and for
+// a caller's parameter of the method's own name. A static call and a bound's
+// method fill every slot at once, and are held to it beside them.
+
+struct Tag<T> {
+    n: i32,
+}
+
+struct Holder<O> {
+    items: List<O>,
+    k: i32,
+}
+
+struct Lead {
+}
+struct Last {
+}
+
+struct Host<X> {
+    x: i32,
+}
+
+impl<X> Host<X> {
+    fn pick<M>(&self, m: M, t: Tag<X>) -> M {
+        return m;
+    }
+
+    fn spick<M>(m: M, t: Tag<X>) -> M {
+        return m;
+    }
+
+    fn count<..Bs, M>(&self, h: Holder<Tag<[..Bs, M, X]>>, t: Tag<[..Bs, M, X]>) -> i32 {
+        return h.items.len() + h.k + t.n;
+    }
+}
+
+trait Pick with () {
+    type Of;
+    fn choose<M>(&self, m: M, t: Tag<Self::Of>) -> M;
+}
+
+impl<X> Pick for Host<X> {
+    type Of = X;
+    fn choose<M>(&self, m: M, t: Tag<X>) -> M {
+        return m;
+    }
+}
+
+fn by_method<A, B>(host: &Host<B>, t: Tag<B>) -> i32 {
+    return host.pick(1, t) + host.pick::<i32>(2, t);
+}
+
+fn by_static<A, B>(t: Tag<B>) -> i32 {
+    return Host::<B>::spick(3, t);
+}
+
+fn by_trait<A, B>(host: &Host<B>, t: Tag<B>) -> i32 {
+    return host.choose(4, t);
+}
+
+fn by_bound<A, P: Pick>(p: &P, t: Tag<P::Of>) -> i32 {
+    return p.choose(5, t);
+}
+
+fn by_pack<A, B>(host: &Host<B>, t: Tag<[Lead, Last, B]>) -> i32 {
+    return host.count(Holder { items: [], k: 1 }, t) + host.count::<[Lead], Last>(Holder { items: [], k: 1 }, t);
+}
+
+fn by_name<A, M>(host: &Host<M>, t: Tag<M>) -> i32 {
+    return host.pick(6, t);
+}
+
+test "a method's own parameters keep apart from the caller's of the same index" {
+    let host = Host::<Lead> { x: 0 };
+    let t = Tag::<Lead> { n: 5 };
+    assert by_method::<Last, Lead>(&host, t) == 3;
+    assert by_static::<Last, Lead>(t) == 3;
+    assert by_trait::<Last, Lead>(&host, t) == 4;
+    assert by_bound::<Last, Host<Lead>>(&host, t) == 5;
+    assert by_pack::<Last, Lead>(&host, Tag::<[Lead, Last, Lead]> { n: 5 }) == 12;
+    assert by_name::<Last, Lead>(&host, t) == 6;
+}

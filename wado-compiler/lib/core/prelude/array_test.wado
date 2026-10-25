@@ -277,3 +277,19 @@ test "copy_from within one array copies the elements" {
     a[1].push(1);
     assert a[0].is_empty();
 }
+
+test "index_swap exchanges two elements" {
+    let mut a = Array::<i32>::filled(3, 0);
+    a[0] = 1;
+    a[2] = 3;
+    a.index_swap(0, 2);
+    assert a[0] == 3 && a[2] == 1;
+    a.index_swap(1, 1);
+    assert a[1] == 0;
+}
+
+#[expect_trap]
+test "index_swap traps on an index out of bounds" {
+    let mut a = Array::<i32>::filled(2, 0);
+    a.index_swap(0, 2);
+}

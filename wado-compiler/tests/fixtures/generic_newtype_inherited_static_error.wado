@@ -1,0 +1,41 @@
+// A generic newtype's arguments shape its base's, so a static the base
+// supplies is checked at that shape: `Listed`'s `T` sits inside a `List`, and
+// an `i32` argument answers no `T`. One the arguments leave open is reported
+// as for the base itself. A parameter the base writes as itself takes the
+// newtype, not the base.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn id(v: T) -> T {
+        return v;
+    }
+
+    fn zero() -> i32 {
+        return 0;
+    }
+
+    fn take(w: Wrap<T>) -> T {
+        return w.v;
+    }
+}
+
+type Same<T> = Wrap<T>;
+type Listed<T> = Wrap<List<T>>;
+
+test {
+    let a = Listed::id(1);
+    let b = Listed::<i32>::id(1);
+    let c = Listed::<_>::id(1);
+    let d = Same::zero();
+    let e = Listed::<_>::zero();
+    let f = Same::take(Wrap { v: 1 });
+    let g = Same::<i32>::take(Wrap { v: 1 });
+}
+
+__DATA__
+{
+    "compile_error": ":30:31: analysis error: type mismatch: expected 'List<i32>', found 'i32'; 31:13: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 33:13: cannot infer type parameter `T` of `Listed::zero`; add a turbofish (`Listed::<...>::zero()`) or a type annotation; 34:24: type mismatch: expected 'Same<i32>', found 'Wrap<i32>'; 35:31: type mismatch: expected 'Same<i32>', found 'Wrap<i32>'; 29:13: cannot infer type parameter `T` of `Listed::id`; add a turbofish (`Listed::<...>::id()`) or a type annotation; 32:13: cannot infer type parameter `T` of `Same::zero`; add a turbofish (`Same::<...>::zero()`) or a type annotation"
+}

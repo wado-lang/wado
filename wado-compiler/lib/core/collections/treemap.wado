@@ -474,6 +474,14 @@ impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
     }
 }
 
+impl<K: Ord, V> IndexSwap<K> for TreeMap<K, V> {
+    fn index_swap(&mut self, a: K, b: K) {
+        let at_b = self.log.found(self.find_index(b), &b);
+        let at_a = self.log.found(self.find_index(a), &a);
+        self.log.values.index_swap(at_a, at_b);
+    }
+}
+
 impl<K: Ord, V: Ref> IndexRef<K> for TreeMap<K, V> {
     type Output = V;
 
@@ -620,7 +628,13 @@ impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, 
         let mut map = d.begin_map()?;
         let mut result = TreeMap::<K, V>::new();
         while let Some(key) = map.next_key::<K>()? {
-            let val = map.next_value::<V>()?;
+            let val = match map.next_value::<V>() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_item(&key));
+                },
+            };
             result.insert_decoded(on_duplicate, key, val)?;
         }
         map.end()?;
@@ -661,9 +675,22 @@ impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
         let on_duplicate = d.on_duplicate_field();
         let mut seq = d.begin_seq()?;
         let mut result = TreeSet::<T>::new();
-        while let Some(element) = seq.next_element::<T>()? {
+        // `result.len()` counts only distinct elements; the repeats make up the
+        // index an error names.
+        let mut repeats = 0;
+        loop {
+            let Some(element) = match seq.next_element::<T>() {
+                Ok(next) => next,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_item(&(result.len() + repeats)));
+                },
+            } else {
+                break;
+            };
             if !result.insert(element) {
                 report_duplicate_field(on_duplicate, &element)?;
+                repeats += 1;
             }
         }
         seq.end()?;

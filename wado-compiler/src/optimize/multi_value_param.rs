@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirFunction, ParamAbi, aggregate_field_info};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -263,38 +263,27 @@ impl<'a> ParamScope<'_, 'a> {
         walk.finish()
     }
 
-    /// Fold the value tree at `v` into `reads`, answering the expressions it
-    /// names as extraction sources, which extraction runs.
-    fn value(
-        &self,
-        v: ValueId,
-        reads: &mut Reads<'a>,
-        seen: &mut IndexSet<ValueId>,
-    ) -> Vec<ExprId> {
+    /// Fold the value tree at `v` into `reads`.
+    fn value(&self, v: ValueId, reads: &mut Reads<'a>, seen: &mut IndexSet<ValueId>) {
         let values = &self.body.values;
-        let source = |id: ValueId| match values.kind(id) {
-            ValueKind::Opaque(oid) => values.opaque_source(*oid),
-            _ => None,
+        let reads_local = |id: ValueId| match values.kind(id) {
+            ValueKind::Opaque(oid) => values.promoted_opaque_local(*oid) == self.local,
+            _ => false,
         };
-        let mut sources = Vec::new();
-        values.walk_values::<()>(v, seen, |_, kind| {
+        values.walk_values::<()>(v, seen, |id, kind| {
             let descend = match kind {
                 ValueKind::FieldAccess {
                     receiver,
                     field_index,
                     ..
-                } if source(*receiver) == Some(OpaqueSource::Local(self.local)) => {
+                } if reads_local(*receiver) => {
                     reads
                         .fields
                         .insert(self.field_names[*field_index as usize].as_str());
                     false
                 }
-                ValueKind::Opaque(oid) => {
-                    match values.opaque_source(*oid) {
-                        Some(OpaqueSource::Local(index)) => reads.whole |= index == self.local,
-                        Some(OpaqueSource::Expr(e)) => sources.push(e),
-                        None => {}
-                    }
+                ValueKind::Opaque(_) => {
+                    reads.whole |= reads_local(id);
                     false
                 }
                 ValueKind::FieldAccess { .. }
@@ -313,12 +302,11 @@ impl<'a> ParamScope<'_, 'a> {
             };
             ControlFlow::Continue(descend)
         });
-        sources
     }
 }
 
-/// One walk over nodes and the value trees and extraction sources their
-/// promoted operands name, folding what it finds into one [`Reads`].
+/// One walk over nodes and the value trees their promoted operands name,
+/// folding what it finds into one [`Reads`].
 struct ReadWalk<'s, 'b, 'a> {
     scope: &'s ParamScope<'b, 'a>,
     names: IndexSet<&'a str>,
@@ -330,7 +318,6 @@ struct ReadWalk<'s, 'b, 'a> {
     /// The call arguments that hand the local on whole.
     forwarded: IndexSet<ExprId>,
     values_seen: IndexSet<ValueId>,
-    sources_seen: IndexSet<ExprId>,
 }
 
 impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
@@ -344,16 +331,6 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
             written: IndexSet::default(),
             forwarded: IndexSet::default(),
             values_seen: IndexSet::default(),
-            sources_seen: IndexSet::default(),
-        }
-    }
-
-    fn value(&mut self, v: ValueId) {
-        let sources = self.scope.value(v, &mut self.reads, &mut self.values_seen);
-        for e in sources {
-            if self.sources_seen.insert(e) {
-                self.node(NodeRef::Expr(e));
-            }
         }
     }
 
@@ -375,7 +352,7 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
                 if let Some(i) = forwarded_values.iter().position(|&f| f == v) {
                     forwarded_values.swap_remove(i);
                 } else {
-                    self.value(v);
+                    self.scope.value(v, &mut self.reads, &mut self.values_seen);
                 }
             }
             if let NodeRef::Expr(e) = node {

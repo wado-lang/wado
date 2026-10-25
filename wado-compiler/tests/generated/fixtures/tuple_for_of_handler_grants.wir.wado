@@ -39,9 +39,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(15)
 
 type "functype//tuple_for_of_handler_grants.wado/run" = fn();  // TypeId(16)
 
@@ -75,7 +75,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
@@ -85,8 +85,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -99,20 +99,20 @@ global global:tuple_for_of_handler_grants.wado::$const_obj_1: ref "core:prelude/
 fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     let $local_4: ref "core:prelude/string.wado//String";
     let $save_tuple_for_of_handler_grants.wado/A_9: ref null "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A";
-    let $d_tuple_for_of_handler_grants.wado/A_10: ref "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A";
     let $local_0_18: ref null "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A";
+    let $local_1_19: ref "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A";
     let $local_2_20: i32;
     let is_negative_25: bool;
     let x_29: i64;
     let $moved_4_54: i32;
-    global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $d_tuple_for_of_handler_grants.wado/A_10(struct.new "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A" { outer: local.tee $save_tuple_for_of_handler_grants.wado/A_9(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A), op_a_op: struct.new "canonical//CanonicalClosure_0" { env: struct.new "tuple_for_of_handler_grants.wado//$Closure_0" {  }, func: ref.func "closure/tuple_for_of_handler_grants.wado/$closure_wrapper_0" } });
+    global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = struct.new "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A" { outer: local.tee $save_tuple_for_of_handler_grants.wado/A_9(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A), op_a_op: struct.new "canonical//CanonicalClosure_0" { env: struct.new "tuple_for_of_handler_grants.wado//$Closure_0" {  }, func: ref.func "closure/tuple_for_of_handler_grants.wado/$closure_wrapper_0" } };
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_25 = local.tee $local_2_20($inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_5: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_18(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A)) == 0) {
-            global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $d_tuple_for_of_handler_grants.wado/A_10(ref.as_non_null($local_0_18)).outer;
+            global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $local_1_19(ref.as_non_null($local_0_18)).outer;
             $local_2_20 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_tuple_for_of_handler_grants.wado/A_10.op_a_op)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_19.op_a_op)).env);
             };
             global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = $local_0_18;
             break $inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_5: $local_2_20;
@@ -128,43 +128,43 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, is_negative_25, x_29, $local_2_20);
     $local_2_20 = builtin::i32_wrap_i64(local.tee x_29("wasi/stream-new"()));
     is_negative_25 = builtin::i32_wrap_i64(x_29 >> 32_i64);
-    $moved_4_54 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"($moved_4_54 = $local_2_20; $local_2_20 = 0; $moved_4_54);
+    $moved_4_54 = "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_54 = $local_2_20; $local_2_20 = 0; $moved_4_54);
     $local_2_20 = is_negative_25;
     is_negative_25 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_25 = $local_2_20; $local_2_20 = 0; is_negative_25, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_25 = $moved_4_54; $moved_4_54 = 0; is_negative_25);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_20, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_20 = $moved_4_54; $moved_4_54 = 0; $local_2_20);
     global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = $save_tuple_for_of_handler_grants.wado/A_9;
-    global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $d_tuple_for_of_handler_grants.wado/A_10(struct.new "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A" { outer: local.tee $save_tuple_for_of_handler_grants.wado/A_9(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A), op_a_op: struct.new "canonical//CanonicalClosure_0" { env: struct.new "tuple_for_of_handler_grants.wado//$Closure_1" {  }, func: ref.func "closure/tuple_for_of_handler_grants.wado/$closure_wrapper_1" } });
+    global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = struct.new "tuple_for_of_handler_grants.wado//$Dispatch_tuple_for_of_handler_grants.wado/A" { outer: local.tee $save_tuple_for_of_handler_grants.wado/A_9(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A), op_a_op: struct.new "canonical//CanonicalClosure_0" { env: struct.new "tuple_for_of_handler_grants.wado//$Closure_1" {  }, func: ref.func "closure/tuple_for_of_handler_grants.wado/$closure_wrapper_1" } };
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $moved_4_54 = local.tee is_negative_25($inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_14: block -> i32 {
+    $moved_4_54 = local.tee $local_2_20($inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_14: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_18(global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A)) == 0) {
-            global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $d_tuple_for_of_handler_grants.wado/A_10(ref.as_non_null($local_0_18)).outer;
-            is_negative_25 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_tuple_for_of_handler_grants.wado/A_10.op_a_op)).env);
+            global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = local.tee $local_1_19(ref.as_non_null($local_0_18)).outer;
+            $local_2_20 = block -> i32 {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_19.op_a_op)).env);
             };
             global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = $local_0_18;
-            break $inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_14: is_negative_25;
+            break $inline__effect_dispatch__tuple_for_of_handler_grants_wado_A__a_op_14: $local_2_20;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:tuple_for_of_handler_grants.wado::$const_obj_1).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
     } + 20) < 0;
-    is_negative_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s(is_negative_25); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
-    $moved_4_54 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_4, $moved_4_54, is_negative_25);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, $moved_4_54, x_29, is_negative_25);
-    is_negative_25 = builtin::i32_wrap_i64(local.tee x_29("wasi/stream-new"()));
+    $local_2_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s($local_2_20); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
+    $moved_4_54 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_4, $moved_4_54, $local_2_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, $moved_4_54, x_29, $local_2_20);
+    $local_2_20 = builtin::i32_wrap_i64(local.tee x_29("wasi/stream-new"()));
     $moved_4_54 = builtin::i32_wrap_i64(x_29 >> 32_i64);
-    $local_2_20 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"($local_2_20 = is_negative_25; is_negative_25 = 0; $local_2_20);
-    is_negative_25 = $moved_4_54;
+    is_negative_25 = "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_25 = $local_2_20; $local_2_20 = 0; is_negative_25);
+    $local_2_20 = $moved_4_54;
     $moved_4_54 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_54 = is_negative_25; is_negative_25 = 0; $moved_4_54, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_54 = $local_2_20; $local_2_20 = 0; $moved_4_54);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_20, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_20 = is_negative_25; is_negative_25 = 0; $local_2_20);
     global:tuple_for_of_handler_grants.wado::$effect_tuple_for_of_handler_grants.wado/A = $save_tuple_for_of_handler_grants.wado/A_9;
 }
 
-fn "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "tuple_for_of_handler_grants.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "tuple_for_of_handler_grants.wado/$cm_export__run"() {
@@ -275,7 +275,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

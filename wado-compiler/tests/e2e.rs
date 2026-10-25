@@ -280,9 +280,17 @@ struct TestSpec {
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
 
-    /// Lines the emitted component's WAT must carry.
+    /// Optimizer remarks, by the optimization level that emits them (`"O2"`).
+    /// Each remark reads `"file:line:col remark: …"`, so `":6:5 remark: a copy"`
+    /// pins the position in the fixture.
     #[serde(default)]
-    wat_lines: Vec<WatLineSpec>,
+    remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
+
+    /// Lines the emitted component's WAT must carry. A CM import's shape —
+    /// which names an instance type exports, which functions are aliased out of
+    /// it — is visible here and nowhere a run reaches.
+    #[serde(default)]
+    wat_lines: Vec<TextMatch>,
 
     /// Compile and stop. For a program whose subject is the component the
     /// compiler emits, and whose imports the runner hosts nothing for.
@@ -313,18 +321,39 @@ struct CoverageSpec {
     uncovered_functions: Vec<String>,
 }
 
-/// A line of the emitted component's WAT: the substrings it holds, and how many
-/// such lines there must be. A CM import's shape — which names an instance type
-/// exports, which functions are aliased out of it — is visible here and nowhere
-/// a run reaches.
+/// One text the compiler emits, a WAT line or a remark: the substrings it
+/// holds, and how many such texts there must be.
 #[derive(Debug, serde::Deserialize)]
-struct WatLineSpec {
-    /// Substrings that must all appear on one trimmed line.
+#[serde(deny_unknown_fields)]
+struct TextMatch {
+    /// Substrings that must all appear in one text.
     contains: Vec<String>,
 
-    /// How many lines must match. Omitted means at least one.
+    /// How many texts must match. Omitted means at least one.
     #[serde(default)]
     count: Option<usize>,
+}
+
+impl TextMatch {
+    /// Assert this entry against `texts`, each a `what`, printing `context` on
+    /// a failure.
+    fn assert_in(&self, texts: &[&str], what: &str, test_id: &str, context: &str) {
+        let matched: Vec<&str> = texts
+            .iter()
+            .copied()
+            .filter(|text| self.contains.iter().all(|needle| text.contains(needle)))
+            .collect();
+        let (ok, wanted) = match self.count {
+            Some(exact) => (matched.len() == exact, exact.to_string()),
+            None => (!matched.is_empty(), "1 or more".to_string()),
+        };
+        assert!(
+            ok,
+            "[{test_id}] expected {wanted} {what}(s) holding {:?}, found {}:\n{matched:#?}\n\n{context}",
+            self.contains,
+            matched.len(),
+        );
+    }
 }
 
 impl TestSpec {
@@ -943,6 +972,7 @@ fn run_with_allocator(
         wir_text,
         warnings,
         errors,
+        remarks,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -968,6 +998,27 @@ fn run_with_allocator(
             "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {}",
             warning_text()
         );
+    }
+
+    for level in spec.remarks.keys() {
+        assert!(
+            [
+                OptLevel::O0,
+                OptLevel::O1,
+                OptLevel::O2,
+                OptLevel::O3,
+                OptLevel::Os
+            ]
+            .map(common::opt_level_name)
+            .contains(&level.as_str()),
+            "[{test_id}] `remarks` is keyed by an optimization level, not {level:?}"
+        );
+    }
+    if let Some(expected) = spec.remarks.get(common::opt_level_name(opt_level)) {
+        let texts: Vec<&str> = remarks.iter().map(String::as_str).collect();
+        for wanted in expected {
+            wanted.assert_in(&texts, "remark", test_id, &format!("remarks: {remarks:#?}"));
+        }
     }
 
     for expected in &spec.compile_errors_contains {
@@ -1334,27 +1385,9 @@ fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
     );
     let wat = wasmprinter::print_bytes(wasm)
         .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
-    for wanted_line in &spec.wat_lines {
-        let matched: Vec<&str> = wat
-            .lines()
-            .map(str::trim)
-            .filter(|line| {
-                wanted_line
-                    .contains
-                    .iter()
-                    .all(|needle| line.contains(needle))
-            })
-            .collect();
-        let (ok, wanted) = match wanted_line.count {
-            Some(exact) => (matched.len() == exact, exact.to_string()),
-            None => (!matched.is_empty(), "1 or more".to_string()),
-        };
-        assert!(
-            ok,
-            "[{test_id}] expected {wanted} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
-            wanted_line.contains,
-            matched.len(),
-        );
+    let lines: Vec<&str> = wat.lines().map(str::trim).collect();
+    for wanted in &spec.wat_lines {
+        wanted.assert_in(&lines, "WAT line", test_id, &format!("full WAT:\n{wat}"));
     }
 }
 

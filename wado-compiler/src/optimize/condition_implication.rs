@@ -189,12 +189,36 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum BoundKey {
     Local(u32),
-    /// `root_local . field_index` — a field read of a by-value local.
-    Field(u32, u32),
+    /// `root_local . path` — a field read of a by-value local, through the
+    /// fields `path` names.
+    Field(u32, FieldPath),
     /// A folded bound: `arr.len()` over a literal list is a constant by the time
     /// the guard and the check meet, and two such constants denote the same
     /// program object exactly when they are equal.
     Const(i64),
+}
+
+/// The fields a [`BoundKey::Field`] reads from its root, outermost first. The
+/// whole path is the identity: `node.outputs.used` and `node.inputs.used` end
+/// in one field and are two lengths.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct FieldPath(u64);
+
+impl FieldPath {
+    const ROOT: FieldPath = FieldPath(0);
+    /// The bits one field takes, holding its index plus one so that a path
+    /// never packs to another's.
+    const SLOT_BITS: u32 = 16;
+
+    /// This path followed by `field`, or `None` past the four fields the
+    /// packing holds.
+    fn then(self, field: u32) -> Option<FieldPath> {
+        let slot = u64::from(field) + 1;
+        if self.0 >> (u64::BITS - Self::SLOT_BITS) != 0 || slot >> Self::SLOT_BITS != 0 {
+            return None;
+        }
+        Some(FieldPath(self.0 << Self::SLOT_BITS | slot))
+    }
 }
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
@@ -256,8 +280,8 @@ struct BindWalk<'e, 'a> {
 }
 
 impl BindWalk<'_, '_> {
-    /// Visit `n`: a promoted operand's source runs first and its reads last, so
-    /// ordering errs toward a write preceding a read.
+    /// Visit `n`: a promoted operand's reads come last, so ordering errs toward
+    /// a write preceding a read.
     fn node(&mut self, n: NodeRef) {
         let body = &*self.engine.body;
         if let NodeRef::Stmt(s) = n {
@@ -265,7 +289,7 @@ impl BindWalk<'_, '_> {
                 // The back edge runs a loop's writes before each read in it.
                 StmtKind::Loop { .. } => {
                     let mut writes = Vec::new();
-                    body.for_each_live_node_under(n, |m| node_writes(self.engine, m, &mut writes));
+                    body.for_each_node_under(n, |m| node_writes(self.engine, m, &mut writes));
                     for w in writes {
                         self.write(w);
                     }
@@ -276,19 +300,12 @@ impl BindWalk<'_, '_> {
                 _ => {}
             }
         }
-        let mut sourced = Vec::new();
         let mut promoted_reads = hashmap::IndexSet::default();
-        let mut seen = hashmap::IndexSet::default();
         body.for_each_operand(n, |op| {
             if let Some(v) = op.as_value() {
-                body.values
-                    .for_each_opaque_expr(v, &mut seen, |e| sourced.push(e));
                 body.values.collect_opaque_locals(v, &mut promoted_reads);
             }
         });
-        for e in sourced {
-            self.node(NodeRef::Expr(e));
-        }
         let mut children = Vec::new();
         body.for_each_child(n, |c| children.push(c));
         for c in children {
@@ -388,20 +405,10 @@ fn operand_reads_global(body: &nir_arena::Body, op: Operand) -> bool {
         matches!(n, NodeRef::Expr(x) if matches!(body.exprs[x].kind, ExprKind::GlobalVarGet { .. }))
             .then_some(())
     };
-    match op {
-        Operand::Expr(e) => body
-            .find_in_live_node_under(NodeRef::Expr(e), is_global_read)
-            .is_some(),
-        Operand::Value(v) => {
-            let mut sources = Vec::new();
-            body.values
-                .for_each_opaque_expr(v, &mut hashmap::IndexSet::default(), |e| sources.push(e));
-            sources.into_iter().any(|e| {
-                body.find_in_live_node_under(NodeRef::Expr(e), is_global_read)
-                    .is_some()
-            })
-        }
-    }
+    op.as_expr().is_some_and(|e| {
+        body.find_in_nodes_under(NodeRef::Expr(e), is_global_read)
+            .is_some()
+    })
 }
 
 /// Cap on how many copy-temp / block-tail hops a bounded resolution chain
@@ -480,17 +487,26 @@ pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
     operand_local(engine.body, Operand::Value(v))
 }
 
-/// The root a [`BoundKey::Field`] keys on. Path-sensitive on purpose: since the
-/// key is `(root, field_index)`, the walk must not collapse a variant-payload
-/// projection (whose field 0 is not the scrutinee's field 0), so it does not use
-/// `arena_query::storage_root`.
-fn field_bound_root(body: &nir_arena::Body, expr: ExprId) -> Option<u32> {
+/// The root and field path a [`BoundKey::Field`] keys on. Path-sensitive on
+/// purpose, so it does not use `arena_query::storage_root`: a variant-payload
+/// projection's field 0 is not the scrutinee's field 0, and each element an
+/// `Index` reads is an object of its own.
+fn field_path(body: &nir_arena::Body, expr: ExprId) -> Option<(u32, FieldPath)> {
     match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => field_bound_root(body, inner.as_expr()?),
+        ExprKind::Local { index, .. } => Some((*index, FieldPath::ROOT)),
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        }
+        | ExprKind::Cast { expr: inner, .. } => field_path(body, inner.as_expr()?),
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let (root, path) = field_path(body, inner.as_expr()?)?;
+            Some((root, path.then(*field_index)?))
+        }
         _ => None,
     }
 }
@@ -515,9 +531,9 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
-            ExprKind::FieldAccess { field_index, .. } => {
-                let root = field_bound_root(engine.body, e)?;
-                Some(BoundKey::Field(root, *field_index))
+            ExprKind::FieldAccess { .. } => {
+                let (root, path) = field_path(engine.body, e)?;
+                Some(BoundKey::Field(root, path))
             }
             _ => None,
         },
@@ -529,7 +545,7 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
                 ..
             } => Some(BoundKey::Field(
                 opaque_local(engine, *receiver)?,
-                *field_index,
+                FieldPath::ROOT.then(*field_index)?,
             )),
             _ => None,
         },
@@ -1159,18 +1175,18 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
 pub(super) fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     let body = &*engine.body;
     let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         if let NodeRef::Block(b) = n
             && panics_before_any_exit(engine, b)
         {
-            body.for_each_live_node_under(n, |m| {
+            body.for_each_node_under(n, |m| {
                 if let NodeRef::Expr(e) = m {
                     diverging.insert(e);
                 }
             });
         }
     });
-    body.find_in_live_node_under(node, |n| {
+    body.find_in_nodes_under(node, |n| {
         let NodeRef::Expr(e) = n else { return None };
         if diverging.contains(&e) {
             return None;
@@ -1195,7 +1211,7 @@ fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
             return true;
         }
         let jumps = body
-            .find_in_live_node_under(NodeRef::Stmt(s), |n| match n {
+            .find_in_nodes_under(NodeRef::Stmt(s), |n| match n {
                 NodeRef::Stmt(t) => body.stmts[t].kind.is_jump().then_some(()),
                 NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
             })
@@ -1336,7 +1352,7 @@ fn structural_loop_guard(
 /// step tests `current == T::MAX` under a guard that already rules it out.
 fn refute_past_cap(engine: &mut Engine, node: NodeRef, binds: &Binds, var: u32, cap: i64) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    engine.body.for_each_live_node_under(node, |n| {
+    engine.body.for_each_node_under(node, |n| {
         let Some((cond, ..)) = if_parts(engine, n) else {
             return;
         };
@@ -1422,7 +1438,7 @@ fn refute_panic_checks(
     let floor_alone = floor.filter(|f| f.alone);
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
     let mut proven_conjuncts: Vec<ConjunctSlot> = Vec::new();
-    engine.body.for_each_live_node_under(node, |n| {
+    engine.body.for_each_node_under(node, |n| {
         // Driving the condition to `false` drops the expression with it, so a
         // condition that writes — an `assert`'s operand capture spliced into
         // the comparison — would lose a store the surviving path still makes.
@@ -2445,7 +2461,7 @@ fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
 /// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
 fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         quiet &= match n {
             NodeRef::Expr(e) => match &body.exprs[e].kind {
                 ExprKind::Call { func_id, .. } => quiet_call(*func_id),
@@ -2822,7 +2838,7 @@ fn sole_unconditional_write(
 /// expression node for.
 fn write_count(engine: &Engine, s: StmtId, var: u32) -> usize {
     let mut writes = 0;
-    engine.body.for_each_live_node_under(NodeRef::Stmt(s), |n| {
+    engine.body.for_each_node_under(NodeRef::Stmt(s), |n| {
         let binds_var = match n {
             NodeRef::Stmt(i) => match &engine.body.stmts[i].kind {
                 StmtKind::Let { local_index, .. } => *local_index == var,

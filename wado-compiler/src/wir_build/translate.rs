@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
@@ -249,14 +249,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 user_params.push(wir_type);
             }
         }
-        let result_wirs: Vec<WirType> = if functor.canonical_return == TypeTable::UNIT
-            || functor.canonical_return == TypeTable::NEVER
-        {
-            vec![]
-        } else {
-            vec![ctx.type_id_to_wir_type(type_table, functor.canonical_return)]
-        };
-        let _ = type_table;
+        let result_wirs = ctx.result_wir_types(type_table, functor.canonical_return);
 
         // Decide vtable schema for this functor by looking the canonical
         // return type up in the inspectable gate computed at WirContext
@@ -279,7 +272,6 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // Get functor struct type ID
         let type_table = &*ctx.package.type_table.borrow();
         let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
-        let _ = type_table;
         let WirType::Ref {
             type_id: functor_struct_type_id,
             ..
@@ -896,7 +888,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 .first()
                 .and_then(|p| type_table.box_payload_of(p.type_id).map(|_| p.type_id));
             drop(tir_func);
-            let _ = type_table;
             let body = build_fn_canonical_dispatch_body(
                 ctx,
                 self_param_name,
@@ -958,7 +949,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 translator.translate_block(body.root())
             };
             apply_cold_path_hints(&mut wir_body);
-            let _ = type_table;
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }
@@ -1070,6 +1060,10 @@ impl FunctionTranslator<'_, '_> {
     /// Shorthand for `self.ctx.type_id_to_wir_type(self.type_table, type_id)`.
     pub(super) fn wir_type(&self, type_id: TypeId) -> WirType {
         self.ctx.type_id_to_wir_type(self.type_table, type_id)
+    }
+
+    pub(super) fn result_wir_types(&self, type_id: TypeId) -> Vec<WirType> {
+        self.ctx.result_wir_types(self.type_table, type_id)
     }
 
     /// The WIR type index of a `TypeId` that must lower to a concrete reference
@@ -2178,7 +2172,7 @@ impl FunctionTranslator<'_, '_> {
                 // so LocalSet would be invalid. `translate_operand` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if self.operand_type_id(*value) == TypeTable::NEVER {
+                if self.type_table.is_never(self.operand_type_id(*value)) {
                     Some(value_instr)
                 } else if self.is_stackless_type(self.operand_type_id(*value)) {
                     // Unit-type (and `&()`-type) locals have no Wasm
@@ -2384,7 +2378,9 @@ impl FunctionTranslator<'_, '_> {
     /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
-        if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
+        if self.type_table.is_never(self.body.exprs[expr_id].type_id)
+            && !instr.ends_with_terminator()
+        {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr
@@ -2435,15 +2431,12 @@ impl FunctionTranslator<'_, '_> {
                         .is_some_and(|l| self.multi_value_split_locals.contains_key(&l))
             })
             .collect();
-        // Whether evaluating each argument runs code: a local read runs none,
-        // and a promoted value none unless its tree names an extraction source.
+        // Whether evaluating each argument runs code: a local read or a promoted
+        // value runs none.
         let runs_code: Vec<bool> = ordered
             .iter()
             .zip(&local_read)
-            .map(|(&op, &local)| match op {
-                Operand::Value(v) => self.body.values.names_extraction_source(v),
-                Operand::Expr(_) => !local,
-            })
+            .map(|(&op, &local)| op.as_expr().is_some() && !local)
             .collect();
         // A diverging argument stays in its place: the call after it is dead
         // code, which validates at any arity, and nothing to its right runs.
@@ -2541,9 +2534,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Whether evaluating `op` stores nothing: reads and arithmetic alone.
     fn writes_nothing(&self, op: Operand) -> bool {
-        let e = match op {
-            Operand::Value(v) => return !self.body.values.names_extraction_source(v),
-            Operand::Expr(e) => e,
+        let Operand::Expr(e) = op else {
+            return true;
         };
         match &self.body.exprs[e].kind {
             ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => {
@@ -2753,20 +2745,7 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for a leaf the graph cannot reconstruct (a
-            // local read, a call result). It is re-emitted from the recorded
-            // source the builder/lower scheduled for it.
-            ValueKind::Opaque(id) => {
-                match self
-                    .body
-                    .values
-                    .opaque_source(id)
-                    .expect("promoted Opaque has no recorded extraction source")
-                {
-                    OpaqueSource::Local(idx) => self.local_get(idx),
-                    OpaqueSource::Expr(e) => self.translate_expr_inner(e),
-                }
-            }
+            ValueKind::Opaque(id) => self.local_get(self.body.values.promoted_opaque_local(id)),
             // A `Select` (control-merge of pure values) extracts as a
             // value-producing `if`. Sound because the arms are pure values
             // (the builder constructs `Select` only at merges of pure values);
@@ -2813,8 +2792,9 @@ impl FunctionTranslator<'_, '_> {
                 // materialised), read the split local directly — a `StructGet`
                 // would read an uninitialised slot. Mirrors `translate_expr_inner`.
                 if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
-                    && let Some(OpaqueSource::Local(idx)) = self.body.values.opaque_source(*oid)
-                    && let Some(splits) = self.multi_value_split_locals.get(&idx)
+                    && let Some(splits) = self
+                        .multi_value_split_locals
+                        .get(&self.body.values.promoted_opaque_local(*oid))
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
                     let (held, ty) = (local_get(name, ty), ty.clone());
@@ -3251,12 +3231,11 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| self.core_wir_type(self.operand_type_id(*a)))
                         .collect();
-                    let mut results =
-                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
-                            vec![]
-                        } else {
-                            vec![self.core_wir_type(expr.type_id)]
-                        };
+                    let mut results = if self.type_table.is_stackless(expr.type_id) {
+                        vec![]
+                    } else {
+                        vec![self.core_wir_type(expr.type_id)]
+                    };
                     if discards_result {
                         assert!(results.is_empty(), "a UNIT call declares no result");
                         results.push(WirType::I32);

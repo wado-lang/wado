@@ -1,0 +1,51 @@
+//! Regression: inside a closure, the locals a `with` desugars into and the ones
+//! drop elaboration mints both came after the closure's own lets. The closure
+//! scope numbered the first without recording them in the closure's locals, so
+//! drop elaboration numbered its own from the same index and the two shared a
+//! slot.
+use { println, Stdout } from "core:cli";
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+struct One {}
+
+impl Ask for One {
+    fn ask(&mut self) -> i32 {
+        resume 40
+    }
+}
+
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+export fn run() with Stdout {
+    let f = |x: i32| {
+        let t = make(x);
+        let mut one = One {};
+        with Ask => &mut one do {
+            if x > 0 {
+                return Ask::ask() + t.n;
+            }
+        }
+        return t.n;
+    };
+    println(`${f(2)} ${f(-1)} drops=${DROPS}`);
+}
+
+__DATA__
+{"stdout": "42 -1 drops=2\n"}

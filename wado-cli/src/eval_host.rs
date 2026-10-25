@@ -30,13 +30,13 @@ use wado_lsp::host::dependency_index_from;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
-use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
-use crate::fingerprint::{Input, compiler_digest, hash_field};
+use crate::cache::derived_dir;
+use crate::compile::{load_nearest_manifest, render_error_diagnostics};
+use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
-use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
 use wado_host::sync::{join_in_drop, joined, lock};
@@ -223,9 +223,7 @@ impl EvalHost {
         if !matches!(entry.outcome, Outcome::CompileTimedOut)
             && let Some(path) = &path
         {
-            let bytes = serde_json::to_vec(&entry).expect("an entry serializes");
-            // Losing the cache is never an error: the next run evaluates again.
-            let _ = write_atomic(path, &bytes);
+            write_entry(path, &entry);
         }
         entry.outcome
     }
@@ -340,9 +338,8 @@ struct Dependencies {
     /// The calling package's root, which no dependency's files include, even
     /// a dependency whose package holds it.
     caller_root: Option<PathBuf>,
-    /// Where outcomes are cached: `build/eval/` under the calling package's
-    /// root, or under the caller's directory when it is in no package. `None`,
-    /// and so no cache, when the package's manifest is invalid.
+    /// Where outcomes are cached: the calling package's [`derived_dir`].
+    /// `None`, and so no cache, when the package's manifest is invalid.
     cache_dir: Option<PathBuf>,
 }
 
@@ -364,7 +361,7 @@ impl Dependencies {
         };
         let project = match load_nearest_manifest(caller) {
             Ok(Some(project)) => project,
-            Ok(None) => return none(Some(build_dir(&base).join("eval"))),
+            Ok(None) => return none(derived_dir(None, "eval")),
             Err(_) => return none(None),
         };
         let index = dependency_index_from(&project.manifest, &project.root, &base);
@@ -382,7 +379,7 @@ impl Dependencies {
                 .map(absolute)
                 .collect(),
             caller_root: Some(normalize_path(&absolutize(&project.root))),
-            cache_dir: Some(build_dir(&project.root).join("eval")),
+            cache_dir: derived_dir(Some(&project.root), "eval"),
             base,
             index,
         }
@@ -752,38 +749,36 @@ fn trap_kind(trap: Trap) -> TrapKind {
 }
 
 /// One test's handle on the run's [`EvalHost`]: which file is calling, the CPU
-/// permit it runs on, and how long it has spent inside `eval`.
+/// permit it runs on, and the clock its time inside `eval` stops.
 pub struct EvalSession {
     host: Arc<EvalHost>,
     caller: PathBuf,
     /// Empty only inside `eval`.
     cpu: Option<OwnedSemaphorePermit>,
-    paused: Duration,
+    clock: Arc<TestClock>,
 }
 
 impl EvalSession {
     /// A session for a test in the file at `caller`, running on `cpu`.
     #[must_use]
-    pub fn new(host: Arc<EvalHost>, caller: &str, cpu: OwnedSemaphorePermit) -> Self {
+    pub fn new(
+        host: Arc<EvalHost>,
+        caller: &str,
+        cpu: OwnedSemaphorePermit,
+        clock: Arc<TestClock>,
+    ) -> Self {
         Self {
             host,
             caller: PathBuf::from(caller),
             cpu: Some(cpu),
-            paused: Duration::ZERO,
+            clock,
         }
-    }
-
-    /// The time spent inside `eval` so far, which does not count against the
-    /// test's deadline.
-    #[must_use]
-    pub fn paused(&self) -> Duration {
-        self.paused
     }
 }
 
 impl eval_host::Host for EvalSession {
     async fn run(&mut self, source: String, fuel: u64) -> Outcome {
-        let start = Instant::now();
+        lock(&self.clock.eval).entered = Some(Instant::now());
         drop(
             self.cpu
                 .take()
@@ -791,8 +786,46 @@ impl eval_host::Host for EvalSession {
         );
         let outcome = self.host.outcome(&self.caller, source, fuel).await;
         self.cpu = Some(self.host.cpu_permit().await);
-        self.paused += start.elapsed();
+        let mut eval = lock(&self.clock.eval);
+        let entered = eval
+            .entered
+            .take()
+            .expect("a test leaves only the eval it entered");
+        eval.paused += entered.elapsed();
         outcome
+    }
+}
+
+/// A test's own time, which its deadline counts: the time since it started,
+/// less the time inside `eval`.
+pub struct TestClock {
+    start: Instant,
+    eval: Mutex<EvalTime>,
+}
+
+#[derive(Default)]
+struct EvalTime {
+    paused: Duration,
+    /// When the `eval` the test is inside began, where it is inside one.
+    entered: Option<Instant>,
+}
+
+impl TestClock {
+    #[must_use]
+    pub fn new(start: Instant) -> Self {
+        Self {
+            start,
+            eval: Mutex::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn own(&self) -> Duration {
+        let eval = lock(&self.eval);
+        let inside = eval
+            .entered
+            .map_or(Duration::ZERO, |entered| entered.elapsed());
+        self.start.elapsed().saturating_sub(eval.paused + inside)
     }
 }
 

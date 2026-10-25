@@ -1,0 +1,69 @@
+use { Case, program, read_after_program, in_closure_program, expected } from "./generator.wado";
+use { eval, EvalError, Output } from "core:eval";
+
+/// The first case whose part of `actual` differs from what it expects.
+fn first_divergence(cases: &List<Case>, actual: &String) -> String {
+    let mut prefix = String::new();
+    for let i of 0..<cases.len() {
+        let want = cases[i].expected(i);
+        prefix.push_str(&want);
+        if !actual.starts_with(&prefix) {
+            return `${cases[i].label()}\nexpected:\n${want}actual:\n${actual}`;
+        }
+    }
+    return "the outputs differ past the last case";
+}
+
+/// Cases per evaluated program: the compile of one holding them all runs past
+/// `eval`'s time limit at `-O3`.
+global CHUNK: i32 = 200;
+
+test "every value drops once, where the model says" {
+    let all = Case::all();
+    for let start of (0..<all.len()).step_by(CHUNK) {
+        let mut cases: List<Case> = [];
+        for let i of start..<i32::min(start + CHUNK, all.len()) {
+            cases.push(all[i]);
+        }
+        let source = program(&cases);
+        let out = eval(source).unwrap();
+        assert out.status matches { Exited(0) }, `${out.status:?}\n${out.stderr}\n${source}`;
+        assert out.stdout == expected(&cases), first_divergence(&cases, &out.stdout);
+    }
+}
+
+/// `result` compiled where `accepted`, and was otherwise rejected with
+/// `message`.
+fn assert_rejected_unless(case: &Case, result: Result<Output, EvalError>, accepted: bool, message: String) {
+    if accepted {
+        assert result matches { Ok(_) }, `${case.label()}: ${result:?}`;
+        return;
+    }
+    let Err(EvalError::CompileFailed(failure)) = result else {
+        panic(`${case.label()}: expected a rejection, got ${result:?}`);
+    };
+    assert failure.rendered.contains(&message), `${case.label()}: ${failure.rendered}`;
+}
+
+// One program per case: a rejection stops the whole program, so cases cannot
+// share one. `flag` is only read at run time, so one value of it suffices.
+test "a read after a move is rejected, and only there" {
+    for let case of Case::all() {
+        if case.is_plain() && case.flag {
+            let result = eval(read_after_program(&case));
+            assert_rejected_unless(&case, result, case.readable_after(), "affine value `t` used after it was moved");
+        }
+    }
+}
+
+// A closure captures by reference, so a consumer that moves is rejected inside
+// one, in whatever context, and one that borrows is not.
+test "a move inside a closure is rejected, and only there" {
+    for let case of Case::all() {
+        if case.is_plain() && case.flag {
+            let result = eval(in_closure_program(&case));
+            let message = "a closure captures `t` by reference, so its body cannot move it";
+            assert_rejected_unless(&case, result, !case.consumer.moves(), message);
+        }
+    }
+}

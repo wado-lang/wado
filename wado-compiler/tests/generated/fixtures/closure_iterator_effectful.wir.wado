@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//closure_iterator_effectful.wado/run" = fn();  // TypeId(11)
 
@@ -47,7 +47,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//closure_iterator_effectful.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//closure_iterator_effectful.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -57,7 +57,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -70,14 +70,13 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
     let item_17: i32;
     let is_negative_30: bool;
     let x_34: i64;
+    let $moved_4: i32;
+    let $moved_6: i32;
+    let $cm_pair_7: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $moved_4: i32;
-    let $moved_6: i32;
-    let $cm_pair_7: i64;
-    let $moved_3: i32;
     let $sroa_self_index_67: i32;
     let $tmpl_buf_69: ref "core:prelude/string.wado//String";
     let new_used_106: i32;
@@ -94,65 +93,65 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
             is_negative_30 = item_17 < 0;
             x_34 = builtin::i64_extend_i32_s(item_17);
             x_34 = select i64(x_34 < 0_i64, 0_i64 - x_34, x_34);
-            item_17 = $inline_count_digits_u64_16: block -> i32 {
+            item_17 = $inline_count_digits_u64_2: block -> i32 {
                 if x_34 <u 100000_i64 {
                     if x_34 <u 100_i64 {
                         if x_34 <u 10_i64 {
-                            break $inline_count_digits_u64_16: 1;
+                            break $inline_count_digits_u64_2: 1;
                         }
-                        break $inline_count_digits_u64_16: 2;
+                        break $inline_count_digits_u64_2: 2;
                     }
                     if x_34 <u 1000_i64 {
-                        break $inline_count_digits_u64_16: 3;
+                        break $inline_count_digits_u64_2: 3;
                     }
                     if x_34 <u 10000_i64 {
-                        break $inline_count_digits_u64_16: 4;
+                        break $inline_count_digits_u64_2: 4;
                     }
-                    break $inline_count_digits_u64_16: 5;
+                    break $inline_count_digits_u64_2: 5;
                 }
                 if x_34 <u 10000000000_i64 {
                     if x_34 <u 10000000_i64 {
                         if x_34 <u 1000000_i64 {
-                            break $inline_count_digits_u64_16: 6;
+                            break $inline_count_digits_u64_2: 6;
                         }
-                        break $inline_count_digits_u64_16: 7;
+                        break $inline_count_digits_u64_2: 7;
                     }
                     if x_34 <u 100000000_i64 {
-                        break $inline_count_digits_u64_16: 8;
+                        break $inline_count_digits_u64_2: 8;
                     }
                     if x_34 <u 1000000000_i64 {
-                        break $inline_count_digits_u64_16: 9;
+                        break $inline_count_digits_u64_2: 9;
                     }
-                    break $inline_count_digits_u64_16: 10;
+                    break $inline_count_digits_u64_2: 10;
                 }
                 if x_34 <u 1000000000000000_i64 {
                     if x_34 <u 1000000000000_i64 {
                         if x_34 <u 100000000000_i64 {
-                            break $inline_count_digits_u64_16: 11;
+                            break $inline_count_digits_u64_2: 11;
                         }
-                        break $inline_count_digits_u64_16: 12;
+                        break $inline_count_digits_u64_2: 12;
                     }
                     if x_34 <u 10000000000000_i64 {
-                        break $inline_count_digits_u64_16: 13;
+                        break $inline_count_digits_u64_2: 13;
                     }
                     if x_34 <u 100000000000000_i64 {
-                        break $inline_count_digits_u64_16: 14;
+                        break $inline_count_digits_u64_2: 14;
                     }
-                    break $inline_count_digits_u64_16: 15;
+                    break $inline_count_digits_u64_2: 15;
                 }
                 if x_34 <u 100000000000000000_i64 {
                     if x_34 <u 10000000000000000_i64 {
-                        break $inline_count_digits_u64_16: 16;
+                        break $inline_count_digits_u64_2: 16;
                     }
-                    break $inline_count_digits_u64_16: 17;
+                    break $inline_count_digits_u64_2: 17;
                 }
                 if x_34 <u 1000000000000000000_i64 {
-                    break $inline_count_digits_u64_16: 18;
+                    break $inline_count_digits_u64_2: 18;
                 }
                 if x_34 <u -8446744073709551616_i64 {
-                    break $inline_count_digits_u64_16: 19;
+                    break $inline_count_digits_u64_2: 19;
                 }
-                break $inline_count_digits_u64_16: 20;
+                break $inline_count_digits_u64_2: 20;
             };
             if is_negative_30 {
                 if @unlikely(local.tee new_used_106($tmpl_buf_69.used + 1) > builtin::array_len($tmpl_buf_69.repr)) {
@@ -189,18 +188,18 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
             }
             start_162 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
             item_17 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-            start_162 = "closure_iterator_effectful.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_162; start_162 = 0; $moved_4);
+            start_162 = "closure_iterator_effectful.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_162; start_162 = 0; $moved_4);
             is_negative_30 = item_17;
             item_17 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = is_negative_30; is_negative_30 = 0; $moved_3, $tmpl_buf_69.repr, $tmpl_buf_69.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_30, $tmpl_buf_69.repr, $tmpl_buf_69.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6 = start_162; start_162 = 0; $moved_6);
             continue l1;
         };
     };
 }
 
-fn "closure_iterator_effectful.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "closure_iterator_effectful.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "closure_iterator_effectful.wado/$cm_export__run"() {

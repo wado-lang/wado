@@ -343,9 +343,6 @@ pub(super) struct ParamSpecState {
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
     /// set of clones.
     param_consts: IndexMap<FuncId, IndexMap<String, ParamSeed>>,
-    /// The per-function walks behind the reachable set the constants are
-    /// taken over.
-    reachability: ReachabilityCache,
     /// The call graph whose cycles a clone must not split.
     callees: BodyMemo<Vec<usize>>,
 }
@@ -402,21 +399,41 @@ impl LocalUses {
     }
 }
 
-/// Per-function signature facts the classifier needs about callees.
+/// The signature facts the classifier needs about callees, by function index.
 struct Signatures {
-    /// Parameter local indices per function index; empty for a bodyless record.
-    param_locals: Vec<Vec<u32>>,
-    /// Parameter names per function index, beside `param_locals`.
-    param_names: Vec<Vec<String>>,
+    of: Vec<Signature>,
+}
+
+struct Signature {
+    /// Parameter local indices; empty for a bodyless record.
+    param_locals: Vec<u32>,
+    /// Parameter names, beside `param_locals`.
+    param_names: Vec<String>,
     /// The struct type each parameter's reference points at, when it is one.
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
+<<<<<<< HEAD
     param_struct: Vec<Vec<Option<TypeKey>>>,
     /// Whether the function has a body the summary can walk and a clone can copy.
     has_body: Vec<bool>,
+||||||| ed92649a8
+    param_struct: Vec<Vec<Option<TypeKey>>>,
+    /// Whether the function has a body the summary can walk.
+    has_body: Vec<bool>,
+    /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
+    /// the unique anchor passes resolve that item by.
+    specializable: Vec<bool>,
+=======
+    param_struct: Vec<Option<TypeKey>>,
+    /// Whether the function has a body the summary can walk.
+    has_body: bool,
+    /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
+    /// the unique anchor passes resolve that item by.
+    specializable: bool,
+>>>>>>> origin/main
     /// Whether each parameter's own slot may be replaced by a constant. A
     /// slot the body reassigns, references or aliases holds more than the argument.
-    param_fixed: Vec<Vec<bool>>,
+    param_fixed: Vec<bool>,
     /// Whether the function's scalar arguments may move into a clone. A callee
     /// writing through a reference is one a compile-time frame runs for those
     /// writes, and a constant it no longer receives is one that frame cannot
@@ -424,12 +441,19 @@ struct Signatures {
     /// a call cycle is one whose recursion the constant decides nothing about,
     /// and cloning one member splits a cycle the return-ABI analysis reasons
     /// about whole.
+<<<<<<< HEAD
     scalar_specializable: Vec<bool>,
     /// The globals no write reaches, whose `&G` a clone may name again.
     immutable_globals: IndexSet<GlobalKey>,
+||||||| ed92649a8
+    scalar_specializable: Vec<bool>,
+=======
+    scalar_specializable: bool,
+>>>>>>> origin/main
 }
 
 impl Signatures {
+<<<<<<< HEAD
     fn build(project: &NirPackage, types: &TypeTable, recursive: &IndexSet<FuncId>) -> Self {
         let mut param_locals = Vec::with_capacity(project.functions.len());
         let mut param_names = Vec::with_capacity(project.functions.len());
@@ -453,6 +477,48 @@ impl Signatures {
             );
             param_struct.push(
                 func.params
+||||||| ed92649a8
+    fn build(project: &NirPackage, types: &TypeTable, recursive: &IndexSet<FuncId>) -> Self {
+        let mut param_locals = Vec::with_capacity(project.functions.len());
+        let mut param_names = Vec::with_capacity(project.functions.len());
+        let mut param_struct = Vec::with_capacity(project.functions.len());
+        let mut has_body = Vec::with_capacity(project.functions.len());
+        let mut specializable = Vec::with_capacity(project.functions.len());
+        let mut param_fixed = Vec::with_capacity(project.functions.len());
+        let mut scalar_specializable = Vec::with_capacity(project.functions.len());
+        for (index, func) in project.functions.iter().enumerate() {
+            let func = func.borrow();
+            param_locals.push(func.params.iter().map(|p| p.local_index).collect());
+            param_names.push(func.params.iter().map(|p| p.name.clone()).collect());
+            scalar_specializable.push(
+                !func.params.iter().any(|p| p.is_mut_ref)
+                    && !recursive.contains(&FuncId::new(index)),
+            );
+            param_fixed.push(
+                func.params
+                    .iter()
+                    .map(|p| is_param_fixed(&func, p))
+                    .collect(),
+            );
+            param_struct.push(
+                func.params
+=======
+    fn build(
+        project: &NirPackage,
+        types: &TypeTable,
+        recursive: &IndexSet<FuncId>,
+        exec: &Executor,
+    ) -> Self {
+        let functions = &project.functions;
+        let of = exec.map_indices(functions.len(), |index| {
+            let func = functions[index].borrow();
+            let live_body = func.body.is_some() && !func.is_dead;
+            Signature {
+                param_locals: func.params.iter().map(|p| p.local_index).collect(),
+                param_names: func.params.iter().map(|p| p.name.clone()).collect(),
+                param_struct: func
+                    .params
+>>>>>>> origin/main
                     .iter()
                     .map(|p| {
                         if func.retains.contains(&p.name) {
@@ -465,6 +531,7 @@ impl Signatures {
                         }
                     })
                     .collect(),
+<<<<<<< HEAD
             );
             has_body.push(func.body.is_some() && !func.is_dead);
         }
@@ -482,16 +549,42 @@ impl Signatures {
                 .map(|g| (g.module_source.clone(), g.name.clone()))
                 .collect(),
         }
+||||||| ed92649a8
+            );
+            let live_body = func.body.is_some() && !func.is_dead;
+            has_body.push(live_body);
+            specializable.push(live_body && func.compiler_item.is_none());
+        }
+        Signatures {
+            param_locals,
+            param_names,
+            param_struct,
+            has_body,
+            specializable,
+            param_fixed,
+            scalar_specializable,
+        }
+=======
+                has_body: live_body,
+                specializable: live_body && func.compiler_item.is_none(),
+                param_fixed: func
+                    .params
+                    .iter()
+                    .map(|p| is_param_fixed(&func, p))
+                    .collect(),
+                scalar_specializable: !func.params.iter().any(|p| p.is_mut_ref)
+                    && !recursive.contains(&FuncId::new(index)),
+            }
+        });
+        Signatures { of }
+>>>>>>> origin/main
     }
 
     /// The parameter local index a call's argument at `position` binds to, for a
     /// callee whose body the summary can see.
     fn param_local(&self, callee: FuncId, position: usize) -> Option<u32> {
-        let index = callee.index();
-        if !self.has_body.get(index).copied().unwrap_or(false) {
-            return None;
-        }
-        self.param_locals[index].get(position).copied()
+        let signature = self.of.get(callee.index()).filter(|s| s.has_body)?;
+        signature.param_locals.get(position).copied()
     }
 }
 
@@ -753,12 +846,12 @@ fn summarize_params(
             return Vec::new();
         };
         let id = FuncId::new(index);
-        let tracked: IndexSet<u32> = signatures.param_struct[index]
+        let signature = &signatures.of[index];
+        let tracked: IndexSet<u32> = signature
+            .param_struct
             .iter()
-            .enumerate()
-            .filter_map(|(position, pointee)| {
-                pointee.map(|_| signatures.param_locals[index][position])
-            })
+            .zip(&signature.param_locals)
+            .filter_map(|(pointee, &local)| pointee.map(|_| local))
             .collect();
         if tracked.is_empty() {
             return Vec::new();
@@ -1190,21 +1283,25 @@ fn select_sites(
             ),
             _ => return,
         };
+<<<<<<< HEAD
         let index = callee.index();
         if !signatures.has_body[index] {
+||||||| ed92649a8
+        let index = callee.index();
+        if !signatures.specializable[index] {
+=======
+        let signature = &signatures.of[callee.index()];
+        if !signature.specializable {
+>>>>>>> origin/main
             return;
         }
         let unanimous = constants.get(&callee);
         let mut bindings: Vec<Binding> = Vec::new();
         for (position, arg, is_mut) in arguments {
-            let Some(&param_local) = signatures.param_locals[index].get(position) else {
+            let Some(&param_local) = signature.param_locals.get(position) else {
                 continue;
             };
-            match signatures.param_struct[index]
-                .get(position)
-                .copied()
-                .flatten()
-            {
+            match signature.param_struct.get(position).copied().flatten() {
                 Some(pointee) => select_field_bindings(
                     SelectField {
                         locals,
@@ -1222,8 +1319,8 @@ fn select_sites(
                 // only a position they disagree on is worth a clone.
                 None => {
                     if !is_mut
-                        && signatures.scalar_specializable[index]
-                        && signatures.param_fixed[index][position]
+                        && signature.scalar_specializable
+                        && signature.param_fixed[position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
                         && let Some(value) = FieldConst::of_scalar(body, types, arg)
                     {
@@ -1236,8 +1333,8 @@ fn select_sites(
         // constant that settles a round after another still reaches it. A
         // bound slot stays bound: its parameter is still passed the constant.
         if let Some(spec) = state.specs.get(&callee) {
-            let locals = &signatures.param_locals[index];
-            let names = &signatures.param_names[index];
+            let locals = &signature.param_locals;
+            let names = &signature.param_names;
             bindings.retain(|(param, slot, _)| {
                 let position = locals.iter().position(|p| p == param);
                 let name = &names[position.expect("a binding names a parameter")];
@@ -1340,6 +1437,7 @@ pub(super) fn specialize_const_params(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
     descriptors: &mut DescriptorCache,
+    reachability: &mut ReachabilityCache,
 ) -> bool {
     let cached: Vec<_> = state
         .clones
@@ -1347,13 +1445,8 @@ pub(super) fn specialize_const_params(
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let mut reachable = reachable_function_positions(
-        project,
-        descriptors,
-        &mut state.reachability,
-        gate.exec(),
-        cached,
-    );
+    let mut reachable =
+        reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
@@ -1377,7 +1470,7 @@ fn specialize_round(
         let types = project.type_table.borrow();
         let recursive =
             recursive_functions(state.callees.refresh(project, gate.exec(), body_callees));
-        Signatures::build(project, &types, &recursive)
+        Signatures::build(project, &types, &recursive, gate.exec())
     };
     let facts = summarize_params(project, &signatures, gate.exec());
     let cold = cold_path_id(descriptors.descriptors(project));

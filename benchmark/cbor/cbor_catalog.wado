@@ -20,6 +20,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     let catalog = json_from_bytes::<CitmCatalog, _>(
@@ -28,6 +29,14 @@ test "smoke" {
     let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
     let back = cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap();
     assert event_count(&back) == 0;
+}
+
+test "fuel" {
+    let catalog = json_from_bytes::<CitmCatalog, _>(#include_bytes("../json_catalog/citm_catalog.json")).unwrap();
+    let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
+    measure("catalog/ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = measure("catalog/de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
+    assert events == 184;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

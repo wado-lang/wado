@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_export__run" = fn();  // TypeId(10)
 
@@ -47,7 +47,7 @@ type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#Error
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -57,7 +57,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -66,8 +66,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_export__run"() {
@@ -79,38 +79,38 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"() w
     let $local_1: ref "core:prelude/string.wado//String";
     let $moved_4: i32;
     let $cm_pair_7: i64;
-    let $sroa_$f_buf_60: ref "core:prelude/string.wado//String";
-    let new_used_144: i32;
-    let start_145: i32;
-    $sroa_$f_buf_60 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    if @unlikely(local.tee new_used_144(0 + 3) > builtin::array_len($sroa_$f_buf_60.repr)) {
+    let $sroa_$f_buf_62: ref "core:prelude/string.wado//String";
+    let new_used_146: i32;
+    let start_147: i32;
+    $sroa_$f_buf_62 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    if @unlikely(local.tee new_used_146(0 + 3) > builtin::array_len($sroa_$f_buf_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_60, new_used_144);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_62, new_used_146);
     }
-    start_145 = $sroa_$f_buf_60.used;
-    $sroa_$f_buf_60.used = new_used_144;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_60.repr, start_145, 100_i64, 3);
-    if @unlikely(local.tee start_145($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    start_147 = $sroa_$f_buf_62.used;
+    $sroa_$f_buf_62.used = new_used_146;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_62.repr, start_147, 100_i64, 3);
+    if @unlikely(local.tee start_147($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_145);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_147);
     }
-    new_used_144 = $local_1.used;
-    $local_1.used = start_145;
-    builtin::array_copy<u8>($local_1.repr, new_used_144, global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_1, 0, 1);
-    if @unlikely(local.tee new_used_144(local.tee $sroa_$f_buf_60($local_1).used + 3) > builtin::array_len($sroa_$f_buf_60.repr)) {
+    new_used_146 = $local_1.used;
+    $local_1.used = start_147;
+    builtin::array_copy<u8>($local_1.repr, new_used_146, global:opt_elide_adjacent_struct_local_intervening_copy.wado::$const_obj_1, 0, 1);
+    if @unlikely(local.tee new_used_146(local.tee $sroa_$f_buf_62($local_1).used + 3) > builtin::array_len($sroa_$f_buf_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_60, new_used_144);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_62, new_used_146);
     }
-    start_145 = $sroa_$f_buf_60.used;
-    $sroa_$f_buf_60.used = new_used_144;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_60.repr, start_145, 200_i64, 3);
-    start_145 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_144 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_145; start_145 = 0; $moved_4);
-    start_145 = new_used_144;
-    new_used_144 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_144 = start_145; start_145 = 0; new_used_144, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_144 = $moved_4; $moved_4 = 0; new_used_144);
+    start_147 = $sroa_$f_buf_62.used;
+    $sroa_$f_buf_62.used = new_used_146;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_62.repr, start_147, 200_i64, 3);
+    start_147 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    new_used_146 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_147; start_147 = 0; $moved_4);
+    start_147 = new_used_146;
+    new_used_146 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_147, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_147 = $moved_4; $moved_4 = 0; start_147);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

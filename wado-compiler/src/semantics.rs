@@ -20,7 +20,9 @@ use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
-use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
+use crate::elaborator::sem::types::{
+    CoercionKind, DesugarKind, FallbackSite, MethodDispatch, TypeAnnotations,
+};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -369,13 +371,7 @@ impl Semantics {
     ) -> IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> {
         let mut by_module: IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> =
             IndexMap::default();
-        let walks = self.state.iter().flat_map(|state| {
-            state.module_semantics.values().flat_map(|sem| {
-                std::iter::once(&sem.types)
-                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
-            })
-        });
-        for types in walks {
+        for types in self.walks() {
             for (site, shown) in &types.inexact_float_patterns {
                 let module = self.space_modules[&site.space].clone();
                 by_module
@@ -387,6 +383,28 @@ impl Semantics {
             }
         }
         by_module
+    }
+
+    /// The destructuring assignments that keep their desugaring, keyed by the
+    /// assignment's span, which names its module. Gathered from every walk, as
+    /// [`Self::inexact_float_patterns`] are, so one that falls back in any walk
+    /// of a default body is here, whichever module walked it.
+    pub(crate) fn destructuring_fallbacks(&self) -> IndexMap<Span, &FallbackSite> {
+        self.walks()
+            .flat_map(|types| &types.destructuring_fallbacks)
+            .map(|(site, fallback)| (*site, fallback))
+            .collect()
+    }
+
+    /// The facts of every body walk: each module's own, and each trait default
+    /// body's, which a walk resolves in the module that takes it.
+    fn walks(&self) -> impl Iterator<Item = &TypeAnnotations> {
+        self.state.iter().flat_map(|state| {
+            state.module_semantics.values().flat_map(|sem| {
+                std::iter::once(&sem.types)
+                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
+            })
+        })
     }
 
     /// Every value recorded for `fact` at `id`, from the module
@@ -800,11 +818,13 @@ impl Semantics {
             DesugarKind::ForOfTuple => "for_of_tuple",
             DesugarKind::ForOfVariadic => "for_of_variadic",
             DesugarKind::ForOfIterator => "for_of_iterator",
+            DesugarKind::ForOfNever => "for_of_never",
             DesugarKind::CStyleFor => "c_style_for",
             DesugarKind::While => "while",
             DesugarKind::WhileLetChain => "while_let_chain",
             DesugarKind::IfLetChain => "if_let_chain",
             DesugarKind::CompoundAssign => "compound_assign",
+            DesugarKind::DestructuringAssign => "destructuring_assign",
             DesugarKind::IndexMutMethodCall => "index_mut_method_call",
             DesugarKind::NewtypeFromCollapse => "newtype_from_collapse",
             DesugarKind::NewtypeFromUnwrap => "newtype_from_unwrap",

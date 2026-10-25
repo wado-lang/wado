@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Downloads Microsoft's onnxruntime release for this host, unmodified, and
+# prints the directory it unpacked to. The version is the one onnxruntime-node
+# pins in package-loam/package.json, which Loam's oracles run. Cached under
+# ~/.cache/loam.
+set -euo pipefail
+
+VERSION=1.30.0
+case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)
+        asset=onnxruntime-linux-x64-$VERSION
+        sha=a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd
+        ;;
+    Linux-aarch64)
+        asset=onnxruntime-linux-aarch64-$VERSION
+        sha=e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da
+        ;;
+    Darwin-arm64)
+        asset=onnxruntime-osx-arm64-$VERSION
+        sha=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
+        ;;
+    *)
+        echo "no onnxruntime $VERSION release for $(uname -s)-$(uname -m)" >&2
+        exit 1
+        ;;
+esac
+
+# Unpacked beside the cache and renamed into it, so an interrupted run leaves
+# nothing a later one would take for the release.
+cache="$HOME/.cache/loam"
+if [ ! -d "$cache/$asset" ]; then
+    mkdir -p "$cache"
+    part="$cache/$asset.part"
+    rm -rf "$part"
+    mkdir "$part"
+    curl -fsSL -o "$part/release.tgz" "https://github.com/microsoft/onnxruntime/releases/download/v$VERSION/$asset.tgz"
+    if command -v sha256sum > /dev/null; then sha256=(sha256sum); else sha256=(shasum -a 256); fi
+    echo "$sha  $part/release.tgz" | "${sha256[@]}" -c - >&2
+    tar -xzf "$part/release.tgz" -C "$part"
+    mv "$part/$asset" "$cache/$asset"
+    rm -rf "$part"
+fi
+echo "$cache/$asset"

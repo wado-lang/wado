@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//closure_mut_capture_after_reify_temp.wado/run" = fn();  // TypeId(10)
 
@@ -47,7 +47,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//closure_mut_capture_after_reify_temp.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -57,7 +57,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -74,7 +74,7 @@ fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     let start_16: i32;
     let $moved_4: i32;
     let $cm_pair_7: i64;
-    let $sroa_$f_buf_101: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_102: ref "core:prelude/string.wado//String";
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     if @unlikely(local.tee new_used_15(0 + 2) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -85,13 +85,13 @@ fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_16, global:closure_mut_capture_after_reify_temp.wado::$const_obj_2, 0, 1);
     start_16 = start_16 + 1;
     builtin::array_copy<u8>($load_2, start_16, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee start_16(local.tee $sroa_$f_buf_101($local_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
+    if @unlikely(local.tee start_16(local.tee $sroa_$f_buf_102($local_5).used + 1) > builtin::array_len($sroa_$f_buf_102.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_101, start_16);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_102, start_16);
     }
-    new_used_15 = $sroa_$f_buf_101.used;
-    $sroa_$f_buf_101.used = start_16;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_101.repr, new_used_15, 2_i64, 1);
+    new_used_15 = $sroa_$f_buf_102.used;
+    $sroa_$f_buf_102.used = start_16;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, new_used_15, 2_i64, 1);
     if @unlikely(local.tee new_used_15($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_15);
@@ -99,24 +99,24 @@ fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     start_16 = $local_5.used;
     $local_5.used = new_used_15;
     builtin::array_copy<u8>($local_5.repr, start_16, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee start_16(local.tee $sroa_$f_buf_101($local_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
+    if @unlikely(local.tee start_16(local.tee $sroa_$f_buf_102($local_5).used + 1) > builtin::array_len($sroa_$f_buf_102.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_101, start_16);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_102, start_16);
     }
-    new_used_15 = $sroa_$f_buf_101.used;
-    $sroa_$f_buf_101.used = start_16;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_101.repr, new_used_15, 1_i64, 1);
+    new_used_15 = $sroa_$f_buf_102.used;
+    $sroa_$f_buf_102.used = start_16;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, new_used_15, 1_i64, 1);
     new_used_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     start_16 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_15; new_used_15 = 0; $moved_4);
+    $moved_4 = "closure_mut_capture_after_reify_temp.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_15; new_used_15 = 0; $moved_4);
     new_used_15 = start_16;
     start_16 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_16 = new_used_15; new_used_15 = 0; start_16, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_16 = $moved_4; $moved_4 = 0; start_16);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_15, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_15 = $moved_4; $moved_4 = 0; new_used_15);
 }
 
-fn "closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "closure_mut_capture_after_reify_temp.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "closure_mut_capture_after_reify_temp.wado/$cm_export__run"() {

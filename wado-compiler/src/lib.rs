@@ -5,6 +5,8 @@
 // to it.
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+mod affine_holding;
+pub mod affine_move_check;
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
@@ -25,6 +27,7 @@ pub mod const_eval;
 pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
+pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
@@ -64,8 +67,6 @@ mod prelower_reach;
 pub mod primitive;
 pub mod remarks;
 pub mod resolve;
-mod resource_holding;
-pub mod resource_move_check;
 pub mod self_comparison;
 pub mod semantics;
 pub mod signature_reach;
@@ -137,6 +138,7 @@ pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, semantics, semantics_for_world, semantics_of,
 };
 
+pub use affine_move_check::{AffineMoveError, check_affine_moves_semantic};
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
 pub use effect_check::{
@@ -156,7 +158,6 @@ use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;
@@ -915,8 +916,8 @@ fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
-/// The FQ prefix of every `core:eval` interface.
-const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
+/// The packages only `wado test` supplies.
+const TEST_WORLD_ONLY_PACKAGES: &[&str] = &["core:eval", "core:fuel"];
 
 #[derive(Default)]
 struct LibSurface {
@@ -1612,7 +1613,7 @@ fn compile_after_load<H: CompilerHost>(
             .map(|p| p.import_fq.clone())
             .collect();
         let diags = effect_check::check_semantics(&sem, provided_import_fqs);
-        let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
+        let move_errors = affine_move_check::check_affine_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         sem.redirect_effect_vars(&diags.rows);
         for error in diags.effects {
@@ -1893,6 +1894,16 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
+    let remarks_logged = logger.would_log(compiler_host::Severity::Info);
+    // Owned: `sem` is taken apart below.
+    let destructuring_fallbacks = if remarks_logged {
+        let fallbacks = sem.destructuring_fallbacks().into_iter();
+        fallbacks
+            .map(|(site, fallback)| (site, fallback.clone()))
+            .collect()
+    } else {
+        IndexMap::default()
+    };
     let semantics::Semantics {
         entry_module_source,
         export_mappings,
@@ -2065,17 +2076,6 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::synthesize(package).map_err(|error| bail_with_synthesis(logger, error))?
     };
 
-    // === Phase 8c: Effect Dispatch Synthesis ===
-    // Lowers `WithHandler` / `Resume` and generates per-effect dispatch
-    // infrastructure (struct, mut global, dispatch wrappers). Runs after
-    // effect-check so that handler-skip semantics are validated against
-    // the original `WithHandler` shape.
-    let package = {
-        let _span = logger.span("effect-dispatch");
-        synthesis::effect_dispatch::synthesize_post_check(package)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
-    };
-
     // === Phase 8d: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
@@ -2161,7 +2161,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("lower");
-        lower(flat, logger)?
+        lower(flat, logger, logger)?
     };
 
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
@@ -2183,9 +2183,21 @@ fn compile_after_load<H: CompilerHost>(
     // `remarks` and WEP `wep-2026-06-03-optimizer-remarks.md`. Gated on the log
     // level so the NIR walk is skipped entirely when remarks would be filtered
     // out (the default CLI level is `warn`).
-    if logger.would_log(compiler_host::Severity::Info) {
+    if remarks_logged {
         let residual = remarks::collect_value_copy_remarks(&nir)
             .into_iter()
+            .map(|mut remark| {
+                // A copy a destructuring assignment makes says why it is no move.
+                // The remark anchors to the statement, so a statement reading
+                // no target makes no copy of its own to explain.
+                if let Some(site) = destructuring_fallbacks.get(&remark.span)
+                    && !site.target_reads.is_empty()
+                    && let Some(cause) = &site.cause
+                {
+                    remark.message = format!("{}\n  note: {}", remark.message, cause.note());
+                }
+                remark
+            })
             .chain(remarks::collect_param_gate_remarks(&nir))
             .chain(remarks::collect_const_region_remarks(&nir));
         for remark in residual {
@@ -2248,19 +2260,21 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // Only `wado test` supplies `core:eval`, so a component of any other world
-    // reaching it would build and then fail to instantiate wherever it runs.
+    // A component of any other world reaching a test-world-only package would
+    // build and then fail to instantiate wherever it runs.
     if !nir.is_test_world()
-        && let Some(entry) = wir_package
-            .import_plan
-            .iter()
-            .find(|entry| entry.fq.starts_with(EVAL_PACKAGE_PREFIX))
+        && let Some((entry, package)) = wir_package.import_plan.iter().find_map(|entry| {
+            let (package, _) = entry.fq.split_once('/')?;
+            TEST_WORLD_ONLY_PACKAGES
+                .contains(&package)
+                .then_some((entry, package))
+        })
     {
         report_without_span(
             logger,
-            compiler_host::Code::EvalOutsideTestWorld,
+            compiler_host::Code::TestWorldOnlyImport,
             format!(
-                "this program imports `{}`, but `core:eval` runs only under `wado test`; \
+                "this program imports `{}`, but `{package}` runs only under `wado test`; \
                  a program for the `{}` world cannot reach it",
                 entry.fq, nir.target_world,
             ),
@@ -2563,14 +2577,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                     .map_err(|error| bail_with_synthesis(&logger, error))?
             };
 
-            // Effect dispatch synthesis (lowers WithHandler / Resume).
-            // Dump path mirrors the main compile pipeline (Phase 8c).
-            let package = {
-                let _span = logger.span("effect-dispatch");
-                synthesis::effect_dispatch::synthesize_post_check(package)
-                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
-            };
-
             // Link
             let mut flat = link::link(package);
 
@@ -2612,7 +2618,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Lower (FlatPackage → NirPackage)
             let nir = {
                 let _span = logger.span("lower");
-                lower(flat, &logger)?
+                lower(flat, &logger, &logger)?
             };
             // Snapshot lowered state (NIR right after lower, before optimize)
             let lower_text = Some(nir_unparse::unparse_nir_package(&nir));

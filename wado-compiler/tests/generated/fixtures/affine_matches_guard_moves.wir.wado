@@ -27,7 +27,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//affine_matches_guard_moves.wado/run" = fn();  // TypeId(11)
 
@@ -49,7 +49,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//affine_matches_guard_moves.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//affine_matches_guard_moves.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -59,7 +59,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -69,16 +69,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:affine_matches_guard_moves.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 114, 111, 112, 32, 49), used: 6 };
 
 fn "affine_matches_guard_moves.wado/run"() with Stdout {
-    let $moved_6_6: ref null "affine_matches_guard_moves.wado//Tok";
     let text: ref "core:prelude/string.wado//String";
     let $moved_4_82: i32;
     let $cm_pair_7_85: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
-    $sroa_$pattern_temp_0_0_9 = $moved_6_6 = struct.new "affine_matches_guard_moves.wado//Tok" { id: 1 }; if ref.is_null($moved_6_6) == 0 {
+    $sroa_$pattern_temp_0_0_9 = if ref.is_null(struct.new "affine_matches_guard_moves.wado//Tok" { id: 1 }) == 0 {
         $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_85("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_85 >> 32_i64);
-        $moved_4_82 = "wasi/wasi:cli/Stdout::write_via_stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
+        $moved_4_82 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
         $sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10;
         $sroa_$pattern_temp_0_1_10 = 0;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
@@ -107,15 +106,15 @@ fn "affine_matches_guard_moves.wado/run"() with Stdout {
     };
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_85("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_85 >> 32_i64);
-    $moved_4_82 = "affine_matches_guard_moves.wado/$cm_binding__Stdout_write_via_stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
+    $moved_4_82 = "affine_matches_guard_moves.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_82 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4_82);
     $sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10;
     $sroa_$pattern_temp_0_1_10 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $sroa_$pattern_temp_0_1_10, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_10 = $moved_4_82; $moved_4_82 = 0; $sroa_$pattern_temp_0_1_10);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9 = $moved_4_82; $moved_4_82 = 0; $sroa_$pattern_temp_0_0_9);
 }
 
-fn "affine_matches_guard_moves.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "affine_matches_guard_moves.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "affine_matches_guard_moves.wado/$cm_export__run"() {

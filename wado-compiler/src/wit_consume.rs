@@ -12,12 +12,16 @@ use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
     NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
-    VariantCase, VariantDecl, Visibility, cm_import_of,
+    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_import_of,
 };
-use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
+use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
-use crate::name::wado_identifier;
+use crate::module_source::ModuleSource;
+use crate::name::{
+    cm_dependency_interface, interface_basename, mangle_local_method, unnamed_interface_name,
+    wado_identifier,
+};
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -29,11 +33,8 @@ use wit_parser::{
 pub struct ComponentBindings {
     /// The AST module declaring the component's exported interfaces and types.
     pub module: Module,
-    /// FQ names of every exported interface (drives import-plan classification).
-    pub interface_fqs: Vec<String>,
-    /// Bare names of every exported world-level function (Phase 9); composition
-    /// wires these by name.
-    pub world_func_names: Vec<String>,
+    /// Every interface the component exports.
+    pub interfaces: Vec<ExportedInterface>,
     /// FQ names of the interfaces the component itself imports — its host-leaf
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
@@ -42,6 +43,16 @@ pub struct ComponentBindings {
     /// keyed by the reference's own site. Merged into the CM registry by the
     /// loader; the syntax nodes carry no interface of their own.
     pub source_interfaces: SourceInterfaceBatch,
+}
+
+/// An interface an imported component exports.
+#[derive(Debug, Clone)]
+pub struct ExportedInterface {
+    /// Its name in the component.
+    pub export: String,
+    /// The interface the program imports it as, which composition wires to
+    /// `export` ([`cm_dependency_interface`]).
+    pub import: String,
 }
 
 /// The host-leaf import FQs a component-binding module carries in its
@@ -72,10 +83,27 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 /// excluded via the module's host-leaf import list. Empty for a core-wasm
 /// asset, whose decls carry `#[canonical(...)]`.
 pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
+    interfaces_on(module, Side::Export)
+}
+
+/// The interfaces a component-binding module's dependency imports and its
+/// consumer provides, each with its `#[cm]` import.
+pub fn imported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
+    interfaces_on(module, Side::Import)
+}
+
+/// Which side of a component an interface its bindings declare sits on.
+#[derive(Clone, Copy, PartialEq)]
+enum Side {
+    Export,
+    Import,
+}
+
+fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
     let imports: hashmap::IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
     module.items.iter().filter_map(move |item| match item {
         Item::Interface(decl) => cm_import_of(&decl.attrs)
-            .filter(|cm| !imports.contains(&cm.interface_path()))
+            .filter(|cm| imports.contains(&cm.interface_path()) == (side == Side::Import))
             .map(|cm| (decl, cm)),
         _ => None,
     })
@@ -86,22 +114,51 @@ pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceD
 /// # Errors
 /// A message naming each shape the component exports that has no import
 /// mapping yet: a resource, a world-level type, or `error-context`.
-pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
-    let mut b = Builder::new();
-    let mut interface_fqs = Vec::new();
-    let mut world_func_names = Vec::new();
+pub fn build_bindings(
+    resolve: &Resolve,
+    world: WorldId,
+    component: &ModuleSource,
+) -> Result<ComponentBindings, String> {
+    let namespace = component
+        .wasm_canonical_namespace()
+        .expect("a component is a wasm asset");
+    let exports: hashmap::IndexMap<String, String> = resolve.worlds[world]
+        .exports
+        .values()
+        .filter_map(|item| match item {
+            WorldItem::Interface { id, .. } => Some(interface_fq(resolve, *id)),
+            WorldItem::Function(_) | WorldItem::Type { .. } => None,
+        })
+        .map(|fq| {
+            let cm = CmImport::parse(&fq).expect("interface FQ is well-formed");
+            let import = cm_dependency_interface(&cm, &namespace).interface_path();
+            (fq, import)
+        })
+        .collect();
+    // A non-WASI import is a guest effect the consumer must provide. WASI
+    // leaves resolve to their auto-loaded stdlib effect and need no synthesis.
+    let guest_imports: Vec<wit_parser::InterfaceId> = resolve.worlds[world]
+        .imports
+        .values()
+        .filter_map(|item| match item {
+            WorldItem::Interface { id, .. } if !interface_fq(resolve, *id).starts_with("wasi:") => {
+                Some(*id)
+            }
+            WorldItem::Interface { .. } | WorldItem::Function(_) | WorldItem::Type { .. } => None,
+        })
+        .collect();
+    let mut b = Builder::new(
+        interface_names(resolve, world, &exports, &guest_imports),
+        exports,
+    );
 
     for (_, item) in &resolve.worlds[world].exports {
         match item {
             WorldItem::Interface { id, .. } => {
                 let fq = interface_fq(resolve, *id);
                 b.emit_interface(resolve, *id, &fq);
-                interface_fqs.push(fq);
             }
-            WorldItem::Function(f) => {
-                b.emit_world_function(resolve, f);
-                world_func_names.push(f.name.clone());
-            }
+            WorldItem::Function(f) => b.emit_world_function(resolve, f),
             WorldItem::Type { .. } => {
                 return Err(
                     "importing a component that exports a world-level type is not yet supported"
@@ -124,17 +181,12 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         })
         .collect();
 
-    // A non-WASI import is a guest effect the consumer must provide: materialize
-    // it as an impl-able `#[cm]` interface so effect reconstruction resolves the
-    // requirement and a `with h do` handler can satisfy it. WASI leaves resolve
-    // to their auto-loaded stdlib effect and need no synthesis here.
-    for (_, item) in &resolve.worlds[world].imports {
-        if let WorldItem::Interface { id, .. } = item {
-            let fq = interface_fq(resolve, *id);
-            if !fq.starts_with("wasi:") {
-                b.emit_interface(resolve, *id, &fq);
-            }
-        }
+    // A guest effect becomes an impl-able `#[cm]` interface, so effect
+    // reconstruction resolves the requirement and a `with h do` handler can
+    // satisfy it.
+    for id in guest_imports {
+        let fq = interface_fq(resolve, id);
+        b.emit_interface(resolve, id, &fq);
     }
 
     if !b.errors.is_empty() {
@@ -176,13 +228,91 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         // Synthesized from WIT, never highlighted: no source text to key on.
         Vec::new(),
     );
+    let interfaces = b
+        .exports
+        .into_iter()
+        .map(|(export, import)| ExportedInterface { export, import })
+        .collect();
     Ok(ComponentBindings {
         module,
-        interface_fqs,
-        world_func_names,
+        interfaces,
         host_leaf_imports,
         source_interfaces,
     })
+}
+
+/// What a component's bindings declare each interface, and each of its types,
+/// under.
+struct InterfaceNames {
+    /// Each interface the bindings declare -> its name.
+    interfaces: hashmap::IndexMap<String, String>,
+    /// The default interfaces the component exports, whose types are items of
+    /// the module. Any other interface's types are named through it.
+    defaults: hashmap::IndexSet<String>,
+}
+
+/// Name each interface the bindings declare by its basename, or, where
+/// another interface shares the basename or a higher rank takes it (a world
+/// function, a default interface's type), by its interface name, which only a
+/// full name reaches.
+fn interface_names(
+    resolve: &Resolve,
+    world: WorldId,
+    exports: &hashmap::IndexMap<String, String>,
+    guest_imports: &[wit_parser::InterfaceId],
+) -> InterfaceNames {
+    let parse = |fq: &str| CmImport::parse(fq).expect("interface FQ is well-formed");
+    let exported: Vec<CmImport> = exports.keys().map(|fq| parse(fq)).collect();
+    let defaults: hashmap::IndexSet<String> = exported
+        .iter()
+        .filter(|cm| cm.is_package_default())
+        .map(CmImport::interface_path)
+        .collect();
+    let declared: Vec<CmImport> = exported
+        .into_iter()
+        .chain(
+            guest_imports
+                .iter()
+                .map(|id| parse(&interface_fq(resolve, *id))),
+        )
+        .collect();
+    let mut taken: hashmap::IndexSet<String> = hashmap::IndexSet::default();
+    for item in resolve.worlds[world].exports.values() {
+        match item {
+            WorldItem::Function(func) => {
+                taken.insert(wado_identifier(&func.name));
+            }
+            WorldItem::Interface { id, .. } if defaults.contains(&interface_fq(resolve, *id)) => {
+                taken.extend(
+                    resolve.interfaces[*id]
+                        .types
+                        .keys()
+                        .map(|name| name.to_upper_camel_case()),
+                );
+            }
+            WorldItem::Interface { .. } | WorldItem::Type { .. } => {}
+        }
+    }
+    let mut sharing: hashmap::IndexMap<String, usize> = hashmap::IndexMap::default();
+    for cm in &declared {
+        *sharing.entry(interface_basename(cm)).or_default() += 1;
+    }
+    let interfaces = declared
+        .iter()
+        .map(|cm| {
+            let basename = interface_basename(cm);
+            let name = if sharing[&basename] > 1 || taken.contains(&basename) {
+                unnamed_interface_name(cm)
+            } else {
+                basename
+            };
+            (cm.interface_path(), name)
+        })
+        .collect();
+    InterfaceNames {
+        interfaces,
+        defaults,
+    }
 }
 
 /// Allocates dense, module-local `AstId`s while building the synthesized module.
@@ -193,10 +323,14 @@ struct Builder {
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
     uses_tree_map: bool,
+    names: InterfaceNames,
+    /// Each interface the component exports -> the one the program imports it
+    /// as ([`cm_dependency_interface`]).
+    exports: hashmap::IndexMap<String, String>,
 }
 
 impl Builder {
-    fn new() -> Self {
+    fn new(names: InterfaceNames, exports: hashmap::IndexMap<String, String>) -> Self {
         Self {
             space: AstIdSpace::next(),
             count: 0,
@@ -204,6 +338,22 @@ impl Builder {
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
             uses_tree_map: false,
+            names,
+            exports,
+        }
+    }
+
+    /// The name the bindings declare the WIT type `wit_name` of the interface
+    /// `fq` under: an item of the module for a default interface's type, a
+    /// member of its interface otherwise. A type of an interface the bindings
+    /// do not declare is the standard library's, by its own name.
+    fn type_name(&self, fq: &str, wit_name: &str) -> String {
+        let name = wit_name.to_upper_camel_case();
+        match self.names.interfaces.get(fq) {
+            Some(interface) if !self.names.defaults.contains(fq) => {
+                mangle_local_method(interface, &name)
+            }
+            Some(_) | None => name,
         }
     }
 
@@ -221,6 +371,7 @@ impl Builder {
             items: vec![UseItem::Simple {
                 id: self.id(),
                 name: "TreeMap".to_string(),
+                spelling: UseNameSpelling::Ident,
                 name_span: syn(),
                 alias: None,
                 local_span: syn(),
@@ -237,9 +388,19 @@ impl Builder {
         id
     }
 
-    /// `#[cm("ns:pkg/iface@ver[#frag]")]` as an interface-import boundary.
+    /// The interface the program imports the component's interface `fq` as:
+    /// one it imports itself keeps its name.
+    fn import_fq(&self, fq: &str) -> String {
+        self.exports
+            .get(fq)
+            .cloned()
+            .unwrap_or_else(|| fq.to_string())
+    }
+
+    /// `#[cm("ns:pkg/iface@ver[#frag]")]` as an interface-import boundary, for
+    /// the interface `fq` the program imports.
     fn cm_import_attr(&self, fq: &str, frag: Option<&str>) -> Attribute {
-        let mut cm = CmImport::parse(fq).expect("interface FQ is well-formed");
+        let mut cm = CmImport::parse(&self.import_fq(fq)).expect("interface FQ is well-formed");
         cm.function = frag.map(str::to_string);
         Attribute {
             name: CM.to_string(),
@@ -277,11 +438,7 @@ impl Builder {
             self.emit_type_def(resolve, *type_id, fq);
         }
 
-        let iface_name = iface
-            .name
-            .as_deref()
-            .unwrap_or_default()
-            .to_upper_camel_case();
+        let iface_name = self.names.interfaces[fq].clone();
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
@@ -340,7 +497,15 @@ impl Builder {
             });
         }
 
-        let attrs = vec![self.cm_import_attr(fq, None)];
+        let mut attrs = vec![self.cm_import_attr(fq, None)];
+        if self.exports.contains_key(fq) {
+            attrs.push(Attribute {
+                name: CM_EXPORT.to_string(),
+                args: vec![AttrArg::Str(StrLit::new(fq))],
+                cm_boundary: None,
+                span: syn(),
+            });
+        }
         let id = self.id();
         self.items.push(Item::Interface(InterfaceDecl {
             id,
@@ -434,7 +599,10 @@ impl Builder {
         let Some(wit_name) = td.name.as_deref() else {
             return; // anonymous structural type: rendered inline at use sites
         };
-        let wado_name = wit_name.to_upper_camel_case();
+        if used_origin(resolve, type_id) != type_id {
+            return; // a WIT `use`: a site naming it names the other interface's type
+        }
+        let wado_name = self.type_name(fq, wit_name);
         let cm = self.cm_import_attr(fq, Some(wit_name));
 
         match &td.kind {
@@ -653,10 +821,13 @@ impl Builder {
         let WitType::Id(id) = ty else {
             unreachable!("non-Id leaf handled above");
         };
+        let id = used_origin(resolve, id);
         let td = &resolve.types[id];
         if let Some(name) = td.name.as_deref() {
-            let src = type_source_fq(resolve, id, current_fq);
-            self.named(&name.to_upper_camel_case(), Some(src))
+            let owner = type_source_fq(resolve, id, current_fq);
+            let declared = self.type_name(&owner, name);
+            let src = self.import_fq(&owner);
+            self.named(&declared, Some(src))
         } else {
             self.errors.push(
                 "encountered an unnameable WIT leaf type while importing a component".to_string(),
@@ -779,6 +950,20 @@ fn type_source_fq(resolve: &Resolve, type_id: TypeId, current_fq: &str) -> Strin
     }
 }
 
+/// The type a WIT `use` of `type_id` reaches, through any chain of them, or
+/// `type_id` itself. A `use` is a named alias of a type another interface owns;
+/// an alias within one interface is a `type` declaration of its own.
+fn used_origin(resolve: &Resolve, type_id: TypeId) -> TypeId {
+    let td = &resolve.types[type_id];
+    if let TypeDefKind::Type(WitType::Id(inner)) = td.kind
+        && resolve.types[inner].name.is_some()
+        && resolve.types[inner].owner != td.owner
+    {
+        return used_origin(resolve, inner);
+    }
+    type_id
+}
+
 /// `namespace:package/interface@version` for an interface.
 fn interface_fq(resolve: &Resolve, iface_id: wit_parser::InterfaceId) -> String {
     let iface = &resolve.interfaces[iface_id];
@@ -800,8 +985,9 @@ fn syn() -> Span {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Item, cm_import_of};
+    use crate::ast::{Item, cm_import_of, cm_interface_name_of};
     use crate::component_model::CmInterfaceRegistry;
+    use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
 
     fn decode_fixture() -> (Resolve, WorldId) {
         let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
@@ -824,14 +1010,29 @@ mod tests {
         format!("{}:{}/cm-catalog@{version}", name.namespace, name.name)
     }
 
+    fn component() -> ModuleSource {
+        ModuleSourceInterner::new().wasm("cm-catalog.wasm", WasmAssetKind::Wasm)
+    }
+
     #[test]
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
-        let b = build_bindings(&resolve, world).expect("build bindings");
+        let component = component();
+        let b = build_bindings(&resolve, world, &component).expect("build bindings");
         let catalog_fq = catalog_fq(&resolve);
+        // The program imports the interface under a name of this component's.
+        let catalog_import = cm_dependency_interface(
+            &CmImport::parse(&catalog_fq).unwrap(),
+            &component.wasm_canonical_namespace().unwrap(),
+        )
+        .interface_path();
         let registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(b.source_interfaces.clone());
-        assert_eq!(b.interface_fqs, vec![catalog_fq.clone()]);
+        let [exported] = b.interfaces.as_slice() else {
+            panic!("cm-catalog exports one interface");
+        };
+        assert_eq!(exported.export, catalog_fq);
+        assert_eq!(exported.import, catalog_import);
         // cm-catalog performs no I/O, so the ambient panic path imports nothing
         // (`log_stderr` rides an existing stderr import or drops its message —
         // see `AmbientStdio`). Its one host-leaf import is
@@ -854,11 +1055,15 @@ mod tests {
         }
         let iface = iface.expect("interface present");
         assert_eq!(iface.name, "CmCatalog");
+        assert_eq!(
+            cm_interface_name_of(&iface.attrs).unwrap().interface_path(),
+            catalog_fq
+        );
 
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = cm_import_of(&id_u32.attrs).unwrap();
-        assert_eq!(cm.interface_path(), catalog_fq);
+        assert_eq!(cm.interface_path(), catalog_import);
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -871,7 +1076,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some(catalog_fq.as_str())
+                    Some(catalog_import.as_str())
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),
@@ -893,7 +1098,7 @@ mod tests {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some(catalog_fq.as_str())
+                    Some(catalog_import.as_str())
                 );
             }
             other => panic!("expected Named Meters, got {other:?}"),
@@ -912,7 +1117,7 @@ mod tests {
             )
             .unwrap();
         let world = resolve.select_world(&[package], Some("w")).unwrap();
-        let b = build_bindings(&resolve, world).expect("build bindings");
+        let b = build_bindings(&resolve, world, &component()).expect("build bindings");
         let mut names = Vec::new();
         for item in &b.module.items {
             let functions = match item {

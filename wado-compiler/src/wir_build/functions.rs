@@ -194,7 +194,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // for a used effect. Per-function filtering avoids importing unused
             // WASI functions that the component builder doesn't support (e.g.,
             // [static] HTTP functions like consume_body).
-            if !ctx.package.used_wasi_functions.contains(&func.used_key()) {
+            if !ctx
+                .package
+                .used_wasi_functions
+                .contains(&func.cm_identifier())
+            {
                 continue;
             }
 
@@ -223,11 +227,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 
     // World-level function imports: register the raw core import under the same
     // lowered type as an interface method, so the adapter's `CmRawCall` resolves.
-    let world_funcs: Vec<CmFunctionInfo> = cm_interface_registry
-        .world_import_functions()
-        .map(|(_, f)| f.clone())
-        .collect();
-    for func in &world_funcs {
+    for func in cm_interface_registry.world_import_functions() {
         let local_name = func.local_alias_name();
 
         let (params, results) = cm_import_core_func_type(func, cm_interface_registry);

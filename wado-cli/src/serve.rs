@@ -966,13 +966,17 @@ async fn run_http_server(
     let stack_pool = max_concurrency_u32
         .saturating_mul(2)
         .saturating_add(workers_u32.saturating_mul(8));
-    let engine =
-        runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, runtime_knobs)?;
+    let engine = runtime::create_serve_engine(
+        cranelift_opt,
+        max_instances,
+        stack_pool,
+        runtime_knobs.clone(),
+    )?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&component)?;
     // Open preopens once at startup; they are attached to every worker
     // generation's `WasiState`.
-    let preopens = Arc::new(Preopens::open(&preopened_dirs)?);
+    let preopens = Arc::new(Preopens::open(&preopened_dirs, runtime_knobs.process)?);
     let argv: Arc<[String]> = Arc::new([program.to_owned()]);
     let instance_pre = linker.instantiate_pre(&component)?;
     let service_pre = Arc::new(ServicePre::<WasiState>::new(instance_pre)?);

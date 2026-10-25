@@ -471,10 +471,12 @@ the first or trip a uniqueness check written for a different failure.
 A module declaring an interface the standard library does not bundle is the
 ordinary case, and the one the `#[cm(…)]` bindings exist for. The rule bites
 where a module declares into `wasi:*` or `core:*`, which the standard library
-already owns. It also requires that a module's types for one interface stay in
-that module. Splitting them across files is rejected, because
-the second file is a second declaring module. The `interface` whose operations
-name those types is free to sit elsewhere, since it declares no type of its own.
+already owns. It also requires that the types of one interface stay in one
+module. A type declared inside its `interface` does so by construction
+([WEP: A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)).
+A module-level type that names its interface through `#[cm(…)]`, the form that
+WEP withdraws, can be split across files, and the second file is rejected as a
+second declaring module.
 
 A name is never a map key, never an equality operand, and never a parameter that
 decides which declaration is meant.
@@ -981,13 +983,3 @@ fresh inference variable, never the callee's binder, so a default fills it and
 an unanswered one is reported
 (`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
 settle is reported once, and its slot becomes the error type.
-
-## Known gap: a CM operation is bound by its spelling
-
-A call to an interface operation finds its Component Model binding by
-`Interface::operation`, not by the declaration it names. Two interfaces of one
-name that each declare an operation of one name are rejected as a collision,
-whether or not one program reaches both. What it admits is a refusal no scope
-explains: a program's own `Client::send` collides with `wasi:http`'s, which it
-never imports. The pending fixture is
-`cm_interface_name_shared_with_stdlib_todo.wado`.

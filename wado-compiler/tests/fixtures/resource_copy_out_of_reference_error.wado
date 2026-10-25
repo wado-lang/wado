@@ -1,8 +1,8 @@
 // A generic reaches an affine value through a reference only where its
 // parameter is declared `affine` (WEP: Affine Types). A user's own `&self`
 // getter over an unmarked `T` is not instantiated with a resource, and
-// `list.last()` is not found, since `Sequence`, which declares it, is
-// implemented for a copyable element only. `list[0]` read by value is a move
+// `list.last()` is rejected the same way, since `Sequence`, which declares it,
+// is implemented for a copyable element only. `list[0]` read by value is a move
 // out of a reference, which `spec_components_copy_out_of_reference` states.
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
@@ -36,7 +36,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 __DATA__
 {
-  "compile_error": ":25:17: analysis error: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it",
-  "compile_errors_contains": ["no method 'last' found on type 'List<Fields>'"],
-  "compile_error_codes": ["AFFINE_ARGUMENT", "METHOD_NOT_FOUND"]
+  "compile_error": ":25:17: analysis error: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it; 26:9: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it",
+  "compile_error_codes": ["AFFINE_ARGUMENT"]
 }

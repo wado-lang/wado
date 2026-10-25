@@ -69,9 +69,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//contract_clause_lends_read_only.wado/all_positive" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(22)
 
@@ -105,7 +105,7 @@ type "functype//contract_clause_lends_read_only.wado/contract_clause_lends_read_
 
 type "functype//contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect$dae[self]" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(39)
 
@@ -117,7 +117,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//contract_clause_lends_read_only.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(44)
+type "functype//contract_clause_lends_read_only.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(44)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
@@ -127,8 +127,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -137,8 +137,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:contract_clause_lends_read_only.wado::$const_obj_0: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
 global global:contract_clause_lends_read_only.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
-global global:contract_clause_lends_read_only.wado::$const_obj_36: ref Array<u8> = array.new_fixed<u8>(124, 105, 51, 50, 124, 32, 45, 62, 32, 98, 111, 111, 108);
-global global:contract_clause_lends_read_only.wado::$const_obj_37: ref Array<u8> = array.new_fixed<u8>(124, 120, 58, 32, 105, 51, 50, 124, 32, 40, 120, 32, 62, 32, 48, 41);
+global global:contract_clause_lends_read_only.wado::$const_obj_25: ref Array<u8> = array.new_fixed<u8>(124, 105, 51, 50, 124, 32, 45, 62, 32, 98, 111, 111, 108);
+global global:contract_clause_lends_read_only.wado::$const_obj_26: ref Array<u8> = array.new_fixed<u8>(124, 120, 58, 32, 105, 51, 50, 124, 32, 40, 120, 32, 62, 32, 48, 41);
 
 fn "contract_clause_lends_read_only.wado/all_positive"(xs) {
     let $load_4: ref Array<u8>;
@@ -147,19 +147,20 @@ fn "contract_clause_lends_read_only.wado/all_positive"(xs) {
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let end: i32;
     let item_15: i32;
-    let $sroa_s_repr_48: ref Array<u8>;
-    let $sroa_self_repr_62: ref Array<i32>;
-    let $sroa_self_index_63: i32;
-    if @unlikely(local.tee $sroa_self_index_63($inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_0: block -> bool {
+    let other: ref "core:prelude/string.wado//String";
+    let $sroa_s_repr_50: ref Array<u8>;
+    let $sroa_self_repr_64: ref Array<i32>;
+    let $sroa_self_index_65: i32;
+    if @unlikely($inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_0: block -> bool {
         end = xs.used;
-        $sroa_self_repr_62 = xs.repr;
-        $sroa_self_index_63 = 0;
+        $sroa_self_repr_64 = xs.repr;
+        $sroa_self_index_65 = 0;
         $v0_1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "contract_clause_lends_read_only.wado//$Closure_0" {  }, inspect: ref.func "closure/contract_clause_lends_read_only.wado/$closure_inspect_wrapper_0", func: ref.func "closure/contract_clause_lends_read_only.wado/$closure_wrapper_0" };
         b1: block {
             l2: loop {
-                break_if b1 $sroa_self_index_63 >= end;
-                item_15 = builtin::array_get_value<i32>($sroa_self_repr_62, $sroa_self_index_63);
-                $sroa_self_index_63 = $sroa_self_index_63 + 1;
+                break_if b1 $sroa_self_index_65 >= end;
+                item_15 = builtin::array_get_value<i32>($sroa_self_repr_64, $sroa_self_index_65);
+                $sroa_self_index_65 = $sroa_self_index_65 + 1;
                 if block -> bool {
                     let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                     call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0_1)).env, item_15);
@@ -170,32 +171,33 @@ fn "contract_clause_lends_read_only.wado/all_positive"(xs) {
             };
         };
         break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_0: 1;
-    }) == 0) {
+    } == 0) {
         cold_path;
-        $sroa_self_index_63 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }), 127);
+        $sroa_self_index_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }), 127);
         $load_4 = $local_3_3.repr;
-        $sroa_s_repr_48 = array.new_data<u8>("Contract of ");
-        builtin::array_copy<u8>($load_4, $sroa_self_index_63, $sroa_s_repr_48, 0, 12);
-        end = $sroa_self_index_63 + 12;
-        $sroa_s_repr_48 = array.new_data<u8>("all_positive");
-        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_48, 0, 12);
-        end = $sroa_self_index_63 + 24;
-        $sroa_s_repr_48 = array.new_data<u8>(" failed at ");
-        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_48, 0, 11);
-        end = $sroa_self_index_63 + 35;
-        $sroa_s_repr_48 = array.new_data<u8>("contract_clause_lends_read_only.wado:26");
-        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_48, 0, 39);
-        end = $sroa_self_index_63 + 74;
-        $sroa_s_repr_48 = array.new_data<u8>("
+        $sroa_s_repr_50 = array.new_data<u8>("Contract of ");
+        builtin::array_copy<u8>($load_4, $sroa_self_index_65, $sroa_s_repr_50, 0, 12);
+        end = $sroa_self_index_65 + 12;
+        $sroa_s_repr_50 = array.new_data<u8>("all_positive");
+        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_50, 0, 12);
+        end = $sroa_self_index_65 + 24;
+        $sroa_s_repr_50 = array.new_data<u8>(" failed at ");
+        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_50, 0, 11);
+        end = $sroa_self_index_65 + 35;
+        $sroa_s_repr_50 = array.new_data<u8>("contract_clause_lends_read_only.wado:26");
+        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_50, 0, 39);
+        end = $sroa_self_index_65 + 74;
+        $sroa_s_repr_50 = array.new_data<u8>("
 condition: xs.into_iter().all(|x| x > 0)
 ");
-        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_48, 0, 42);
-        $sroa_self_index_63 = $sroa_self_index_63 + 116;
-        $sroa_s_repr_48 = array.new_data<u8>("|x| x > 0: ");
-        builtin::array_copy<u8>($load_4, $sroa_self_index_63, $sroa_s_repr_48, 0, 11);
+        builtin::array_copy<u8>($load_4, end, $sroa_s_repr_50, 0, 42);
+        $sroa_self_index_65 = $sroa_self_index_65 + 116;
+        $sroa_s_repr_50 = array.new_data<u8>("|x| x > 0: ");
+        builtin::array_copy<u8>($load_4, $sroa_self_index_65, $sroa_s_repr_50, 0, 11);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3_3);
         "contract_clause_lends_read_only.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->bool>" { value: ref.as_non_null($v0_1) }, $local_4);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3_3);
+        other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"($local_3_3, other);
         "core:rt/panic"($local_3_3.repr, $local_3_3.used);
         unreachable;
     }
@@ -243,15 +245,15 @@ fn "contract_clause_lends_read_only.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_135.repr, is_negative_41, x_45, self_23);
     self_23 = builtin::i32_wrap_i64(local.tee x_45("wasi/stream-new"()));
     is_negative_41 = builtin::i32_wrap_i64(x_45 >> 32_i64);
-    $moved_4 = "contract_clause_lends_read_only.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = self_23; self_23 = 0; $moved_4);
+    $moved_4 = "contract_clause_lends_read_only.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = self_23; self_23 = 0; $moved_4);
     self_23 = is_negative_41;
     is_negative_41 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_41 = self_23; self_23 = 0; is_negative_41, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_41 = $moved_4; $moved_4 = 0; is_negative_41);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_23, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_23 = $moved_4; $moved_4 = 0; self_23);
 }
 
-fn "contract_clause_lends_read_only.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "contract_clause_lends_read_only.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "contract_clause_lends_read_only.wado/$cm_export__run"() {
@@ -362,7 +364,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
@@ -487,7 +489,7 @@ fn "contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$C
         }
         start_14 = self_1.used;
         self_1.used = new_used_13;
-        builtin::array_copy<u8>(self_1.repr, start_14, global:contract_clause_lends_read_only.wado::$const_obj_37, 0, 16);
+        builtin::array_copy<u8>(self_1.repr, start_14, global:contract_clause_lends_read_only.wado::$const_obj_26, 0, 16);
     } else {
         if @unlikely(local.tee start_14(local.tee self_1(f.buf).used + 13) > builtin::array_len(self_1.repr)) {
             cold_path;
@@ -495,20 +497,20 @@ fn "contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$C
         }
         new_used_13 = self_1.used;
         self_1.used = start_14;
-        builtin::array_copy<u8>(self_1.repr, new_used_13, global:contract_clause_lends_read_only.wado::$const_obj_36, 0, 13);
+        builtin::array_copy<u8>(self_1.repr, new_used_13, global:contract_clause_lends_read_only.wado::$const_obj_25, 0, 13);
     }
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(self, out) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(self, other) {
     let new_used: i32;
-    let start_9: i32;
-    if @unlikely(local.tee new_used(out.used + 1) > builtin::array_len(out.repr)) {
+    let start_7: i32;
+    if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
     }
-    start_9 = out.used;
-    out.used = new_used;
-    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
+    start_7 = self.used;
+    self.used = new_used;
+    builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 1);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {

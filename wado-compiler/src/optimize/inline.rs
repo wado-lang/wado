@@ -41,10 +41,9 @@ use super::dce::{ReachabilityCache, callee_descriptor, reachable_function_positi
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
-use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
-use crate::optimize::dce::DescriptorCache;
+use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::Executor;
 use crate::token::Span;
@@ -326,10 +325,9 @@ impl<'a> CostWalk<'a> {
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 self.value_folds(view, *operand)
             }
-            ValueKind::Opaque(oid) => matches!(
-                self.body.values.opaque_source(*oid),
-                Some(OpaqueSource::Local(l)) if view.params.contains(&l)
-            ),
+            ValueKind::Opaque(oid) => view
+                .params
+                .contains(&self.body.values.promoted_opaque_local(*oid)),
             ValueKind::Const(..) => true,
             ValueKind::Int(..)
             | ValueKind::Float(..)
@@ -1155,7 +1153,7 @@ fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
             && !covered.contains(&st)
             && let StmtKind::Loop { body: b } = &body.stmts[st].kind
         {
-            body.for_each_live_node_under(NodeRef::Block(*b), |n| match n {
+            body.for_each_node_under(NodeRef::Block(*b), |n| match n {
                 NodeRef::Expr(e) => {
                     out.insert(e);
                 }
@@ -1265,11 +1263,15 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
 type ArgSite = (FuncId, Vec<(u32, Operand)>);
 
 /// The [`ArgSite`]s of every function, indexed by store position; empty for a
-/// bodyless one.
-fn argument_sites(scans: &[BodyScan]) -> Vec<Vec<ArgSite>> {
+/// bodyless one and for one no entry reaches.
+fn argument_sites(scans: &[BodyScan], live: &[bool]) -> Vec<Vec<ArgSite>> {
     scans
         .iter()
-        .map(|scan| {
+        .zip(live)
+        .map(|(scan, &live)| {
+            if !live {
+                return Vec::new();
+            }
             scan.calls
                 .iter()
                 .map(|(callee, args)| {
@@ -1823,7 +1825,7 @@ pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<
 
 /// The callee of every `Call` site under `node`, once per site.
 fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
-    body.for_each_live_node_under(node, |n| {
+    body.for_each_node_under(node, |n| {
         if let NodeRef::Expr(id) = n
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
@@ -1846,9 +1848,20 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
+<<<<<<< HEAD
 fn call_site_counts(scans: &[BodyScan], live: &IndexSet<usize>) -> Vec<usize> {
     let mut counts = vec![0usize; scans.len()];
     for (callee, _) in live.iter().flat_map(|&caller| &scans[caller].calls) {
+||||||| ed92649a8
+fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
+    let mut counts = vec![0usize; scans.len()];
+    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
+=======
+/// A site in a function no entry reaches never runs, so it is not counted.
+fn call_site_counts(sites: &[Vec<ArgSite>]) -> Vec<usize> {
+    let mut counts = vec![0usize; sites.len()];
+    for (callee, _) in sites.iter().flatten() {
+>>>>>>> origin/main
         counts[callee.index()] += 1;
     }
     counts
@@ -1856,9 +1869,12 @@ fn call_site_counts(scans: &[BodyScan], live: &IndexSet<usize>) -> Vec<usize> {
 
 /// The functions some cold site calls, indexed by store position: the ones a
 /// [`Site::Cold`] admission asks whether they shrink.
-fn called_cold(scans: &[BodyScan], cold: &[bool]) -> Vec<bool> {
+fn called_cold(scans: &[BodyScan], live: &[bool], cold: &[bool]) -> Vec<bool> {
     let mut called = vec![false; scans.len()];
     for (caller, scan) in scans.iter().enumerate() {
+        if !live[caller] {
+            continue;
+        }
         if cold[caller] {
             for (callee, _) in &scan.calls {
                 called[callee.index()] = true;
@@ -2114,7 +2130,21 @@ pub fn inline_functions(
     descriptor_cache: &mut DescriptorCache,
     mod_ref: &mut SummaryCache,
     scans: &mut InlineScans,
+    reachability: &mut ReachabilityCache,
 ) -> bool {
+    // Function DCE runs outside the loop, so a branch pruned inside it leaves
+    // functions only that branch called. Their sites would price a callee as
+    // called more often than it is, which declines a splice the live program
+    // would take.
+    let live = {
+        let reachable =
+            reachable_function_positions(project, descriptor_cache, reachability, gate.exec(), []);
+        let mut live = vec![false; project.functions.len()];
+        for pos in reachable {
+            live[pos] = true;
+        }
+        live
+    };
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
@@ -2132,16 +2162,33 @@ pub fn inline_functions(
     let descriptors = descriptor_cache.descriptors(project);
     let cold_path = cold_path_id(descriptors);
     let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
+<<<<<<< HEAD
     let call_sites = call_site_counts(scans, &live);
     let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
+||||||| ed92649a8
+    let call_sites = call_site_counts(scans);
+    let cold = unreached_through(project, &call_sites, |caller| &scans[caller].hot_callees);
+=======
+    let call_sites = call_site_counts(&sites);
+    let (live_ref, no_callees) = (&live, &IndexSet::default());
+    let live_edges = |pick: fn(&BodyScan) -> &IndexSet<FuncId>| {
+        move |caller: usize| {
+            if live_ref[caller] {
+                pick(&scans[caller])
+            } else {
+                no_callees
+            }
+        }
+    };
+    let cold = unreached_through(project, &call_sites, live_edges(|s| &s.hot_callees));
+>>>>>>> origin/main
     // A function only loops reach runs once per iteration of one, so each of
     // its sites pays its call edge on every iteration, as a site in a loop does.
-    let looped = unreached_through(project, &call_sites, |caller| {
-        &scans[caller].unlooped_callees
-    });
-    let called_cold = called_cold(scans, &cold);
+    let looped = unreached_through(project, &call_sites, live_edges(|s| &s.unlooped_callees));
+    let called_cold = called_cold(scans, &live, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2186,7 +2233,6 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let sites = argument_sites(scans);
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
@@ -2432,7 +2478,8 @@ pub fn inline_functions(
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
     let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
-        if held.contains(&fid) {
+        // A dead caller's sites were priced as never running, so none is taken.
+        if !live[fid.index()] || held.contains(&fid) {
             return None;
         }
         let candidates = Candidates {
@@ -2534,6 +2581,9 @@ pub fn inline_functions(
     drop(inline_call_immutability);
     drop(inline_type_table);
 
+    // Every caller's new strings, for one pass over `string_literals` rather
+    // than one per caller.
+    let mut new_literals: IndexSet<String> = IndexSet::default();
     for (caller, inlined_funcs) in &spliced_into {
         let (caller_module_source, func_name) = {
             let func = project.functions[caller.index()].borrow();
@@ -2569,16 +2619,13 @@ pub fn inline_functions(
                 .collect();
             caller_strings.extend(to_add);
         }
-        let to_add: Vec<String> = {
-            let existing_literals: IndexSet<&str> =
-                project.string_literals.iter().map(String::as_str).collect();
-            all_inlined_strings
-                .into_iter()
-                .filter(|s| !existing_literals.contains(s.as_str()))
-                .collect()
-        };
-        project.string_literals.extend(to_add);
+        new_literals.extend(all_inlined_strings);
     }
+    let existing_literals: IndexSet<&str> =
+        project.string_literals.iter().map(String::as_str).collect();
+    new_literals.retain(|s| !existing_literals.contains(s.as_str()));
+    project.string_literals.extend(new_literals);
+    exec.drop_all(inline_candidates);
     !spliced_into.is_empty()
 }
 
@@ -3539,20 +3586,8 @@ fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -
             heap_ver,
         },
         ValueKind::Opaque(oid) => {
-            // Mint a fresh caller opaque, remapping its source local into the
-            // caller frame (a skeleton-`Expr` source splices that expr).
-            let new = match callee.values.opaque_source(oid) {
-                Some(OpaqueSource::Local(idx)) => caller
-                    .values
-                    .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
-                Some(OpaqueSource::Expr(e)) => {
-                    let spliced = splice_expr(caller, callee, e, ctx);
-                    caller
-                        .values
-                        .fresh_opaque_with_source(OpaqueSource::Expr(spliced))
-                }
-                None => caller.values.fresh_opaque(),
-            };
+            let idx = callee.values.promoted_opaque_local(oid);
+            let new = caller.values.fresh_opaque_local(ctx.local(idx));
             if let Some(t) = recorded_ty {
                 caller.values.set_type(new, t);
             }

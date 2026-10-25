@@ -1,9 +1,11 @@
 // Test: WIR-level verification of <= loop-guarded bounds check elimination
 // When `i <= limit` is the loop guard and `arr.used == limit + 1`,
 // the bounds check `i >= arr.used` is redundant and should be eliminated at O2.
+// Kept out of line so the scope holds the loop and nothing `run` prints with.
 
 use { println, Stdout } from "core:cli";
 
+#[inline(never)]
 fn sum_le(limit: i32) -> i32 {
     let arr = List::<i32>::filled(limit + 1, 1);
     let mut sum = 0;
@@ -20,7 +22,13 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "6\n",
+<<<<<<< HEAD
     "wir_scope": "array_bounds_elim_le_guard_wir.wado/run\"",
+||||||| ed92649a8
+    "wir_scope": "$cm_export__run",
+=======
+    "wir_scope": "sum_le",
+>>>>>>> origin/main
     "wir_expect:O2": [
         "builtin::array_get_value<i32>("
     ],

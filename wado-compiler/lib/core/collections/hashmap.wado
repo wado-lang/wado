@@ -405,6 +405,14 @@ impl<K: Hash, V> IndexValue<K> for HashMap<K, V> {
     }
 }
 
+impl<K: Hash, V> IndexSwap<K> for HashMap<K, V> {
+    fn index_swap(&mut self, a: K, b: K) {
+        let at_b = self.log.found(self.find_index(&b), &b);
+        let at_a = self.log.found(self.find_index(&a), &a);
+        self.log.values.index_swap(at_a, at_b);
+    }
+}
+
 impl<K: Hash, V: Ref> IndexRef<K> for HashMap<K, V> {
     type Output = V;
 
@@ -569,7 +577,13 @@ impl<K: Hash + Deserialize + Inspect, V: Deserialize> Deserialize for HashMap<K,
         let mut map = d.begin_map()?;
         let mut result = HashMap::<K, V>::new();
         while let Some(key) = map.next_key::<K>()? {
-            let val = map.next_value::<V>()?;
+            let val = match map.next_value::<V>() {
+                Ok(val) => val,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_item(&key));
+                },
+            };
             result.insert_decoded(on_duplicate, key, val)?;
         }
         map.end()?;
@@ -607,9 +621,22 @@ impl<T: Hash + Deserialize + Inspect> Deserialize for HashSet<T> {
         let on_duplicate = d.on_duplicate_field();
         let mut seq = d.begin_seq()?;
         let mut result = HashSet::<T>::new();
-        while let Some(element) = seq.next_element::<T>()? {
+        // `result.len()` counts only distinct elements; the repeats make up the
+        // index an error names.
+        let mut repeats = 0;
+        loop {
+            let Some(element) = match seq.next_element::<T>() {
+                Ok(next) => next,
+                Err(e) => {
+                    builtin::cold_path();
+                    return Result::Err(e.within_item(&(result.len() + repeats)));
+                },
+            } else {
+                break;
+            };
             if !result.insert(element) {
                 report_duplicate_field(on_duplicate, &element)?;
+                repeats += 1;
             }
         }
         seq.end()?;

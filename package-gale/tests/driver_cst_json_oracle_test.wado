@@ -1,5 +1,5 @@
-#![generated(by = "package-gale/scripts/regen-oracle.sh")]
-// Do not edit by hand — re-run scripts/regen-oracle.sh json to regenerate.
+#![generated(by = "package-gale/scripts/regen_oracle.wado")]
+// Do not edit by hand — re-run scripts/regen_oracle.wado json to regenerate.
 // Generated against ANTLR4 4.13.2 (the published jar, run as a black box).
 //
 // Stage B' for a real grammar: Gale's JSON.g4 parse trees pinned
@@ -16,7 +16,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = json::parse(input);
     let actual = json::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm;
+    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "oracle: {a: 1}" {

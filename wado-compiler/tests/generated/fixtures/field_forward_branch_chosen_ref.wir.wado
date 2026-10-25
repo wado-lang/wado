@@ -27,7 +27,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//field_forward_branch_chosen_ref.wado/pick" = fn(ref "field_forward_branch_chosen_ref.wado//S", ref "field_forward_branch_chosen_ref.wado//S", bool) -> ref "field_forward_branch_chosen_ref.wado//S";  // TypeId(11)
 
@@ -77,7 +77,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
@@ -87,7 +87,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -157,11 +157,11 @@ fn "field_forward_branch_chosen_ref.wado/via_if"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_match"() with Stdout {
@@ -223,11 +223,11 @@ fn "field_forward_branch_chosen_ref.wado/via_match"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_114.repr, $match_scrut_0, x_31, start_18);
     start_18 = builtin::i32_wrap_i64(local.tee x_31("wasi/stream-new"()));
     $match_scrut_0 = builtin::i32_wrap_i64(x_31 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_18; start_18 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_18; start_18 = 0; $moved_4);
     start_18 = $match_scrut_0;
     $match_scrut_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($match_scrut_0 = start_18; start_18 = 0; $match_scrut_0, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($match_scrut_0 = $moved_4; $moved_4 = 0; $match_scrut_0);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_18, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_18 = $moved_4; $moved_4 = 0; start_18);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_labeled_block"() with Stdout {
@@ -274,11 +274,11 @@ fn "field_forward_branch_chosen_ref.wado/via_labeled_block"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_labeled_block_tail"() with Stdout {
@@ -325,11 +325,11 @@ fn "field_forward_branch_chosen_ref.wado/via_labeled_block_tail"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_select"() with Stdout {
@@ -371,11 +371,11 @@ fn "field_forward_branch_chosen_ref.wado/via_select"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_black_box"() with Stdout {
@@ -400,11 +400,11 @@ fn "field_forward_branch_chosen_ref.wado/via_black_box"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, new_used, x, start_16);
     start_16 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used = builtin::i32_wrap_i64(x >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_16; start_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_16; start_16 = 0; $moved_4);
     start_16 = new_used;
     new_used = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used = start_16; start_16 = 0; new_used, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used = $moved_4; $moved_4 = 0; new_used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_16, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_16 = $moved_4; $moved_4 = 0; start_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_call"() with Stdout {
@@ -446,11 +446,11 @@ fn "field_forward_branch_chosen_ref.wado/via_call"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_holder"() with Stdout {
@@ -496,11 +496,11 @@ fn "field_forward_branch_chosen_ref.wado/via_holder"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_85.repr, start_17, x_30, new_used_16);
     new_used_16 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
     start_17 = builtin::i32_wrap_i64(x_30 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_16; new_used_16 = 0; $moved_4);
     new_used_16 = start_17;
     start_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_17 = new_used_16; new_used_16 = 0; start_17, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_17 = $moved_4; $moved_4 = 0; start_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_16, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_16 = $moved_4; $moved_4 = 0; new_used_16);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_closure"() with Stdout {
@@ -546,11 +546,11 @@ fn "field_forward_branch_chosen_ref.wado/via_closure"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_87.repr, start_19, x_32, new_used_18);
     new_used_18 = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
     start_19 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = new_used_18; new_used_18 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = new_used_18; new_used_18 = 0; $moved_4);
     new_used_18 = start_19;
     start_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19 = new_used_18; new_used_18 = 0; start_19, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_19 = $moved_4; $moved_4 = 0; start_19);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_18, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_18 = $moved_4; $moved_4 = 0; new_used_18);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_nested_if"() with Stdout {
@@ -614,11 +614,11 @@ fn "field_forward_branch_chosen_ref.wado/via_nested_if"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_114.repr, new_used_17, x_31, start_18);
     start_18 = builtin::i32_wrap_i64(local.tee x_31("wasi/stream-new"()));
     new_used_17 = builtin::i32_wrap_i64(x_31 >> 32_i64);
-    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_18; start_18 = 0; $moved_4);
+    $moved_4 = "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_18; start_18 = 0; $moved_4);
     start_18 = new_used_17;
     new_used_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_17 = start_18; start_18 = 0; new_used_17, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_17 = $moved_4; $moved_4 = 0; new_used_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_18, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_18 = $moved_4; $moved_4 = 0; start_18);
 }
 
 fn "field_forward_branch_chosen_ref.wado/run"() with Stdout {
@@ -634,8 +634,8 @@ fn "field_forward_branch_chosen_ref.wado/run"() with Stdout {
     "field_forward_branch_chosen_ref.wado/via_nested_if"();
 }
 
-fn "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "field_forward_branch_chosen_ref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "field_forward_branch_chosen_ref.wado/$cm_export__run"() {

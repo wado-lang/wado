@@ -29,6 +29,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
+use crate::nir_visitor::reachable_exprs;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -121,8 +122,8 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
         let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
             continue;
         };
-        for node in body.exprs.values() {
-            if let ExprKind::Call { func_id, .. } = &node.kind {
+        for e in reachable_exprs(body) {
+            if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind {
                 counts[func_id.index()] += 1;
             }
         }

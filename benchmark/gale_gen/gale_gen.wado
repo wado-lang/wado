@@ -1,12 +1,13 @@
 // gale-gen benchmark: `gale gen` throughput (grammar assembly + codegen) over
-// the Rust grammar, as a byte rate over the input `.g4` size — the series on
-// the CI dashboard. Sources are embedded with `#include_str`, so no measured
-// iteration touches the filesystem. The ANTLR4 reference over the same `.g4`
-// (`antlr4_gen.mjs`) is a separate mise step.
+// the Rust grammar, as a byte rate over the input `.g4` size. Sources are
+// embedded with `#include_str`, so no measured iteration touches the
+// filesystem. The ANTLR4 reference over the same `.g4` (`antlr4_gen.mjs`) is a
+// separate mise step.
 
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 use { assemble_grammar } from "../../package-gale/src/g4/parser.wado";
 use { generate, GenerateOptions } from "../../package-gale/src/codegen.wado";
 use { AtnMode } from "../../package-gale/src/gen_settings.wado";
@@ -27,17 +28,8 @@ fn gen_rust() -> i32 {
     return out.source.len();
 }
 
-test "smoke" {
-    // A tiny grammar keeps this in the test world's timeout; the full Rust
-    // generation is `run()`'s workload, too slow under the debug allocator.
-    let inputs: List<[String, String]> = [
-        ["G.g4", "grammar G; r : 'a' ;"],
-    ];
-    let mut g = match assemble_grammar(&inputs) {
-        Ok(g) => g,
-        Err(_) => panic("smoke: assemble_grammar failed"),
-    };
-    assert generate(&mut g, &GenerateOptions {}).source.len() > 0;
+test "fuel" {
+    assert measure("generate", || gen_rust()) > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock) {

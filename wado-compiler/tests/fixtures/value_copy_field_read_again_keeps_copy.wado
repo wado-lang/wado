@@ -1,0 +1,59 @@
+// A field read out of a local that is read again moves only where the field is
+// overwritten before any read takes it. Each case here reads or writes the old
+// field first, so the value taken out of it must be a copy.
+
+struct Pair {
+    x: List<i32>,
+    y: List<i32>,
+}
+
+fn bump_x(p: &mut Pair) {
+    p.x.push(9);
+}
+
+test "the field is written in place before it is overwritten" {
+    let mut p = Pair { x: [1], y: [2, 2] };
+    let t = p.y;
+    p.y.push(3);
+    p.y = p.x;
+    assert t == [2, 2];
+}
+
+test "a whole read takes every field not overwritten yet" {
+    let mut p = Pair { x: [1], y: [2, 2] };
+    let t = p.x;
+    p.y = [];
+    bump_x(&mut p);
+    p.x = [];
+    assert t == [1];
+}
+
+test "a whole read after the field is overwritten takes the new value" {
+    let mut p = Pair { x: [1], y: [2, 2] };
+    let t = p.x;
+    p.x = [];
+    bump_x(&mut p);
+    assert t == [1] && p.x == [9];
+}
+
+test "the next iteration reads the field before it is overwritten" {
+    let mut p = Pair { x: [1], y: [2] };
+    let mut taken: List<List<i32>> = [];
+    for let i of 0..<3 {
+        let t = p.y;
+        taken.push(t);
+        p.y.push(i);
+    }
+    assert taken == [[2], [2, 0], [2, 0, 1]];
+}
+
+test "a reference to the local reads the old field" {
+    let mut p = Pair { x: [1], y: [2, 2] };
+    let r = &mut p;
+    [p.x, p.y] = [p.y, p.x];
+    r.x.push(7);
+    assert p.x == [2, 2, 7] && p.y == [1];
+}
+
+__DATA__
+{"test": {}}

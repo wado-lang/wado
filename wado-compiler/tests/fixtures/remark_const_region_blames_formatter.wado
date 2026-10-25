@@ -1,0 +1,24 @@
+// The store globalization leaves is exempt for the fold, so a region that
+// carries one and survives anyway is blamed for what actually stopped it: the
+// formatter, not the store. Three interpolations is what it takes to survive;
+// one folds.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let w = 1024;
+    let h = 768;
+    println(`mandelbrot ${w}x${h}, max_iter=${256}`);
+}
+
+__DATA__
+{
+    "stdout": "mandelbrot 1024x768, max_iter=256\n",
+    "remarks": {
+        "O2": [
+            {"contains": ["computes a constant at run time"], "count": 1},
+            {"contains": ["computes a constant at run time", "write_decimal_digits"]},
+            {"contains": ["writes a global"], "count": 0}
+        ]
+    }
+}

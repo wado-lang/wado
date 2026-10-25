@@ -157,7 +157,7 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
-- `set.join(call)` moves the call into a `WaitableSet`, so one wait covers
+- `set.insert(call)` moves the call into a `WaitableSet`, so one wait covers
   several calls and streams.
 
 A function or closure that starts an async call also holds the effects these
@@ -187,7 +187,7 @@ test {
 ```
 
 An `AsyncCall<T>` is affine: `wait` and `cancel` take it by value, and
-assigning one moves it ([Affine Types](./spec-types.md#affine-types)). A
+assigning one moves it ([Affine Types](./spec-affine.md)). A
 call that drops unawaited is cancelled, and its result buffer freed.
 
 <!-- {"fixture":"async_call_moves.wado"} -->
@@ -203,13 +203,13 @@ with Fetch => &Canned {} do {
 
 #### Waiting on Several
 
-A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
+A `WaitableSet<W>` owns what it waits on. `insert` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
 `Ready<W>` beside the event. `poll` asks without blocking. The event is a
 `ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
 `CopyResult` a started stream copy ended on, or `Unreported` for a member that
 neither has a handle for the host to report nor an event of its own. A member
-whose event is already known joins ready with that event, whether the host
+whose event is already known enters ready with that event, whether the host
 reported it to another set or the call or copy settled as it started. A set
 that drops drops its remaining members first.
 
@@ -235,8 +235,8 @@ impl Waitable for Timer;
 
 fn first_ready() -> String with MonotonicClock {
     let mut set = WaitableSet::<Timer>::new();
-    set.join(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
-    set.join(Timer::Short(MonotonicClock::wait_for(0)));
+    set.insert(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
+    set.insert(Timer::Short(MonotonicClock::wait_for(0)));
     let ready = set.wait();
     let name = match ready.member {
         Short(call) => {
@@ -259,7 +259,7 @@ export fn run() with (Stdout, MonotonicClock) {
 
 The host reports a call's resolution once, but a call a set handed back
 after its resolution still ends as any call does. `wait` returns its result,
-`cancel` and a drop end it, and a set it joins again reports it at once with
+`cancel` and a drop end it, and a set it enters again reports it at once with
 the same event.
 
 #### Handling an Async Operation
@@ -371,13 +371,25 @@ test {
 }
 ```
 
+A type declared in an interface
+([Effect Definition](./spec-effects.md#effect-definition)) takes its CM name
+from that interface: the interface's name with the type's name in kebab case,
+so `Geo::Point` in `a:x/geo@0.1.0` is `a:x/geo@0.1.0#point`. A
+`#[cm("…#name")]` on a module-level type is an error, so that form names only
+an operation.
+
+> Not yet implemented: a type is not yet declared inside an interface, so
+> `TerminalOutput` and `ErrorCode` above sit at module level and name their
+> interface through `#[cm]`
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
+
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
 #### Resource Linearity
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
-An affine resource is move-only and carries a drop obligation (see [Resource Ownership](#resource-ownership)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
+An affine resource is move-only and carries a drop obligation (see [Affine Types](./spec-affine.md)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
 The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets (see [Handle Encoding](#handle-encoding)). `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one, so an affine resource and an unrestricted one never convert into each other.
 
@@ -385,105 +397,7 @@ An unrestricted resource is not a Component Model `resource`. Its operations are
 
 ### Resource Ownership
 
-An affine resource is move-only. Assigning it, passing it by value, returning it, placing it in an aggregate, and calling a method that takes `self` by value each move it. Using a binding after it has moved is a compile error.
-
-<!-- {"fixture":"spec_components_use_after_move.wado"} -->
-
-```wado
-pub resource Counter {
-    fn bump(&self);
-    fn consume(self);
-}
-
-fn eat(c: Counter) { }
-
-fn misuse(c: Counter, d: Counter) {
-    eat(c);          // moves `c`
-    c.bump();        // ERROR: affine value `c` used after it was moved
-    d.consume();     // a by-value `self` moves `d` too
-}
-```
-
-The check follows control flow. A move on one branch of an `if` or `match` counts after the branches meet, unless that branch diverges. A move inside a loop body is a use after move on the next iteration. A new `let` of the name, or an assignment to it, makes it usable again.
-
-A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. The check tracks each place, a binding or a field path under it: moving `h.f` out of an owned `h` leaves its other fields usable, and a later use of `h` or `h.f` is a use after move.
-
-Three positions never move an affine value:
-
-- A closure body sees its captures by reference.
-- A `match` guard sees the arm's bindings by reference.
-- A global is never read by value, since no check follows it across functions.
-
-A `match` or `if let` consumes its scrutinee when an arm is entered. A refutable pattern that fails consumes nothing, so the `else` of an `if let` or a `let ... else` may still use it.
-
-A method consumes a resource through a bare `self` receiver, and takes a reference to it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
-
-#### No Move Out of a Reference
-
-Reading an affine value by value through a `&` or `&mut`, `&self` included, is a compile error. A reference leaves its referent with its owner, so the value read would have a second owner. The rule covers a field read through a reference and a dereference, wherever the value goes: returned, passed, bound or stored. Reading it where it stands (`self.f.has(name)`) takes no ownership and is allowed.
-
-<!-- {"fixture":"spec_components_move_out_of_reference.wado"} -->
-
-```wado
-affine struct Holder { f: Fields }
-
-impl Holder {
-    fn peek(&self) -> Fields {
-        return self.f;       // ERROR: cannot move affine type `Fields` out of a reference
-    }
-}
-```
-
-<!-- {"fixture":"spec_components_consume_holder.wado"} -->
-
-```wado
-impl Holder {
-    fn into_fields(self) -> Fields {
-        return self.f;       // OK: the holder is consumed
-    }
-}
-
-test {
-    let holder = Holder { f: Fields::new() };
-    assert holder.into_fields().copy_all().is_empty();
-}
-```
-
-#### Elements
-
-An element of a list or an array is read through the reference indexing takes, so reading it by value (`list[i]`, `list[i].f`) is a move out of a reference too. Reading it where it stands (`list[0].has(name)`) is allowed.
-
-<!-- {"fixture":"spec_components_copy_out_of_reference.wado"} -->
-
-```wado
-fn first(list: List<Fields>) -> Fields {
-    return list[0];      // ERROR: cannot move affine type `Fields` out of a reference
-}
-```
-
-A generic reaches a resource only through a parameter declared `affine` (see [Affine Types](./spec-types.md#affine-types)), so a call's result is never a copy of one. `List::pop` and `List::remove` take the element out. The caller owns it, so a result nothing binds is dropped.
-
-<!-- {"fixture":"spec_components_extract_through_mut.wado"} -->
-
-```wado
-fn take_last(list: &mut List<Fields>) -> Option<Fields> {
-    return list.pop();   // OK: `pop` takes the element out
-}
-
-test {
-    let mut list: List<Fields> = [];
-    take_last(&mut list);    // the result nothing binds is dropped
-    assert list.is_empty();
-}
-```
-
-#### Drop
-
-An owned resource drops as any affine value does (see [Drop](./spec-types.md#drop)), so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A resource's `fn drop(self)` is its `Drop` impl: it consumes its receiver, so a use after it is a use after move.
-
-Lowering a resource to the host as an `own`, as an argument, a result or what a stream or future write carries, moves it: the host owns the handle from then on.
-
-A trap does not unwind, so it runs no drops.
+An affine resource follows [Affine Types](./spec-affine.md). A resource's `fn drop(self)` is its `Drop` impl, and an imported resource's ends the handle through the Component Model's `resource.drop`. Lowering a resource to the host as an `own`, as an argument, a result or what a stream or future write carries, moves it: the host owns the handle from then on.
 
 #### Handles at the Boundary
 

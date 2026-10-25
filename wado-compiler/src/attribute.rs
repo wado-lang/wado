@@ -14,6 +14,7 @@ pub const AMBIENT: &str = "ambient";
 pub const BENIGN: &str = "benign";
 pub const CANONICAL: &str = "canonical";
 pub const CM: &str = "cm";
+pub const CM_EXPORT: &str = "cm_export";
 pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
 pub const COMPILER_ITEM: &str = "compiler_item";
@@ -259,9 +260,8 @@ fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
     match target {
         AttrTarget::StructField => &["name", "positional", "default"],
         AttrTarget::EnumCase | AttrTarget::VariantCase => &["name"],
-        AttrTarget::Struct | AttrTarget::Enum | AttrTarget::Variant | AttrTarget::Flags => {
-            &["name_policy"]
-        }
+        AttrTarget::Variant => &["name_policy", "tag"],
+        AttrTarget::Struct | AttrTarget::Enum | AttrTarget::Flags => &["name_policy"],
         AttrTarget::Module
         | AttrTarget::Newtype
         | AttrTarget::Function
@@ -344,6 +344,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: CM_TARGET,
         args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
         summary: "this declaration's identity at the Component Model boundary",
+        stdlib_only: false,
+        bodyless: None,
+    },
+    AttributeSchema {
+        name: CM_EXPORT,
+        targets: &[AttrTarget::Interface],
+        args: AttrArgs::OneString,
+        summary: "the name a `use` spells an imported component's interface by",
         stdlib_only: false,
         bodyless: None,
     },
@@ -533,7 +541,9 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: WIRE,
         targets: WIRE_TARGET,
-        args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
+        args: AttrArgs::Read(
+            "`name = \"…\"`, `name_policy = \"…\"`, `tag = \"…\"`, `positional`, or `default`",
+        ),
         summary: "how serialization spells this declaration",
         stdlib_only: false,
         bodyless: None,
@@ -790,7 +800,7 @@ impl<F: FnMut(WrittenAttribute<'_>)> AttributeWalk<'_, F> {
     }
 }
 
-impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
+impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor<'_> for AttributeWalk<'_, F> {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Struct(decl) => {

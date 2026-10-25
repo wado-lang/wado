@@ -30,7 +30,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
 type "functype//inline_cost_model.wado/step" = fn(i32, i32) -> i32;  // TypeId(12)
 
@@ -66,7 +66,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
-type "functype//inline_cost_model.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(29)
+type "functype//inline_cost_model.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(30)
 
@@ -76,7 +76,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -133,27 +133,27 @@ fn "inline_cost_model.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_111.repr, start_12, x_26, $sroa_b_used_100);
     $sroa_b_used_100 = builtin::i32_wrap_i64(local.tee x_26("wasi/stream-new"()));
     start_12 = builtin::i32_wrap_i64(x_26 >> 32_i64);
-    total = "inline_cost_model.wado/$cm_binding__Stdout_write_via_stream"(total = $sroa_b_used_100; $sroa_b_used_100 = 0; total);
+    total = "inline_cost_model.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(total = $sroa_b_used_100; $sroa_b_used_100 = 0; total);
     $sroa_b_used_100 = start_12;
     start_12 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_12 = $sroa_b_used_100; $sroa_b_used_100 = 0; start_12, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_12 = total; total = 0; start_12);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_b_used_100, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_b_used_100 = total; total = 0; $sroa_b_used_100);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    total = local.tee start_12("inline_cost_model.wado/inline_cost_model.wado/Buf::churn$dae[self]"(black_box(3))) < 0;
-    start_12 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_26(x_26 = builtin::i64_extend_i32_s(start_12); select i64(x_26 < 0_i64, 0_i64 - x_26, x_26)));
-    total = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, total, start_12);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, total, x_26, start_12);
-    start_12 = builtin::i32_wrap_i64(local.tee x_26("wasi/stream-new"()));
+    total = local.tee $sroa_b_used_100("inline_cost_model.wado/inline_cost_model.wado/Buf::churn$dae[self]"(black_box(3))) < 0;
+    $sroa_b_used_100 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_26(x_26 = builtin::i64_extend_i32_s($sroa_b_used_100); select i64(x_26 < 0_i64, 0_i64 - x_26, x_26)));
+    total = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, total, $sroa_b_used_100);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, total, x_26, $sroa_b_used_100);
+    $sroa_b_used_100 = builtin::i32_wrap_i64(local.tee x_26("wasi/stream-new"()));
     total = builtin::i32_wrap_i64(x_26 >> 32_i64);
-    $sroa_b_used_100 = "inline_cost_model.wado/$cm_binding__Stdout_write_via_stream"($sroa_b_used_100 = start_12; start_12 = 0; $sroa_b_used_100);
-    start_12 = total;
+    start_12 = "inline_cost_model.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_12 = $sroa_b_used_100; $sroa_b_used_100 = 0; start_12);
+    $sroa_b_used_100 = total;
     total = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(total = start_12; start_12 = 0; total, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(total = $sroa_b_used_100; $sroa_b_used_100 = 0; total);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_b_used_100, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_b_used_100 = start_12; start_12 = 0; $sroa_b_used_100);
 }
 
-fn "inline_cost_model.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "inline_cost_model.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "inline_cost_model.wado/$cm_export__run"() {

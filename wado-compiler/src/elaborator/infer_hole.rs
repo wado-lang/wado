@@ -106,6 +106,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
+    /// [`Self::mint_infer_hole`] for a call's type argument `slot`. A variable
+    /// inference already put there takes the diagnostic and the bounds: a
+    /// second one would orphan it, which the sweep would then pin to `error`
+    /// behind a diagnostic nobody asked for.
+    pub(super) fn defer_slot(
+        &mut self,
+        slot: Option<TypeId>,
+        span: Span,
+        message: String,
+        param_name: String,
+        bounds: Vec<DeclaredBound>,
+    ) -> TypeId {
+        let existing = slot.filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
+        let Some(var) = existing else {
+            return self.mint_infer_hole(span, message, param_name, bounds);
+        };
+        self.attach_infer_var_diag(var, span, message);
+        self.attach_infer_var_bounds(var, param_name, bounds, span);
+        var
+    }
+
     /// The bounds `param` declares, each as the trait its own site names plus
     /// the spelling that site wrote, with the enclosing impl's parameters at
     /// `impl_args`, which the solution is checked against long after the
@@ -215,6 +236,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// Whether every variable `ty` names is still unanswered and reports
+    /// itself if it stays so.
+    pub(super) fn awaits_report(&self, tt: &TypeTable, ty: TypeId) -> bool {
+        let vars = tt.infer_vars_in(ty);
+        !vars.is_empty()
+            && vars.iter().all(|var| {
+                self.infer_holes.diags.contains_key(var)
+                    && self.infer_holes.solutions.get(var) == Some(&None)
+            })
+    }
+
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
     /// parameter, so unsolved siblings of one use site coalesce.
     pub(super) fn attach_infer_var_blame(
@@ -305,7 +337,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
     fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
+        let table = self.tysys.type_table.borrow();
+        self.tysys.is_unbound_type_param(t)
+            && !table.type_keys(scope_params).contains(&table.type_key(t))
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -658,6 +692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .operator_dispatch
             .values_mut()
             .chain(facts.index_assign_dispatch.values_mut())
+            .chain(facts.index_swap_dispatch.values_mut())
         {
             sub_operator_dispatch(tt, od, subst);
         }

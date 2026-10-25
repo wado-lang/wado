@@ -19,7 +19,7 @@ shape. Each module's doc says how it works.
 | Annotate             | `Semantics`      | `elaborator/`                                   |
 | Liveness             | Reachability     | `elaborator/`                                   |
 | Reify                | TIR per module   | `elaborator/`                                   |
-| Check                | Diagnostics      | `effect_check.rs`, `resource_move_check.rs`     |
+| Check                | Diagnostics      | `effect_check.rs`, `affine_move_check.rs`       |
 | Synthesis            | TIR              | `synthesis/`                                    |
 | Link                 | One flat package | `link.rs`                                       |
 | Monomorphize / Erase | Concrete TIR     | `monomorphize/`                                 |

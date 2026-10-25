@@ -8,13 +8,13 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::affine_holding::{Held, HeldTypes, holds_affine};
 use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
 use crate::type_table::{TypeKey, TypeTable};
@@ -142,17 +142,17 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or holds at any depth, an affine resource: what
+    /// Whether `type_id` is, or holds at any depth, an affine type: what
     /// makes a binding of it move-only, and a by-value `self` on it legal.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        holds_resource(self, type_id)
+    pub(crate) fn carries_affine(&self, type_id: TypeId) -> bool {
+        holds_affine(self, type_id)
     }
 
     /// Whether a value of `type_id` is move-only in a body whose `affine`
-    /// type parameters are `affine_params`: it holds an affine resource, or
-    /// one of those parameters, at any depth.
+    /// type parameters are `affine_params`: it holds an affine type, or one of
+    /// those parameters, at any depth.
     pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
-        holds_resource(
+        holds_affine(
             &AffineParams {
                 types: self,
                 affine_params,
@@ -170,7 +170,7 @@ impl TypeSystem {
         };
         members
             .into_iter()
-            .position(|member| holds_resource(self, member))
+            .position(|member| holds_affine(self, member))
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
@@ -697,14 +697,47 @@ impl TypeSystem {
         base_type: TypeId,
         newtype: TypeId,
     ) -> TypeId {
+        self.substitute_in_type(type_id, &|t| (t == base_type).then_some(newtype))
+    }
+
+    /// `type_id` with every instance of the newtype `def` replaced by the base
+    /// that instance wraps, so `Same<i32>` reads as `Wrap<i32>` whatever
+    /// arguments the newtype was resolved at elsewhere.
+    pub(crate) fn unwrap_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
+        self.substitute_in_type(type_id, &|t| match self.type_table.borrow().get(t) {
+            ResolvedType::Newtype {
+                def: of, base_type, ..
+            } if *of == def => Some(*base_type),
+            _ => None,
+        })
+    }
+
+    /// [`Self::unwrap_newtype_in_type`] down to the end of each instance's
+    /// newtype chain, which a chain's first base is not.
+    pub(crate) fn represent_newtype_in_type(&self, type_id: TypeId, def: DefId) -> TypeId {
+        self.substitute_in_type(type_id, &|t| {
+            let table = self.type_table.borrow();
+            match table.get(t) {
+                ResolvedType::Newtype { def: of, .. } if *of == def => {
+                    Some(table.representation_head(t))
+                }
+                _ => None,
+            }
+        })
+    }
+
+    fn substitute_in_type(
+        &self,
+        type_id: TypeId,
+        replace: &impl Fn(TypeId) -> Option<TypeId>,
+    ) -> TypeId {
+        if let Some(replaced) = replace(type_id) {
+            return replaced;
+        }
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
-            // Direct match: base type -> newtype
-            _ if type_id == base_type => newtype,
-
-            // Reference: substitute the inner type
             ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                let new_inner = self.substitute_in_type(inner, replace);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -714,7 +747,7 @@ impl TypeSystem {
                 }
             }
             ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                let new_inner = self.substitute_in_type(inner, replace);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -728,7 +761,7 @@ impl TypeSystem {
             ResolvedType::GenericInstance { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
+                    .map(|&arg| self.substitute_in_type(arg, replace))
                     .collect();
                 if new_args == type_args {
                     type_id
@@ -890,7 +923,7 @@ fn reaches(
 }
 
 /// What a type holds inside a body that declares `affine_params`: each of
-/// them counts as an affine resource.
+/// them counts as affine.
 struct AffineParams<'a> {
     types: &'a TypeSystem,
     affine_params: &'a [TypeId],
@@ -948,7 +981,7 @@ impl HeldTypes for AffineParams<'_> {
         };
         drop(table);
         if is_affine_param {
-            Held::Resource
+            Held::Affine
         } else {
             self.types.held(type_id)
         }
@@ -970,7 +1003,7 @@ impl HeldTypes for TypeSystem {
                 .is_some_and(|def| table.is_affine_decl(def))
         };
         if declared_affine {
-            return Held::Resource;
+            return Held::Affine;
         }
         self.members_held(type_id)
     }
@@ -989,7 +1022,7 @@ impl TypeSystem {
                 if self.type_table.borrow().is_unrestricted_resource(def) {
                     Held::Nothing
                 } else {
-                    Held::Resource
+                    Held::Affine
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,

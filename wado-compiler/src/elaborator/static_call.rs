@@ -338,7 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = match self.select_candidate(candidates, arg_types) {
             Selection::One(candidate) => self.callee_of_candidate(
-                receiver_name,
+                (receiver_name, &key),
                 method_name,
                 &candidate,
                 receiver_type,
@@ -389,13 +389,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype and a `flags` reach what they wrap: their impls are looked
         // up on the base, so the spelling resolves there too. Read from the
         // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
-        // caller's frame no `Q` to look one up by; the name answers only where
-        // the key reaches no declaration to read.
+        // caller's frame no `Q` to look one up by.
         //
         // One link at a time: the base answers the arguments as it sees them,
         // its own type where they wrote the newtype, and the answer takes the
         // newtype back.
-        match self.newtype_base_target(&key, receiver_name) {
+        match self.newtype_base_target(&key) {
             Some((base_key, base_name)) => {
                 let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
                 let mut lookup = self.resolve_static_callee(StaticQuery {
@@ -424,36 +423,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         arg_types: &[TypeId],
     ) -> (Option<TypeId>, Vec<TypeId>) {
-        let Some(newtype) = receiver else {
-            return (None, arg_types.to_vec());
-        };
-        let Some(base) = self.tysys.type_table.borrow().get_newtype_base(newtype) else {
+        let Some(ResolvedType::Newtype { def, base_type, .. }) =
+            receiver.map(|newtype| self.tysys.type_table.borrow().get(newtype).clone())
+        else {
             return (None, arg_types.to_vec());
         };
         let at_base = arg_types
             .iter()
-            .map(|&arg| self.tysys.substitute_newtype_in_type(arg, newtype, base))
+            .map(|&arg| self.tysys.unwrap_newtype_in_type(arg, def))
             .collect();
-        (Some(base), at_base)
+        (Some(base_type), at_base)
+    }
+
+    /// `arg_types` as the type at the end of the newtype `def`'s chain reads
+    /// them.
+    pub(super) fn args_at_representation(&self, def: DefId, arg_types: &[TypeId]) -> Vec<TypeId> {
+        arg_types
+            .iter()
+            .map(|&arg| self.tysys.represent_newtype_in_type(arg, def))
+            .collect()
     }
 
     /// `callee` as a newtype inherits it: every base on `receiver`'s chain
     /// becomes `receiver`, in each parameter and the return type (`spec-types`,
     /// "Method Signature Substitution"). Any other receiver is left as is.
     fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
+        self.retype_through_newtype_chain(receiver, &mut callee.params.param_types);
+        self.retype_through_newtype_chain(receiver, std::slice::from_mut(&mut callee.return_type));
+    }
+
+    /// `types` with every base on `receiver`'s newtype chain become `receiver`.
+    pub(super) fn retype_through_newtype_chain(&self, receiver: TypeId, types: &mut [TypeId]) {
         let mut link = receiver;
         loop {
             let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
                 break;
             };
-            for param in &mut callee.params.param_types {
-                *param = self
-                    .tysys
-                    .substitute_newtype_in_type(*param, base, receiver);
+            for ty in types.iter_mut() {
+                *ty = self.tysys.substitute_newtype_in_type(*ty, base, receiver);
             }
-            callee.return_type =
-                self.tysys
-                    .substitute_newtype_in_type(callee.return_type, base, receiver);
             link = base;
         }
     }
@@ -608,7 +616,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// otherwise.
     fn callee_of_candidate(
         &mut self,
-        receiver_name: &str,
+        (receiver_name, receiver_key): (&str, &ImplTargetKey),
         method_name: &str,
         candidate: &Candidate,
         receiver_type: Option<TypeId>,
@@ -639,13 +647,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let method_ref = method_ref.supplied_by(supply.impl_def);
                 // Resolved here rather than asked of every caller: the name
                 // costs a scope to resolve, and this is the one rung that needs
-                // it.
-                let receiver_type = receiver_type.or_else(|| {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
-                    drop(scope);
-                    Some(resolved)
-                });
+                // it. The key's declaration answers first, as the name may not
+                // reach it from the caller's frame.
+                let receiver_type = receiver_type
+                    .or_else(|| self.type_declared_by(Some(receiver_key)))
+                    .or_else(|| {
+                        let mut scope = self.enter_inherited_type_param_scope();
+                        let resolved =
+                            scope.resolve_unsited_type_name(receiver_name, Span::default());
+                        drop(scope);
+                        Some(resolved)
+                    });
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);
                 self.callee_of_trait_declaration(
                     trait_decl,

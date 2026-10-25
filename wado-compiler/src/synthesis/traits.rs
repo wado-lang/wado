@@ -964,22 +964,13 @@ fn generate_struct_members_fn(
         .iter()
         .zip(member_types)
         .map(|(f, member_type)| {
-            let wire_override = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                match &f.wire_name_override {
-                    Some(rename) => option_some(
-                        TirExpr::new(
-                            TirExprKind::StringLiteral(rename.clone()),
-                            env.string_type,
-                            span,
-                        ),
-                        option_string_type,
-                        items,
-                    ),
-                    None => common::option_none(option_string_type, items),
-                }
-            };
+            let wire_override = optional_string_literal(
+                type_table,
+                env.string_type,
+                option_string_type,
+                f.wire_name_override.as_deref(),
+                span,
+            );
             let field_fields = vec![
                 reflect_meta_int_field("index", i64::from(f.index), TypeTable::I32, 0, span),
                 TirStructField {
@@ -1880,6 +1871,7 @@ struct ReflectVariantTarget {
     cases: Vec<(String, u32, TypeId, Option<String>)>,
     span: Span,
     wire_name_policy: Option<NamePolicy>,
+    wire_tag: Option<String>,
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
@@ -1911,6 +1903,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
                 .collect(),
             span: v.span,
             wire_name_policy: v.wire_name_policy,
+            wire_tag: v.wire_tag.clone(),
         })
         .collect()
 }
@@ -1929,6 +1922,7 @@ struct ReflectVariantSynthEnv {
     cases_method: String,
     case_style_type: TypeId,
     wire_name_policy_method: String,
+    wire_tag_method: String,
 }
 
 impl ReflectVariantSynthEnv {
@@ -1953,6 +1947,9 @@ impl ReflectVariantSynthEnv {
             case_style_type,
             wire_name_policy_method: items
                 .method_name(CompilerItem::ReflectWireNamePolicy)
+                .to_string(),
+            wire_tag_method: items
+                .method_name(CompilerItem::ReflectVariantWireTag)
                 .to_string(),
         }
     }
@@ -2050,7 +2047,16 @@ fn generate_variant_reflect_methods(
         span,
     );
 
-    let mut functions = vec![type_name_fn, discriminant_fn, cases_fn, wire_name_policy_fn];
+    let wire_tag_fn =
+        generate_variant_wire_tag_fn(type_table, env, variant_trait_name, target, span);
+
+    let mut functions = vec![
+        type_name_fn,
+        discriminant_fn,
+        cases_fn,
+        wire_name_policy_fn,
+        wire_tag_fn,
+    ];
     for f in &mut functions {
         f.impl_type_params.clone_from(&target.type_params);
     }
@@ -2066,6 +2072,56 @@ fn generate_variant_reflect_methods(
         ));
     }
     functions
+}
+
+/// `Option::Some("…")` holding `value`, or `null` where there is none.
+fn optional_string_literal(
+    type_table: &RefCell<TypeTable>,
+    string_type: TypeId,
+    option_string_type: TypeId,
+    value: Option<&str>,
+    span: Span,
+) -> TirExpr {
+    let tt = type_table.borrow();
+    let items = tt.compiler_items();
+    match value {
+        Some(s) => option_some(
+            TirExpr::new(TirExprKind::StringLiteral(s.to_string()), string_type, span),
+            option_string_type,
+            items,
+        ),
+        None => common::option_none(option_string_type, items),
+    }
+}
+
+/// Build `Variant^ReflectVariant::wire_tag()` as `return Option::Some("…");`, or
+/// `return null;` for a variant that declares no tag.
+fn generate_variant_wire_tag_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectVariantSynthEnv,
+    variant_trait_name: &FqTraitName,
+    target: &ReflectVariantTarget,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.receiver, variant_trait_name, &env.wire_tag_method);
+    let qualified_name = method_info.to_mangled_name();
+    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
+    let tag = optional_string_literal(
+        type_table,
+        env.string_type,
+        option_string_type,
+        target.wire_tag.as_deref(),
+        span,
+    );
+    let body = TirBlock::new(vec![return_stmt(tag, span)], span);
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        option_string_type,
+        body,
+        vec![],
+    )
 }
 
 /// Build `Variant^ReflectVariant::members()` as
@@ -2092,22 +2148,13 @@ fn generate_variant_cases_fn(
         .zip(member_types)
         .map(
             |((case_name, index, payload, wire_name_override), member_type)| {
-                let wire_override = {
-                    let tt = type_table.borrow();
-                    let items = tt.compiler_items();
-                    match wire_name_override {
-                        Some(rename) => option_some(
-                            TirExpr::new(
-                                TirExprKind::StringLiteral(rename.clone()),
-                                env.string_type,
-                                span,
-                            ),
-                            option_string_type,
-                            items,
-                        ),
-                        None => common::option_none(option_string_type, items),
-                    }
-                };
+                let wire_override = optional_string_literal(
+                    type_table,
+                    env.string_type,
+                    option_string_type,
+                    wire_name_override.as_deref(),
+                    span,
+                );
                 let case_fields = vec![
                     reflect_meta_int_field("index", i64::from(*index), TypeTable::I32, 0, span),
                     TirStructField {
@@ -2749,22 +2796,13 @@ fn generate_enum_members_fn(
                 index,
                 wire_name_override,
             } = case;
-            let wire_override = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                match wire_name_override {
-                    Some(rename) => option_some(
-                        TirExpr::new(
-                            TirExprKind::StringLiteral(rename.clone()),
-                            env.string_type,
-                            span,
-                        ),
-                        option_string_type,
-                        items,
-                    ),
-                    None => common::option_none(option_string_type, items),
-                }
-            };
+            let wire_override = optional_string_literal(
+                type_table,
+                env.string_type,
+                option_string_type,
+                wire_name_override.as_deref(),
+                span,
+            );
             let value = TirExpr::new(
                 TirExprKind::EnumConstruct {
                     enum_type,

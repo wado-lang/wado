@@ -1,0 +1,58 @@
+// An operator whose impl has a bound the operand's arguments do not meet
+// reports that bound, not an absent operator trait. Of the impls, those taking
+// the right operand's type answer, as dispatch picks among them.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Tag> Add for Wrap<T> {
+    type Output = i32;
+
+    fn add(&self, other: &Wrap<T>) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Tag> Neg for Wrap<T> {
+    type Output = i32;
+
+    fn neg(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+impl<T: Named> Add<String> for Wrap<T> {
+    type Output = i32;
+
+    fn add(&self, other: &String) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let w = Wrap { v: "s" };
+    let a = w + w;
+    let b = -w;
+    let c = w + "x";
+}
+
+__DATA__
+{
+    "compile_error": ":49:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 50:13: type 'String' does not implement trait 'Tag' required by bound on 'T'; 51:13: type 'String' does not implement trait 'Named' required by bound on 'T'",
+    "compile_errors_not_contains": ["cannot be applied"]
+}

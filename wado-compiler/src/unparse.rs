@@ -3,20 +3,20 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EffectsSource, EnumCase,
-    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
-    FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
-    Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
-    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StrLit, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport, written_params,
+    AssertStmt, AssignExpr, AssignTarget, AssociatedConst, AssociatedTypeBinding,
+    AssociatedTypeDecl, AstId, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr,
+    BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, EffectsSource, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
+    FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl,
+    RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -788,8 +788,19 @@ impl<'a> Unparser<'a> {
 
     fn unparse_use_item(&mut self, item: &UseItem) {
         match item {
-            UseItem::Simple { name, alias, .. } => {
-                self.output.push_str(name);
+            UseItem::Simple {
+                name,
+                spelling,
+                alias,
+                ..
+            } => {
+                match spelling {
+                    UseNameSpelling::Ident => self.output.push_str(name),
+                    UseNameSpelling::InterfaceName(_) => {
+                        self.output
+                            .push_str(&StrLit::new(name.as_str()).as_written());
+                    }
+                }
                 if let Some(alias) = alias {
                     self.output.push_str(" as ");
                     self.output.push_str(alias);
@@ -1686,19 +1697,29 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(expr);
             }
             Condition::LetChain { elements, .. } => {
-                self.comma_sep_with(" && ", elements, |s, elem| {
-                    if let ConditionElement::Let { pattern, .. } = elem {
-                        s.output.push_str("let ");
-                        s.unparse_pattern(pattern);
-                        s.output.push_str(" = ");
-                    }
-                    let expr = elem.expr();
-                    s.with_parens_if(chain_operand_needs_parens(expr), |s| {
-                        s.unparse_expr(expr);
-                    });
-                });
+                let snap = self.snapshot();
+                self.comma_sep_with(" && ", elements, Self::unparse_chain_element);
+                if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
+                    self.rollback(snap);
+                    self.unparse_chain_multiline(
+                        "&&",
+                        elements,
+                        |s, elem, _| s.unparse_chain_element(elem),
+                        |elem| tail_call_span_start(elem.expr()),
+                    );
+                }
             }
         }
+    }
+
+    fn unparse_chain_element(&mut self, elem: &ConditionElement) {
+        if let ConditionElement::Let { pattern, .. } = elem {
+            self.output.push_str("let ");
+            self.unparse_pattern(pattern);
+            self.output.push_str(" = ");
+        }
+        let expr = elem.expr();
+        self.with_parens_if(chain_operand_needs_parens(expr), |s| s.unparse_expr(expr));
     }
 
     fn unparse_while(&mut self, w: &WhileStmt) {
@@ -1855,7 +1876,7 @@ impl<'a> Unparser<'a> {
             }
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
-            Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
+            Expr::TupleLiteral(t) => self.unparse_bracketed(&t.elements, t.span),
             Expr::TupleComprehension(c) => self.unparse_tuple_comprehension(c),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
             Expr::TryOp(qm) => {
@@ -1940,9 +1961,9 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" }]");
     }
 
-    fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
-        let elements = &tuple_lit.elements;
-        let has_comment = self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end);
+    /// `[e0, e1, …]`, a tuple literal or a destructuring assignment's places.
+    fn unparse_bracketed(&mut self, elements: &[Expr], span: Span) {
+        let has_comment = self.has_comment_in_range(span.start, span.end);
         // An empty array still has an interior a comment can sit in, and `[]`
         // has no room for one.
         if elements.is_empty() && !has_comment {
@@ -1969,7 +1990,7 @@ impl<'a> Unparser<'a> {
         if has_comment || has_container || call_elems > 0 {
             self.emit_entries_per_line(
                 ["[", "]"],
-                tuple_lit.span,
+                span,
                 elements,
                 |e| (e.span(), Trailing::Of(e.id())),
                 Unparser::unparse_expr,
@@ -2081,19 +2102,31 @@ impl<'a> Unparser<'a> {
         });
     }
 
-    /// One operand of a logical chain. The chain renders an operand more than
-    /// once to try another width, and every attempt must render it the same.
-    fn unparse_operand(&mut self, part: &Expr, parens: bool) {
-        self.with_parens_if(parens, |s| s.unparse_expr(part));
+    fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
+        let parts = collect_logical_chain_binary(b);
+        self.unparse_chain_multiline(
+            binary_op_str(b.op),
+            &parts,
+            |s, part, first| {
+                s.with_parens_if(needs_parens(part, b.op, first), |s| s.unparse_expr(part));
+            },
+            |part| tail_call_span_start(part),
+        );
     }
 
-    fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
-        let op_str = binary_op_str(b.op);
-        let parts = collect_logical_chain_binary(b);
-
-        self.with_parens_if(needs_parens(parts[0], b.op, true), |s| {
-            s.unparse_expr(parts[0]);
-        });
+    /// `parts` joined by `op`, each after the first on a line of its own that
+    /// `op` starts. `render` draws a part, told whether it is the first, and
+    /// `tail_call` names the call a part ends with. The chain renders a part
+    /// more than once to try another width, and every attempt must render it
+    /// the same.
+    fn unparse_chain_multiline<T>(
+        &mut self,
+        op: &str,
+        parts: &[T],
+        render: impl Fn(&mut Self, &T, bool),
+        tail_call: impl Fn(&T) -> Option<usize>,
+    ) {
+        render(self, &parts[0], true);
 
         for (i, part) in parts[1..].iter().enumerate() {
             self.output.push('\n');
@@ -2102,11 +2135,10 @@ impl<'a> Unparser<'a> {
             // indent from the line it is on, not from the chain's own level.
             self.indent_level += 1;
             self.write_indent();
-            self.output.push_str(op_str);
+            self.output.push_str(op);
             self.output.push(' ');
             let snap = self.snapshot();
-            let parens = needs_parens(part, b.op, false);
-            self.unparse_operand(part, parens);
+            render(self, part, false);
 
             // The last operand ends the chain, so the caller's ` {` lands on
             // its line. Measure that line once the operand is rendered — only
@@ -2115,18 +2147,18 @@ impl<'a> Unparser<'a> {
             let last = i + 2 == parts.len();
             if last
                 && self.last_line_exceeds_reserved()
-                && let Some(tail) = tail_call_span_start(part)
+                && let Some(tail) = tail_call(part)
             {
                 self.rollback(snap);
                 self.force_wrap = Some(tail);
-                self.unparse_operand(part, parens);
+                render(self, part, false);
                 self.force_wrap = None;
                 // Wrapping the tail is worth it only if it bought the line
                 // back. A tail whose own arguments overflow leaves it over
                 // either way, and the compact form is the better of the two.
                 if self.last_line_exceeds_reserved() {
                     self.rollback(snap);
-                    self.unparse_operand(part, parens);
+                    render(self, part, false);
                 }
             }
             self.indent_level -= 1;
@@ -2151,7 +2183,10 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_assign(&mut self, a: &AssignExpr) {
-        self.unparse_expr(&a.target);
+        match &a.target {
+            AssignTarget::Place(target) => self.unparse_expr(target),
+            AssignTarget::Destructuring { places, span } => self.unparse_bracketed(places, *span),
+        }
         self.output.push_str(" = ");
         self.unparse_expr(&a.value);
     }
@@ -2230,7 +2265,8 @@ impl<'a> Unparser<'a> {
     /// Emit `(args)`, one line per argument when the single-line form would
     /// overflow, wrap anyway, or leave a comment inside the call unplaced.
     /// `span` is the call expression's, so an empty argument list holding a
-    /// comment wraps too.
+    /// comment wraps too. One holding none never does: wrapping it shortens
+    /// nothing.
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
         // in that case we skip the single-line attempt entirely, as does a
@@ -2239,10 +2275,12 @@ impl<'a> Unparser<'a> {
         if forced {
             self.force_wrap = None;
         }
-        if (!has_trailing_comma || args.is_empty()) && !forced {
+        if args.is_empty() || (!has_trailing_comma && !forced) {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
-            if !self.exceeds_width_since(snap) && !self.has_comment_in_range(span.start, span.end) {
+            if (args.is_empty() || !self.exceeds_width_since(snap))
+                && !self.has_comment_in_range(span.start, span.end)
+            {
                 return;
             }
             self.rollback(snap);
@@ -3252,16 +3290,16 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
 }
 
 /// The span start of the call whose `)` ends `expr`'s rendering, if a call
-/// does. That call is the only one whose wrapping shortens the line `expr`
-/// ends on, so it is the one a caller short of room forces. Follows the right
-/// spine, where the rendering's last token is, and stops at an operand the
-/// unparser would parenthesize: there the last token is the paren, not the
-/// call.
+/// with arguments does. That call is the only one whose wrapping shortens the
+/// line `expr` ends on, so it is the one a caller short of room forces. Follows
+/// the right spine, where the rendering's last token is, and stops at an
+/// operand the unparser would parenthesize: there the last token is the paren,
+/// not the call.
 fn tail_call_span_start(expr: &Expr) -> Option<usize> {
     match expr {
-        Expr::Call(c) => Some(c.span.start),
-        Expr::MethodCall(m) => Some(m.span.start),
-        Expr::StaticMethodCall(s) => Some(s.span.start),
+        Expr::Call(c) if !c.args.is_empty() => Some(c.span.start),
+        Expr::MethodCall(m) if !m.args.is_empty() => Some(m.span.start),
+        Expr::StaticMethodCall(s) if !s.args.is_empty() => Some(s.span.start),
         Expr::Binary(b) if !needs_parens(&b.right, b.op, false) => tail_call_span_start(&b.right),
         Expr::ComparisonChain(chain) => tail_call_span_start(&chain.comparisons.last()?.right),
         _ => None,
@@ -3322,7 +3360,10 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         Expr::Matches(m) => {
             !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
         }
-        Expr::Assign(a) => closure_body_needs_parens(&a.target),
+        Expr::Assign(a) => match &a.target {
+            AssignTarget::Place(target) => closure_body_needs_parens(target),
+            AssignTarget::Destructuring { .. } => false,
+        },
         Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
         Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
         // A postfix or cast operand carries parens from `binds_tighter_than`,

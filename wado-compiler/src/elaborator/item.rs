@@ -782,6 +782,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         {
             scope.reject_provided_from(target, source, impl_block.span);
         }
+        if scope.tysys.type_table.borrow().is_never(target) {
+            let type_name = scope.tysys.type_table.borrow().type_name(target);
+            let _ = scope.emit(TypeError::ImplForNever {
+                type_name,
+                span: impl_block.span,
+            });
+        }
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
         }
@@ -1358,22 +1365,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A by-value `self` transfers ownership, so it is legal on a resource
-    /// and on a concrete aggregate that transitively owns one (the consuming
-    /// method hands that resource off). A plain value type's method must take
-    /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
-    /// concrete value type, so they are already permitted.
+    /// A by-value `self` transfers ownership, so a concrete aggregate takes it
+    /// only when it is affine. Generic aggregates resolve to `GenericInstance`
+    /// rather than a concrete value type, so they are already permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
-        let (is_resource, is_concrete_value, type_name) = {
+        let (is_concrete_value, type_name) = {
             let tt = self.tysys.type_table.borrow();
-            let resolved = tt.get(self_ty);
             (
                 matches!(
-                    resolved,
-                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-                ),
-                matches!(
-                    resolved,
+                    tt.get(self_ty),
                     ResolvedType::Struct { .. }
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
@@ -1381,8 +1381,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tt.type_name(self_ty),
             )
         };
-        if is_concrete_value && !is_resource && !self.tysys.carries_resource(self_ty) {
-            let _ = self.emit(TypeError::SelfByValueOnNonResource { type_name, span });
+        if is_concrete_value && !self.tysys.carries_affine(self_ty) {
+            let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
         }
     }
 
@@ -2182,7 +2182,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s.
     /// `resource_self` marks a resource decl, whose `&self` shorthand becomes a
-    /// real parameter at index 0 to match `$cm_binding__<R>_<op>(self, args)`;
+    /// real parameter at index 0 to match its `$cm_binding__*(self, args)`;
     /// an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
@@ -2341,6 +2341,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
 
             ops.push(TirEffectOp {
+                def: method_def,
                 name: method.name.clone(),
                 params,
                 return_type,

@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//ord_cmp_fold_float_nan.wado/run" = fn();  // TypeId(10)
 
@@ -47,7 +47,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//ord_cmp_fold_float_nan.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//ord_cmp_fold_float_nan.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
@@ -57,7 +57,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -155,11 +155,11 @@ fn "ord_cmp_fold_float_nan.wado/run"() with Stdout {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_237, text_16.repr, text_16.used);
     start_28 = builtin::i32_wrap_i64(local.tee $cm_pair_7_192("wasi/stream-new"()));
     new_used_27 = builtin::i32_wrap_i64($cm_pair_7_192 >> 32_i64);
-    $moved_4_189 = "ord_cmp_fold_float_nan.wado/$cm_binding__Stdout_write_via_stream"($moved_4_189 = start_28; start_28 = 0; $moved_4_189);
+    $moved_4_189 = "ord_cmp_fold_float_nan.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_189 = start_28; start_28 = 0; $moved_4_189);
     start_28 = new_used_27;
     new_used_27 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_27 = start_28; start_28 = 0; new_used_27, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_27 = $moved_4_189; $moved_4_189 = 0; new_used_27);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_28, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_28 = $moved_4_189; $moved_4_189 = 0; start_28);
     m = black_box(builtin::f32_reinterpret_i32(2143289344));
     text_16 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
     $sroa_$f_buf_237 = (if m < 1_f32 -> ref "core:prelude/string.wado//String" {
@@ -168,12 +168,12 @@ fn "ord_cmp_fold_float_nan.wado/run"() with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(text_16, $sroa_$f_buf_237.repr, $sroa_$f_buf_237.used);
-    if @unlikely(local.tee new_used_27($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+    if @unlikely(local.tee start_28($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_28);
     }
     $moved_4_189 = $local_4.used;
-    $local_4.used = new_used_27;
+    $local_4.used = start_28;
     builtin::array_copy<u8>($local_4.repr, $moved_4_189, global:ord_cmp_fold_float_nan.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_237 = local.tee text_16($local_4);
     $mv_arg_2 = global:ord_cmp_fold_float_nan.wado::$const_obj_1;
@@ -182,9 +182,9 @@ fn "ord_cmp_fold_float_nan.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, $moved_4_189);
     }
-    new_used_27 = $local_4.used;
+    start_28 = $local_4.used;
     $local_4.used = $moved_4_189;
-    builtin::array_copy<u8>($local_4.repr, new_used_27, global:ord_cmp_fold_float_nan.wado::$const_obj_0, 0, 1);
+    builtin::array_copy<u8>($local_4.repr, start_28, global:ord_cmp_fold_float_nan.wado::$const_obj_0, 0, 1);
     text_16 = $local_4;
     $mv_arg_2 = (if (m <= inf_f32) == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -192,17 +192,17 @@ fn "ord_cmp_fold_float_nan.wado/run"() with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(text_16, $mv_arg_2.repr, $mv_arg_2.used);
-    new_used_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_192("wasi/stream-new"()));
+    start_28 = builtin::i32_wrap_i64(local.tee $cm_pair_7_192("wasi/stream-new"()));
     $moved_4_189 = builtin::i32_wrap_i64($cm_pair_7_192 >> 32_i64);
-    start_28 = "ord_cmp_fold_float_nan.wado/$cm_binding__Stdout_write_via_stream"(start_28 = new_used_27; new_used_27 = 0; start_28);
-    new_used_27 = $moved_4_189;
+    new_used_27 = "ord_cmp_fold_float_nan.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_27 = start_28; start_28 = 0; new_used_27);
+    start_28 = $moved_4_189;
     $moved_4_189 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_189 = new_used_27; new_used_27 = 0; $moved_4_189, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_189 = start_28; start_28 = 0; $moved_4_189);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_28, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_28 = new_used_27; new_used_27 = 0; start_28);
 }
 
-fn "ord_cmp_fold_float_nan.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "ord_cmp_fold_float_nan.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "ord_cmp_fold_float_nan.wado/$cm_export__run"() {

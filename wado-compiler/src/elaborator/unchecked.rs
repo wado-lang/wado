@@ -108,7 +108,11 @@ impl Finder<'_> {
 
     /// Why `unchecked` cannot mark `operand`, or `None` where it can.
     fn misplaced(&self, operand: &Expr) -> Option<&'static str> {
-        let callees = self.callees(operand);
+        self.misplaced_among(operand, self.callees(operand))
+    }
+
+    /// [`Self::misplaced`], where `operand` reaches `callees`.
+    fn misplaced_among(&self, operand: &Expr, callees: Option<Vec<DefId>>) -> Option<&'static str> {
         if let Some(callees) = &callees
             && every(callees, |def| self.contracts.binds(def))
         {
@@ -130,20 +134,32 @@ impl Finder<'_> {
     }
 }
 
-impl AstVisitor for Finder<'_> {
+impl AstVisitor<'_> for Finder<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         let assignment = match expr {
-            Expr::Assign(assign) => Some((&assign.target, &assign.value)),
-            Expr::CompoundAssign(compound) => Some((&compound.target, &compound.value)),
+            Expr::Assign(assign) => Some((assign.places(), &assign.value)),
+            Expr::CompoundAssign(compound) => {
+                Some((std::slice::from_ref(&compound.target), &compound.value))
+            }
             _ => None,
         };
-        if let Some((Expr::Index(index), value)) = assignment
-            && let Some(span) = index.unchecked
-        {
-            self.report(ASSIGNED, span);
-            self.visit_expr(&index.expr);
-            self.visit_expr(&index.index);
-            self.visit_expr(value);
+        if let Some((places, value)) = assignment {
+            for place in places {
+                if let Expr::Index(index) = place
+                    && let Some(span) = index.unchecked
+                {
+                    self.report(ASSIGNED, span);
+                    self.visit_expr(&index.expr);
+                    self.visit_expr(&index.index);
+                } else {
+                    self.visit_expr(place);
+                }
+            }
+            if let Expr::Assign(assign) = expr {
+                self.visit_transposed_reads(assign);
+            } else {
+                self.visit_expr(value);
+            }
             return;
         }
         let verdict = match expr {
@@ -167,6 +183,36 @@ impl AstVisitor for Finder<'_> {
 }
 
 impl Finder<'_> {
+    /// Visits `assign`'s right side, where a walk that lowered the statement to
+    /// `index_swap` made each subscript a vouch for that call's contract.
+    fn visit_transposed_reads(&mut self, assign: &ast::AssignExpr) {
+        let swaps: Vec<DefId> = self
+            .sem
+            .types
+            .all(|facts| &facts.index_swap_dispatch, assign.id)
+            .filter_map(|dispatch| dispatch.method_def)
+            .collect();
+        let value = match &assign.value {
+            Expr::TupleLiteral(value) if !swaps.is_empty() => value,
+            value => return self.visit_expr(value),
+        };
+        for read in &value.elements {
+            if let Expr::Index(index) = read
+                && let Some(span) = index.unchecked
+            {
+                let mut callees = self.callees(read).expect("a subscript is a call");
+                callees.extend(&swaps);
+                if let Some(message) = self.misplaced_among(read, Some(callees)) {
+                    self.report(message, span);
+                }
+                self.visit_expr(&index.expr);
+                self.visit_expr(&index.index);
+            } else {
+                self.visit_expr(read);
+            }
+        }
+    }
+
     fn report(&mut self, message: &str, span: Span) {
         self.found.push(Diagnostic {
             severity: Severity::Error,

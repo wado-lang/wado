@@ -26,6 +26,7 @@
 - [Memory Model](./spec-memory.md)
 - [Traits](./spec-traits.md)
 - [Standard Traits](./spec-standard-traits.md)
+- [Affine Types](./spec-affine.md)
 - [Static Reflection](./spec-reflection.md)
 - [Effect System](./spec-effects.md)
 - [Module System](./spec-modules.md)
@@ -207,7 +208,10 @@
 - [Affine Types — Swift's Noncopyable Discipline for Resources](./wep-2026-10-17-affine-types.md)
 - [`core:process` — Running Host Programs Without Extending Authority](./wep-2026-10-21-core-process.md)
 - [Destructuring Assignment and a Swap Without Value Copies](./wep-2026-10-21-destructuring-assignment.md)
+- [A Component's Exports Are Named as the Component Names Them](./wep-2026-10-22-component-export-names.md)
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
+- [Fuel Benchmarks](./wep-2026-10-25-fuel-benchmarks.md)
+- [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
 
 ## Standard Library
 
@@ -220,6 +224,7 @@
 - [core:digest](./stdlib-core-digest.md)
 - [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
+- [core:fuel](./stdlib-core-fuel.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
 - [core:jsonc](./stdlib-core-jsonc.md)
@@ -228,6 +233,7 @@
 - [core:log](./stdlib-core-log.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)
+- [core:process](./stdlib-core-process.md)
 - [core:router](./stdlib-core-router.md)
 - [core:secure_random](./stdlib-core-secure_random.md)
 - [core:serde](./stdlib-core-serde.md)

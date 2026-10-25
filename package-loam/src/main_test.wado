@@ -214,8 +214,7 @@ test "a shard the index does not name is refused" {
     let dir = scratch("gen-stray-shard");
     shards(&dir);
     fs::write(`${dir}/other.safetensors`, &write_safetensors(&[])).unwrap();
-    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err(
-    );
+    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err();
     assert refused == `loam: '${dir}/other.safetensors': the index names no shard of this file name`;
 }
 
@@ -270,8 +269,7 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
         {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
     ]}";
     fs::write(`${dir}/options.json`, &options).unwrap();
-    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
-    );
+    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap();
     assert report.contains("
     branch    Y, Z = If(C)
         Y: f32 [Total=\"Y[0]\", Embed=2]

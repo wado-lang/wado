@@ -51,9 +51,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
 type "functype//effect_handler_self_delegation.wado/run" = fn();  // TypeId(18)
 
@@ -87,7 +87,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//effect_handler_self_delegation.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(34)
+type "functype//effect_handler_self_delegation.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(34)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
 
@@ -97,8 +97,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -115,8 +115,8 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let offset_1: ref "effect_handler_self_delegation.wado//OffsetCounter";
     let $save_effect_handler_self_delegation.wado/Counter_9: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
     let $save_effect_handler_self_delegation.wado/Counter_12: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
-    let $d_effect_handler_self_delegation.wado/Counter_13: ref "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
     let $local_0_14: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
+    let $local_1_15: ref "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
     let $local_2_16: i32;
     let $local_2_19: i32;
     let is_negative_28: bool;
@@ -124,14 +124,14 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let $sroa_$f_buf_129: ref "core:prelude/string.wado//String";
     base = struct.new "effect_handler_self_delegation.wado//BaseCounter" { value: 0 };
     offset_1 = struct.new "effect_handler_self_delegation.wado//OffsetCounter" { offset: 1000 };
-    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_12(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_0" } });
-    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_9(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: offset_1 }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } });
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_12(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_0" } };
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_9(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: offset_1 }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } };
     $local_2_16 = $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter)) == 0) {
-            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(ref.as_non_null($local_0_14)).outer;
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $local_1_15(ref.as_non_null($local_0_14)).outer;
             $local_2_16 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_self_delegation.wado/Counter_13.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_15.op_next)).env);
             };
             global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $local_0_14;
             break $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: $local_2_16;
@@ -144,9 +144,9 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     };
     $local_2_19 = $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_2: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter)) == 0) {
-            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(ref.as_non_null($local_0_14)).outer;
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $local_1_15(ref.as_non_null($local_0_14)).outer;
             $local_2_19 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_self_delegation.wado/Counter_13.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_15.op_next)).env);
             };
             global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $local_0_14;
             break $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_2: $local_2_19;
@@ -175,36 +175,36 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_129.repr, is_negative_28, x_32, $local_2_19);
     $local_2_19 = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
     is_negative_28 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    $local_2_16 = "effect_handler_self_delegation.wado/$cm_binding__Stdout_write_via_stream"($local_2_16 = $local_2_19; $local_2_19 = 0; $local_2_16);
+    $local_2_16 = "effect_handler_self_delegation.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_16 = $local_2_19; $local_2_19 = 0; $local_2_16);
     $local_2_19 = is_negative_28;
     is_negative_28 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_28 = $local_2_19; $local_2_19 = 0; is_negative_28, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_28 = $local_2_16; $local_2_16 = 0; is_negative_28);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_19, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_19 = $local_2_16; $local_2_16 = 0; $local_2_19);
     global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $save_effect_handler_self_delegation.wado/Counter_9;
     global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $save_effect_handler_self_delegation.wado/Counter_12;
     $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    if @unlikely(local.tee is_negative_28(0 + 6) > builtin::array_len($mv_arg_1.repr)) {
+    if @unlikely(local.tee $local_2_19(0 + 6) > builtin::array_len($mv_arg_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, is_negative_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, $local_2_19);
     }
     $local_2_16 = $mv_arg_1.used;
-    $mv_arg_1.used = is_negative_28;
+    $mv_arg_1.used = $local_2_19;
     builtin::array_copy<u8>($mv_arg_1.repr, $local_2_16, global:effect_handler_self_delegation.wado::$const_obj_1, 0, 6);
-    is_negative_28 = local.tee $local_2_16(base.value) < 0;
+    $local_2_19 = local.tee $local_2_16(base.value) < 0;
     $local_2_16 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s($local_2_16); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    is_negative_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, is_negative_28, $local_2_16);
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, is_negative_28, x_32, $local_2_16);
+    $local_2_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, $local_2_19, $local_2_16);
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, $local_2_19, x_32, $local_2_16);
     $local_2_16 = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
-    is_negative_28 = builtin::i32_wrap_i64(x_32 >> 32_i64);
-    $local_2_19 = "effect_handler_self_delegation.wado/$cm_binding__Stdout_write_via_stream"($local_2_19 = $local_2_16; $local_2_16 = 0; $local_2_19);
-    $local_2_16 = is_negative_28;
-    is_negative_28 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_28 = $local_2_16; $local_2_16 = 0; is_negative_28, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_28 = $local_2_19; $local_2_19 = 0; is_negative_28);
+    $local_2_19 = builtin::i32_wrap_i64(x_32 >> 32_i64);
+    is_negative_28 = "effect_handler_self_delegation.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_28 = $local_2_16; $local_2_16 = 0; is_negative_28);
+    $local_2_16 = $local_2_19;
+    $local_2_19 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_16, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_16 = is_negative_28; is_negative_28 = 0; $local_2_16);
 }
 
-fn "effect_handler_self_delegation.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "effect_handler_self_delegation.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "effect_handler_self_delegation.wado/$cm_export__run"() {
@@ -315,7 +315,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;

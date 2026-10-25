@@ -1090,12 +1090,6 @@ impl ModuleSource {
         matches!(self, Self::EntryPoint { .. })
     }
 
-    /// The interface an `E::op()` call's namespace names, by its bare name.
-    #[must_use]
-    pub fn interface_name(&self) -> Option<String> {
-        self.effect_interface().map(|head| head.name().to_string())
-    }
-
     /// The namespace of an operation of `effect`.
     #[must_use]
     pub fn effect(effect: &DeclaredHead) -> Self {

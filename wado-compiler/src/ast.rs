@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO,
-    UNAVAILABLE, WASM_MODULE,
+    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
+    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -313,7 +313,7 @@ impl Module {
             target: AstId,
             result: Option<Span>,
         }
-        impl AstVisitor for SpanFinder {
+        impl AstVisitor<'_> for SpanFinder {
             fn visit_id(&mut self, id: AstId, span: Span) {
                 if self.result.is_none() && id == self.target {
                     self.result = Some(span);
@@ -342,7 +342,7 @@ impl Module {
             column: usize,
             best: Option<(AstId, Span)>,
         }
-        impl AstVisitor for Finder {
+        impl AstVisitor<'_> for Finder {
             fn visit_id(&mut self, id: AstId, span: Span) {
                 if !span_contains(span, self.line, self.column) {
                     return;
@@ -403,7 +403,11 @@ fn span_byte_len(span: Span) -> usize {
 /// `walk_*`, which recurses through the visitor's own methods, so an implementer
 /// overrides only where its behaviour differs from plain traversal. `visit_id`
 /// sees every [`AstId`] / [`Span`] pair, containers and leaves alike.
-pub trait AstVisitor: Sized {
+///
+/// `'ast` is the tree's own lifetime, so a visitor may keep what it visits. One
+/// that keeps nothing implements `AstVisitor<'_>` and writes its overrides with
+/// elided lifetimes.
+pub trait AstVisitor<'ast>: Sized {
     /// Invoked for every [`AstId`] emitted during traversal.
     ///
     /// Default is a no-op; an id-emitter overrides this to collect all ids,
@@ -413,53 +417,53 @@ pub trait AstVisitor: Sized {
 
     /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
     /// because it carries the effect name the site spells.
-    fn visit_effect_name(&mut self, effect: &EffectName) {
+    fn visit_effect_name(&mut self, effect: &'ast EffectName) {
         self.visit_id(effect.id, effect.span);
     }
 
     /// `body`, the walk of a node carrying `attrs`: an item, a method, a `let`,
     /// a parameter, a field, a case, an associated type or constant. Overridable
     /// because an attribute such as `#[allow]` scopes to what the node encloses.
-    fn visit_attributed(&mut self, _attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+    fn visit_attributed(&mut self, _attrs: &'ast [Attribute], body: impl FnOnce(&mut Self)) {
         body(self);
     }
 
-    fn visit_item(&mut self, item: &Item) {
+    fn visit_item(&mut self, item: &'ast Item) {
         walk_item(self, item);
     }
 
-    fn visit_function(&mut self, func: &Function) {
+    fn visit_function(&mut self, func: &'ast Function) {
         walk_function(self, func);
     }
 
-    fn visit_block(&mut self, block: &Block) {
+    fn visit_block(&mut self, block: &'ast Block) {
         walk_block(self, block);
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt) {
+    fn visit_stmt(&mut self, stmt: &'ast Stmt) {
         walk_stmt(self, stmt);
     }
 
-    fn visit_condition(&mut self, cond: &Condition) {
+    fn visit_condition(&mut self, cond: &'ast Condition) {
         walk_condition(self, cond);
     }
 
-    fn visit_match_expr(&mut self, m: &MatchExpr) {
+    fn visit_match_expr(&mut self, m: &'ast MatchExpr) {
         walk_match_expr(self, m);
     }
 
-    fn visit_expr(&mut self, expr: &Expr) {
+    fn visit_expr(&mut self, expr: &'ast Expr) {
         walk_expr(self, expr);
     }
 
-    fn visit_pattern(&mut self, pat: &Pattern) {
+    fn visit_pattern(&mut self, pat: &'ast Pattern) {
         walk_pattern(self, pat);
     }
 
     /// A declaration's type parameters. Overridable because a bound is a
     /// reference site and a visitor resolving one needs the bound itself, not
     /// just the id [`walk_generic_params`] emits.
-    fn visit_generic_params(&mut self, params: &[GenericParam]) {
+    fn visit_generic_params(&mut self, params: &'ast [GenericParam]) {
         walk_generic_params(self, params);
     }
 
@@ -467,19 +471,23 @@ pub trait AstVisitor: Sized {
     /// `<T: Trait>`, a trait's supertraits, an associated type's `type A:
     /// Trait`. They are the same kind of reference, so a visitor that answers
     /// for one answers for all three.
-    fn visit_trait_bounds(&mut self, bounds: &[TraitBound]) {
+    fn visit_trait_bounds(&mut self, bounds: &'ast [TraitBound]) {
         walk_trait_bounds(self, bounds);
     }
 
     /// A generic associated type's own parameters, and `body` written where
     /// they are in scope. Overridable because a scope-aware visitor binds them
     /// for `body` alone.
-    fn visit_assoc_type_params(&mut self, params: &[GenericParam], body: impl FnOnce(&mut Self)) {
+    fn visit_assoc_type_params(
+        &mut self,
+        params: &'ast [GenericParam],
+        body: impl FnOnce(&mut Self),
+    ) {
         self.visit_generic_params(params);
         body(self);
     }
 
-    fn visit_type(&mut self, ty: &Type) {
+    fn visit_type(&mut self, ty: &'ast Type) {
         walk_type(self, ty);
     }
 }
@@ -589,12 +597,12 @@ pub fn for_each_function<'a>(
 
 /// Every attribute-carrying node is reached through
 /// [`AstVisitor::visit_attributed`], once, by the walk of what contains it.
-pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
+pub fn walk_item<'ast, V: AstVisitor<'ast>>(v: &mut V, item: &'ast Item) {
     v.visit_attributed(item.attrs(), |v| walk_item_contents(v, item));
 }
 
 /// What [`walk_item`] visits under the item's attributes.
-pub fn walk_item_contents<V: AstVisitor>(v: &mut V, item: &Item) {
+pub fn walk_item_contents<'ast, V: AstVisitor<'ast>>(v: &mut V, item: &'ast Item) {
     match item {
         Item::Use(u) => {
             v.visit_id(u.id, u.span);
@@ -748,14 +756,14 @@ pub fn walk_item_contents<V: AstVisitor>(v: &mut V, item: &Item) {
 }
 
 /// The methods of an `impl`, a trait, an interface or a resource.
-fn walk_methods<V: AstVisitor>(v: &mut V, methods: &[Function]) {
+fn walk_methods<'ast, V: AstVisitor<'ast>>(v: &mut V, methods: &'ast [Function]) {
     for method in methods {
         v.visit_attributed(&method.attrs, |v| v.visit_function(method));
     }
 }
 
 /// A parameter list wherever one is declared: a function's, a world export's.
-fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
+fn walk_params<'ast, V: AstVisitor<'ast>>(v: &mut V, params: &'ast [Param]) {
     for param in params {
         v.visit_attributed(&param.attrs, |v| {
             v.visit_id(param.id, param.span);
@@ -770,7 +778,7 @@ fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
     }
 }
 
-pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+pub fn walk_function<'ast, V: AstVisitor<'ast>>(v: &mut V, func: &'ast Function) {
     walk_function_signature(v, func);
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -778,7 +786,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
 }
 
 /// Everything [`walk_function`] visits but the body.
-pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
+pub fn walk_function_signature<'ast, V: AstVisitor<'ast>>(v: &mut V, func: &'ast Function) {
     v.visit_id(func.id, func.span);
     for target in &func.export_targets {
         v.visit_id(target.id, target.span);
@@ -799,20 +807,20 @@ pub struct IdCollector {
     pub ids: Vec<AstId>,
 }
 
-impl AstVisitor for IdCollector {
+impl AstVisitor<'_> for IdCollector {
     fn visit_id(&mut self, id: AstId, _span: Span) {
         self.ids.push(id);
     }
 }
 
-pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
+pub fn walk_block<'ast, V: AstVisitor<'ast>>(v: &mut V, block: &'ast Block) {
     v.visit_id(block.id, block.span);
     for stmt in &block.stmts {
         v.visit_stmt(stmt);
     }
 }
 
-pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
+pub fn walk_stmt<'ast, V: AstVisitor<'ast>>(v: &mut V, stmt: &'ast Stmt) {
     v.visit_id(stmt.id(), stmt.span());
     match stmt {
         Stmt::Let(s) => v.visit_attributed(&s.attrs, |v| {
@@ -884,7 +892,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
     }
 }
 
-pub fn walk_condition<V: AstVisitor>(v: &mut V, cond: &Condition) {
+pub fn walk_condition<'ast, V: AstVisitor<'ast>>(v: &mut V, cond: &'ast Condition) {
     match cond {
         Condition::Expr(e) => v.visit_expr(e),
         Condition::LetChain { elements, .. } => {
@@ -904,7 +912,7 @@ pub fn walk_condition<V: AstVisitor>(v: &mut V, cond: &Condition) {
     }
 }
 
-pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
+pub fn walk_match_expr<'ast, V: AstVisitor<'ast>>(v: &mut V, m: &'ast MatchExpr) {
     // NOTE: `m.id` is emitted by the caller (`walk_expr` for `Expr::Match` or
     // `walk_stmt` for `Stmt::Match`), since both share the same `MatchExpr::id`.
     v.visit_expr(&m.expr);
@@ -918,7 +926,7 @@ pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
     }
 }
 
-pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
+pub fn walk_expr<'ast, V: AstVisitor<'ast>>(v: &mut V, expr: &'ast Expr) {
     v.visit_id(expr.id(), expr.span());
     match expr {
         Expr::Ident(i) => {
@@ -936,10 +944,18 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&e.right);
         }
         Expr::Unary(e) => v.visit_expr(&e.expr),
-        Expr::Assign(e) => {
-            v.visit_expr(&e.target);
-            v.visit_expr(&e.value);
-        }
+        Expr::Assign(e) => match &e.target {
+            AssignTarget::Place(place) => {
+                v.visit_expr(place);
+                v.visit_expr(&e.value);
+            }
+            AssignTarget::Destructuring { places, .. } => {
+                v.visit_expr(&e.value);
+                for place in places {
+                    v.visit_expr(place);
+                }
+            }
+        },
         Expr::CompoundAssign(e) => {
             v.visit_expr(&e.target);
             v.visit_expr(&e.value);
@@ -1084,7 +1100,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
     }
 }
 
-pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
+pub fn walk_pattern<'ast, V: AstVisitor<'ast>>(v: &mut V, pat: &'ast Pattern) {
     match pat {
         Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
             v.visit_id(*id, *span);
@@ -1135,7 +1151,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
 pub fn for_each_pattern_binding(pat: &Pattern, f: &mut impl FnMut(AstId)) {
     struct Bindings<'a, F>(&'a mut F);
 
-    impl<F: FnMut(AstId)> AstVisitor for Bindings<'_, F> {
+    impl<F: FnMut(AstId)> AstVisitor<'_> for Bindings<'_, F> {
         fn visit_pattern(&mut self, pat: &Pattern) {
             if let Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } = pat {
                 (self.0)(*id);
@@ -1151,7 +1167,7 @@ pub fn for_each_pattern_binding(pat: &Pattern, f: &mut impl FnMut(AstId)) {
 pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
     struct Names<'a, F>(&'a mut F);
 
-    impl<F: FnMut(&str, Span)> AstVisitor for Names<'_, F> {
+    impl<F: FnMut(&str, Span)> AstVisitor<'_> for Names<'_, F> {
         fn visit_pattern(&mut self, pat: &Pattern) {
             if let Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } = pat {
                 (self.0)(name, *span);
@@ -1167,7 +1183,7 @@ pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
 /// reference sites inside its bounds. A bound names a trait and its associated
 /// types, so it is a reference site like any other and must be reachable by an
 /// id-collecting walk (WEP 2026-08-12).
-pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
+pub fn walk_generic_params<'ast, V: AstVisitor<'ast>>(v: &mut V, params: &'ast [GenericParam]) {
     for p in params {
         v.visit_attributed(&p.attrs, |v| {
             v.visit_id(p.id, p.span);
@@ -1179,7 +1195,7 @@ pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
     }
 }
 
-pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
+pub fn walk_trait_bounds<'ast, V: AstVisitor<'ast>>(v: &mut V, bounds: &'ast [TraitBound]) {
     for bound in bounds {
         v.visit_id(bound.id, bound.span);
         for arg in &bound.type_args {
@@ -1197,7 +1213,7 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
 
 /// The types and effect names a function signature carries, whether it stands
 /// as a [`Type::Function`] or as a trait bound's `fn_signature`.
-fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
+fn walk_function_type<'ast, V: AstVisitor<'ast>>(v: &mut V, ft: &'ast FunctionType) {
     for p in &ft.params {
         v.visit_type(p);
     }
@@ -1205,13 +1221,13 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     walk_effect_names(v, &ft.effects);
 }
 
-fn walk_effect_names<V: AstVisitor>(v: &mut V, effects: &[EffectName]) {
+fn walk_effect_names<'ast, V: AstVisitor<'ast>>(v: &mut V, effects: &'ast [EffectName]) {
     for effect in effects {
         v.visit_effect_name(effect);
     }
 }
 
-pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
+pub fn walk_type<'ast, V: AstVisitor<'ast>>(v: &mut V, ty: &'ast Type) {
     match ty {
         Type::Named(t) => v.visit_id(t.id, t.span),
         Type::Generic(t) => {
@@ -1800,6 +1816,35 @@ impl NamePolicy {
             .find(|(name, _)| *name == written)
             .map(|&(_, policy)| policy)
     }
+
+    /// `name` spelled under this policy. Source-casing-agnostic, since Wado
+    /// casing is convention, not a rule.
+    #[must_use]
+    pub fn apply(self, name: &str) -> String {
+        use heck::{
+            ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
+            ToUpperCamelCase,
+        };
+        match self {
+            Self::Camel => name.to_lower_camel_case(),
+            Self::Snake => name.to_snake_case(),
+            Self::Pascal => name.to_upper_camel_case(),
+            Self::ScreamingSnake => name.to_shouty_snake_case(),
+            Self::Kebab => name.to_kebab_case(),
+            Self::ScreamingKebab => name.to_shouty_kebab_case(),
+        }
+    }
+
+    /// The wire name of a member: its `#[wire(name)]`, or else its source
+    /// `name` under the declaration's `policy`.
+    #[must_use]
+    pub fn wire_name(overridden: Option<&str>, policy: Option<Self>, name: &str) -> String {
+        match (overridden, policy) {
+            (Some(written), _) => written.to_string(),
+            (None, Some(policy)) => policy.apply(name),
+            (None, None) => name.to_string(),
+        }
+    }
 }
 
 /// Attribute like #[cm("...")]
@@ -1928,6 +1973,21 @@ impl Attribute {
 #[must_use]
 pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
     attrs.iter().find_map(Attribute::as_cm_import)
+}
+
+/// The interface name a `use` spells the interface carrying `attrs` by: the
+/// one an imported component exports it under (`#[cm_export]`), where that is
+/// not the CM import it binds, else that import.
+#[must_use]
+pub fn cm_interface_name_of(attrs: &[Attribute]) -> Option<CmImport> {
+    let exported = attrs.iter().find(|a| a.name == CM_EXPORT).map(|a| {
+        let name = a
+            .args
+            .first()
+            .expect("`#[cm_export]` takes the interface name");
+        CmImport::parse(name.as_str()).expect("`#[cm_export]` names an interface")
+    });
+    exported.or_else(|| cm_import_of(attrs).cloned())
 }
 
 /// The world-level function import among `attrs`, wherever it sits: the bare
@@ -2150,6 +2210,23 @@ impl CmImport {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 
+    /// The interface name as a `use` writes it: `"wasi:cli/stdout@0.3.0"`.
+    pub fn interface_path_as_written(&self) -> String {
+        StrLit::new(self.interface_path()).as_written()
+    }
+
+    /// Whether `name`, an interface name written in a `use`, names this
+    /// interface: a name without a version names it at any version.
+    pub fn is_named_by(&self, name: &CmImport) -> bool {
+        self.namespace == name.namespace
+            && self.package == name.package
+            && self.interface == name.interface
+            && name
+                .version
+                .as_ref()
+                .is_none_or(|v| self.version.as_ref() == Some(v))
+    }
+
     /// Whether this is its package's default interface, the one named after the
     /// package (`acme:geo/geo`): what a Wado library exports.
     pub fn is_package_default(&self) -> bool {
@@ -2264,12 +2341,13 @@ impl WorldExport {
 /// - Namespace: `use name from "..."` (import entire module as namespace)
 #[derive(Debug, Clone)]
 pub enum UseItem {
-    /// Simple import: `name` or `name as alias`
+    /// Simple import: `name`, `name as alias`, or `"ns:pkg/iface" as alias`
     Simple {
         /// `AstId` for the name identifier — used by LSP to record a use→def
         /// edge from the specifier name back to the imported symbol.
         id: AstId,
         name: String,
+        spelling: UseNameSpelling,
         /// Span of just the `name` identifier (narrower than the whole item).
         name_span: Span,
         alias: Option<String>,
@@ -2291,6 +2369,15 @@ pub enum UseItem {
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String, name_span: Span },
+}
+
+/// How a `use` item spells the name it imports.
+#[derive(Debug, Clone)]
+pub enum UseNameSpelling {
+    Ident,
+    /// A full interface name as a string (`"wasi:cli/stdout"`), which always
+    /// takes `as`, since a string is no identifier to bind.
+    InterfaceName(CmImport),
 }
 
 /// Simple use item (used within effect function imports)
@@ -3568,13 +3655,33 @@ pub struct TupleComprehensionExpr {
     pub span: Span,
 }
 
-/// Assignment expression: `x = value` or `x.field = value`
+/// Assignment expression: `x = value`, `x.field = value`, or a destructuring
+/// assignment `[a, b] = value`.
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub id: AstId,
-    pub target: Expr,
+    pub target: AssignTarget,
     pub value: Expr,
     pub span: Span,
+}
+
+/// What an assignment writes.
+#[derive(Debug, Clone)]
+pub enum AssignTarget {
+    /// `place = value`.
+    Place(Expr),
+    /// `[p0, p1, …] = value`: each element of `value` to its own place.
+    Destructuring { places: Vec<Expr>, span: Span },
+}
+
+impl AssignExpr {
+    /// The places this assignment writes, in the order it writes them.
+    pub fn places(&self) -> &[Expr] {
+        match &self.target {
+            AssignTarget::Place(place) => std::slice::from_ref(place),
+            AssignTarget::Destructuring { places, .. } => places,
+        }
+    }
 }
 
 /// Compound assignment operators
@@ -4790,7 +4897,6 @@ pub struct VariantDecl {
 /// - Unit variants: `None` → payload is `None` (parser level), becomes `()` in TIR
 /// - Scalar payloads: `Some(T)` → payload is `Some(T)`
 /// - Tuple payloads: `Rectangle([f64, f64])` → payload is `Some([f64, f64])`
-/// - Struct payloads: `Named({ w: f64 })` → payload is `Some({ w: f64 })`
 #[derive(Debug, Clone)]
 pub struct VariantCase {
     pub id: AstId,
@@ -5143,7 +5249,7 @@ mod ast_id_tests {
 
     fn collect_ids(items: &[Item]) -> Vec<(AstId, Span)> {
         struct Collector(Vec<(AstId, Span)>);
-        impl AstVisitor for Collector {
+        impl AstVisitor<'_> for Collector {
             fn visit_id(&mut self, id: AstId, span: Span) {
                 self.0.push((id, span));
             }

@@ -44,7 +44,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//opt_licm_call_writes_ref_field.wado/bump_global" = fn();  // TypeId(15)
 
@@ -86,7 +86,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//opt_licm_call_writes_ref_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(35)
+type "functype//opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
@@ -96,7 +96,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -197,41 +197,41 @@ fn "opt_licm_call_writes_ref_field.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_19, x_23, self_13);
     self_13 = builtin::i32_wrap_i64(local.tee x_23("wasi/stream-new"()));
     is_negative_19 = builtin::i32_wrap_i64(x_23 >> 32_i64);
-    $moved_4_57 = "opt_licm_call_writes_ref_field.wado/$cm_binding__Stdout_write_via_stream"($moved_4_57 = self_13; self_13 = 0; $moved_4_57);
+    $moved_4_57 = "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = self_13; self_13 = 0; $moved_4_57);
     self_13 = is_negative_19;
     is_negative_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_19 = self_13; self_13 = 0; is_negative_19, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_19 = $moved_4_57; $moved_4_57 = 0; is_negative_19);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_13, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_13 = $moved_4_57; $moved_4_57 = 0; self_13);
     g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_licm_call_writes_ref_field.wado//$Closure_0" { $capture_0: local.tee p(struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1, y: 0 }) }, func: ref.func "closure/opt_licm_call_writes_ref_field.wado/$closure_wrapper_0" };
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $moved_4_57 = local.tee is_negative_19("opt_licm_call_writes_ref_field.wado/through_closure"(p, g)) < 0;
-    is_negative_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_23(x_23 = builtin::i64_extend_i32_s(is_negative_19); select i64(x_23 < 0_i64, 0_i64 - x_23, x_23)));
-    $moved_4_57 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, $moved_4_57, is_negative_19);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $moved_4_57, x_23, is_negative_19);
-    is_negative_19 = builtin::i32_wrap_i64(local.tee x_23("wasi/stream-new"()));
+    $moved_4_57 = local.tee self_13("opt_licm_call_writes_ref_field.wado/through_closure"(p, g)) < 0;
+    self_13 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_23(x_23 = builtin::i64_extend_i32_s(self_13); select i64(x_23 < 0_i64, 0_i64 - x_23, x_23)));
+    $moved_4_57 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, $moved_4_57, self_13);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $moved_4_57, x_23, self_13);
+    self_13 = builtin::i32_wrap_i64(local.tee x_23("wasi/stream-new"()));
     $moved_4_57 = builtin::i32_wrap_i64(x_23 >> 32_i64);
-    self_13 = "opt_licm_call_writes_ref_field.wado/$cm_binding__Stdout_write_via_stream"(self_13 = is_negative_19; is_negative_19 = 0; self_13);
-    is_negative_19 = $moved_4_57;
+    is_negative_19 = "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_19 = self_13; self_13 = 0; is_negative_19);
+    self_13 = $moved_4_57;
     $moved_4_57 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_57 = is_negative_19; is_negative_19 = 0; $moved_4_57, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_57 = self_13; self_13 = 0; $moved_4_57);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_13, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_13 = is_negative_19; is_negative_19 = 0; self_13);
     p = local.tee o(struct.new "opt_licm_call_writes_ref_field.wado//Outer" { inner: struct.new "opt_licm_call_writes_ref_field.wado//P" { x: 1, y: 0 }, pad: 0 }).inner;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_13 = local.tee $moved_4_57("opt_licm_call_writes_ref_field.wado/through_container"(o, p)) < 0;
-    $moved_4_57 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_23(x_23 = builtin::i64_extend_i32_s($moved_4_57); select i64(x_23 < 0_i64, 0_i64 - x_23, x_23)));
-    self_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, self_13, $moved_4_57);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, self_13, x_23, $moved_4_57);
-    $moved_4_57 = builtin::i32_wrap_i64(local.tee x_23("wasi/stream-new"()));
-    self_13 = builtin::i32_wrap_i64(x_23 >> 32_i64);
-    is_negative_19 = "opt_licm_call_writes_ref_field.wado/$cm_binding__Stdout_write_via_stream"(is_negative_19 = $moved_4_57; $moved_4_57 = 0; is_negative_19);
-    $moved_4_57 = self_13;
-    self_13 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_13 = $moved_4_57; $moved_4_57 = 0; self_13, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_13 = is_negative_19; is_negative_19 = 0; self_13);
+    is_negative_19 = local.tee self_13("opt_licm_call_writes_ref_field.wado/through_container"(o, p)) < 0;
+    self_13 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_23(x_23 = builtin::i64_extend_i32_s(self_13); select i64(x_23 < 0_i64, 0_i64 - x_23, x_23)));
+    is_negative_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, is_negative_19, self_13);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_19, x_23, self_13);
+    self_13 = builtin::i32_wrap_i64(local.tee x_23("wasi/stream-new"()));
+    is_negative_19 = builtin::i32_wrap_i64(x_23 >> 32_i64);
+    $moved_4_57 = "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = self_13; self_13 = 0; $moved_4_57);
+    self_13 = is_negative_19;
+    is_negative_19 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_13, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_13 = $moved_4_57; $moved_4_57 = 0; self_13);
 }
 
-fn "opt_licm_call_writes_ref_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "opt_licm_call_writes_ref_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "opt_licm_call_writes_ref_field.wado/$cm_export__run"() {

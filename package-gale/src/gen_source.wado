@@ -1,0 +1,150 @@
+//! What `gale gen` and `gale dump` share: reading the grammar files through the
+//! grants, and generating a parser from them. A module of its own so a tool can
+//! generate in-process without importing the CLI's `export fn run`.
+
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+// Only the path functions, which perform no I/O: this file opens its own files
+// because it searches every grant, which `core:fs` does not.
+use fs from "core:fs";
+use { assemble_grammar } from "./g4/parser.wado";
+use { Grammar } from "./ir.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
+use { diagnostic_level } from "./gir.wado";
+use { event } from "core:log";
+
+/// The parser `gale gen` writes for these grammars, with each diagnostic logged
+/// as it goes.
+internal fn gen_source(
+    g4_paths: List<String>,
+    scm_paths: List<String>,
+    options: GenerateOptions,
+) -> Result<String, String> with Preopens {
+    if g4_paths.is_empty() {
+        return Result::Err("gale gen: no grammar files given");
+    }
+    let mut merged = load_and_merge(&g4_paths)?;
+
+    // Parse each `.scm` separately so an error names the file it came from.
+    let mut highlight_query: Option<List<HighlightRule>> = null;
+    if !scm_paths.is_empty() {
+        let mut all_rules: List<HighlightRule> = [];
+        for let p of &scm_paths {
+            match parse_highlight_query(&read_source_file(p)?) {
+                Ok(rules) => all_rules.extend(&rules),
+                Err(e) => {
+                    return Result::Err(`gale: ${*p}: highlight query ${e.line}:${e.col}: ${e.message}`);
+                },
+            }
+        }
+        highlight_query = Option::Some(all_rules);
+    }
+    let options = GenerateOptions { ..options, highlight_query };
+
+    // `diagnostic_level` decides what a default run shows, and an `Error` one
+    // means no parser is written.
+    let generated = generate(&mut merged, &options);
+    let mut refused = false;
+    for let d of &generated.diagnostics {
+        if let Some(level) = diagnostic_level(&d.kind) {
+            event(level, d.message, { owner: d.owner.label() });
+            refused = refused || level matches { Error };
+        }
+    }
+    if refused {
+        return Result::Err("gale gen: no parser written; the errors above say why");
+    }
+    return Result::Ok(generated.source);
+}
+
+/// Shared CLI front end for `gen` and `dump`: read every grammar file,
+/// parse, merge the split halves, synthesize implicit tokens, and run the
+/// rule-reference check (deferred until post-merge so cross-grammar refs
+/// resolve).
+internal fn load_and_merge(paths: &List<String>) -> Result<Grammar, String> with Preopens {
+    let mut inputs: List<[String, String]> = [];
+    for let path of paths {
+        inputs.push([*path, read_source_file(path)?]);
+    }
+    return match assemble_grammar(&inputs) {
+        Ok(g) => Result::Ok(g),
+        Err(Parse(pe)) => Result::Err(`gale: ${pe.0}: parse error: ${pe.1}`),
+        Err(Check(msg)) => Result::Err(`gale: ${msg}`),
+    };
+}
+
+/// Read one source file to a UTF-8 string.
+fn read_source_file<S: AsStrSlice>(path: S) -> Result<String, String> with Preopens {
+    let file = open_granted(path)?;
+    let Ok(bytes) = read_all(&file) else {
+        return Result::Err(`gale: ${path}: read error`);
+    };
+    return match String::try_from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(e) => Result::Err(`gale: ${path}: not valid UTF-8: ${e}`),
+    };
+}
+
+/// Open `path` for reading under a granted directory, or say why no grant
+/// reaches it.
+///
+/// A path resolves inside a preopened directory, so `--dir` bounds what the
+/// program can reach. Reading searches every grant — the file sits under one or
+/// under none — and names why nothing matched instead of "no such file".
+fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preopens {
+    let dirs = Preopens::get_directories();
+    let mut grants: List<String> = [];
+    let mut denied = false;
+    for let mut i = 0; i < dirs.len(); i += 1 {
+        match dirs[i].0.open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
+            Ok(file) => {
+                return Result::Ok(file);
+            },
+            Err(e) => {
+                if !e matches { NoEntry } {
+                    denied = true;
+                }
+            },
+        }
+        grants.push(dirs[i].1);
+    }
+    let why = if grants.is_empty() {
+        "gale: no directory was granted to this program (try without --no-dir)";
+    } else if path.starts_with("/") {
+        absolute_path_hint(path);
+    } else if denied {
+        `gale: not readable under ${grants.join(", ")}`;
+    } else {
+        `gale: not found under ${grants.join(", ")} — check the path, or grant the directory holding it with wado run --dir <dir> ...`;
+    };
+    return Result::Err(`gale: ${path}: cannot open file\n${why}`);
+}
+
+/// Why absolute `path` opens nowhere, and the `wado run` invocation that
+/// would grant its own directory and name the file relative to it.
+internal fn absolute_path_hint<S: AsStrSlice>(path: S) -> String
+    contract path.starts_with("/"), "open_granted and create_granted ask only for an absolute path"
+{
+    let because = "gale: a path opens inside a granted directory, so an absolute path never does";
+    let Some(name) = fs::file_name(path) else {
+        return `${because}: wado run --dir ${path} ...`;
+    };
+    // A file at the filesystem root has an empty directory part.
+    let dir = fs::parent(path).unwrap();
+    let holder = if dir.is_empty() { "/" } else { dir.to_string() };
+    return `${because}: wado run --dir ${holder} ... ${name}`;
+}
+
+/// Read a file to EOF. The stream's completion future is consumed so a
+/// mid-stream error surfaces as `Err` instead of being silently treated as
+/// EOF (truncated input).
+fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
+    let [read_stream, done] = file.read_via_stream(0 as Filesize);
+    let result = read_stream.read_to_end_bytes();
+    read_stream.drop();
+    let read_result = done.read();
+    if let Some(Err(e)) = read_result {
+        return Result::Err(e);
+    }
+    return Result::Ok(result);
+}

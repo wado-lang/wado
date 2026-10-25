@@ -104,7 +104,8 @@ Allocation and aggregates:
   sites reach, unless the body is no bigger than the call. A callee that
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop. A function only
+  back: at its only call site, or at its only site in a loop. Only sites in a
+  function an entry reaches count. A function only
   loops reach runs once per iteration, so its body counts as a loop's. A call
   is tried before its arguments, and a spliced body, arguments included, is
   scanned again for calls to splice, wherever the call it replaced sat.
@@ -219,8 +220,9 @@ settles the locals (step 11).
    `br_if` selection, the calls to a function left empty and the once-flags
    guarding them, and branch hints.
 8. DCE and compaction.
-9. Local coalescing: locals of one Wasm type whose live ranges never overlap
-   share a slot. A local's nullability is settled before it shares one.
+9. Local coalescing: a local read once is first forwarded into its read. Then
+   locals of one Wasm type whose live ranges never overlap share a slot. A
+   local's nullability is settled before it shares one.
 10. Tee fusion: a `local.set` and the read right after it become a
     `local.tee`. A local this leaves unread is removed.
 11. Local settling: a non-null local that Wasm's block-scoped rule sees read
@@ -232,6 +234,27 @@ on its own, with its passes named `wir/<module>:<pass>`.
 
 wasmtime lays out the cold side of a hinted branch out of line.
 `-f no-branch-hinting` disables hints for benchmarking.
+
+## Profile-Guided Optimization
+
+Not implemented yet; see
+[WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
+
+A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
+from its `#[workload]` tests. A compile marks each outermost region the
+workloads never ran with `cold_path()`, so every pass that reads a marker
+treats it as it treats one the author wrote. The test world reads no profile unless `-f pgo`
+asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths` ignores every
+marker the author or the profile wrote, so three builds of one program can be
+compared.
+
+Two questions stay open while profiles spread, and each optimizer change that
+touches cold paths answers them again:
+
+- What a profile gains: `benchmark/` compared across the three builds.
+- What cold code costs the compile: every pass still runs on a cold function,
+  so part of the compile goes to code that rarely runs. The span trace in the
+  `profiling-wado-compiler` skill measures the share.
 
 ## Differential Testing (EMI)
 

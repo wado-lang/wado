@@ -195,8 +195,8 @@ The last two are what this WEP is for. The migration will find them.
    parameters the trait does not write, an associated type's bound pinning
    a type to `Self`, the locals of a body other than a function's, and a
    standard library attribute accepted in a program. It found
-   two gaps, each now a WEP known gap: a CM operation bound by its spelling,
-   and an inline `with { path }`. A block with no fixture to run could
+   two gaps, each recorded as a WEP known gap: a CM operation bound by its
+   spelling (since closed), and an inline `with { path }`. A block with no fixture to run could
    still quote a real file, so a reference may name a `source`.
 6. [x] Delete the baseline, so the rule holds with no exceptions.
 

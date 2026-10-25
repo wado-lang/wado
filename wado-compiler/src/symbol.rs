@@ -9,7 +9,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{AstId, CmImport, Visibility};
+use crate::ast::{AstId, CmImport, UseNameSpelling, Visibility};
 use crate::module_source::ModuleSource;
 use crate::name::{mangle_local_method, split_local_method};
 use crate::token::Span;
@@ -45,6 +45,21 @@ pub enum SymbolKind {
     World(WorldSymbol),
     /// A global variable
     Global(GlobalSymbol),
+}
+
+impl SymbolKind {
+    /// Whether the symbol declares a type with a definition of its own.
+    pub fn declares_type(&self) -> bool {
+        matches!(
+            self,
+            SymbolKind::Struct(_)
+                | SymbolKind::Enum(_)
+                | SymbolKind::Variant(_)
+                | SymbolKind::Flags(_)
+                | SymbolKind::Newtype(_)
+                | SymbolKind::Resource(_)
+        )
+    }
 }
 
 /// Function symbol data
@@ -401,6 +416,52 @@ impl SymbolTable {
         (!visibility.reachable_from(target.same_package(from))).then_some(visibility)
     }
 
+    /// Each interface `target` offers that the full interface name `name` names,
+    /// with a member name it is offered under. A name without a version may
+    /// name the interface at several versions.
+    pub fn interfaces_named<'a>(
+        &'a self,
+        target: &'a ModuleSource,
+        name: &CmImport,
+    ) -> Vec<(String, &'a Symbol)> {
+        let members = self
+            .get_module_symbols(target)
+            .into_iter()
+            .map(|sym| sym.name.clone())
+            .chain(self.reexport_names(target));
+        let mut found: Vec<(String, &Symbol)> = Vec::new();
+        for member in members {
+            let Some(symbol) = self.lookup_in_module(target, &member) else {
+                continue;
+            };
+            let names_it = matches!(symbol.kind, SymbolKind::Effect(_))
+                && symbol.cm_import().is_some_and(|cm| cm.is_named_by(name));
+            if names_it && !found.iter().any(|(_, s)| s.defined_at == symbol.defined_at) {
+                found.push((member, symbol));
+            }
+        }
+        found
+    }
+
+    /// The member of `target` a `use` item names: its own name, or, for an
+    /// interface's full name, the one member that interface is offered under.
+    pub fn use_item_member(
+        &self,
+        target: &ModuleSource,
+        name: &str,
+        spelling: &UseNameSpelling,
+    ) -> Option<String> {
+        match spelling {
+            UseNameSpelling::Ident => Some(name.to_owned()),
+            UseNameSpelling::InterfaceName(interface) => {
+                match self.interfaces_named(target, interface).as_slice() {
+                    [(member, _)] => Some(member.clone()),
+                    _ => None,
+                }
+            }
+        }
+    }
+
     /// Every member `from` may name through a namespace import of `target`:
     /// what `target` declares plus what it re-exports, less what visibility
     /// bars. `use { x } from` and `ns::x` reach the same set.
@@ -572,8 +633,7 @@ impl SymbolTable {
         self.lookup_in_module_with_visited(&declaring, &qualified, visited)
     }
 
-    /// Where an `Owner::member` name reached from `module_source` is declared:
-    /// the owning interface's module, and the member's name there.
+    /// Where an `Owner::member` name reached from `module_source` is declared.
     fn declared_member(
         &self,
         module_source: &ModuleSource,
@@ -581,13 +641,27 @@ impl SymbolTable {
         visited: &mut Vec<(ModuleSource, String)>,
     ) -> Option<(ModuleSource, String)> {
         let (owner, member) = split_local_method(name)?;
-        let owner = self.lookup_in_module_with_visited(module_source, owner, visited)?;
-        matches!(owner.kind, SymbolKind::Effect(_)).then(|| {
-            (
-                owner.module_source().clone(),
-                mangle_local_method(&owner.name, member),
-            )
-        })
+        interface_member(
+            self.lookup_in_module_with_visited(module_source, owner, visited)?,
+            member,
+        )
+    }
+
+    /// The type `owner::member` written in `module` names, where `owner` is an
+    /// interface the module reaches: a type an interface declares is named
+    /// through it.
+    pub fn interface_type(
+        &self,
+        module: &ModuleSource,
+        owner: &str,
+        member: &str,
+    ) -> Option<&Symbol> {
+        let owner = self
+            .imported(module, owner)
+            .or_else(|| self.lookup_in_module(module, owner))?;
+        let (declaring, qualified) = interface_member(owner, member)?;
+        let symbol = self.lookup_in_module(&declaring, &qualified)?;
+        symbol.kind.declares_type().then_some(symbol)
     }
 
     /// Whether `name` names a type every module reads without importing it:
@@ -595,16 +669,7 @@ impl SymbolTable {
     pub fn is_prelude_type(&self, name: &str) -> bool {
         let prelude = ModuleSource::prelude();
         if let Some(symbol) = self.lookup_in_module(&prelude, name) {
-            return matches!(
-                symbol.kind,
-                SymbolKind::Struct(_)
-                    | SymbolKind::Enum(_)
-                    | SymbolKind::Variant(_)
-                    | SymbolKind::Flags(_)
-                    | SymbolKind::Newtype(_)
-                    | SymbolKind::Resource(_)
-                    | SymbolKind::BuiltinType
-            );
+            return symbol.kind.declares_type() || matches!(symbol.kind, SymbolKind::BuiltinType);
         }
         self.prelude_builtin_types.contains_key(name)
     }
@@ -647,6 +712,17 @@ impl SymbolTable {
     pub fn all_symbols(&self) -> impl Iterator<Item = &Symbol> {
         self.symbols.values()
     }
+}
+
+/// Where `member` of the interface `owner` is declared: the interface's module,
+/// and the member's name there. `None` when `owner` is no interface.
+fn interface_member(owner: &Symbol, member: &str) -> Option<(ModuleSource, String)> {
+    matches!(owner.kind, SymbolKind::Effect(_)).then(|| {
+        (
+            owner.module_source().clone(),
+            mangle_local_method(&owner.name, member),
+        )
+    })
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(6)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(8)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(8)
 
 type "functype//type_cast.wado/$cm_export__run" = fn();  // TypeId(9)
 
@@ -34,7 +34,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
 
-type "functype//type_cast.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
@@ -50,15 +50,15 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "type_cast.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "type_cast.wado/$cm_export__run"() {
@@ -68,55 +68,45 @@ fn "type_cast.wado/$cm_export__run"() {
     let $sroa_$pattern_temp_0_1_14_24: i32;
     $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
-    $moved_4_14 = "type_cast.wado/$cm_binding__Stdout_write_via_stream"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
+    $moved_4_14 = "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
     $sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24;
     $sroa_$pattern_temp_0_1_14_24 = 0;
-    $sroa_$pattern_temp_0_1_14_24 = $sroa_$pattern_temp_0_0_13_23;
-    $sroa_$pattern_temp_0_0_13_23 = 0;
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("i32 to f64 works");
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_1_14_24, $mv_field_2, 16);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_24 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_1_14_24);
-    $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_0_13_23);
+    $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $moved_4_14 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_23 = "type_cast.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $sroa_$pattern_temp_0_0_13_23);
-    $sroa_$pattern_temp_0_1_14_24 = $moved_4_14;
-    $moved_4_14 = 0;
-    $moved_4_14 = $sroa_$pattern_temp_0_1_14_24;
-    $sroa_$pattern_temp_0_1_14_24 = 0;
-    $mv_field_2 = array.new_data<u8>("f64 to i32 works");
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($moved_4_14, $mv_field_2, 16);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
-    $moved_4_14 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_24 = "type_cast.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_1_14_24 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_1_14_24);
-    $moved_4_14 = $sroa_$pattern_temp_0_0_13_23;
-    $sroa_$pattern_temp_0_0_13_23 = 0;
+    $sroa_$pattern_temp_0_1_14_24 = "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_24 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $sroa_$pattern_temp_0_1_14_24);
     $sroa_$pattern_temp_0_0_13_23 = $moved_4_14;
     $moved_4_14 = 0;
-    $mv_field_2 = array.new_data<u8>("chained casts work");
-    "core:rt/write_string_to_stream$spec1$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 18);
+    $mv_field_2 = array.new_data<u8>("f64 to i32 works");
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 16);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $sroa_$pattern_temp_0_0_13_23);
     $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
-    $moved_4_14 = "type_cast.wado/$cm_binding__Stdout_write_via_stream"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
+    $moved_4_14 = "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
     $sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24;
     $sroa_$pattern_temp_0_1_14_24 = 0;
-    $sroa_$pattern_temp_0_1_14_24 = $sroa_$pattern_temp_0_0_13_23;
-    $sroa_$pattern_temp_0_0_13_23 = 0;
-    $mv_field_2 = array.new_data<u8>("cast in arithmetic works");
-    "core:rt/write_string_to_stream$spec2$dae[add_newline]"($sroa_$pattern_temp_0_1_14_24, $mv_field_2, 24);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_24 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_1_14_24);
-    $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
+    $mv_field_2 = array.new_data<u8>("chained casts work");
+    "core:rt/write_string_to_stream$spec1$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_0_13_23);
+    $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $moved_4_14 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_23 = "type_cast.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $sroa_$pattern_temp_0_0_13_23);
-    $sroa_$pattern_temp_0_1_14_24 = $moved_4_14;
+    $sroa_$pattern_temp_0_1_14_24 = "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_24 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $sroa_$pattern_temp_0_1_14_24);
+    $sroa_$pattern_temp_0_0_13_23 = $moved_4_14;
     $moved_4_14 = 0;
-    $moved_4_14 = $sroa_$pattern_temp_0_1_14_24;
+    $mv_field_2 = array.new_data<u8>("cast in arithmetic works");
+    "core:rt/write_string_to_stream$spec2$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $sroa_$pattern_temp_0_0_13_23);
+    $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
+    $moved_4_14 = "type_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
+    $sroa_$pattern_temp_0_0_13_23 = $sroa_$pattern_temp_0_1_14_24;
     $sroa_$pattern_temp_0_1_14_24 = 0;
     $mv_field_2 = array.new_fixed<u8>(111, 107);
-    "core:rt/write_string_to_stream$spec3$dae[add_newline]"($moved_4_14, $mv_field_2, 2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_14 = $sroa_$pattern_temp_0_0_13_23; $sroa_$pattern_temp_0_0_13_23 = 0; $moved_4_14);
+    "core:rt/write_string_to_stream$spec3$dae[add_newline]"($sroa_$pattern_temp_0_0_13_23, $mv_field_2, 2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_23 = $moved_4_14; $moved_4_14 = 0; $sroa_$pattern_temp_0_0_13_23);
     "wasi/task-return"(0);
 }
 
@@ -189,7 +179,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(17)), 0, $mv$message$repr, 0, 16);
     builtin::array_set_u8(new_repr, 16, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 17);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 17);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
@@ -199,7 +189,7 @@ fn "core:rt/write_string_to_stream$spec1$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(19)), 0, $mv$message$repr, 0, 18);
     builtin::array_set_u8(new_repr, 18, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 19);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 19);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
@@ -209,7 +199,7 @@ fn "core:rt/write_string_to_stream$spec2$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(25)), 0, $mv$message$repr, 0, 24);
     builtin::array_set_u8(new_repr, 24, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 25);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 25);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
@@ -219,7 +209,7 @@ fn "core:rt/write_string_to_stream$spec3$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $mv$message$repr, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 3);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 3);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

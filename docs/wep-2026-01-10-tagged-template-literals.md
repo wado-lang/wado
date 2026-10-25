@@ -879,10 +879,9 @@ warm-up phase takes that cost. Three runs:
   a static dispatch, and neither records one.
 - Whether `match type` gains a `template` arm for the `Template` case
   [Total Reflection](./wep-2026-09-05-total-reflection.md) gives the type.
-- A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by
-  a blanket impl (`` i32::label`…` ``). Neither is a tagged-template gap: the
-  same static method fails the same way when spelled as a call, and both are
-  pinned as `#[TODO]` — `reflect_pack_static_namespace_import_todo.wado` and
+- A tag answered by a blanket impl (`` i32::label`…` ``). It is not a
+  tagged-template gap: the same static method fails the same way when spelled
+  as a call, and is pinned as `#[TODO]` in
   `reflect_pack_blanket_static_todo.wado`.
 - The type has no `Inspect`, though every other type does. An `assert` that
   captures a template's value fails to compile

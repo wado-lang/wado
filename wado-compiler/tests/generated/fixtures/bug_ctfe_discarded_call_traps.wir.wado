@@ -23,31 +23,29 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//bug_ctfe_discarded_call_traps.wado/$cm_export__run" = fn();  // TypeId(10)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(11)
+type "functype//core:rt/unreachable" = fn();  // TypeId(11)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(12)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(13)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//bug_ctfe_discarded_call_traps.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -55,62 +53,60 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "bug_ctfe_discarded_call_traps.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "bug_ctfe_discarded_call_traps.wado/$cm_export__run"() {
     let $local_0: ref "core:prelude/string.wado//String";
-    let $moved_4: i32;
-    let $cm_pair_7: i64;
-    let new_used_122: i32;
-    let start_123: i32;
-    $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    drop(10 / 0);
-    if @unlikely(local.tee new_used_122(0 + 1) > builtin::array_len($local_0.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_122);
-    }
-    start_123 = $local_0.used;
-    $local_0.used = new_used_122;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_123, 7_i64, 1);
-    start_123 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_122 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = start_123; start_123 = 0; $moved_4);
-    start_123 = new_used_122;
-    new_used_122 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_122 = start_123; start_123 = 0; new_used_122, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_122 = $moved_4; $moved_4 = 0; new_used_122);
-    "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let arr: ref Array<u8>;
+    let t: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    digit_count = offset + digit_count;
+    let new_used_131: i32;
+    let start_132: i32;
+    $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    drop(10 / 0);
+    if @unlikely(local.tee new_used_131(0 + 1) > builtin::array_len($local_0.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_131);
+    }
+    start_132 = $local_0.used;
+    $local_0.used = new_used_131;
+    arr = $local_0.repr;
+    new_used_131 = start_132 + 1;
+    t = 7_i64;
     b1: block {
         l2: loop {
-            break_if b1 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
+            break_if b1 (new_used_131 - start_132) < 2;
+            q = t /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, new_used_131 - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, new_used_131 - 2, (48 + tens) & 255);
+            new_used_131 = new_used_131 - 2;
+            t = q;
             continue l2;
         };
     };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    if new_used_131 > start_132 {
+        builtin::array_set_u8(arr, start_132, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
     }
+    start_132 = builtin::i32_wrap_i64(local.tee t("wasi/stream-new"()));
+    new_used_131 = builtin::i32_wrap_i64(t >> 32_i64);
+    pair = "bug_ctfe_discarded_call_traps.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pair = start_132; start_132 = 0; pair);
+    start_132 = new_used_131;
+    new_used_131 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_132, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_132 = pair; pair = 0; start_132);
+    "wasi/task-return"(0);
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

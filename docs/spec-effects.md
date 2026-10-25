@@ -59,6 +59,23 @@ test {
 }
 ```
 
+An interface may also declare types: `struct`, `enum`, `variant`, `flags`,
+`resource`, and `type Name = T;`, which declares a newtype, since an interface
+has no associated types. It declares nothing else. Inside the interface a type
+is named by its own name, looked up in the interface before the module.
+Outside, a path through the interface is its only name, as `Geo::Point`, in a
+type, a literal, a pattern and a call alike. A namespace import adds its prefix,
+as `geo::Geo::Point`.
+
+A type in an interface takes no visibility modifier: it reaches as far as its
+interface. In an interface that carries `#[cm]`, every field must be `pub`,
+since a WIT record has no private field. A type an exported interface's signature names
+belongs to that interface, or to another one, and naming a type no interface
+declares is an error.
+
+> Not yet implemented: a type declared in an interface
+> ([WEP](./wep-2026-10-22-component-export-names.md)).
+
 ### Default Implementations
 
 An `interface` dispatches differently from a trait, but writes its members exactly as a trait does. An operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation. What answers an operation dispatched with no handler installed is in [With No Handler Installed](#with-no-handler-installed).
@@ -317,7 +334,7 @@ fn bad() {
 A resource's drop is an operation of its effect too, but a benign one: a
 function declares no effect for a drop it performs. Every drop of the resource
 reaches an installed handler, a written `x.drop()` and an implicit one alike
-([Drop](./spec-types.md#drop)), so a test double that counts drops sees both. A
+([Drop](./spec-affine.md#drop)), so a test double that counts drops sees both. A
 double that leaves its other operations to `..trap` answers `drop` itself.
 
 ### Implied Resources
@@ -861,7 +878,7 @@ A bundled binding whose type implements no effect is a compile error. So is one 
 
 ### Handler State
 
-A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block.
+A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block. An affine one moves into the `with` (see [Drop](./spec-affine.md#drop)).
 
 <!-- {"fixture":"spec_effects_handler_scope.wado"} -->
 

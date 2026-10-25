@@ -248,6 +248,7 @@ fn candidate_info(
         return_type,
         tail_ok,
         tail_call_lowerable: true,
+        type_table,
     };
     // The lowering splits every `Return`, nested ones included.
     if !every_return(body, NodeRef::Block(body.root()), |value| {
@@ -320,6 +321,7 @@ struct ExpectedShape<'a> {
     /// Accepting the shape somewhere the lowering cannot follow is the one way
     /// this pass can produce invalid Wasm, so break positions clear it.
     tail_call_lowerable: bool,
+    type_table: &'a TypeTable,
 }
 
 impl ExpectedShape<'_> {
@@ -357,7 +359,7 @@ fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &Expected
 /// The value of a `return`, in tail position. A `return` nested inside it is
 /// checked on its own by [`every_return`].
 fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -> bool {
-    if body.exprs[expr].type_id == TypeTable::NEVER {
+    if expected.type_table.is_never(body.exprs[expr].type_id) {
         return true;
     }
     match &body.exprs[expr].kind {

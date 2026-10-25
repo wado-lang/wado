@@ -1,0 +1,25 @@
+// `b` is a value copy of `a` that is then mutated, so the copy of the backing
+// array survives to the final IR and is remarked at the copying statement. The
+// list spine scalarizes away, leaving the array itself as what is copied. One
+// opaque element keeps the list from being a constant written back as a literal
+// at each binding, which would leave no copy to remark on.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: List<i32> = [1, 2, builtin::black_box(3)];
+    let mut b = a;
+    b.push(4);
+    println(`${a.len()} ${b.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n",
+    "remarks": {
+        "O2": [
+            {"contains": ["remark:"], "count": 1},
+            {"contains": [":11:5 remark: a copy of `Array<i32>`"]}
+        ]
+    }
+}

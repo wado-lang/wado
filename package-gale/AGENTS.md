@@ -19,7 +19,9 @@ The descriptor corpus, `.g4` semantics, and test regeneration all depend on it:
 git submodule update --init --recommend-shallow vendor/antlr4
 ```
 
-Files headed `// Do not edit by hand` are generated. To change one, edit its source (e.g. `status.toml`) and regenerate via `scripts/extract-antlr4-descriptors.sh` (needs the submodule).
+Files headed `// Do not edit by hand` are generated. To change one, edit its source (e.g. `status.toml`) and regenerate via `mise run extract-gale-descriptors` (needs the submodule).
+
+The oracle scripts spawn `java` and `javac`, which `core:process` reaches only under `/usr` and `/etc` by default. A JDK elsewhere (mise's, say) is opened through `[process] read` in `~/.config/wado/config.toml` (`read = ["~/.local/share/mise/installs"]`) or `--process-read`.
 
 ## Compatibility principle
 
@@ -46,7 +48,7 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 
 - Backtrack only where it makes the parse faster — parser or lexer. The rule is about speed: a try-fail-retry loop used to settle what prediction cannot usually costs more than predicting. So disambiguate with static k-token lookahead, and route a decision static prediction cannot resolve in depth 5 to the runtime ATN simulator. A backtrack that replaces more expensive work is allowed, such as parsing directly and rewinding on failure instead of scanning ahead and then parsing again. Show it is faster with a benchmark, and keep the tree the same as the jar's. The repeat-exit probe also rewinds, but it decides nothing: it re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN) — gate every emit site on the feature.
-- Keep the ATN off any shape the static path already lexes or predicts as the jar does: an ATN-class rule inlines about a thousand lines of runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `scripts/antlr4-oracle.sh <grammar.g4> <start_rule> < input` (`--tokens` for the lexer) before it is reported. The script caches the jar and needs `java` and `javac`.
+- Keep the ATN off any shape the static path already lexes or predicts as the jar does: an ATN-class rule inlines about a thousand lines of runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `mise run oracle-gale <grammar.g4> <start_rule> < input` (`--tokens` for the lexer; `scripts/antlr4_oracle.wado`) before it is reported. The script caches the jar under `build/antlr4/`.
 - A compiler bug is P0 (top-level `AGENTS.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
 
 ## Debugging tools
@@ -123,9 +125,9 @@ Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus
 2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` from `tests/support/tree_compare.wado` lets you write indented expected trees).
 3. ANTLR4 descriptor compatibility (`tests/antlr4-compat/`) — the extracted corpus as a long-lived regression suite; see [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
-Real-world grammars can also be oracle-pinned (Stage B′ over the published jar, not hand-written trees): `scripts/regen-oracle.sh <key>` regenerates `tests/driver_cst_<key>_oracle_test.wado` from `tests/oracle/<key>/cases.*`, marking cases Gale currently parses differently `#[TODO]`. Java runs only at regen time; the committed trees keep CI Java-free. `sqlite` and `json` are pinned this way. Adding a grammar is config + cases, but only for a clean single combined `WS -> skip` grammar — split and whitespace-token grammars (Rust, TypeScript, css3) are out of scope; see "Stage B′ for real-world grammars" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+Real-world grammars can also be oracle-pinned (Stage B′ over the published jar, not hand-written trees): `mise run oracle-gale-regen <key>` (`scripts/regen_oracle.wado`) regenerates `tests/driver_cst_<key>_oracle_test.wado` from `tests/oracle/<key>/cases.*`, marking cases Gale currently parses differently `#[TODO]`. Java runs only at regen time; the committed trees keep CI Java-free. `sqlite` and `json` are pinned this way. Adding a grammar is config + cases, but only for a clean single combined `WS -> skip` grammar — split and whitespace-token grammars (Rust, TypeScript, css3) are out of scope; see "Stage B′ for real-world grammars" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
-A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4-oracle.sh` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java`, once per base — a lexer and its sibling parser declare their own. Each is the Java twin of a Wado `impl` in the matching driver test, and keeping the pair in sync is what makes the comparison mean anything. `--probe-super` only reports what an input does against a synthesized base — it never yields pinnable output, for the reason in "Oracling a `superClass` grammar" in [`antlr4-compatibility.md`](./antlr4-compatibility.md). `scripts/antlr4-oracle-selftest.sh` pins both paths (needs java; run it after touching the oracle).
+A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4_oracle.wado` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java`, once per base — a lexer and its sibling parser declare their own. Each is the Java twin of a Wado `impl` in the matching driver test, and keeping the pair in sync is what makes the comparison mean anything. `--probe-super` only reports what an input does against a synthesized base — it never yields pinnable output, for the reason in "Oracling a `superClass` grammar" in [`antlr4-compatibility.md`](./antlr4-compatibility.md). `mise run oracle-gale-selftest` pins both paths (run it after touching the oracle).
 
 A split grammar takes its lexer through `--lexer <N>Lexer.g4` beside `<N>Parser.g4`. `mise run oracle-gale-typescript [file.ts]` lists where Gale's tree for a whole TypeScript file and the jar's disagree; see "Comparing a whole TypeScript file" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
@@ -143,6 +145,8 @@ Two rules follow from every byte of these files landing in every generated parse
 
 - **No comments.** They would be copied into hundreds of generated files. State intent through names, decomposition, and asserts.
 - **Nothing test-only.** String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
+
+A map in a fragment hashes under a fixed `HashSeed` (`LATN_SEED` in `latn.wado`) rather than taking one from `new()`. A seed from the host would make every generated parser import `wasi:random/insecure-seed`.
 
 ## Failed approaches (do not repeat)
 

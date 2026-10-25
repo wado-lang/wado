@@ -7,12 +7,11 @@ and its search tree serves only lookup: no public API reads the keys in sorted
 order. Under `K: Ord`, a lookup costs about log₂(n) key comparisons, and a
 balanced tree of any shape makes about that many.
 
-Those comparisons are where the time goes. In the `gale_gen` benchmark,
-`TreeMap<String, i32>::find_index_str` takes 15% of the samples, more than any
-other function. A B-tree in place of the AA tree speeds up insertion, removal,
-copying and iteration on `example/map_bench.wado`, but leaves `gale_gen`
-within noise. A hash table needs one hash and, usually, one comparison per
-lookup.
+Those comparisons are where the time goes: in a lookup-heavy program,
+`TreeMap<String, i32>::find_index_str` takes more samples than any other
+function. A B-tree in place of the AA tree speeds up insertion, removal, copying
+and iteration on `example/map_bench.wado`, but not lookup. A hash table needs
+one hash and, usually, one comparison per lookup.
 
 A hash table brings a hazard that a tree does not have. When an attacker chooses
 the keys, colliding keys turn every operation linear, which is a denial of
@@ -108,14 +107,7 @@ optimization level.
   best-effort output and lifts the check from the whole body. `eval`'s case is
   the one `#[benign]` names: an effect that does not show through the interface.
 
-### `GaleMap` and `GaleSet` go
-
-Gale's `GaleMap` and `GaleSet` are newtypes over `HashMap` and `HashSet` under a
-fixed seed. They exist because `HashMap::new` used to require a seed: the
-newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
-`Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap`
-and `HashSet` and the newtypes are deleted. `wado-lang:gale` re-exports both,
-so the deletion breaks a package that names them.
+### A Kiln generator hashes under a fixed seed
 
 Code that runs as a Kiln generator reaches `DEFAULT_HASH_SEED` as any other
 code does. The generator world imports `wasi:random/insecure-seed`, whose value
@@ -162,10 +154,15 @@ pub trait Hash: Eq with () {
 }
 ```
 
-`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, tuples,
-`List`, `String`, integers, `char` and `bool` wherever a use needs it. Every
-implementation keeps `a == b` implying equal hashes. `String` and `StrSlice`
-hash alike, so `HashMap<String, V>` offers `get_str` as `TreeMap` does.
+`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, enums
+and flags types, and written for tuples, `List`, `String`, integers, floats,
+`char` and `bool`. Every implementation keeps `a == b` implying equal hashes, so
+a written `eq` or `cmp` withholds the derived `hash`, which would feed members
+the comparison ignores. A float's `==` treats every NaN as one value and `-0.0`
+as `0.0`, so its `hash` feeds its bits with each of those groups made one bit
+pattern. `f16` and `bf16` hash the `f32` they widen to, the value their
+comparison reads. `String` and `StrSlice` hash alike, so
+`HashMap<String, V>` offers `get_str` as `TreeMap` does.
 
 The hash function is a seeded multiply-and-fold hash, chosen by measurement.
 Each word is folded into the state by a full-width multiply with a seeded key,
@@ -206,13 +203,11 @@ an all-zero seed.
 
 ## Roadmap
 
-- [ ] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
+- [x] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
   every type listed above hashes consistently with its `Eq`.
 - [ ] The hash function, chosen by measurement on Wasm.
 - [x] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
-- [x] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
-  benchmark row is re-measured.
 - [x] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
   effects admitted in its initializer, an unlisted one still rejected, and the
   world import still required, and the not-yet-implemented note in
@@ -230,21 +225,13 @@ an all-zero seed.
   order, and the output holds no seed.
 - [x] Map and list literals coerce to `HashMap<String, V>` and `HashSet<T>`.
   Done when a literal and a spread keep source order, last write wins.
-- [x] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
-  deleted and the generator still compiles.
-- [x] Gale and Wadopoet build their maps with `new()`. Done when their fixed
-  seeds are deleted and their generators still compile. Gale's
-  `src/runtime/latn.wado` keeps `LATN_SEED`: it is inlined into every
-  generated parser, and `new()` there would make each parser import
-  `wasi:random/insecure-seed`.
+- [x] The Kiln host answers `insecure-seed` from a fixed seed. Done when a
+  fixture's generator builds a map with `new()`.
 
 ## Known gaps
 
 - Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
-- Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
-  and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
-  groups, which bit patterns do not.
 - Derivation serializes private fields of any type without a hand-written impl.
   `core:prng`'s `Seed` serializes its state words this way.

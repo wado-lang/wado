@@ -1,0 +1,24 @@
+// No template here leaves a constant computed at run time:
+// - every interpolation is constant, so the template denotes a literal and the
+//   buffer, the `Formatter` and `fmt_decimal` leave with it;
+// - a `String` interpolation folds to a literal too;
+// - one reading a local the optimizer cannot know has to run, which is no
+//   constant the engine failed to reach;
+// - `"true"` is globalized, and the store that leaves at the use site serves
+//   only the read below it, so it is no write the region is refused for.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`n=${42}`);
+    println(`s=${"y"}`);
+    let n = builtin::black_box(42);
+    println(`n=${n}`);
+    println(`v=${true}`);
+}
+
+__DATA__
+{
+    "stdout": "n=42\ns=y\nn=42\nv=true\n",
+    "remarks": {"O2": [{"contains": ["computes a constant at run time"], "count": 0}]}
+}

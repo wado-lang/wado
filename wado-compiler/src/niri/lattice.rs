@@ -13,7 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, value_kind_to_const};
+use crate::nir_value_graph::{ValueId, ValueKind, value_kind_to_const};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 
@@ -62,9 +62,9 @@ impl Interpreter<'_> {
         // is what leaves a frozen `i * i` unevaluable, and a foldable loop then
         // survives to run time.
         if let ValueKind::Opaque(oid) = body.values.kind(v) {
-            return match body.values.opaque_source(*oid) {
-                Some(OpaqueSource::Local(idx)) => self.local_lattice(idx),
-                _ => Lattice::Unevaluated,
+            return match body.values.opaque_local(*oid) {
+                Some(idx) => self.local_lattice(idx),
+                None => Lattice::Unevaluated,
             };
         }
         self.try_fold_operand(body, Operand::Value(v))

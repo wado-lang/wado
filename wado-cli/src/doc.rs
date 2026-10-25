@@ -444,10 +444,11 @@ mod format_contract_tests {
     }
 
     #[test]
-    fn a_type_reexported_from_a_component_is_documented() {
-        // `core:icu` publishes `BinaryProperty` with
-        // `pub use { BinaryProperty } from "./icu.wat"`. The type is named in
-        // two signatures, so a reader who cannot see its cases cannot call them.
+    fn a_type_of_an_interface_reexported_from_a_component_is_documented() {
+        // `core:icu` publishes `Properties` with
+        // `pub use { Properties } from "./icu.wat"`. Its type `BinaryProperty`
+        // is named in two signatures, so a reader who cannot see its cases
+        // cannot call them.
         let out = render_single(
             &stdlib_doc("core:icu"),
             "markdown",
@@ -455,7 +456,7 @@ mod format_contract_tests {
             OutputFormat::Markdown,
         );
         assert!(
-            out.contains("enum BinaryProperty"),
+            out.contains("enum Properties::BinaryProperty"),
             "a component's re-exported enum must be documented:\n{out}"
         );
         assert!(

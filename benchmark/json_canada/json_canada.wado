@@ -15,6 +15,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     // Tiny GeoJSON FeatureCollection with one feature, two coordinates.
@@ -24,6 +25,14 @@ test "smoke" {
     let bytes = to_bytes::<FeatureCollection>(&fc).unwrap();
     let back = from_bytes::<FeatureCollection, _>(bytes).unwrap();
     assert count_points(&back) == 2;
+}
+
+test "fuel" {
+    let json_data = #include_bytes("./canada.json");
+    let fc = from_bytes::<FeatureCollection, _>(json_data).unwrap();
+    measure("ser", || to_bytes::<FeatureCollection>(&fc).unwrap().len());
+    let total_points = measure("de", || count_points(&from_bytes::<FeatureCollection, _>(json_data).unwrap()));
+    assert total_points == 55563;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

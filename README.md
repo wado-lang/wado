@@ -199,9 +199,9 @@ How it works:
 
 ## Benchmarks
 
-Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.
+Per-commit performance tracking is published to GitHub Pages. Every push to `main` records two deterministic metrics, so a change in either is the compiler's, never the runner's.
 
-- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime-throughput/) — throughput (work per second, higher is better) for integer, float, array, string, and compression workloads (run on wasmtime at `-O1`/`-O2`/`-O3`)
+- [Fuel](https://wado-lang.github.io/wado/benchmarks/fuel/) — the Wasm instructions each benchmark phase runs (lower is better), compiled at `-O1`, `-O2` and `-O3`. GC and other host work are not counted; the wall-clock benchmarks show them.
 - [Wasm Binary Size](https://wado-lang.github.io/wado/benchmarks/wasm-size/) — `.wasm` output size for representative programs (compiled at `-Os`)
 
 For comparison results against other programming languages:

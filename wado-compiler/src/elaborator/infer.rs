@@ -294,6 +294,11 @@ pub(super) struct InferCtx<'a> {
     /// (`let x: i32 = foo()`) to fix type parameters that never appear in
     /// the argument list.
     expected_returns: Vec<(TypeId, TypeId)>,
+    /// Queue of `(expected, actual)` constraints whose `actual` is `!`, applied
+    /// last. A value of `!` fits any type, so it binds a parameter only where
+    /// nothing else does: `Some(panic(..))` under `Option<i32>` is an
+    /// `Option<i32>`.
+    never_args: Vec<(TypeId, TypeId)>,
 }
 
 impl<'a> InferCtx<'a> {
@@ -306,12 +311,17 @@ impl<'a> InferCtx<'a> {
             bindings: IndexMap::default(),
             deferred_args: Vec::new(),
             expected_returns: Vec::new(),
+            never_args: Vec::new(),
         }
     }
 
     /// Add a strong constraint, unifying `expected` (which may contain
     /// type parameters) against the concrete `actual` immediately.
     pub(super) fn add(&mut self, expected: TypeId, actual: TypeId) {
+        if self.type_table.borrow().is_never(actual) {
+            self.never_args.push((expected, actual));
+            return;
+        }
         unify(self.type_table, expected, actual, &mut self.bindings);
     }
 
@@ -368,6 +378,9 @@ impl<'a> InferCtx<'a> {
         // Pass 3: literal-number args. Only fills parameters that no
         // stronger constraint already pinned.
         for (expected, actual) in std::mem::take(&mut self.deferred_args) {
+            unify(self.type_table, expected, actual, &mut self.bindings);
+        }
+        for (expected, actual) in std::mem::take(&mut self.never_args) {
             unify(self.type_table, expected, actual, &mut self.bindings);
         }
     }

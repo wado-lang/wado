@@ -1275,6 +1275,28 @@ test "the mock serializer writes every shape" {
     assert mock_serialize(&Shape::Line(4)) == `{"Line":4}`;
 }
 
+struct TagSplit {
+    pattern: String,
+}
+
+#[wire(tag = "type")]
+variant Tagged {
+    Split(TagSplit),
+    Empty,
+}
+
+test "a format that keeps the default refuses an internal tag" {
+    let e = json::from_string::<Flaky<Tagged>>(`{"type":"Empty"}`).unwrap_err();
+    assert e.kind == DeserializeErrorKind::UnexpectedType;
+    assert e.message == `this format cannot read an internally tagged variant, whose tag is "type"`;
+}
+
+test "a tagged write fails at each step it takes" {
+    // begin, the tag, then each field and end
+    assert failures_writing::<Tagged>(Tagged::Split(TagSplit { pattern: "x" })) == 4;
+    assert failures_writing::<Tagged>(Tagged::Empty) == 3;
+}
+
 test "a discriminant no case has is an unknown one" {
     let e = json::from_string::<ReadByDisc<Light>>(`"7"`).unwrap_err();
     assert e.kind == DeserializeErrorKind::UnknownVariant && e.message == "unknown variant discriminant";

@@ -1,0 +1,16 @@
+// A static called through a namespace reports a type argument missing the
+// method's bound at the call, not inside the callee's body.
+use dep from "./sub/static_type_arg_bound_namespaced_dep.wado";
+
+struct N {
+    f: fn(),
+}
+
+export fn run() {
+    let n = dep::Q::make::<N>();
+}
+
+__DATA__
+{
+    "compile_error": ":10:13: analysis error: type 'N' does not implement trait 'Default' required by bound on 'U'"
+}

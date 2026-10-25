@@ -1,0 +1,42 @@
+// A target projection may name a parameter only a pin binds: `U` here comes
+// from `T: Tr<Key = U>`, so `U::K` is read once `T`'s bound has answered.
+
+trait Tr with () {
+    type Key;
+}
+
+trait Keyed with () {
+    type K;
+}
+
+trait Foo with () {
+    fn foo(&self) -> i32;
+}
+
+struct Wrap<A, B> {
+    a: A,
+    b: B,
+}
+
+struct Ka {}
+
+struct Kb {}
+
+impl Tr for Ka {
+    type Key = Kb;
+}
+
+impl Keyed for Kb {
+    type K = i32;
+}
+
+impl<T: Tr<Key = U>, U: Keyed> Foo for Wrap<T, U::K> {
+    fn foo(&self) -> i32 {
+        return 42;
+    }
+}
+
+test {
+    let w = Wrap { a: Ka {}, b: 41 };
+    assert w.foo() == 42;
+}

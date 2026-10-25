@@ -23,7 +23,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
 type "functype//tagged_template_format_loop_site.wado/$cm_export__run" = fn();  // TypeId(10)
 
@@ -45,7 +45,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//tagged_template_format_loop_site.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//tagged_template_format_loop_site.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
@@ -55,7 +55,7 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -66,8 +66,8 @@ global global:core:prelude/traits.wado::$const_obj_11: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(104, 61);
 global global:core:prelude/traits.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(32, 101, 110, 100);
 
-fn "tagged_template_format_loop_site.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "tagged_template_format_loop_site.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "tagged_template_format_loop_site.wado/$cm_export__run"() {
@@ -86,15 +86,13 @@ fn "tagged_template_format_loop_site.wado/$cm_export__run"() {
     }; sum == 184 {
         sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
         current = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-        $sroa_$iter_0_start_17 = "tagged_template_format_loop_site.wado/$cm_binding__Stdout_write_via_stream"($sroa_$iter_0_start_17 = sum; sum = 0; $sroa_$iter_0_start_17);
+        $sroa_$iter_0_start_17 = "tagged_template_format_loop_site.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_17 = sum; sum = 0; $sroa_$iter_0_start_17);
         sum = current;
         current = 0;
-        current = sum;
-        sum = 0;
         let $mv_field_2: ref Array<u8>;
         $mv_field_2 = array.new_fixed<u8>(111, 107);
-        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(current, $mv_field_2, 2);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(current = $sroa_$iter_0_start_17; $sroa_$iter_0_start_17 = 0; current);
+        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(sum, $mv_field_2, 2);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = $sroa_$iter_0_start_17; $sroa_$iter_0_start_17 = 0; sum);
     }
     "wasi/task-return"(0);
 }
@@ -168,7 +166,7 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $mv$message$repr, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(local.tee $mv$message$used(tx), new_repr, 0, 3);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 3);
     });
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }

@@ -228,9 +228,9 @@ pub enum Code {
     /// A generator's `probe` takes a parameter no host supplies, or answers
     /// something other than an extent.
     KilnProbeSignature,
-    /// A program for a world other than the test world reaches `core:eval`,
-    /// which only `wado test` supplies.
-    EvalOutsideTestWorld,
+    /// A program for a world other than the test world reaches a package only
+    /// `wado test` supplies (`core:eval`, `core:fuel`).
+    TestWorldOnlyImport,
     /// A `use ... from "<path>"` names a generator, but no invocation produced a
     /// module for it, so there is nothing to import.
     KilnNoGeneratedModule,
@@ -361,7 +361,7 @@ impl std::fmt::Display for Code {
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
             Code::KilnProbeSignature => "KILN_PROBE_SIGNATURE",
-            Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
+            Code::TestWorldOnlyImport => "TEST_WORLD_ONLY_IMPORT",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
@@ -486,6 +486,13 @@ pub trait SpanEmitter {
     fn span_start(&self, name: &str);
     fn span_end(&self, name: &str);
     fn debug(&self, message: &str);
+}
+
+pub fn in_span<T>(profiler: &dyn SpanEmitter, name: &str, f: impl FnOnce() -> T) -> T {
+    profiler.span_start(name);
+    let result = f();
+    profiler.span_end(name);
+    result
 }
 
 /// No-op implementation for when profiling is not needed.

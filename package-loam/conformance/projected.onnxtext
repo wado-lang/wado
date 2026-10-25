@@ -1,0 +1,20 @@
+# Three projections of one RMS normalized input, by weights of 4, 2 and 3
+# columns, as attention's query, key and value: each a kernel alone, read by a
+# softmax, returned, and reduced along its row.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+projected (float[N, S, 2] X) => (float[N, S, 4] Y, float[N, S, 2] K, float[N, S, 1] Z)
+<float[2] W = {1.5, -0.5}, float[2, 4] A = {0.5, -1.0, 0.25, 1.5, 0.75, -0.5, 2.0, -0.25}, float[2, 2] B = {1.0, 0.5, -0.25, -1.5}, float[2, 3] C = {1.0, -0.5, 0.25, 2.0, -1.0, 0.5}>
+{
+    Q2 = Mul(X, X)
+    M = ReduceMean <axes = [-1], keepdims = 1> (Q2)
+    Eps = Constant <value = float {0.000001}> ()
+    V2 = Add(M, Eps)
+    R = Sqrt(V2)
+    O = Div(X, R)
+    H = Mul(O, W)
+    Q = MatMul(H, A)
+    K = MatMul(H, B)
+    V = MatMul(H, C)
+    Y = Softmax <axis = -1> (Q)
+    Z = ReduceMean <axes = [-1], keepdims = 1> (V)
+}

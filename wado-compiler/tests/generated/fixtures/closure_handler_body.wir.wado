@@ -62,9 +62,9 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
 
 type "functype//closure_handler_body.wado/run" = fn();  // TypeId(21)
 
@@ -104,7 +104,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//closure_handler_body.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(40)
+type "functype//closure_handler_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
@@ -114,8 +114,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
+import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
+import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
@@ -156,15 +156,15 @@ fn "closure_handler_body.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_81.repr, self_14, x_25, is_negative_21);
     is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
     self_14 = builtin::i32_wrap_i64(x_25 >> 32_i64);
-    $moved_4 = "closure_handler_body.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = is_negative_21; is_negative_21 = 0; $moved_4);
+    $moved_4 = "closure_handler_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = is_negative_21; is_negative_21 = 0; $moved_4);
     is_negative_21 = self_14;
     self_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_14 = is_negative_21; is_negative_21 = 0; self_14, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(self_14 = $moved_4; $moved_4 = 0; self_14);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_21, $local_6.repr, $local_6.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_21 = $moved_4; $moved_4 = 0; is_negative_21);
 }
 
-fn "closure_handler_body.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
+fn "closure_handler_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "closure_handler_body.wado/$cm_export__run"() {
@@ -275,7 +275,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
@@ -372,18 +372,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_0::$call"(self) {
     let $h_closure_handler_body.wado/Log: ref "closure_handler_body.wado//Sink";
     let $save_closure_handler_body.wado/Log: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
-    let $d_closure_handler_body.wado/Log: ref "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
     let message: ref "core:prelude/string.wado//String";
-    let $local_1_6: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
+    let $local_1: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
+    let $local_2: ref "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
     $h_closure_handler_body.wado/Log = self.$capture_0;
-    global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(struct.new "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log" { outer: local.tee $save_closure_handler_body.wado/Log(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_handler_body.wado//$Closure_1" { $capture_0: $h_closure_handler_body.wado/Log }, func: ref.func "closure/closure_handler_body.wado/$closure_wrapper_1" } });
+    global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = struct.new "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log" { outer: local.tee $save_closure_handler_body.wado/Log(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_handler_body.wado//$Closure_1" { $capture_0: $h_closure_handler_body.wado/Log }, func: ref.func "closure/closure_handler_body.wado/$closure_wrapper_1" } };
     $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: block {
         message = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-        if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
-            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
+        if @likely(ref.is_null(local.tee $local_1(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
+            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message);
-            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
+            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1;
         } else {
             "core:rt/panic"(local.tee message(global:closure_handler_body.wado::$const_obj_1).repr, message.used);
             unreachable;
@@ -406,31 +406,31 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_1::$call"(self,
 fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(self) {
     let $h_closure_handler_body.wado/Log: ref "closure_handler_body.wado//Sink";
     let $save_closure_handler_body.wado/Log: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
-    let $d_closure_handler_body.wado/Log: ref "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
-    let message_5: ref "core:prelude/string.wado//String";
-    let $local_1_6: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
+    let message_4: ref "core:prelude/string.wado//String";
+    let $local_1_5: ref null "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
+    let $local_2_6: ref "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log";
     $h_closure_handler_body.wado/Log = self.$capture_0;
-    global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(struct.new "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log" { outer: local.tee $save_closure_handler_body.wado/Log(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_handler_body.wado//$Closure_3" { $capture_0: $h_closure_handler_body.wado/Log }, func: ref.func "closure/closure_handler_body.wado/$closure_wrapper_3" } });
+    global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = struct.new "closure_handler_body.wado//$Dispatch_closure_handler_body.wado/Log" { outer: local.tee $save_closure_handler_body.wado/Log(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_handler_body.wado//$Closure_3" { $capture_0: $h_closure_handler_body.wado/Log }, func: ref.func "closure/closure_handler_body.wado/$closure_wrapper_3" } };
     $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: block {
-        message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-        if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
-            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
+        message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
+        if @likely(ref.is_null(local.tee $local_1_5(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
+            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
             let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
-            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_emit)).env, message_4);
+            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_5;
         } else {
-            "core:rt/panic"(local.tee message_5(global:closure_handler_body.wado::$const_obj_1).repr, message_5.used);
+            "core:rt/panic"(local.tee message_4(global:closure_handler_body.wado::$const_obj_1).repr, message_4.used);
             unreachable;
         }
     };
     $inline__effect_dispatch__closure_handler_body_wado_Log__emit_1: block {
-        message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("there"), used: 5 };
-        if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
-            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
-            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_1: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
+        message_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("there"), used: 5 };
+        if @likely(ref.is_null(local.tee $local_1_5(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
+            global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_emit)).env, message_4);
+            break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_1: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_5;
         } else {
-            "core:rt/panic"(local.tee message_5(global:closure_handler_body.wado::$const_obj_1).repr, message_5.used);
+            "core:rt/panic"(local.tee message_4(global:closure_handler_body.wado::$const_obj_1).repr, message_4.used);
             unreachable;
         }
     };

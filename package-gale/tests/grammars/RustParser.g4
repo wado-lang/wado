@@ -563,6 +563,9 @@ literalExpression
     | BYTE_LITERAL
     | BYTE_STRING_LITERAL
     | RAW_BYTE_STRING_LITERAL
+    // LOCAL: the C string literals `RustLexer.g4` adds.
+    | C_STRING_LITERAL
+    | RAW_C_STRING_LITERAL
     | INTEGER_LITERAL
     | FLOAT_LITERAL
     | KW_TRUE

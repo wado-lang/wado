@@ -6,6 +6,8 @@
 use std::time::Duration;
 
 use predicates::prelude::*;
+#[cfg(unix)]
+use wado_host::sandbox;
 
 use crate::common::{custom_sections, wado, wado_in, wado_test};
 
@@ -1408,6 +1410,184 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
     run()
         .failure()
         .stdout(predicate::str::contains("cached:").not());
+    // A file in no package caches in the user cache, never beside itself.
+    assert!(!tmp.path().join("build").exists());
+}
+
+/// An environment variable the compile read is an input like a file: a run
+/// that sees another value compiles again.
+#[test]
+fn test_test_caches_a_file_whose_compile_read_the_environment() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("param_test.wado");
+    std::fs::write(
+        &main,
+        "#[param(from_env = \"PARAM_TEST_N\")]\nglobal N: i32 = 1;\n\ntest \"t\" {\n    assert N == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&main).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    wado()
+        .env("PARAM_TEST_N", "2")
+        .arg("test")
+        .arg(&main)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+/// `wado run` takes the component it built from the cache while nothing the
+/// compile read has changed, and a file in no package keeps that cache in the
+/// user cache rather than beside itself.
+#[cfg(unix)]
+#[test]
+fn test_run_reuses_its_component_until_something_it_read_changes() {
+    use std::os::unix::fs::MetadataExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let scripts = tmp.path().join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    let dep = scripts.join("dep.wado");
+    let body = |n: i32| format!("pub fn n() -> i32 {{\n    return {n};\n}}\n");
+    std::fs::write(&dep, body(1)).unwrap();
+    let main = scripts.join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\nuse { n } from \"./dep.wado\";\n\nexport fn run() with Stdout {\n    println(`${n()}`);\n}\n",
+    )
+    .unwrap();
+    let run = |expected: &str| {
+        wado_in(&scripts)
+            .env("XDG_CACHE_HOME", cache.path())
+            .args(["run", "main.wado"])
+            .assert()
+            .success()
+            .stdout(format!("{expected}\n"));
+    };
+    let entry = || {
+        let dir = cache.path().join("wado/run");
+        let entries: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "json"))
+            .collect();
+        assert_eq!(entries.len(), 1, "one entry per entry file and options");
+        std::fs::metadata(&entries[0]).unwrap().ino()
+    };
+
+    run("1");
+    let first = entry();
+    run("1");
+    assert_eq!(entry(), first, "an unchanged run writes no entry");
+    std::fs::write(&dep, body(2)).unwrap();
+    run("2");
+    assert_ne!(entry(), first, "an edited import compiles again");
+    assert_eq!(
+        std::fs::read_dir(&scripts).unwrap().count(),
+        2,
+        "nothing is written beside the script"
+    );
+}
+
+/// A cache entry names every file the compile read, and a path that is not
+/// UTF-8 cannot be written into one: the run goes ahead uncached.
+#[cfg(unix)]
+#[test]
+fn test_run_compiles_a_file_under_a_directory_whose_name_is_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp
+        .path()
+        .join(std::ffi::OsStr::from_bytes(b"not-utf8-\xff"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n",
+    )
+    .unwrap();
+    wado_in(&dir)
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("hi\n");
+}
+
+/// The package metadata a project's component embeds is read outside the
+/// compile, so the cached component is checked against it too.
+#[test]
+fn test_run_rebuilds_a_cached_component_once_its_license_file_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"lic\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+    std::fs::write(
+        tmp.path().join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n",
+    )
+    .unwrap();
+    let embedded_license = |text: &str| {
+        std::fs::write(tmp.path().join("LICENSE"), text).unwrap();
+        wado_in(tmp.path())
+            .args(["run", "src/main.wado"])
+            .assert()
+            .success();
+        let cached: Vec<_> = std::fs::read_dir(tmp.path().join("build/run"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "wasm"))
+            .collect();
+        assert_eq!(cached.len(), 1);
+        custom_sections(&cached[0])
+            .into_iter()
+            .find(|(name, _)| name == "org.wado-lang.license")
+            .map(|(_, payload)| String::from_utf8(payload).unwrap())
+    };
+    assert_eq!(embedded_license("one").as_deref(), Some("one"));
+    assert_eq!(embedded_license("two").as_deref(), Some("two"));
+}
+
+#[test]
+fn test_clean_global_removes_the_user_cache() {
+    let cache = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(cache.path().join("wado/run")).unwrap();
+    std::fs::write(cache.path().join("wado/run/x.json"), "{}").unwrap();
+    wado()
+        .env("XDG_CACHE_HOME", cache.path())
+        .args(["clean", "--global"])
+        .assert()
+        .success();
+    assert!(!cache.path().join("wado").exists());
+    assert!(cache.path().exists(), "only wado's own directory goes");
+    wado()
+        .args(["clean", "--global", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pass one"));
+}
+
+#[test]
+fn test_clean_global_ignores_a_relative_xdg_cache_home() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join(".cache/wado")).unwrap();
+    std::fs::create_dir_all(cwd.path().join("rel/wado")).unwrap();
+    wado_in(cwd.path())
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", "rel")
+        .args(["clean", "--global"])
+        .assert()
+        .success();
+    assert!(cwd.path().join("rel/wado").exists());
+    assert!(!home.path().join(".cache/wado").exists());
 }
 
 #[test]
@@ -1587,6 +1767,135 @@ fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
             .success()
             .stdout(predicate::str::is_match(r"fuel \d+").unwrap());
     }
+}
+
+/// A test blocked on a host future runs no wasm, so no epoch interrupts it; the
+/// timeout still ends it.
+#[cfg(unix)]
+#[test]
+fn test_test_times_out_a_guest_blocked_on_the_host() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("blocked_test.wado");
+    std::fs::write(
+        &file,
+        "use { cmd } from \"core:process\";\n\n#[timeout_ms(300)]\ntest \"blocked\" {\n    let _ = cmd`sleep 30`.status();\n}\n",
+    )
+    .unwrap();
+    wado_test()
+        .arg(&file)
+        .timeout(Duration::from_secs(60))
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("test timed out after 300ms"));
+}
+
+/// `--process-read` lets a child read a path outside the guest's grants, and
+/// that path alone.
+#[cfg(unix)]
+#[test]
+fn test_run_process_read_opens_a_path_to_the_child() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let tool = tempfile::tempdir().unwrap();
+    std::fs::write(tool.path().join("data.txt"), "from the tool").unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { args, print, Stdout, Environment } from \"core:cli\";\nuse { cmd, Process } from \"core:process\";\n\nexport fn run() with (Stdout, Environment, Process) {\n    let path = args()[0];\n    print(String::from_utf8_lossy(&cmd`cat ${path}`.read().unwrap()));\n}\n",
+    )
+    .unwrap();
+    let data = tool.path().join("data.txt");
+    let run = |extra: &[&std::ffi::OsStr]| {
+        wado_in(work.path())
+            .arg("run")
+            .args(extra)
+            .arg("main.wado")
+            .arg(&data)
+            .assert()
+    };
+
+    run(&[]).failure();
+    run(&["--process-read".as_ref(), tool.path().as_os_str()])
+        .success()
+        .stdout("from the tool");
+
+    // `[process] read` in the user config opens it the same way, unless
+    // another user can write the file.
+    let config_home = tempfile::tempdir().unwrap();
+    let config = config_home.path().join("wado").join("config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(
+        &config,
+        format!(
+            "[process]\nread = [{:?}]\n",
+            tool.path().display().to_string()
+        ),
+    )
+    .unwrap();
+    let run_configured = || {
+        wado_in(work.path())
+            .env("XDG_CONFIG_HOME", config_home.path())
+            .args(["run", "main.wado"])
+            .arg(&data)
+            .assert()
+    };
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+    run_configured().success().stdout("from the tool");
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o666)).unwrap();
+    run_configured()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "warning: ignoring {}: other users can write it",
+            config.display()
+        )));
+}
+
+#[test]
+fn test_run_process_read_takes_an_existing_path_and_a_spawning_guest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let missing = tmp.path().join("missing");
+    wado()
+        .args(["run", "--process-read"])
+        .arg(&missing)
+        .arg("example/hello.wado")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "--process-read {}: ",
+            missing.display()
+        )));
+    for flags in [
+        ["--deny-process", "--process-read"],
+        ["--process-read", "--deny-process"],
+    ] {
+        let mut cmd = wado();
+        cmd.arg("run");
+        for flag in flags {
+            cmd.arg(flag);
+            if flag == "--process-read" {
+                cmd.arg(tmp.path());
+            }
+        }
+        cmd.arg("example/hello.wado")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("which --deny-process forbids"));
+    }
+    wado()
+        .args([
+            "run",
+            "--deny-process",
+            "--deny-process",
+            "example/hello.wado",
+        ])
+        .assert()
+        .success();
 }
 
 #[test]

@@ -16,6 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::call_args::CallArgs;
+use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
@@ -67,7 +68,7 @@ use crate::{nir, tir};
 /// the `NirPackage`. The closure-functor conversion looks up the
 /// fresh [`FuncRef`] in `func_map`, so a functor shares its methods with
 /// the package rather than holding copies.
-pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
+pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter) -> NirPackage {
     let LowerPlan {
         box_plan,
         closure,
@@ -94,8 +95,9 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let strings = string::plan(&flat);
     // After the last rewrite of a body, which would move the arguments it keys.
     let struct_fields_map = struct_fields(&flat.structs);
-    let points_to =
-        value_copy::points_to::compute(&flat, &struct_fields_map, &closure.functor_infos);
+    let points_to = in_span(profiler, "lower/points_to", || {
+        value_copy::points_to::compute(&flat, &struct_fields_map, &closure.functor_infos)
+    });
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -1048,12 +1050,14 @@ impl FunctionTranslator<'_, '_> {
             for field in this.aggregate_fields(ty) {
                 let field_type = field.2;
                 path.push(field);
-                if this
-                    .base
-                    .type_table
-                    .borrow()
-                    .is_in_place_aggregate(field_type)
-                {
+                // An affine field holds an object, which the write moves as a
+                // whole: the drop before the write has nulled the old one
+                // (WEP: Affine Types).
+                let descends = {
+                    let tt = this.base.type_table.borrow();
+                    tt.is_in_place_aggregate(field_type) && !tt.holds_affine_resource(field_type)
+                };
+                if descends {
                     collect(this, field_type, path, out);
                 } else {
                     out.push(path.clone());

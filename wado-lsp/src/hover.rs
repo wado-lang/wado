@@ -95,17 +95,7 @@ pub(crate) fn hover_for_item_symbol(
 
 /// True for symbol kinds that name a type (and so can carry `impl` blocks).
 fn is_type_symbol(kind: &SymbolKind) -> bool {
-    matches!(
-        kind,
-        SymbolKind::Struct(_)
-            | SymbolKind::Enum(_)
-            | SymbolKind::Variant(_)
-            | SymbolKind::Flags(_)
-            | SymbolKind::Newtype(_)
-            | SymbolKind::Resource(_)
-            | SymbolKind::Trait(_)
-            | SymbolKind::Effect(_)
-    )
+    kind.declares_type() || matches!(kind, SymbolKind::Trait(_) | SymbolKind::Effect(_))
 }
 
 /// Append the module's `impl` blocks targeting `symbol`'s type, each rendered
@@ -261,7 +251,7 @@ impl FirstMatch for LocalRenderer<'_> {
     }
 }
 
-impl AstVisitor for LocalRenderer<'_> {
+impl AstVisitor<'_> for LocalRenderer<'_> {
     fn visit_function(&mut self, func: &ast::Function) {
         if self.result.is_some() {
             return;

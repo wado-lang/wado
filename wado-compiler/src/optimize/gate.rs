@@ -19,6 +19,7 @@ use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
 use crate::nir_engine::EngineBuffers;
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
@@ -86,8 +87,8 @@ impl CallGraph {
                 continue;
             };
             let mut seen: IndexSet<FuncId> = IndexSet::default();
-            for node in body.exprs.values() {
-                let func_id = match &node.kind {
+            for e in reachable_exprs(body) {
+                let func_id = match &body.exprs[e].kind {
                     ExprKind::Call { func_id, .. } => func_id,
                     _ => continue,
                 };

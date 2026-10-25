@@ -1,0 +1,47 @@
+// An argument read against a parameter whose pack no argument has answered
+// yet. Its list literal takes the pack's answer once the call settles it,
+// whether the same argument answers it or a later one does.
+
+struct Tag<T> {
+    n: i32,
+}
+
+struct Holder<O> {
+    items: List<O>,
+    k: i32,
+}
+
+struct Lead {
+}
+struct Last {
+}
+struct Host {
+}
+
+impl Host {
+    fn count<..Bs, M>(&self, h: Holder<Tag<[..Bs, M]>>) -> Tag<[..Bs, M]> {
+        return Tag { n: h.items.len() + h.k };
+    }
+}
+
+fn count<..Bs, M>(h: Holder<Tag<[..Bs, M]>>) -> Tag<[..Bs, M]> {
+    return Tag { n: h.items.len() + h.k };
+}
+
+fn paired<..Bs, M>(h: Holder<Tag<[..Bs, M]>>, t: Tag<[..Bs, M]>) -> i32 {
+    return h.items.len() + h.k + t.n;
+}
+
+test "the argument that answers a pack types its own list literal" {
+    let t = Tag::<[Lead, Last]> { n: 0 };
+    let host = Host {};
+    let by_method = host.count(Holder { items: [t, t], k: 1 });
+    assert by_method.n == 3;
+    let by_function = count(Holder { items: [t, t], k: 1 });
+    assert by_function.n == 3;
+}
+
+test "a later argument's answer types an empty list literal" {
+    let t = Tag::<[Lead, Last]> { n: 5 };
+    assert paired(Holder { items: [], k: 1 }, t) == 6;
+}

@@ -5,7 +5,7 @@ import { mkdtempSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const WADO = './target/release/wado';
+const WADO = './target/debug/wado';
 
 type SizeResult = { name: string; unit: string; value: number };
 

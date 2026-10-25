@@ -80,6 +80,10 @@ let out = Compress::compress(bytes);
 // The default interface, named after its package (`acme:geo/geo`, what a Wado
 // library exports), also offers its functions by bare name, as source does.
 use { area } from "./geo.wasm" with { type: "wasm" };
+
+// Any interface by its full name; the version may go where only one is offered.
+use { "acme:geo/geo@0.1.0" as Geo } from "./geo.wasm" with { type: "wasm" };
+use { "wasi:cli/stdout" as Out } from "wasi:cli";
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
@@ -289,6 +293,7 @@ See the spec on [tuple literals](./spec-literals.md#tuple-literals) and [list li
 let t = [1, "hello", true];   // [i32, String, bool]
 let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
+[a, b] = [b, a];              // destructuring assignment: the right side first, then each target
 
 // Lists (requires explicit type context)
 let a: List<i32> = [1, 2, 3];           // type annotation
@@ -589,7 +594,7 @@ assert rw as u32 == 3;     // cast to/from u32
 
 A resource is move-only, and so is anything holding one: such a type is
 declared `affine`. A value of it drops once, where its scope ends, unless it
-moved. See [the spec](./spec-types.md#affine-types).
+moved. See [the spec](./spec-affine.md).
 
 ```wado
 affine struct Conn { socket: TcpSocket, retries: i32 }
@@ -1274,6 +1279,8 @@ affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, 
 affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
 affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+// `[c[i], c[j]] = [c[j], c[i]]` calls it: the elements move, affine ones too
+affine trait IndexSwap<I> with () { fn index_swap(&mut self, a: I, b: I); }
 
 // For string template interpolation
 pub affine trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
@@ -1342,7 +1349,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Hash`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable, hashable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -1874,6 +1881,25 @@ let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem 
 Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 `example/cat.wado`.
 
+### core:process
+
+Runs a host program, confined to the guest's own grants plus a fixed system
+baseline. `availability()` says whether this host can enforce that. The `cmd`
+template splits literal text on spaces and keeps each hole one argument, so
+no shell ever parses it. See [`core:process`](./stdlib-core-process.md).
+
+```wado
+use { cmd, Command, Process } from "core:process";
+
+let head = cmd`git rev-parse HEAD`.read()?;          // ByteList; Err on a nonzero exit
+let out = cmd`git commit -m ${msg} -- ${files}`.output()?;  // status, stdout, stderr
+let status = Command::new("make").arg("test").inherit_stdio().status()?;
+let status = cmd`sleep 30`.timeout(100_000_000).status()?;  // ns; ExitStatus::TimedOut
+
+let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
+child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe
+```
+
 ### core:collections
 
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
@@ -1988,6 +2014,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   point ranges or per character
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
+- [`core:fuel`](./stdlib-core-fuel.md) — `measure`, the fuel (Wasm instructions)
+  a region of a test ran, under `wado test --report-fuel`
 - [`core:eval`](./stdlib-core-eval.md) — compile and run a program from source
   under `wado test`, for testing code generators
 

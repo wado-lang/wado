@@ -67,19 +67,36 @@ runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them. `expand` is a view, each stretched axis read through a stride of 0.
 - `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
-  dispatches. One writes the present keys and values into one buffer, the new
-  keys turned by the rotary tables. The next attends each query row over each
-  part of `LANES` positions in a workgroup of its own: the turned query, its scores,
-  their weights against the part's greatest, and the values they weigh. The
-  last joins a row's parts, rescaling each to the row's greatest score. Gemma's
-  step over one token has 4 query rows, so a workgroup a row left the device idle
-  and grew slower with the sequence: at 600 positions a token took 1.9 times
-  as long as with the parts. `conformance/webgpu_attention.wado` holds it to `Cpu`.
-- A product of at most four rows, as a step over one token makes, does not
-  run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
-  computes a run of columns, its lanes splitting the inner axis. The lanes
+  dispatches. One appends the new keys, turned by the rotary tables, and
+  values to the attention cache. The cache holds a power of two of positions,
+  so a step writes only its own positions, into the cache its past is in, and
+  binds what the step before bound. A step whose past is not the cache's last,
+  as a branch from an earlier past is, or that outgrows the cache, copies the
+  past to a cache of its own first. The next attends each query row over each
+  part of 4 positions in a workgroup of its own: the turned query, its scores,
+  their weights against the part's greatest, and the values they weigh. 64
+  lanes split each position's dot, as a lane a position summed Gemma's 256
+  elements alone. The cache's parts are held for every position it holds, so
+  they too bind as the step before's did. A prompt whose rows would outgrow a
+  binding in parts of 4 takes larger parts, as many rows spread over the device
+  in any. The last joins a row's parts, rescaling each to the row's greatest
+  score. Gemma's step over one token has 4
+  query rows, so a workgroup a row left the device idle and grew slower with
+  the sequence: at 600 positions a token took 1.9 times as long as with parts
+  of 64 positions. Parts of 4 with the dot split took Gemma's 8 tokens from a
+  short prompt in 0.94 times the time of parts of 64.
+  `conformance/webgpu_attention.wado` holds it to `Cpu`.
+- A product of at most six rows, as a step over one token or a short prompt
+  makes, does not run in 16 by 16 tiles, which would leave most lanes idle.
+  Each workgroup computes a run of columns, its lanes splitting the inner
+  axis, four rows at a time. Its time grows with the rows, and the tiled
+  product's does not: on GPT-2 (124M) the two meet at about seven. The lanes
   that read the weight together read where it is contiguous: one row's run of
-  columns, or one column of a transposed weight, such as Gemma's head.
+  columns, or one column of a transposed weight, such as Gemma's head. Across
+  a transposed weight a workgroup takes the most columns that still leave 128
+  workgroups, from 16 down to 4, and adds each column's parts in halves. A
+  layer's products of 256 to 2048 columns ran in 32 to 256 workgroups of 8
+  columns, too few reads at once for the device, and took 1.2 times as long.
 - `arg_max` ranks each part of 4096 elements of a lane in a workgroup of its
   own, then a lane's parts in another, and reads back one index per lane, as
   an f32, which holds a vocabulary's indices exactly. A language
@@ -215,6 +232,57 @@ them.
 Whether a node computes anything now depends on its neighbours, so lowering is
 the plan's answer, `Plan::lowering`, which emission and `loam dump` both read.
 
+#### Two products of one input pair
+
+A gated layer multiplies one input by a gate matrix and by a value matrix, and
+meets the two elementwise. A kernel otherwise follows one contraction, so the
+second product would write its output and the kernel would read it back. The
+plan pairs two matrix products of one left operand over one iteration space
+instead, and `forward` calls `matmul_rhs_paired` with the operators after them
+as its epilogue, which reads the two products as `operand(0)` and `operand(1)`.
+
+Each right matrix must be a weight its product alone reads, and the two must
+share one element type and one list of axes. The backend then
+keeps the two as one matrix of twice the columns, a column of the first, then
+the same column of the second (`Paired<N>`). On a device, a product of a few
+rows reading that matrix along its inner axis runs as one dispatch: a
+workgroup's lanes sum an even column and the one after it, and the lane
+holding the even one applies the epilogue to both sums. Any other product runs
+as the product by the whole matrix, then the epilogue over its two halves.
+
+#### Products of one input read apart are one product
+
+Attention's query, key and value are three products of one input, each read by
+a kernel of its own, so they do not pair. The plan concatenates the products
+of one left operand that are each a kernel alone, over one set of leading
+axes, each by a weight as stored that its product alone reads, the weights of
+one row axis and element. The backend keeps their weights as one matrix whose
+columns are each weight's in turn (`Concat<A, B>`), and `forward` computes the
+one product and reads each part as a view of its columns (`slice_axis`), which
+a device writes nothing for. The parts are one kernel, so the normalization
+before them is its prologue.
+
+#### A normalization is its product's prologue
+
+A normalization before a layer is a row group that only the layer's products
+read, by weights, as their left operand. The plan makes such a group, one that
+takes no contraction in, the prologue of the products' kernel, and `forward`
+calls `matmul_rhs_from` or `matmul_rhs_paired_from` with it. A row group still
+takes no contraction: the prologue is a kernel of its own that the product
+computes rather than reads. The product computes it over the rows it reads, so
+a group that folds rows is one only where it writes them whole, not one value
+per row. The plan finds prologues after every kernel is formed, since a kernel
+the plan has not finished may still take a product in.
+
+On a device, a product of a few rows runs it in the product's dispatch. Each
+workgroup folds a block of rows and computes the block's elements into
+workgroup memory, which its lanes then read as the left matrix. Every
+workgroup repeats the fold, which costs the rows' reads again per workgroup
+and saves a dispatch and the normalized tensor's write and read. A product of
+more rows, of rows too long for workgroup memory, or a pair of products by
+weights that are not transposed, writes the prologue with the row kernel it
+would otherwise have had.
+
 #### What a layer costs
 
 | Dispatch            | Nodes it covers                           |
@@ -277,7 +345,7 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
 | GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 294                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.13                             | 204                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
@@ -292,4 +360,7 @@ wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
 roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
 submitting every 32 dispatches to 0.34, keeping the product weights column by
 column in bf16 to 0.28, splitting `arg_max`'s lane over the device to 0.25,
-and reusing buffers and bind groups to 0.19.
+and reusing buffers and bind groups to 0.19. Then the device set the time:
+pairing the gate and the value, workgroups of 256 lanes for the rows and
+attention, and one product of the query, key and value, its normalization in
+it, took it to 0.13.

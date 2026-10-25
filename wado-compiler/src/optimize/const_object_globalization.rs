@@ -240,7 +240,7 @@ pub fn globalize_const_objects(
         return false;
     }
     let functions = &project.functions;
-    exec.map(&per_function, |hoists| {
+    exec.for_each(&per_function, |hoists| {
         let Some((_, first)) = hoists.first() else {
             return;
         };
@@ -1103,7 +1103,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
+    if let Some(e) = body.find_in_nodes_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1130,7 +1130,7 @@ fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
     let Some(e) = value.as_expr() else {
         return out;
     };
-    body.for_each_live_node_under(NodeRef::Expr(e), |node| {
+    body.for_each_node_under(NodeRef::Expr(e), |node| {
         if let NodeRef::Stmt(s) = node {
             out.insert(s);
         }
@@ -1247,7 +1247,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
     while let Some(op) = pending.pop() {
         let Some(e) = op.as_expr() else { continue };
         let mut found = IndexSet::default();
-        body.for_each_live_node_under(NodeRef::Expr(e), |node| {
+        body.for_each_node_under(NodeRef::Expr(e), |node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Local { index, .. } = &body.exprs[id].kind
                 && siblings.set.contains(index)
@@ -1276,7 +1276,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
 /// unseen.
 fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
     let mut counts: IndexMap<u32, usize> = IndexMap::default();
-    body.for_each_live_node_under(node, |node| {
+    body.for_each_node_under(node, |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Local { index, .. } = &body.exprs[id].kind
             && wanted.contains(index)
@@ -1897,7 +1897,7 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let delivers = |op: Operand| delivers_projection_operand(body, op, roots, gate);
     body.block_tail(body.root()).is_some_and(delivers)
         || body
-            .find_in_live_node_under(NodeRef::Block(body.root()), |node| {
+            .find_in_nodes_under(NodeRef::Block(body.root()), |node| {
                 let leaves = match node {
                     NodeRef::Stmt(s) => match &body.stmts[s].kind {
                         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
@@ -1937,7 +1937,7 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// keep the storage or hand it back.
 fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let escapes = |op: Operand| delivers_projection_operand(body, op, roots, gate);
-    body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
+    body.find_in_nodes_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node {
             match &body.exprs[e].kind {
                 // A by-value `self` receiver hands the storage to the callee,
@@ -2170,7 +2170,7 @@ fn yielded_roots(body: &Body, op: Operand, gate: &Gate<'_>) -> Vec<u32> {
     let Some(expr) = op.as_expr() else {
         return out;
     };
-    body.for_each_live_node_under(NodeRef::Expr(expr), |node| {
+    body.for_each_node_under(NodeRef::Expr(expr), |node| {
         if let NodeRef::Expr(e) = node
             && gate.is_reference_type(body.exprs[e].type_id)
             && let Some(root) = projection_root_of(body, e, gate)
@@ -2623,7 +2623,7 @@ fn inline_sibling_lets(
 /// past `ARRAY_NEW_FIXED_LIMIT`, which becomes a build sequence; and one
 /// `promote_constant_arrays_to_data` will rewrite to `array.new_data`.
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
-    body.find_in_live_node_under(NodeRef::Expr(expr), |node| {
+    body.find_in_nodes_under(NodeRef::Expr(expr), |node| {
         let NodeRef::Expr(id) = node else { return None };
         match &body.exprs[id].kind {
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {

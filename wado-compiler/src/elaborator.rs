@@ -38,6 +38,7 @@ mod tagged_template;
 mod template;
 pub(crate) mod trait_env;
 mod trait_query;
+mod transposition;
 mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
@@ -59,6 +60,7 @@ use crate::ast::{
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
+use crate::divergence;
 use crate::elaborator::item::OperationOwner;
 pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
@@ -99,7 +101,7 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
 /// list an item declares. A body's local items are checked where it is walked.
 struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
 
-impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+impl<H: CompilerHost> AstVisitor<'_> for ForwardDefaults<'_, '_, H> {
     fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
         self.0.report_forward_type_param_defaults(params);
         ast::walk_generic_params(self, params);
@@ -192,6 +194,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::abstract_selections`] by default body, shared by every module
     /// (`AnnotateState::abstract_selections`).
     pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
+    /// `AnnotateState::transpositions`.
+    transpositions: Rc<hashmap::IndexMap<ast::AstId, transposition::Clean>>,
 }
 
 /// What a default body's author selected at one call through a bound.
@@ -635,13 +639,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        if let Some(alias) = self.lookup_newtype_of_decl(*def) {
-            return Some(self.tysys.peeled_base(alias));
+        let newtype = self.newtype_self_type(*def)?;
+        Some(self.tysys.peeled_base(newtype))
+    }
+
+    /// The type the newtype or alias `def` declares, a generic one applied to
+    /// its own parameters.
+    pub(super) fn newtype_self_type(&mut self, def: DefId) -> Option<tir::TypeId> {
+        if let Some(alias) = self.lookup_newtype_of_decl(def) {
+            return Some(alias);
         }
-        // A generic newtype declares no one type. Its instance over its own
-        // parameters reaches the base's head, which is all a key reads.
         let names: Vec<String> = self
-            .lookup_generic_newtype_of_decl(*def)?
+            .lookup_generic_newtype_of_decl(def)?
             .type_params
             .iter()
             .map(|p| p.name.clone())
@@ -656,21 +665,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .make_type_param(name, index)
             })
             .collect();
-        let instance = self.generic_newtype_instance(*def, params);
-        Some(self.tysys.peeled_base(instance))
+        Some(self.generic_newtype_instance(def, params))
     }
 
-    /// The base a newtype receiver wraps: the key its impls answer at, and the
-    /// name it answers under. The declaration first, since a namespaced
-    /// `lib::Q::twice()` leaves the caller's frame no `Q` to look one up by.
+    /// The base the newtype `key` declares wraps: the key its impls answer at,
+    /// and the name it answers under.
     pub(super) fn newtype_base_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-        receiver_name: &str,
     ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let (base, base_name) = self
-            .newtype_base_of(key)
-            .or_else(|| self.newtype_base(receiver_name))?;
+        let (base, base_name) = self.newtype_base_of(key)?;
         let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
         Some((base_key, base_name))
     }
@@ -786,7 +790,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     pub(super) fn ast_block_always_exits(&self, block: &Block) -> bool {
-        control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+        divergence::block_always_exits(&self.ctrl_flow_ctx(), block)
     }
 
     /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
@@ -796,16 +800,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(body) = body else {
             return;
         };
-        if let Some((jump, span)) = control_flow::find_unbound_loop_jump(self.ctrl_flow_ctx(), body)
-        {
+        if let Some((jump, span)) = control_flow::find_unbound_loop_jump(body) {
             let _ = self.emit(types::TypeError::LoopJumpOutsideLoop { jump, span });
         }
-    }
-
-    /// Whether a labeled block's body can reach its own end, so its trailing
-    /// statement is a branch of the block.
-    pub(super) fn ast_labeled_block_falls_through(&self, block: &Block, label: &str) -> bool {
-        control_flow::labeled_block_falls_through(self.ctrl_flow_ctx(), block, label)
     }
 
     /// Result type of an AST block, read from `expression_types` rather
@@ -845,7 +842,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         };
         if in_handler_method {
-            if !control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+            if !self.ast_block_always_exits(body) {
                 let _ = self.emit(types::TypeError::MissingResume {
                     function: func.name.clone(),
                     span: func.span,
@@ -854,9 +851,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         if func.is_async {
-            if !control_flow::block_delivers(self.ctrl_flow_ctx(), body)
-                && !control_flow::block_always_exits(self.ctrl_flow_ctx(), body)
-            {
+            if !control_flow::block_delivers(body) && !self.ast_block_always_exits(body) {
                 let _ = self.emit(types::TypeError::MissingTaskReturn {
                     function: func.name.clone(),
                     span: func.span,
@@ -867,7 +862,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
             return;
         }
-        if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+        if self.ast_block_always_exits(body) {
             return;
         }
         let _ = self.emit(types::TypeError::MissingReturn {
@@ -1264,15 +1259,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
-        let withheld = if on_bound == OnBoundTrait::Ord {
-            self.tysys.ord_withheld_note(target_type_id)
-        } else if on_bound == OnBoundTrait::Default {
+        let withheld = if on_bound == OnBoundTrait::Default {
             Some(
                 self.tysys
                     .default_withheld_note(&self.type_lookup(), target_type_id),
             )
         } else {
-            None
+            self.tysys
+                .comparison_withheld_note(on_bound, target_type_id)
         };
         if let Some(why) = withheld {
             let _ = self.emit(types::TypeError::MarkerWithheld {
@@ -1613,8 +1607,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             for use_item in &use_decl.items {
                 match use_item {
-                    ast::UseItem::Simple { id, name, .. } => {
-                        self.record_use_reference(&source, *id, name);
+                    ast::UseItem::Simple {
+                        id, name, spelling, ..
+                    } => {
+                        if let Some(member) = self.symbols.use_item_member(&source, name, spelling)
+                        {
+                            self.record_use_reference(&source, *id, &member);
+                        }
                     }
                     ast::UseItem::InterfaceFunctions {
                         id,

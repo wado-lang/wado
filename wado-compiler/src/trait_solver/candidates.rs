@@ -2,7 +2,9 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::holds::{answers_args, impl_applies, newtype_base, withheld_at};
+use super::holds::{
+    answers_args, impl_applies, newtype_base, peels_to_never, withheld_at, written_only_at,
+};
 use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
@@ -113,6 +115,11 @@ fn collect(
     let mut withheld: Vec<TraitDeclId> = Vec::new();
     let own_levels = own_levels(receiver);
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
+        // `!` holds every trait with no impl answering, so not even a blanket
+        // does (spec-types.md § Trait Bounds on `!`).
+        if peels_to_never(program, ty) {
+            break;
+        }
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
         withheld.extend(withheld_at(program, ty));
         for (impl_, def) in program.trait_impls_for(ty) {
@@ -148,6 +155,7 @@ fn collect(
                 found.out_of_scope.push(candidate);
             }
         }
+        withheld.extend(written_only_at(program, ty));
     }
     if !found.in_scope.is_empty() {
         found.out_of_scope.clear();

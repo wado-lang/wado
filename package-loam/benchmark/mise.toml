@@ -2,20 +2,64 @@
 # `=== Impl ===` header per arm and a throughput line `benchmark/logs.ts`
 # reads, so `benchmark/pick.ts` and `benchmark/ab.ts` work on its logs.
 #
-# The models are not in the repository. `package-loam/example/gpt2-124m/
-# fetch.sh` writes the checkpoint and `onnx/decoder_model.onnx`, and
-# `mise run loam-oracle-deps` at the repository root installs onnxruntime.
+# The models are not in the repository: each example's `fetch.sh` writes its
+# checkpoint and graph. onnxruntime and llama.cpp are their own releases, which
+# `fetch_onnxruntime.sh` and `fetch_llama_cpp.sh` download on first use.
 #
 # `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
 
 [settings]
 lockfile = true
 
-[tools]
-node = "latest"
+[tasks.build]
+description = "Build what every Loam benchmark runs: wado-run-webgpu and wado"
+hide = true
+run = """
+#!/usr/bin/env bash
+set -e
+cargo build --release --manifest-path ../../wado-run-webgpu/Cargo.toml --quiet
+if [ -z "${WADO_BIN:-}" ]; then
+    cargo build --release --manifest-path ../../wado-cli/Cargo.toml --quiet
+fi
+"""
+
+[tasks.build-onnxruntime]
+description = "Build the onnxruntime arms"
+hide = true
+sources = ["fetch_onnxruntime.sh", "harness.hpp", "*/onnxruntime.cpp"]
+outputs = ["build/onnxruntime_gpt2_124m", "build/onnxruntime_gemma3_270m"]
+run = """
+#!/usr/bin/env bash
+set -e
+ort=$(./fetch_onnxruntime.sh)
+mkdir -p build
+for model in gpt2_124m gemma3_270m; do
+    c++ -O2 -std=c++17 -I. -I"$ort/include" $model/onnxruntime.cpp \
+        -L"$ort/lib" -lonnxruntime -Wl,-rpath,"$ort/lib" -o build/onnxruntime_$model
+done
+"""
+
+[tasks.build-llama-cpp]
+description = "Build the llama.cpp arm, where the host has its release"
+hide = true
+sources = ["fetch_llama_cpp.sh", "harness.hpp", "gemma3_270m/llama_cpp.cpp"]
+outputs = ["build/llama_cpp"]
+run = """
+#!/usr/bin/env bash
+set -e
+llama=$(./fetch_llama_cpp.sh)
+if [ -z "$llama" ]; then
+    echo "SKIP: llama.cpp has no Vulkan release for this host"
+    exit 0
+fi
+mkdir -p build
+c++ -O2 -std=c++17 -I. -I"$llama/include" gemma3_270m/llama_cpp.cpp \
+    -L"$llama" -lllama -lggml -lggml-base -Wl,-rpath,"$llama" -o build/llama_cpp
+"""
 
 [tasks.gpt2-124m]
 description = "Run GPT-2 (124M) greedy generation (Loam Cpu and WebGPU vs onnxruntime)"
+depends = ["build", "build-onnxruntime"]
 run = """
 #!/usr/bin/env bash
 set -e
@@ -24,22 +68,13 @@ if [ ! -f $model/gpt2.safetensors ] || [ ! -f $model/model.onnx ]; then
     echo "SKIP: run $model/fetch.sh first"
     exit 0
 fi
-
-echo "=== Compiling wado-run-webgpu ==="
-cargo build --release --manifest-path ../../wado-run-webgpu/Cargo.toml --quiet
-if [ -z "${WADO_BIN:-}" ]; then
-    cargo build --release --manifest-path ../../wado-cli/Cargo.toml --quiet
-fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 echo "=== onnxruntime (CPU) ==="
-node gpt2_124m/onnxruntime.mjs
+build/onnxruntime_gpt2_124m
 
 echo "=== onnxruntime (CPU, 1 thread) ==="
-node gpt2_124m/onnxruntime.mjs 1
-
-echo "=== onnxruntime (WebGPU) ==="
-node gpt2_124m/onnxruntime.mjs webgpu
+build/onnxruntime_gpt2_124m 1
 
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m_webgpu.wado
@@ -48,10 +83,46 @@ echo "=== Loam (Cpu) ==="
 "$wado_exe" run -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m.wado
 """
 
+[tasks.gemma3-270m]
+description = "Run Gemma 3 (270M) greedy generation (Loam Cpu and WebGPU vs onnxruntime and llama.cpp)"
+depends = ["build", "build-onnxruntime", "build-llama-cpp"]
+run = """
+#!/usr/bin/env bash
+set -e
+model=../example/gemma3-270m
+if [ ! -f $model/build/gemma3.safetensors ] || [ ! -f $model/build/model.onnx ]; then
+    echo "SKIP: run $model/fetch.sh first"
+    exit 0
+fi
+wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
+
+echo "=== onnxruntime (CPU) ==="
+build/onnxruntime_gemma3_270m
+
+llama=$(./fetch_llama_cpp.sh)
+if [ -n "$llama" ]; then
+    # llama.cpp's own tools run a thread per physical core.
+    cores=$(getconf _NPROCESSORS_ONLN)
+    if command -v lscpu > /dev/null; then
+        cores=$(lscpu -p=core | grep -v '^#' | sort -u | wc -l)
+    fi
+    echo "=== llama.cpp (Vulkan) ==="
+    build/llama_cpp "$(gemma3_270m/fetch_gguf.sh)" "$llama" -1 $cores
+fi
+
+echo "=== Loam (WebGPU) ==="
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
+
+# The weights outgrow the copying collector's half of the heap.
+echo "=== Loam (Cpu) ==="
+"$wado_exe" run -O2 --collector drc $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m.wado
+"""
+
 [tasks.all]
 description = "Run all Loam benchmarks serially"
 run = """
 #!/usr/bin/env bash
 set -e
 MISE_JOBS=1 mise run gpt2-124m
+MISE_JOBS=1 mise run gemma3-270m
 """

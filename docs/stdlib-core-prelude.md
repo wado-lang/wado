@@ -202,6 +202,13 @@ Returns the live case's tag.
 
 Returns the per-case members.
 
+#### `fn wire_tag() -> Option<String>`
+
+`#[compiler_item("reflect_variant_wire_tag")]`
+
+Returns the key `#[wire(tag)]` writes each case under, or `None` where
+the variant declares none.
+
 ### `pub trait ReflectEnum: Reflect with ()`
 
 Compile-time enum introspection. The compiler synthesizes an impl for
@@ -338,6 +345,15 @@ writing it by value is a distinct operation from handing out a `&mut`.
 #### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
 Assigns a value to the element at the given index.
+
+### `pub affine trait IndexSwap<IndexType> with ()`
+
+Element exchange: `c.index_swap(a, b)` does what `[c[a], c[b]] = [c[b], c[a]]`
+does, moving the two elements rather than copying them, so it serves an
+affine element too. Like that assignment it checks `b` before `a`, and
+`a == b` leaves the container as it was.
+
+#### `fn index_swap(&mut self, a: IndexType, b: IndexType)`
 
 ### `pub trait IndexValue<IndexType> with ()`
 
@@ -754,7 +770,7 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 ### `pub affine trait Waitable with ()`
 
 What a `WaitableSet` waits on: a value the host reports events for by its
-handle. It is sealed, so a set joins only what it can account for: the
+handle. It is sealed, so a set holds only what it can account for: the
 standard library implements it on the calls, and a variant whose cases each
 hold one derives it with `impl Waitable for V;`. A bare stream or future end
 is none, since no copy on it is in flight: a copy started on a stream end,
@@ -1532,6 +1548,10 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f32`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f32`
 
 ##### `pub fn default() -> f32`
@@ -1893,6 +1913,10 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f64`
 
 ##### `pub fn default() -> f64`
@@ -2024,6 +2048,10 @@ IEEE 754's `>=`, on the values widened to f32.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for f16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for f16`
 
 ##### `pub fn default() -> f16`
@@ -2150,6 +2178,10 @@ IEEE 754's `>=`, on the values widened to f32.
 #### `impl Ord for bf16`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for bf16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for bf16`
 
@@ -4427,7 +4459,7 @@ _Fields are private._
 #### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>]`
 
 The end and what the copy moved. Waits for a copy that has not settled,
-so a copy that never joined a set finishes as well.
+so a copy never inserted into a set finishes as well.
 
 #### `impl Drop for ReadCopy<T>`
 
@@ -4466,7 +4498,7 @@ _Fields are private._
 #### `pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>]`
 
 The end and what the copy left of its data. Waits for a copy that has
-not settled, so a copy that never joined a set finishes as well.
+not settled, so a copy never inserted into a set finishes as well.
 
 #### `impl Drop for WriteCopy<T>`
 
@@ -4491,9 +4523,9 @@ _Fields are private._
 
 `#[benign(RawWaitableSet)]`
 
-#### `pub fn join(&mut self, member: W)`
+#### `pub fn insert(&mut self, member: W)`
 
-Moves `member` into the set. A member joins one set at a time, so
+Moves `member` into the set. A member is in one set at a time, so
 whether the host has an event left for it is settled here.
 
 #### `pub fn wait(&mut self) -> Ready<W>`
@@ -5651,6 +5683,10 @@ Joins elements into a string with the given separator.
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
 `#[compiler_item("list_index_assign")]`
+
+#### `impl IndexSwap<i32> for List<T>`
+
+##### `fn index_swap(&mut self, a: i32, b: i32)`
 
 #### `impl IndexRef<i32> for List<T>`
 

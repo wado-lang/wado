@@ -1,0 +1,25 @@
+// A map moves its entries when it grows and when it compacts the dead ones
+// away: each value is a list, so a value copy would show.
+
+use { println, Stdout } from "core:cli";
+use { HashMap, TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut t = TreeMap::<i32, List<i32>>::new();
+    let mut h = HashMap::<i32, List<i32>>::new();
+    for let k of 0..<12 {
+        t[k] = [k];
+        h[k] = [k, k];
+    }
+    for let k of 0..<9 {
+        t.remove(k);
+        h.remove(k);
+    }
+    println(`${t.len()} ${t[10].len()} ${h.len()} ${h[11].len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 1 3 2\n",
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

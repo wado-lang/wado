@@ -1,0 +1,24 @@
+// A static called through a namespace fills a `U = Self` default with the
+// receiver the namespace names, not with what its bare name reaches in the
+// caller: here a `Pt` of the caller's own, and in `caller` no `Pt` at all.
+use { println, Stdout } from "core:cli";
+use dep from "./sub/static_self_default_namespaced_dep.wado";
+use { Named } from "./sub/static_self_default_namespaced_dep.wado";
+use caller from "./sub/static_self_default_namespaced_caller.wado";
+
+struct Pt {
+    y: String,
+}
+
+impl Named for Pt {
+    fn name() -> String {
+        return "local";
+    }
+}
+
+export fn run() with Stdout {
+    println(`${dep::Pt::mk()} ${caller::call()}`);
+}
+
+__DATA__
+{"stdout": "dep dep\n"}

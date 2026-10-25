@@ -5,7 +5,7 @@
 use wado_compiler::ast::{AstVisitor, Module};
 
 /// A visitor that answers with the first node it matches.
-pub(crate) trait FirstMatch: AstVisitor {
+pub(crate) trait FirstMatch: for<'ast> AstVisitor<'ast> {
     type Output;
 
     /// Whether the answer is in hand. Overridden `visit_*` methods check this

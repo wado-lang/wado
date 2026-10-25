@@ -1,0 +1,20 @@
+// Read directly, the parameter reaches the comparison and the branch is
+// decided at build time, so nothing survives to remark on.
+
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: i32 = 0;
+
+export fn run() with Stdout {
+    if LOG_LEVEL < 2 {
+        println(`tracing`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "params": {"log.level": "3"},
+    "remarks": {"O2": [{"contains": ["compile-time parameter"], "count": 0}]}
+}

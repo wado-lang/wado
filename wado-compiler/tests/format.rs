@@ -232,6 +232,24 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// A path through a namespace import to an interface's type prints back whole,
+/// in a type, a literal and a pattern.
+#[test]
+fn test_format_keeps_interface_type_paths() {
+    let source = concat!(
+        "fn x_of(p: comp::Geo::Point) -> u32 {\n",
+        "    let comp::Geo::Point { x } = comp::Geo::Point { x: 1 };\n",
+        "    return match comp::Geo::Shape::Dot {\n",
+        "        comp::Geo::Shape::Circle(r) => r,\n",
+        "        comp::Geo::Shape::Dot => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A string outside an expression keeps its escapes as written, as an
 /// expression's string literal does, though the compiler reads its value.
 #[test]
@@ -280,6 +298,21 @@ fn run() {
     let formatted1 = wado_compiler::format(source).expect("format failed");
     let formatted2 = wado_compiler::format(&formatted1).expect("format failed");
     assert_eq!(formatted1, formatted2, "format should be idempotent");
+}
+
+/// An empty argument list stays `()` on an overlong line: wrapping it shortens
+/// nothing, as an empty parameter list is never wrapped either.
+#[test]
+fn test_format_keeps_empty_call_args_inline_on_overlong_line() {
+    let source = concat!(
+        "fn f() {\n",
+        "    assert failure.rendered.contains(\"a closure captures `t` by reference, so its body cannot move it, ever\"), case.label();\n",
+        "    assert failure.rendered.contains(\"a closure captures `t` by reference, so its body cannot move it, ever\"), `${case.label()}: ${x}`;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(!formatted.contains("(\n"), "got:\n{formatted}");
+    assert_format_preserves_ast(source);
 }
 
 /// `resume value;` prints with its own keyword, as a statement and as a match
@@ -1976,6 +2009,17 @@ fn test_format_use_multiple_items() {
 }
 
 #[test]
+fn test_format_use_keeps_a_string_named_import() {
+    let source = r#"use {"wasi:cli/stdout@0.3.0" as Out,println} from "wasi:cli";"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "use { \"wasi:cli/stdout@0.3.0\" as Out, println } from \"wasi:cli\";\n"
+    );
+    assert_format_preserves_ast(&formatted);
+}
+
+#[test]
 fn test_format_indentation() {
     let source = r"
 fn run() {
@@ -2059,6 +2103,17 @@ fn run() {
         formatted.contains("x += 5;"),
         "compound assignment should be preserved: {formatted}"
     );
+}
+
+#[test]
+fn test_format_keeps_destructuring_assignment() {
+    let source = "fn run() {\n    [a,b]=[b,a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn run() {\n    [a, b] = [b, a];\n    [s.x, xs[i], COUNT] = divmod(17, 5);\n}\n"
+    );
+    assert_format_preserves_ast(source);
 }
 
 #[test]
@@ -3131,6 +3186,30 @@ fn run() {
     // Should be idempotent
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_let_chain_multiline() {
+    let source = r"
+fn run() {
+    if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    let expected = r"fn run() {
+    if let Some(transposed) = uses.right.get(vi.name)
+        && !uses.elsewhere.contains(vi.name)
+        && checked.shapes[vi.name].rank() == 2 {
+        out[vi.name] = transposed;
+    }
+}
+";
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
 }
 
 // ============================================================

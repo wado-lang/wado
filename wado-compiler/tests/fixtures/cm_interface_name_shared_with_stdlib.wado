@@ -1,0 +1,24 @@
+// A program's own `Client::send` binds its own Component Model function, though
+// `wasi:http` declares a `Client::send` too: a call finds its binding by the
+// declaration it names, not by `Interface::operation`.
+
+#[cm("example:demo/client")]
+interface Client {
+    #[cm("example:demo/client#send")]
+    #[cm_params("n")]
+    fn send(n: i32) -> i32;
+}
+
+struct Mock {}
+
+impl Client for Mock {
+    fn send(&mut self, n: i32) -> i32 {
+        resume n + 1
+    }
+}
+
+test {
+    with Client => &mut Mock {} do {
+        assert Client::send(1) == 2;
+    }
+}

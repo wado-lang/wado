@@ -15,7 +15,8 @@ use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
-    derive, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
+    derive, derive_alongside, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
+    written_comparison,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -1000,10 +1001,11 @@ impl std::fmt::Debug for SolverBridge {
 }
 
 impl SolverBridge {
-    /// The four structural traits [`derive`] generates impls for.
-    const DERIVED: [CompilerItem; 4] = [
+    /// The structural traits [`derive`] generates impls for.
+    const DERIVED: [CompilerItem; 5] = [
         CompilerItem::Eq,
         CompilerItem::Ord,
+        CompilerItem::Hash,
         CompilerItem::Serialize,
         CompilerItem::Deserialize,
     ];
@@ -1044,6 +1046,7 @@ impl SolverBridge {
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
         Self::intern_declarations(tysys, modules, &mut lowering);
         program.copyable = Self::derived_trait(tysys, &mut lowering, CompilerItem::Copyable);
+        program.never = Some(lowering.builtin(NEVER_TYPE_NAME));
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {
@@ -1073,6 +1076,7 @@ impl SolverBridge {
         ) {
             pair_comparisons(&mut program, eq, ord);
         }
+        program.hash = Self::derived_trait(tysys, &mut lowering, CompilerItem::Hash);
         let mut bridge = Self { program, lowering };
         // Before the declarations, whose derived `Copyable` reads them.
         bridge.state_copyable_facts();
@@ -1103,9 +1107,7 @@ impl SolverBridge {
                 | DeclKey::UndeclaredEffect => false,
             };
             if copies {
-                self.program
-                    .facts
-                    .insert((head, copyable), Fact { visible_from: None });
+                self.program.facts.insert((head, copyable), Fact::default());
             }
         }
     }
@@ -1194,7 +1196,7 @@ impl SolverBridge {
             .collect();
         members.extend(shapes.into_iter().map(|(shape, _)| shape));
         stated.extend(members.iter().chain(&handles).map(|decl| decl.id));
-        Self::derive_all(tysys, table, lowering, program, members, handles);
+        Self::derive_all(tysys, data, table, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
         Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::state_type_facts(tysys, data, table, lowering, program);
@@ -1595,6 +1597,7 @@ impl SolverBridge {
     /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
     fn derive_all(
         tysys: &TypeSystem,
+        data: &DataDecls,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
@@ -1618,16 +1621,55 @@ impl SolverBridge {
             .into_iter()
             .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
             .collect();
+        let first = program.next_impl_id();
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
-                CompilerItem::Ord | CompilerItem::Serialize | CompilerItem::Deserialize => {
-                    &declarations[..handles_from]
-                }
+                CompilerItem::Ord
+                | CompilerItem::Hash
+                | CompilerItem::Serialize
+                | CompilerItem::Deserialize => &declarations[..handles_from],
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
         }
+        if let Some(&(_, deserialize)) = traits
+            .iter()
+            .find(|(item, _)| *item == CompilerItem::Deserialize)
+            && let Some(schema) = Self::derived_trait(tysys, lowering, CompilerItem::FieldSchema)
+        {
+            Self::derive_field_schemas(data, lowering, program, deserialize, schema, first);
+        }
+    }
+
+    /// The `FieldSchema` a struct's derived `Deserialize` reads its keys by, at
+    /// the same arguments: the body is synthesized with the derivation's, so
+    /// one holds exactly where the other does. Only the impls from `first` on
+    /// are this round's.
+    fn derive_field_schemas(
+        data: &DataDecls,
+        lowering: &Lowering,
+        program: &mut Program,
+        deserialize: TraitDeclId,
+        schema: TraitDeclId,
+        first: ImplId,
+    ) {
+        let structs: Vec<ImplDef> = program
+            .impls_of(deserialize)
+            .filter(|(id, def)| {
+                *id >= first
+                    && matches!(def.origin, ImplOrigin::Derived)
+                    && matches!(
+                        &def.target,
+                        SolverType::Decl(head, _) if matches!(
+                            lowering.decl_key(*head),
+                            DeclKey::Def(def) if data.struct_fields.contains_key(def)
+                        )
+                    )
+            })
+            .map(|(_, def)| def.clone())
+            .collect();
+        derive_alongside(program, schema, structs);
     }
 
     /// State each declaration's reflection kinds as facts. A struct's kind
@@ -1650,19 +1692,37 @@ impl SolverBridge {
             .collect();
         let defs = tysys.resolutions.defs();
         let eligible = |def: DefId| !table.is_sealed_reflect_member(defs.ast_id(def));
-        let mut state =
-            |head: TypeDeclId, kind: OnBoundTrait, visible_from: Option<Vec<ModuleId>>| {
-                for &(trait_, stated) in &kinds {
-                    let visible_from = if stated == OnBoundTrait::Reflect {
-                        None
-                    } else if stated == kind {
-                        visible_from.clone()
-                    } else {
-                        continue;
-                    };
-                    program.facts.insert((head, trait_), Fact { visible_from });
+        // The member channel a pin reads, spelled with the declaration's own
+        // parameters. One the lowering cannot say is left out, and a pin on it
+        // waits for monomorphization.
+        let channel = |members: &mut dyn Iterator<Item = TypeId>| {
+            said(members.map(|ty| lowering.type_id(table, ty, &by_position)))
+                .ok()
+                .map(SolverType::Tuple)
+        };
+        let mut state = |head: TypeDeclId,
+                         kind: OnBoundTrait,
+                         visible_from: Option<Vec<ModuleId>>,
+                         members: Option<SolverType>| {
+            for &(trait_, stated) in &kinds {
+                if stated == OnBoundTrait::Reflect {
+                    program.facts.insert((head, trait_), Fact::default());
+                    continue;
                 }
-            };
+                if stated != kind {
+                    continue;
+                }
+                let member_assoc = kind
+                    .member_channel()
+                    .and_then(|name| lowering.known_assoc(trait_, name));
+                program.member_channels.extend(member_assoc);
+                let fact = Fact {
+                    visible_from: visible_from.clone(),
+                    assoc: member_assoc.zip(members.clone()).into_iter().collect(),
+                };
+                program.facts.insert((head, trait_), fact);
+            }
+        };
         for (&def, info) in &data.struct_fields {
             if !eligible(def) {
                 continue;
@@ -1679,17 +1739,33 @@ impl SolverBridge {
                 lowering.declared_type(def),
                 OnBoundTrait::ReflectStruct,
                 visible_from,
+                channel(&mut info.fields.iter().map(|(_, ty, _)| *ty)),
             );
         }
+        // A shape's members are its one argument, the tuple of them.
         for &(head, kind) in shapes {
-            state(head, kind, None);
+            state(
+                head,
+                kind,
+                None,
+                Some(SolverType::Tuple(vec![SolverType::Pack(0)])),
+            );
+        }
+        for (&def, info) in &data.variant_cases {
+            if eligible(def) {
+                state(
+                    lowering.declared_type(def),
+                    OnBoundTrait::ReflectVariant,
+                    None,
+                    channel(&mut info.cases.iter().map(|case| case.payload)),
+                );
+            }
         }
         let of = |kind| move |def: &DefId| (*def, kind);
         let memberless = data
-            .variant_cases
+            .enum_cases
             .keys()
-            .map(of(OnBoundTrait::ReflectVariant))
-            .chain(data.enum_cases.keys().map(of(OnBoundTrait::ReflectEnum)))
+            .map(of(OnBoundTrait::ReflectEnum))
             .chain(data.flags_cases.keys().map(of(OnBoundTrait::ReflectFlags)))
             .chain(newtype_decls(data, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
             .chain(
@@ -1699,7 +1775,7 @@ impl SolverBridge {
             );
         for (def, kind) in memberless {
             if eligible(def) {
-                state(lowering.declared_type(def), kind, None);
+                state(lowering.declared_type(def), kind, None, None);
             }
         }
     }
@@ -1720,10 +1796,9 @@ impl SolverBridge {
                 .compiler_trait_def(item)
                 .and_then(|def| lowering.known_trait(def))
             {
-                program.facts.insert(
-                    (lowering.declared_type(def), trait_),
-                    Fact { visible_from: None },
-                );
+                program
+                    .facts
+                    .insert((lowering.declared_type(def), trait_), Fact::default());
             }
         };
 
@@ -1790,9 +1865,7 @@ impl SolverBridge {
             };
             for (holds, trait_) in [(is_ref, ref_), (is_ref_mut, ref_mut)] {
                 if holds {
-                    self.program
-                        .facts
-                        .insert((head, trait_), Fact { visible_from: None });
+                    self.program.facts.insert((head, trait_), Fact::default());
                 }
             }
         }
@@ -2355,21 +2428,42 @@ impl SolverBridge {
         table: &TypeTable,
         instance: TypeId,
     ) -> Option<(CompilerItem, DefId)> {
-        let (eq, _) = self.program.comparisons?;
-        // A shape the lowering cannot say is one no source names, so no written
-        // impl reaches it.
-        let ty = self.lowering.type_id(table, instance, &by_position).ok()?;
+        let ty = self.comparison_subject(table, instance)?;
         let (written, impl_) = comparison_row(&self.program, &ty)?;
-        let item = if written == eq {
-            CompilerItem::Eq
-        } else {
-            CompilerItem::Ord
-        };
         Some((
-            item,
+            self.comparison_item(written),
             self.impl_def_of(impl_)
                 .expect("a written impl names its block"),
         ))
+    }
+
+    /// Which of `Eq` and `Ord` a written impl reaching `instance` implements,
+    /// withholding its derived `Hash`, by [`written_comparison`].
+    pub(crate) fn hash_withheld_by(
+        &self,
+        table: &TypeTable,
+        instance: TypeId,
+    ) -> Option<CompilerItem> {
+        let ty = self.comparison_subject(table, instance)?;
+        Some(self.comparison_item(written_comparison(&self.program, &ty)?))
+    }
+
+    /// `instance` lowered, where the comparison table pairs `Eq` with `Ord`. A
+    /// shape the lowering cannot say is one no source names, so no written impl
+    /// reaches it.
+    fn comparison_subject(&self, table: &TypeTable, instance: TypeId) -> Option<SolverType> {
+        self.program.comparisons?;
+        self.lowering.type_id(table, instance, &by_position).ok()
+    }
+
+    fn comparison_item(&self, trait_: TraitDeclId) -> CompilerItem {
+        let (eq, ord) = self.program.comparisons.expect("comparisons are paired");
+        if trait_ == eq {
+            CompilerItem::Eq
+        } else {
+            assert_eq!(trait_, ord);
+            CompilerItem::Ord
+        }
     }
 
     /// Whether a written block applies at `instance`, its bounds included: what

@@ -1,0 +1,52 @@
+// An argument of type `!` binds a type parameter only where nothing else does.
+// `Some(panic(..))` under `Option<i32>` is an `Option<i32>`, not an `Option<!>`
+// stored where an `Option<i32>` belongs.
+
+struct Holder<T> {
+    v: T,
+}
+
+fn wrap<T>(x: T) -> Option<T> {
+    return Some(x);
+}
+
+fn pick<T>(a: T, b: T) -> T {
+    return b;
+}
+
+fn in_case(c: bool) -> i32 {
+    if c {
+        let _: Option<i32> = Some(panic("variant"));
+        let _: Result<i32, String> = Ok(panic("result"));
+    }
+    return 1;
+}
+
+fn call(c: bool) -> i32 {
+    if c {
+        let _: Option<i32> = wrap(panic("call"));
+    }
+    return 2;
+}
+
+fn literal(c: bool) -> i32 {
+    if c {
+        let _: Holder<i32> = Holder { v: panic("struct") };
+    }
+    return 3;
+}
+
+fn alongside_a_literal(c: bool) -> i32 {
+    if c {
+        let n = pick(panic("pick"), 4);
+        return n + 1;
+    }
+    return pick(4, 4);
+}
+
+test "a `!` argument takes the expected type" {
+    assert in_case(builtin::black_box(false)) == 1;
+    assert call(builtin::black_box(false)) == 2;
+    assert literal(builtin::black_box(false)) == 3;
+    assert alongside_a_literal(builtin::black_box(false)) == 4;
+}

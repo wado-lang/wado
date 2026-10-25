@@ -10,13 +10,10 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTraitName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
-    split_local_method,
-};
+use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
+    TirLiteralPattern, TirStruct, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
@@ -857,13 +854,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tail_type: TypeId,
         overlays_before: &IndexMap<AstId, usize>,
     ) -> TypeId {
-        let values: Vec<&ast::Expr> = {
-            let ctx = self.ctrl_flow_ctx();
-            break_values(ctx, &lb.block, &lb.label)
-        }
-        .into_iter()
-        .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
-        .collect();
+        let values: Vec<&ast::Expr> = break_values(&lb.block, &lb.label)
+            .into_iter()
+            .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
+            .collect();
         let mut tails = NumericLiteralTails::default();
         let tail_is_literal = tail_type != TypeTable::NEVER
             && self.collect_block_numeric_literal_tails(&lb.block, tail_type, &mut tails)
@@ -964,7 +958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// trailing value no path reaches is still the block's value, as a dead
     /// tail is an `if` arm's, so it answers to the block's type all the same.
     fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
-        if self.ast_labeled_block_falls_through(&lb.block, &lb.label)
+        if !self.ast_block_always_exits(&lb.block)
             || matches!(lb.block.stmts.last(), Some(ast::Stmt::Expr(_)))
         {
             self.ast_block_result_type(&lb.block)
@@ -1872,6 +1866,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         field_access: &ast::FieldAccessExpr,
         expr_type: TypeId,
     ) -> TypeId {
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            return expr_type;
+        }
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
@@ -2207,6 +2204,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         access: IndexAccess,
         key_class: &OnceCell<ArgClass>,
     ) -> TypeId {
+        // No receiver reaches the subscript, so the key is checked but never
+        // evaluated.
+        if self.tysys.type_table.borrow().is_never(expr_type) {
+            self.resolve_expr(&index.index, ctx, None);
+            return expr_type;
+        }
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -2333,10 +2336,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = trait_info.receiver.clone();
-                let mangled_method_name =
-                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
-
                 // `index_ref` returns `&Output`; `index_ref_mut` returns `&mut Output`.
                 let ref_output_type = {
                     let mut tt = self.tysys.type_table.borrow_mut();
@@ -2347,21 +2346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                let func = FunctionRef {
-                    module_source: trait_info.impl_module_source.clone(),
-                    name: mangled_method_name,
-                    template: Some(
-                        self.tysys
-                            .signatures
-                            .declared_template(trait_info.method_def),
-                    ),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        receiver,
-                        Some(trait_info.trait_name.clone()),
-                        index_method.to_string(),
-                    )),
-                };
+                let func = self.indexing_function_ref(&trait_info, index_method);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2396,29 +2381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = trait_info.receiver.clone();
-                let mangled_method_name = MethodName::format_local(
-                    &receiver,
-                    Some(&trait_info.trait_name),
-                    "index_value",
-                );
-
-                // IndexValue returns Output directly (not a reference)
-                let func = FunctionRef {
-                    module_source: trait_info.impl_module_source.clone(),
-                    name: mangled_method_name,
-                    template: Some(
-                        self.tysys
-                            .signatures
-                            .declared_template(trait_info.method_def),
-                    ),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        receiver,
-                        Some(trait_info.trait_name.clone()),
-                        "index_value".to_string(),
-                    )),
-                };
+                let func = self.indexing_function_ref(&trait_info, "index_value");
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2440,16 +2403,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 return trait_info.output_type;
             }
+
+            if self.report_unmet_trait_impl_bound(
+                base_type_id,
+                &[
+                    CompilerItem::IndexValue,
+                    CompilerItem::IndexRef,
+                    CompilerItem::IndexRefMut,
+                ],
+                Some(index_type),
+                index.span,
+            ) {
+                return TypeTable::ERROR;
+            }
         }
 
-        // Fallback: report error for unsupported indexing
         let type_name = self.tysys.type_table.borrow().type_name(expr_type);
         let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
-            trait_name: "Index or IndexValue".to_string(),
+            trait_name: "IndexValue or IndexRef".to_string(),
             span: index.span,
         });
-        TypeTable::UNKNOWN
+        TypeTable::ERROR
     }
 
     /// The key type of the `Index` / `IndexAssign` impl dispatching
@@ -5953,11 +5928,13 @@ impl CaptureWritesCollector {
     }
 }
 
-impl AstVisitor for CaptureWritesCollector {
+impl AstVisitor<'_> for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {
-                self.record_target(&a.target);
+                for place in a.places() {
+                    self.record_target(place);
+                }
                 // Still descend into the target (it may contain
                 // sub-expressions like `arr[bump()] = ...`) and the value.
                 ast::walk_expr(self, expr);

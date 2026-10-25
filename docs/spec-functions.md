@@ -80,6 +80,10 @@ test "every path returns" {
 }
 ```
 
+Such a call ends the path wherever it is evaluated, so `show(panic("x"))` and
+`1 + panic("x")` end it too. The right operand of `&&` or `||` may not run, so
+a call there does not end the path.
+
 A path that reaches the end of the body without a `return` is an error. The
 error points at the function:
 

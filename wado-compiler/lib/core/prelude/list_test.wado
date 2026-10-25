@@ -912,3 +912,52 @@ test "AsSlice::iter_ref reaches a list through the bound" {
     let xs: List<i32> = [7, 8];
     assert first_through_as_slice(&xs) == 7;
 }
+
+test "index_swap exchanges two elements" {
+    let mut xs: List<List<i32>> = [
+        [1],
+        [2, 2],
+        [3, 3, 3],
+    ];
+    xs.index_swap(0, 2);
+    assert xs[0].len() == 3 && xs[1].len() == 2 && xs[2].len() == 1;
+    xs.index_swap(1, 1);
+    assert xs[1].len() == 2;
+}
+
+affine struct SwapTok {
+    id: i32,
+}
+
+impl Drop for SwapTok {
+    fn drop(self) {
+    }
+}
+
+test "index_swap exchanges affine elements" {
+    let mut toks: List<SwapTok> = [];
+    toks.push(SwapTok { id: 1 });
+    toks.push(SwapTok { id: 2 });
+    toks.index_swap(0, 1);
+    assert toks[0].id == 2 && toks[1].id == 1;
+    toks.index_swap(0, 0);
+    assert toks[0].id == 2;
+}
+
+test "reverse and swap move affine elements" {
+    let mut toks: List<SwapTok> = [];
+    toks.push(SwapTok { id: 1 });
+    toks.push(SwapTok { id: 2 });
+    toks.push(SwapTok { id: 3 });
+    toks.reverse();
+    assert toks[0].id == 3 && toks[1].id == 2 && toks[2].id == 1;
+    toks.swap(0, 2);
+    assert toks[0].id == 1 && toks[2].id == 3;
+}
+
+#[expect_trap]
+test "index_swap traps on an index past the length" {
+    let mut xs: List<i32> = [1, 2];
+    xs.reserve(4);
+    xs.index_swap(0, 2);
+}

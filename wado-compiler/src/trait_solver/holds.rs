@@ -76,6 +76,7 @@ pub fn holds_with_args(
         env,
         scope,
         asking: Vec::new(),
+        member_next: false,
         at_itself: None,
     }
     .holds(ty, trait_, args)
@@ -158,12 +159,23 @@ fn bound_answers(
         })
 }
 
+/// A question open on the stack.
+struct Open {
+    ty: SolverType,
+    trait_: TraitDeclId,
+    args: Vec<SolverType>,
+    through_member: bool,
+}
+
 /// One question and the questions open under it.
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
     scope: ModuleId,
-    asking: Vec<(SolverType, TraitDeclId, Vec<SolverType>)>,
+    asking: Vec<Open>,
+    /// Whether the next question asks about a member of the type a pin
+    /// bound it from, rather than about a bound's subject.
+    member_next: bool,
     /// A type this query answers about at the type itself, without inheriting
     /// its newtype base's impls. Selection asks this way so that a blanket
     /// whose bound only the base carries is a candidate at the base's level and
@@ -192,16 +204,27 @@ impl Query<'_> {
         args: &[SolverType],
         subject: Option<&SolverType>,
     ) -> Option<Holds> {
+        let through_member = std::mem::take(&mut self.member_next);
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
-        if self
+        if let Some(at) = self
             .asking
             .iter()
-            .any(|(t, tr, a)| t == ty && *tr == trait_ && a == args)
+            .position(|open| open.ty == *ty && open.trait_ == trait_ && open.args == args)
         {
-            return None;
+            // Reached through a member, it is the type's own recursion, which
+            // holds as a derived `Eq` holds of it; through bounds alone it
+            // grounds nothing.
+            let recursive =
+                through_member || self.asking[at + 1..].iter().any(|open| open.through_member);
+            return recursive.then(Holds::default);
         }
-        self.asking.push((ty.clone(), trait_, args.to_vec()));
+        self.asking.push(Open {
+            ty: ty.clone(),
+            trait_,
+            args: args.to_vec(),
+            through_member,
+        });
         let answer = self.decide(ty, trait_, args, subject);
         self.asking.pop();
         answer
@@ -227,6 +250,9 @@ impl Query<'_> {
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
+        }
+        if let Some(holds) = never_holds(program, ty, trait_) {
+            return Some(holds);
         }
         // A pack's bound holds of each element, so an element in a variadic
         // body answers from the pack's slot. A bound reads a projection the
@@ -269,13 +295,29 @@ impl Query<'_> {
                 .as_ref()
                 .is_none_or(|modules| modules.contains(&self.scope))
         {
+            let matched = || -> Vec<Option<SolverType>> {
+                let SolverType::Decl(_, args) = ty else {
+                    unreachable!("only a declaration's fact binds an associated type");
+                };
+                args.iter().cloned().map(Some).collect()
+            };
             return Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_,
                     structural: false,
                 }],
-                ..Holds::default()
+                assoc: fact
+                    .assoc
+                    .iter()
+                    .map(|(assoc, binding)| {
+                        let member = Member {
+                            binding: binding.clone(),
+                            matched: matched(),
+                        };
+                        (*assoc, member)
+                    })
+                    .collect(),
             });
         }
         // Only an impl of `trait_` itself answers. One of a subtrait owes an
@@ -296,7 +338,9 @@ impl Query<'_> {
                 Some(answer.holds)
             })
             .or_else(|| {
-                if self.at_itself.as_ref() == Some(ty) {
+                if self.at_itself.as_ref() == Some(ty)
+                    || written_only_at(program, ty) == Some(trait_)
+                {
                     return None;
                 }
                 let base = newtype_base(program, ty)?;
@@ -325,16 +369,15 @@ impl Query<'_> {
         }
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred)
+            || self.projections_refuted(&deferred, &bindings)
+        {
             return None;
         }
-        for (projection, met) in &deferred {
-            let expected = self.at_bindings(projection, &bindings)?;
-            if expected != self.normalized(met) {
-                return None;
-            }
-        }
-        if reached_by(program, implemented, ty, def.origin.yields_to()) {
+        if reached_by(program, implemented, ty, def.origin.yields_to())
+            || (def.origin != ImplOrigin::Written
+                && written_only_at(program, ty) == Some(implemented))
+        {
             return None;
         }
         let mut requests = match def.origin {
@@ -353,29 +396,43 @@ impl Query<'_> {
                 }]
             }
         };
-        let pinned = |index: u32| {
+        let pins_on = |index: usize| {
             def.params
                 .iter()
                 .flat_map(|p| &p.pins)
-                .any(|pin| pin.ty.mentions_param(index))
+                .filter(move |pin| pin.ty.mentions_param(index as u32))
         };
-        for (index, param) in def.params.iter().enumerate() {
-            // A parameter only a pin supplies is bound at monomorphization,
-            // and so is its bound (WEP 2026-03-14).
-            let Some(binding) = bindings[index].as_ref() else {
-                if param.bounds.is_empty() || pinned(index as u32) {
+        // A parameter only a pin supplies is bound by the answer to the bound
+        // carrying the pin, so the ones the target binds go first.
+        let from_pin: Vec<bool> = bindings.iter().map(Option::is_none).collect();
+        let order: Vec<usize> = (0..def.params.len())
+            .filter(|&i| !from_pin[i])
+            .chain((0..def.params.len()).filter(|&i| from_pin[i]))
+            .collect();
+        for index in order {
+            let param = &def.params[index];
+            // Only a pin on a member channel descends into the type's members;
+            // any other associated type is no part of it.
+            let through_member = from_pin[index]
+                && pins_on(index).any(|pin| program.member_channels.contains(&pin.assoc));
+            // One the answers leave unbound reads a projection off a
+            // parameter, and is bound at monomorphization with its bound
+            // (WEP 2026-03-14).
+            let Some(binding) = bindings[index].clone() else {
+                if param.bounds.is_empty() || pins_on(index).next().is_some() {
                     continue;
                 }
                 return None;
             };
-            let elements: Vec<&SolverType> = match binding {
+            let elements: Vec<SolverType> = match binding {
                 Binding::One(ty) => vec![ty],
-                Binding::Pack(elems) => elems.iter().collect(),
+                Binding::Pack(elems) => elems,
             };
             // The marker owes no body, so its answer's requests are dropped.
             if param.copyable
                 && let Some(copyable) = program.copyable
                 && !elements.iter().all(|element| {
+                    self.member_next = through_member;
                     self.holds(&peel_newtypes(program, element), copyable, &[])
                         .is_some()
                 })
@@ -395,21 +452,37 @@ impl Query<'_> {
                                 .unwrap_or_else(|| arg.clone())
                         })
                         .collect();
+                    self.member_next = through_member;
                     let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
-                    // one binding nothing is not.
+                    // one binding nothing is not. A pin naming a parameter
+                    // still unbound binds it from what the answer binds.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(expected) = self.at_bindings(&pin.ty, &bindings) else {
+                        let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
                             continue;
                         };
-                        let actual = answer.assoc_at(pin.assoc, &[]);
-                        if actual.is_some_and(|actual| self.normalized(&actual) != expected) {
-                            return None;
+                        let actual = self.normalized(&actual);
+                        match self.at_bindings(&pin.ty, &bindings) {
+                            Some(expected) if expected != actual => return None,
+                            Some(_) => {}
+                            None => {
+                                let from = deferred.len();
+                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred)
+                                    || self.projections_refuted(&deferred[from..], &bindings)
+                                {
+                                    return None;
+                                }
+                            }
                         }
                     }
                     requests.extend(answer.requests);
                 }
             }
+        }
+        // A projection may name a parameter only a later pin binds, so each is
+        // read in full once every answer has bound what it binds.
+        if !self.projections_met(&deferred, &bindings) {
+            return None;
         }
         let matched: Vec<Option<SolverType>> = bindings
             .iter()
@@ -439,6 +512,42 @@ impl Query<'_> {
                 })
                 .collect(),
         })
+    }
+
+    /// Whether a projection a match met, readable at `bindings` already, holds
+    /// something other than what it was matched against.
+    fn projections_refuted(
+        &mut self,
+        deferred: &[(SolverType, SolverType)],
+        bindings: &[Option<Binding>],
+    ) -> bool {
+        deferred.iter().any(|(projection, met)| {
+            self.projection_holds(projection, met, bindings) == Some(false)
+        })
+    }
+
+    /// Whether each projection a match met holds what it was matched against,
+    /// read at `bindings`.
+    fn projections_met(
+        &mut self,
+        deferred: &[(SolverType, SolverType)],
+        bindings: &[Option<Binding>],
+    ) -> bool {
+        deferred
+            .iter()
+            .all(|(projection, met)| self.projection_holds(projection, met, bindings) == Some(true))
+    }
+
+    /// Whether `projection` read at `bindings` is `met`; `None` where it names
+    /// a parameter still unbound.
+    fn projection_holds(
+        &mut self,
+        projection: &SolverType,
+        met: &SolverType,
+        bindings: &[Option<Binding>],
+    ) -> Option<bool> {
+        let expected = self.at_bindings(projection, bindings)?;
+        Some(expected == self.normalized(met))
     }
 
     /// `ty`, written in an impl's parameter space, at what the match bound
@@ -527,12 +636,65 @@ pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDec
     row_is(program, ty, eq).then_some(ord)
 }
 
+/// `!` and a newtype over it hold every trait, binding each associated type to
+/// `!`, and no impl is written for either (spec-types.md § Trait Bounds on `!`).
+fn never_holds(program: &Program, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+    if !peels_to_never(program, ty) {
+        return None;
+    }
+    let never = SolverType::Decl(program.never?, Vec::new());
+    let assoc = program.traits[&trait_]
+        .assoc_bounds
+        .keys()
+        .map(|&assoc| {
+            let member = Member {
+                binding: never.clone(),
+                matched: Vec::new(),
+            };
+            (assoc, member)
+        })
+        .collect();
+    Some(Holds {
+        requests: Vec::new(),
+        assoc,
+    })
+}
+
+/// Whether `ty` is `!` or a newtype over it.
+pub(super) fn peels_to_never(program: &Program, ty: &SolverType) -> bool {
+    is_never(program, &peel_newtypes(program, ty))
+}
+
+fn is_never(program: &Program, ty: &SolverType) -> bool {
+    program.never.is_some_and(
+        |never| matches!(ty, SolverType::Decl(id, args) if *id == never && args.is_empty()),
+    )
+}
+
 /// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait
 /// before the row: the row scans every impl.
 fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
     program
         .comparisons
         .is_some_and(|(eq, ord)| trait_ == ord && row_is(program, ty, eq))
+}
+
+/// The trait only an impl written at `ty` itself answers: [`Program::hash`],
+/// where a written comparison reaches `ty`. Neither a derived body nor a
+/// newtype's base answers it there.
+pub(super) fn written_only_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    program
+        .hash
+        .filter(|_| written_comparison(program, ty).is_some())
+}
+
+/// Which of `Eq` and `Ord` a written impl reaching `ty` implements, `Eq` first.
+#[must_use]
+pub fn written_comparison(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    let (eq, ord) = program.comparisons?;
+    [eq, ord]
+        .into_iter()
+        .find(|&written| reached_by(program, written, ty, &[ImplOrigin::Written]))
 }
 
 /// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.
@@ -600,6 +762,7 @@ pub(super) fn impl_applies(
             env,
             scope,
             asking: Vec::new(),
+            member_next: false,
             at_itself: Some(ty.clone()),
         }
         .impl_answers(id, def, ty)?
@@ -1081,9 +1244,7 @@ mod tests {
     /// and a fact's answer owes the body, as a derived impl's does.
     #[test]
     fn a_fact_answers_and_owes_the_body() {
-        let p = Builder::default()
-            .fact(POINT, EQ, Fact { visible_from: None })
-            .build();
+        let p = Builder::default().fact(POINT, EQ, Fact::default()).build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), EQ, HERE),
             Some(Holds {
@@ -1103,7 +1264,7 @@ mod tests {
     #[test]
     fn a_fact_answers_for_every_instance_of_its_declaration() {
         let p = Builder::default()
-            .fact(LIST, ALPHA, Fact { visible_from: None })
+            .fact(LIST, ALPHA, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &list_of(decl(I32)), ALPHA, HERE),
@@ -1128,6 +1289,7 @@ mod tests {
                 ALPHA,
                 Fact {
                     visible_from: Some(vec![HERE]),
+                    ..Fact::default()
                 },
             )
             .build();
@@ -1270,7 +1432,7 @@ mod tests {
         };
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![EQ])
-            .fact(POINT, EQ, Fact { visible_from: None })
+            .fact(POINT, EQ, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), BETA, HERE),
@@ -1810,7 +1972,7 @@ mod tests {
                 ],
                 ..concrete(ARBITRARY, SolverType::Param(0))
             })
-            .fact(POINT, ALPHA, Fact { visible_from: None })
+            .fact(POINT, ALPHA, Fact::default())
             .build();
         assert_eq!(
             holds(&p, &Env::default(), &decl(POINT), ARBITRARY, HERE),

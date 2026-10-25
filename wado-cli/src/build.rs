@@ -13,13 +13,18 @@ use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, CompileOptions};
+use crate::compile::{self, Artifact, CompileFlags, CompileOptions};
+use crate::fingerprint::Input;
+use crate::input_cache::{InputCache, Slot};
+use crate::kiln_provider::hex32;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{self, openable_dir};
+use wado_host::atomic_write::write_atomic;
 use wado_host::sync::joined;
 
 pub struct BuildOptions {
@@ -318,7 +323,7 @@ pub async fn build_world_component(
     target: &BuildTarget,
     knobs: &CompileKnobs,
     embed: EmbedOptions,
-) -> Result<Vec<u8>, CliExit> {
+) -> Result<Artifact, CliExit> {
     let mut opts = CompileOptions::for_world_build(
         target.entry.to_string_lossy().into_owned(),
         target.output.clone(),
@@ -331,7 +336,7 @@ pub async fn build_world_component(
     // concurrent build (e.g. parallel `serve` drivers sharing this project's
     // `build/<world>.wasm`) could leave the file torn or holding another
     // world's module.
-    Ok(compile::compile_to_artifact(opts).await?.bytes)
+    compile::compile_to_artifact(opts).await
 }
 
 /// Produce the runnable component for a driver (`run` / `serve`). In a project
@@ -341,22 +346,68 @@ pub async fn build_world_component(
 /// no artifact on disk). `flags` supplies the build knobs and the fallback
 /// world. Metadata and WIT embed at their defaults, matching `wado build`, so a
 /// run/serve artifact is identical to a built one.
+///
+/// A component built before, from sources unchanged since and with the same
+/// metadata to embed, is taken from the cache instead, and nothing is written.
 pub async fn build_for_driver(
     entry: &str,
     target_world: &str,
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
-    match compile::load_nearest_manifest(Path::new(entry)).map_err(CliExit::error)? {
-        Some(project) => {
-            let segment = compile::world_path_segment(target_world);
-            let target = BuildTarget {
-                entry: PathBuf::from(entry),
-                output: compile::build_output_path(&project.root, &segment),
-                lib_world: None,
-                target_world: Some(target_world.to_string()),
-            };
-            build_world_component(&target, &flags.knobs, EmbedOptions::default()).await
-        }
-        None => compile::compile(entry, flags).await,
+    let entry_path = Path::new(entry);
+    let project = compile::load_nearest_manifest(entry_path).map_err(CliExit::error)?;
+    let metadata = project.as_ref().map_or_else(String::new, |project| {
+        let sections = compile::package_metadata(project, EmbedOptions::default(), &flags.knobs);
+        sha256_hex(format!("{sections:?}").as_bytes())
+    });
+    let cache = InputCache::new("run", flags, target_world);
+    let slot = cache.slot(entry_path);
+    if let Some(wasm) = slot
+        .as_ref()
+        .and_then(|slot| cached_component(slot, &metadata))
+    {
+        return Ok(wasm);
     }
+    let (wasm, reads) = if let Some(project) = project {
+        let segment = compile::world_path_segment(target_world);
+        let target = BuildTarget {
+            entry: PathBuf::from(entry),
+            output: compile::build_output_path(&project.root, &segment),
+            lib_world: None,
+            target_world: Some(target_world.to_string()),
+        };
+        let artifact =
+            build_world_component(&target, &flags.knobs, EmbedOptions::default()).await?;
+        (artifact.bytes, artifact.reads)
+    } else {
+        let (result, reads) = compile::compile_recording_reads(entry, flags).await?;
+        (result.wasm, reads)
+    };
+    if let (Some(reads), Some(slot)) = (reads, &slot) {
+        cache_component(slot, reads, &wasm, metadata);
+    }
+    Ok(wasm)
+}
+
+/// A component kept beside its entry, which names it by its SHA-256, so a
+/// torn or replaced file is a miss. Its own copy rather than `build/`'s, which
+/// `wado build` and concurrent drivers overwrite.
+fn cached_component(slot: &Slot<'_>, metadata: &str) -> Option<Vec<u8>> {
+    let (sha256, embedded): (String, String) = slot.lookup()?;
+    if embedded != metadata {
+        return None;
+    }
+    let wasm = std::fs::read(slot.path("wasm")).ok()?;
+    (sha256_hex(&wasm) == sha256).then_some(wasm)
+}
+
+fn cache_component(slot: &Slot<'_>, reads: Vec<Input>, wasm: &[u8], metadata: String) {
+    // Losing the cache is never an error: the next run compiles again.
+    if write_atomic(&slot.path("wasm"), wasm).is_ok() {
+        slot.store(reads, (sha256_hex(wasm), metadata));
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex32(&Sha256::digest(bytes).into())
 }

@@ -28,7 +28,7 @@ export fn run() with Stdout {
     let mut proxy = Proxy { inner: Option::Some(inner_rx) };
     let got = with Stream<u8> => &mut proxy do {
         let mut set = WaitableSet::<ReadCopy<u8>>::new();
-        set.join(outer_rx.start_read(8));
+        set.insert(outer_rx.start_read(8));
         let writing = inner_tx.start_write([4, 5, 6]);
         let ready = set.wait();
         let [rx, chunk] = ready.member.finish();

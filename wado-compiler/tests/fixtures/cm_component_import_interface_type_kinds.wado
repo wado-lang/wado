@@ -1,0 +1,34 @@
+// A component interface's types of every kind are named through it, and a WIT
+// `use` between two interfaces names the type of the interface it reaches.
+use { Other, Geo, Log } from "./sub/wasm_import_cm_geo_use_other.wat" with { type: "wat" };
+
+struct Quiet {}
+
+impl Log for Quiet {
+    fn emit(&mut self, e: Log::Entry) {
+        resume ();
+    }
+}
+
+test "a type a WIT `use` reaches is the other interface's" {
+    let mut quiet = Quiet {};
+    with Log => &mut quiet do {
+        let p: Other::Point = Other::make(5);
+        let m: Geo::Meters = Geo::norm(p);
+        assert m as u32 == 105;
+    }
+}
+
+test "a flags and a newtype" {
+    let mut quiet = Quiet {};
+    with Log => &mut quiet do {
+        assert Geo::bits(Geo::Perms::Read | Geo::Perms::Write) == 3;
+        let m: Geo::Meters = 7;
+        assert m as u32 == 7;
+    }
+}
+
+test "an imported interface's type" {
+    let e = Log::Entry { level: 2 };
+    assert e.level == 2;
+}

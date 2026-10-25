@@ -89,33 +89,22 @@ value in both, and exchanging values cannot produce that result.
 
 A target is _owned_ when it is a local, or a field path from a local, reached
 through no reference and no subscript. Two owned targets that differ as paths
-are never one slot. A by-value `self` is a local, so `self.f` under a
-`fn f(self)` receiver is owned. Any other target may be one slot: `*r`, `r.f`,
+are never one slot. Any other target may be one slot: `*r`, `r.f`,
 and `self.f` under a `&self` or `&mut self` receiver reach through a reference,
 two `&mut` to one value are legal, and two subscripts may name one element.
 
-### A permutation of owned targets makes no value copy
+### A permutation of unreferenced owned targets makes no value copy
 
-Any permutation of owned targets is assigned without a value copy: a
-transposition (`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one
-over fields (`[s.x, s.y] = [s.y, s.x]`). A permutation is a product of
-transpositions, and each transposition is lowered one of two ways.
+A permutation of owned targets with no reference to any of them readable after
+the statement is assigned without a value copy: a transposition
+(`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one over fields
+(`[s.x, s.y] = [s.y, s.x]`).
 
-Where no reference to either target is readable after the statement, the
-existing ownership analysis moves the values. The temporaries the desugaring
+The ownership analysis moves the values. The temporaries the desugaring
 introduces are dead after their one read, and each source is overwritten before
-it is read again.
-
-Where one is readable, an assignment to that target writes in place
-([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
-The desugaring would then make a value copy of the target before writing over
-it. The transposition exchanges the two storages' leaves instead. The leaves are
-the ones that in-place write would write, and each is a scalar or a handle, so
-exchanging one copies no value. Each storage keeps its identity, so a reference
-to either target reads the new value, as the in-place write guarantees. Where
-only one target is referenced, the other is given a new object holding the
-referenced target's old leaves: one allocation per in-place level, and no value
-copy.
+it is read again. A field's liveness is its own: a read of `s.y` or of `s` after
+`s.x` is overwritten reads no value `s.x` held, so `s.x` moves while `s` stays
+live.
 
 ### A transposition within one container is `IndexSwap`
 
@@ -140,22 +129,31 @@ It is that call where all of these hold:
 - The right side is a tuple literal whose two elements are the two targets, in
   the other order.
 - `c` is one path written twice: a local, a field path from a local
-  (`self.items`), or a dereference of one. A call, or any other expression that
-  could yield a different container, falls back.
-- Each index is a literal, a constant, a local, or arithmetic over them. An
-  index read out of `c` (`c[c[0]]`) falls back.
-- No index local, and no reference local that `c` dereferences (`r` in `*r`),
-  is referenced or captured anywhere in the body. The desugaring's first
-  `index_assign` could otherwise write through that reference, and its second
-  target would then name another slot, or another container. A closure
-  capturing the local counts, though it writes no `&`. A reference to the
-  container itself does not: a write through it changes the container's
-  contents, never which container `c` names.
-- `c`'s type implements `IndexSwap` at the index type.
+  (`self.items`), or a dereference of one. A local a closure captures counts.
+  A global, a call, or any other expression that could yield a different
+  container, falls back.
+- Each index is a literal, a constant, a local, a field path from a local
+  (`p.a`), or arithmetic over them. An index read out of `c` (`c[c[0]]`,
+  `c[c.k]`) or out of any other container (`c[a[k].n]`), or one reading a
+  mutable global, falls back.
+- No index local is referenced or captured anywhere in the body, and no
+  reference the path to `c` passes through is held where something else may
+  rebind it: in a `mut` local that is referenced or captured (`r` in `*r`), or
+  in a field reached through a reference (`h.p` in `h.p[i]`, where `h` is one).
+  The desugaring's first `index_assign` could otherwise write through that
+  reference, and its second target would then name another slot, or another
+  container. A closure capturing the local counts, though it writes no `&`. A
+  reference local that is not `mut` cannot be rebound, and a reference to the
+  container itself does not count either: a write through it changes the
+  container's contents, never which container `c` names.
+- `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects. A
+  container indexed by more than one key swaps by that one, and keeps the
+  desugaring where it has no `IndexSwap` there.
 
-The call evaluates `c`, `j` and `i` once each, in that order: the order in which
-the desugaring's right side first reads them, so an index that traps (a
-division by zero) fails as it would there. The transposition is recognized
+The call evaluates `j`, then `i`, once each: the order in which the
+desugaring's right side first reads them, so an index that traps (a division by
+zero) fails as it would there. `c` is a path that neither index can change, so
+when the call reads it does not matter. The transposition is recognized
 before the desugared right side is typed. Typing `c[j]` as a read first would
 report a value copy of an affine element, so the order matters.
 
@@ -187,6 +185,17 @@ so its impls take a copyable `V`.
 `List::swap` moves elements the same way, but it is not that impl: its contract
 checks `a` before `b`, the reverse of the desugaring's order.
 
+### `unchecked` goes on the reads
+
+A transposition makes no read: its right side names the arguments of
+`index_swap`. The reads are still where a reader marks `unchecked`, so a marked
+read still names its place, and the mark vouches for the `index_swap` call. Its
+contract is the conjunction of the two reads', so
+`[xs[i], xs[j]] = [unchecked xs[j], unchecked xs[i]]` calls the unchecked twin,
+and marking one read keeps the checked call. Either way the statement swaps
+rather than falling back. On an `index_swap` with no `contract` clause, the
+mark is the error it is on any call.
+
 ### What is not guaranteed, and why
 
 A destructuring assignment with a target that is not owned keeps the
@@ -212,13 +221,17 @@ functions. It anchors to the statement and adds a note that names the cause:
 
 - the right side is not a permutation of the targets (`[a, b] = [b, b]`,
   `[a, b] = [c, a]`);
+- a reference to a copyable owned target is readable after the statement;
 - a target is not owned, and the statement is not a transposition within one
   container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
-- an index local, or a reference local the container is reached through, is
-  referenced or captured;
-- the container's type does not implement `IndexSwap`.
+- an index is not one of the operands above, or it reads the container;
+- the container is not reached from a local;
+- an index reads a mutable global, an index local is referenced or captured, or
+  a reference the container is reached through is held where something else
+  may rebind it;
+- the container's type does not implement `IndexSwap` at the key.
 
 A scalar has no value copy, so a scalar target is never reported.
 
@@ -237,25 +250,22 @@ well.
 
 ## Roadmap
 
-- [ ] Parse and type a destructuring assignment, desugar it, and state its
-  evaluation order and arity error in fixtures.
-- [ ] Show that a permutation of owned targets with no readable reference
+- [x] Parse and type a destructuring assignment, desugar it, and state its
+  evaluation order and arity error in fixtures. Write the assignment into
+  `spec-expressions.md` and the cheatsheet.
+- [x] Show that a permutation of owned targets with no readable reference
   moves, a rotation included: a fixture whose `wir_expect` finds no value copy.
-- [ ] Lower a transposition of owned targets with a readable reference as a
-  leaf exchange. Fixtures show a reference to each target, and to one of the
-  two, reading the new value, with no value copy in `wir_expect`.
-- [ ] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
+- [x] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
   `HashMap` and `TreeMap`.
-- [ ] Recognize the transposition before typing the desugared form and lower
+- [x] Recognize the transposition before typing the desugared form and lower
   it to `index_swap`. Fixtures cover each condition that makes it fall back,
   an affine list, and an out-of-range index failing as the desugaring does.
-- [ ] Extend the surviving value-copy remark with the cause note for a
+- [x] Extend the surviving value-copy remark with the cause note for a
   destructuring assignment, and report an affine fallback as the compile error
   carrying the same note. Fixtures cover each cause, for the remark and for
   the error.
-- [ ] Write the rules into `spec-expressions.md` (the assignment) and
-  `spec-standard-traits.md` (`IndexSwap` and its dispatch), and add both to
-  the cheatsheet.
+- [x] Write `IndexSwap` and its dispatch into `spec-standard-traits.md`, and
+  add it to the cheatsheet.
 
 ## Known gaps
 
@@ -265,18 +275,24 @@ The left side takes only a flat tuple of targets. `_`, a rest `..`, a nested
 tuple and a struct pattern (`{ x, y } = p`) are not accepted. Neither is a
 compound assignment to a tuple (`[a, b] += [1, 2]`).
 
-### `unchecked` on a transposition
+### What counts as referencing an index local
 
-`unchecked xs[i]` vouches for a `List` index contract. Nothing says where
-`unchecked` goes on `[xs[i], xs[j]] = [xs[j], xs[i]]`, so its `index_swap`
-always checks both indices.
+Whether an index local, or a `mut` reference local the container is reached
+through, is referenced or captured is read from the syntax of the item holding
+the statement, by name. A method call on the local counts, since its receiver
+may be taken `&self` or `&mut self`, and so does any mention inside a closure
+of a name the closure does not bind itself. A transposition indexed by `i`
+falls back where the same item calls `i.abs()`, or binds an unrelated `i` that
+a closure reads without binding it.
 
-### A leaf exchange touches every leaf an in-place write would
+### A permutation of owned targets with a readable reference copies
 
-A transposition with a readable reference exchanges the leaves that an in-place
-write of either target would write. That inherits the in-place write's
-imprecision
-([WEP: Reference Liveness § An in-place write writes every leaf](./wep-2026-10-13-referenced-places.md#an-in-place-write-writes-every-leaf)):
-a reference that names no field counts as one to every field, so the exchange
-walks the whole in-place structure where the referenced part would do. The
-exchange makes no value copy either way. The cost is the number of leaves.
+Where a reference to an owned target is readable after the statement, an
+assignment to that target writes in place
+([WEP: Reference Liveness § An assignment to a referenced place writes in place](./wep-2026-10-13-referenced-places.md#an-assignment-to-a-referenced-place-writes-in-place)).
+The desugaring then makes a value copy of the target's old value before writing
+over it. The reference reads the new value, so the result is correct. The cost
+is that one value copy. An affine target is not copied but moved, so the move
+check refuses a read of a reference taken before the statement, as it refuses
+one after any move
+([WEP: Affine Types § A reference is read only while its local holds the value](./wep-2026-10-17-affine-types.md#a-reference-is-read-only-while-its-local-holds-the-value)).

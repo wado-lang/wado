@@ -3077,6 +3077,12 @@ impl Ord for bool {
     }
 }
 
+/// The one value feeds nothing, as an empty tuple does.
+impl Hash for () {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+    }
+}
+
 impl Hash for i8 {
     pub fn hash<H: Hasher>(&self, h: &mut H) {
         h.write_u64(*self as u64);
@@ -3122,6 +3128,28 @@ impl Hash for i64 {
 impl Hash for u64 {
     pub fn hash<H: Hasher>(&self, h: &mut H) {
         h.write_u64(*self);
+    }
+}
+
+// Widening is exact, so `f32` hashes as the `f64` it widens to.
+impl Hash for f32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        (*self as f64).hash(h);
+    }
+}
+
+// A float feeds its bits with every NaN made one and the two zeroes made one,
+// the values its `==` cannot tell apart.
+impl Hash for f64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        let bits = if self.is_nan() {
+            f64::NAN.to_bits();
+        } else if *self == 0.0 {
+            0;
+        } else {
+            self.to_bits();
+        };
+        h.write_u64(bits);
     }
 }
 

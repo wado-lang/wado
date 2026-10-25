@@ -1,0 +1,35 @@
+// A cycle holds only where it descends into the type's members, as a derived
+// `Eq` of a recursive type does. Here `X: Foo` reaches itself through
+// `Carrier::Item`, an associated type no member channel binds, so nothing
+// grounds it and it does not hold.
+
+trait Carrier with () {
+    type Item;
+}
+
+trait Foo with () {
+    fn foo(&self) -> i32;
+}
+
+struct X {
+    v: i32,
+}
+
+impl Carrier for X {
+    type Item = X;
+}
+
+impl<T: Carrier<Item = U>, U: Foo> Foo for T {
+    fn foo(&self) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let _ = X { v: 1 }.foo();
+}
+
+__DATA__
+{
+    "compile_error": ":29:13: analysis error: no method 'foo' found on type 'X'"
+}

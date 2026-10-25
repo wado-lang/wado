@@ -23,9 +23,15 @@ use wasmtime_wasi_tls::{
 use crate::args::CliExit;
 use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker};
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
+use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
+use crate::process_host::{
+    GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
+    add_to_linker as add_process_to_linker,
+};
 use wado_host::engine::default_config;
+use wado_host::random;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
@@ -96,12 +102,15 @@ pub struct WasiState {
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
     tls: WasiTlsCtx,
+    process: ProcessCtx,
     /// `wado test` only: the store's handle on `core:eval`.
     eval: Option<EvalSession>,
     /// `wado test` only: the coverage regions this store reported.
     coverage: CoverageHits,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
+    /// `wado test` only: the regions this store measured through `core:fuel`.
+    fuel_regions: Vec<FuelRegion>,
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -122,6 +131,18 @@ enum Stdio {
     },
 }
 
+/// What a [`WasiState`]'s `wasi:random/insecure` and `insecure-seed` answer.
+pub enum InsecureRandom {
+    /// The host's randomness. `insecure-seed` seeds a hash map's protection
+    /// against denial of service, so a guest serving untrusted input needs it
+    /// unpredictable.
+    Host,
+    /// The same on every run, so a metered test's fuel is a function of the
+    /// program: `HashMap::new` hashes under `insecure-seed`, and a seed changes
+    /// how far its probes go.
+    Fixed,
+}
+
 impl WasiState {
     /// Create a new WASI state with preopened directories and program arguments.
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
@@ -137,9 +158,20 @@ impl WasiState {
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
-    pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
-        let preopens = Preopens::open(preopened_dirs)?;
-        Ok(Self::build(&preopens, args, true, Stdio::Inherit, None))
+    pub fn new(
+        preopened_dirs: &[(String, String)],
+        args: &[String],
+        process: ProcessGrant,
+    ) -> Result<Self> {
+        let preopens = Preopens::open(preopened_dirs, process)?;
+        Ok(Self::build(
+            &preopens,
+            args,
+            true,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        ))
     }
 
     /// Like [`Self::new`], but captures the guest's stdout/stderr into
@@ -163,11 +195,13 @@ impl WasiState {
         preopened_dirs: &[(String, String)],
         args: &[String],
         eval: EvalSession,
+        process: ProcessGrant,
+        insecure_random: InsecureRandom,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let state = Self::build(
-            &Preopens::open(preopened_dirs)?,
+            &Preopens::open(preopened_dirs, process)?,
             args,
             true,
             Stdio::Captured {
@@ -175,6 +209,7 @@ impl WasiState {
                 stderr: stderr.clone(),
             },
             Some(eval),
+            insecure_random,
         );
         Ok((state, stdout, stderr))
     }
@@ -190,7 +225,14 @@ impl WasiState {
     /// services: an HTTP server's env typically holds secrets (DB
     /// credentials, API tokens) that must not leak into handler components.
     pub fn new_no_inherit_env_with_preopens(preopens: &Preopens, args: &[String]) -> Self {
-        Self::build(preopens, args, false, Stdio::Inherit, None)
+        Self::build(
+            preopens,
+            args,
+            false,
+            Stdio::Inherit,
+            None,
+            InsecureRandom::Host,
+        )
     }
 
     /// The one place that decides what a guest reaches.
@@ -200,39 +242,63 @@ impl WasiState {
         inherit_env: bool,
         stdio: Stdio,
         eval: Option<EvalSession>,
+        insecure_random: InsecureRandom,
     ) -> Self {
         let mut builder = WasiCtx::builder();
-        match stdio {
-            Stdio::Inherit => {
-                builder.inherit_stdio();
-            }
-            Stdio::Captured { stdout, stderr } => {
-                builder.stdout(stdout);
-                builder.stderr(stderr);
+        match insecure_random {
+            InsecureRandom::Host => {}
+            InsecureRandom::Fixed => {
+                random::fixed_seed(&mut builder);
             }
         }
+        let guest_stdio = match stdio {
+            Stdio::Inherit => {
+                builder.inherit_stdio();
+                GuestStdio::Host
+            }
+            Stdio::Captured { stdout, stderr } => {
+                builder.stdout(stdout.clone());
+                builder.stderr(stderr.clone());
+                GuestStdio::Captured { stdout, stderr }
+            }
+        };
         if inherit_env {
             builder.inherit_env();
         }
         builder.args(args);
         grant_host_network(&mut builder);
         let mut ctx = builder.build();
-        *ctx.filesystem() = preopens.0.clone();
+        *ctx.filesystem() = preopens.filesystem.clone();
         Self {
             ctx,
             table: ResourceTable::new(),
             http: WasiHttpCtx::new(),
             http_hooks: WadoHttpHooks::new(),
             tls: build_wasi_tls_ctx(),
+            process: ProcessCtx::new(preopens.spawning.clone(), guest_stdio),
             eval,
             coverage: CoverageHits::default(),
             fuel_start: None,
+            fuel_regions: Vec::new(),
         }
     }
 
     /// The coverage regions this store reported.
     pub fn coverage_hits(&mut self) -> &mut CoverageHits {
         &mut self.coverage
+    }
+
+    /// The regions this store measured through `core:fuel`.
+    pub fn fuel_regions(&mut self) -> &mut Vec<FuelRegion> {
+        &mut self.fuel_regions
+    }
+
+    /// The store's handle on `core:process`.
+    pub fn process_view(&mut self) -> ProcessView<'_> {
+        ProcessView {
+            ctx: &mut self.process,
+            table: &mut self.table,
+        }
     }
 
     /// The test's handle on `core:eval`.
@@ -254,7 +320,11 @@ impl WasiState {
 /// The underlying `cap_std::fs::Dir` handles are reference-counted inside
 /// wasmtime's `Dir` (`Arc<cap_std::fs::Dir>`), so cloning a `Preopens`
 /// only bumps refcounts.
-pub struct Preopens(WasiFilesystemCtx);
+pub struct Preopens {
+    filesystem: WasiFilesystemCtx,
+    /// Whether a guest granted these directories may spawn.
+    spawning: Spawning,
+}
 
 impl Preopens {
     /// Open the given `(host_path, guest_path)` pairs once.
@@ -262,13 +332,16 @@ impl Preopens {
     /// # Errors
     ///
     /// Returns an error if any host path cannot be opened.
-    pub fn open(preopened_dirs: &[(String, String)]) -> Result<Self> {
+    pub fn open(preopened_dirs: &[(String, String)], process: ProcessGrant) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         let mut ctx = builder.build();
-        Ok(Self(ctx.filesystem().clone()))
+        Ok(Self {
+            filesystem: ctx.filesystem().clone(),
+            spawning: Spawning::new(preopened_dirs, process)?,
+        })
     }
 }
 
@@ -536,14 +609,20 @@ pub fn create_store(
     engine: &Engine,
     preopened_dirs: &[(String, String)],
     args: &[String],
+    process: ProcessGrant,
 ) -> Result<Store<WasiState>> {
-    Ok(new_store(engine, WasiState::new(preopened_dirs, args)?))
+    Ok(new_store(
+        engine,
+        WasiState::new(preopened_dirs, args, process)?,
+    ))
 }
 
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
 /// in-memory pipes instead of inherited — used by `wado test` so a
 /// test's own prints can be attributed to its result instead of racing
-/// directly onto the host's real stdout/stderr.
+/// directly onto the host's real stdout/stderr. A metered test's insecure
+/// randomness is [`InsecureRandom::Fixed`]; only a test, which serves no
+/// untrusted input, may give up its unpredictability.
 ///
 /// # Errors
 ///
@@ -553,9 +632,20 @@ pub fn create_test_store(
     preopened_dirs: &[(String, String)],
     program: &str,
     eval: EvalSession,
+    process: ProcessGrant,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let (state, stdout, stderr) =
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval)?;
+    let insecure_random = if engine.get_consume_fuel() {
+        InsecureRandom::Fixed
+    } else {
+        InsecureRandom::Host
+    };
+    let (state, stdout, stderr) = WasiState::new_capturing_stdio(
+        preopened_dirs,
+        &[program.to_owned()],
+        eval,
+        process,
+        insecure_random,
+    )?;
     Ok((new_store(engine, state), stdout, stderr))
 }
 
@@ -572,8 +662,8 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// Like [`create_linker`], plus `core:eval` and `core:coverage`, which only a
-/// test may reach.
+/// Like [`create_linker`], plus `core:eval`, `core:coverage` and `core:fuel`,
+/// which only a test may reach.
 ///
 /// # Errors
 ///
@@ -583,6 +673,7 @@ pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker = host_linker(component)?;
     add_eval_to_linker(&mut linker, WasiState::eval_session)?;
     add_coverage_to_linker(&mut linker, WasiState::coverage_hits)?;
+    add_fuel_to_linker(&mut linker)?;
     linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }
@@ -593,6 +684,7 @@ fn host_linker(component: &Component) -> Result<Linker<WasiState>> {
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
+    add_process_to_linker(&mut linker, WasiState::process_view)?;
     Ok(linker)
 }
 
