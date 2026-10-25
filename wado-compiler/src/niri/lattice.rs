@@ -71,10 +71,17 @@ impl Interpreter<'_> {
     }
 
     /// What a local denotes at this point. An aliased local is read through its
-    /// place, never out of `env`; only [`Self::projected_lattice`] resolves one.
+    /// place, never out of `env`; only [`Self::projected_lattice`] resolves one,
+    /// unless nothing can write the place, where the reference reads as its
+    /// referent's value just as `&place` itself does.
     fn local_lattice(&self, idx: u32) -> Lattice {
-        if self.frame.place_aliases.contains_key(&idx) {
-            return Lattice::Unevaluated;
+        if let Some((root, path)) = self.frame.place_aliases.get(&idx) {
+            if !self.frame.const_views.contains(idx) {
+                return Lattice::Unevaluated;
+            }
+            return self
+                .place_value(*root, path)
+                .map_or(Lattice::Unevaluated, Lattice::Const);
         }
         self.frame
             .env
