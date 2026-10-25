@@ -281,6 +281,7 @@ pub struct CompiledFixture {
     pub wir_text: Option<String>,
     pub warnings: Vec<CapturedDiagnostic>,
     pub errors: Vec<CapturedDiagnostic>,
+    pub remarks: Vec<String>,
 }
 
 /// Compile a fixture on a compile worker, unparsing its WIR there when
@@ -297,6 +298,7 @@ pub fn compile_fixture_on_worker(
             result,
             warnings,
             errors,
+            remarks,
         } = compile_capturing_diagnostics(&path, &source, options, None, stubs);
         let (wasm, wir_text) = match result {
             Ok(compiled) => {
@@ -317,6 +319,7 @@ pub fn compile_fixture_on_worker(
             wir_text,
             warnings,
             errors,
+            remarks,
         }
     })
 }
@@ -1076,6 +1079,9 @@ pub struct CapturedCompile {
     pub result: Result<wado_compiler::CompileResult, CompileError>,
     pub warnings: Vec<CapturedDiagnostic>,
     pub errors: Vec<CapturedDiagnostic>,
+    /// Each optimizer remark as `"file:line:col remark: …"`, so an expectation
+    /// pins where it anchors as well as what it says.
+    pub remarks: Vec<String>,
 }
 
 /// One diagnostic as a fixture reads it: the `Code` it was raised under, spelled
@@ -1142,6 +1148,14 @@ pub fn compile_capturing_diagnostics(
         warnings: captured(|s| s == Severity::Warning),
         // The same set `bail_to_compile_error` picks `compile_error` from.
         errors: captured(|s| matches!(s, Severity::Error | Severity::Fatal)),
+        remarks: diagnostics
+            .iter()
+            .filter(|d| d.message.starts_with("remark:"))
+            .map(|d| {
+                let span = d.span.as_ref().expect("a remark anchors to a span");
+                format!("{}:{}:{} {}", span.file, span.line, span.column, d.message)
+            })
+            .collect(),
     }
 }
 

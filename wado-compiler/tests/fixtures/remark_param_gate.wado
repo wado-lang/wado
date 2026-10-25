@@ -1,0 +1,27 @@
+// A constant does not reach a `String` parameter compared with `==`, so the
+// gate survives to run time even though `-D log.level=info` settles it.
+
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+fn is_trace(s: String) -> bool {
+    if s == "trace" {
+        return true;
+    }
+    return false;
+}
+
+export fn run() with Stdout {
+    if is_trace(LOG_LEVEL) {
+        println(`tracing`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "params": {"log.level": "info"},
+    "remarks": {"O2": [{"contains": ["compile-time parameter `log.level` is still read here"]}]}
+}

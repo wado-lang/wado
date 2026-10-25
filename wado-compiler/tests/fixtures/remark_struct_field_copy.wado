@@ -1,0 +1,27 @@
+// `Bag` is SROA-decomposed and its `items` array copy is rebuilt inside a
+// synthesized block whose inner statements carry placeholder spans. The remark
+// anchors to the enclosing real statement `let mut b = a;`, not to a
+// placeholder. One opaque element keeps the bag from being a constant written
+// back as a literal at each binding.
+
+use { println, Stdout } from "core:cli";
+
+struct Bag { items: List<i32> }
+
+export fn run() with Stdout {
+    let a = Bag { items: [1, 2, builtin::black_box(3)] };
+    let mut b = a;
+    b.items.push(4);
+    println(`${a.items.len()} ${b.items.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n",
+    "remarks": {
+        "O2": [
+            {"contains": ["remark:"], "count": 1},
+            {"contains": [":13:5 remark: a copy of `Array<i32>`"]}
+        ]
+    }
+}
