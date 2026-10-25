@@ -45,16 +45,10 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
-<<<<<<< HEAD
 use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
 };
-use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
-||||||| c8657d67e
-use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
-=======
 use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
->>>>>>> origin/main
 use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
