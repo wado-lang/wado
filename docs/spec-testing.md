@@ -303,7 +303,8 @@ Each region also counts how often it ran, and LCOV carries the counts. A test
 that traps adds one run for each region it reached, since its count stops at
 the trap.
 
-> Not yet implemented: the counts.
+> Not yet implemented: a region reports only whether it ran, and LCOV gives
+> every region that ran a count of one.
 
 A region that leads to nothing but a call to `unreachable()` is not one: the
 call, returned or not, is all it holds, or it holds nothing and only the call

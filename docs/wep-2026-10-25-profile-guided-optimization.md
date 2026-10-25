@@ -3,12 +3,14 @@
 ## Context
 
 The optimizer already leans on cold paths. `builtin::cold_path()` marks code
-that rarely runs, and three passes act on it:
+that rarely runs, and every pass that reads the marker acts on it. Among them:
 
 - `nir/cold_outline` moves the marked region into a function of its own.
 - `nir/inline` prices a callee without its cold tail. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
-  is taken (`cold_functions_of`).
+  is taken.
+- `const_object_globalization`, `param_spec`, `match_to_switch` and `peephole`
+  leave cold code as it is.
 - `infer_branch_hints` turns the marker into a Wasm branch hint, and wasmtime
   lays out the cold side out of line.
 
@@ -24,8 +26,9 @@ each one, and reports which ones ran
 on `-O`, so a region measured in one build names the same source in any other.
 A probe records only that a region ran, not how often.
 
-`benchmark/` measures Wado on real programs, and each benchmark already calls its
-kernel from a `test` block. It is where a change to the optimizer is judged, so
+`benchmark/` measures Wado on real programs, and most benchmarks already call
+their kernel from a `test` block. `http_routing`, a `wasi:http/service`, has
+none yet. `benchmark/` is where a change to the optimizer is judged, so
 it is where profile-guided optimization should prove itself first.
 
 ## Decision
@@ -47,8 +50,10 @@ test "sieve to 200k" {
 ```
 
 `wado test` runs a workload like any other test, so a workload that breaks
-fails the suite instead of rotting. The attribute combines with the other test
-attributes.
+fails the suite instead of rotting. The attribute combines with
+`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]` it is a
+compile error: such a test traps by design, and a workload that traps fails
+the recording (below).
 
 A workload should be deterministic and small. Its counts then come out the same
 on every run, so the committed profile changes only when the code or the
@@ -96,8 +101,7 @@ call, the length load, the bounds check and the load on every run.
 
 ### The profile is committed
 
-The profile is a text file, diffable and reviewed like any source. A binary
-format would break the rule against committing binaries. A file under `build/`
+The profile is a text file, so the repository holds no binary for it. A file under `build/`
 would not reach CI or a release build, so their output would differ from the
 author's.
 
@@ -115,20 +119,43 @@ measure the dependency's code as the entry uses it.
 
 Every count moves when the code does, so `.gitattributes` marks a profile
 `linguist-generated -diff`, as it marks the repository's other generated files.
+A routine diff then skips it, and `git diff --text` shows it to a reader who
+wants it.
 
-The profile lists each measured module by the path coverage uses, a file
-relative to the package root or a `core:` module by its import path. Under each
-module it lists each function that holds a measured region, with:
+### A profile names what it measured without machine paths
+
+Every name in a profile resolves the same on any machine and from any entry:
+
+- A module of the package is a file relative to the package root, or for a
+  program without a manifest, relative to the program's directory.
+- A dependency's module is the dependency's package name and the file relative
+  to its root, never the cache path it was fetched to.
+- A `core:` module is its import path.
+
+Coverage names a module relative to the entry module's directory instead, which
+two entries in different directories would name apart.
+
+Under each module the profile lists each function that holds a measured region,
+with:
 
 - its name and its line, for a reader;
-- a hash of its source text;
-- the count of each of its regions, by region number.
+- the hash of its region plan;
+- the count of each of its regions, numbered from zero within the function.
 
-### A function whose source changed has no profile
+Coverage numbers regions across the whole program, so editing one function
+would move every later function's numbers. Numbering within the function keeps
+an edit to one from reaching the counts of another.
 
-Region numbers shift when the source changes. A compile reads a function's
-counts only when the hash of its current source text equals the recorded one. A
-function whose hash differs is compiled as if no profile existed. A stale
+### A function whose plan changed has no profile
+
+A compile reads a function's counts only when the hash of its current region
+plan equals the recorded one. The plan is each region's kind and its span
+relative to the function's start. It changes with the function's text, and also
+with what outside the text decides its regions: a callee becoming `!`-typed
+starts or ends a region, and so does `#[coverage(off)]` on the enclosing `impl`
+or module.
+
+A function whose hash differs is compiled as if no profile existed. A stale
 profile therefore costs only the gain on what changed, and it never marks the
 wrong region.
 
@@ -138,12 +165,15 @@ an author learns when to record again.
 ### A region that never ran is marked cold
 
 Reify inserts a `builtin::cold_path()` at the start of each region whose count
-is zero, in every function the profile covers. Reify is where coverage inserts
-its probes, so a region means the same thing to both. From there, the
-optimizer's existing passes act on the marker as they do on one the author
-wrote.
+is zero and whose enclosing region ran, in every function the profile covers.
+Reify is where coverage inserts its probes, so a region means the same thing to
+both. From there, the optimizer's existing passes act on the marker as they do
+on one the author wrote.
 
-A function whose body region never ran is cold as a whole. A region that ran
+A function whose body region never ran is cold as a whole, with one marker at
+its start. A region inside one already marked gets none: `cold_outline` would
+otherwise outline each branch of a function that never ran into a function of
+its own, and both sides of its `if`s would carry a marker. A region that ran
 any number of times gets no marker. Using the counts beyond zero, to optimize a
 hot path harder than the rest, is left to a later proposal.
 
@@ -170,6 +200,11 @@ and the author's plus the profile's.
 `-f no-cold-paths` leaves alone the hints `infer_branch_hints` derives from
 traps. Those follow from what the program does when it traps, not from a guess.
 
+The existing `-f no-branch-hinting` is a different cut. It drops the markers
+only at WIR build, after every NIR pass has read them, and it also skips the
+hints derived from traps. It answers what branch hints are worth to wasmtime;
+`-f no-cold-paths` answers what the markers are worth to the whole pipeline.
+
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
@@ -195,7 +230,8 @@ level.
 5. [ ] `-f no-pgo` and `-f no-cold-paths`.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
-   profile, and a table compares the three builds the flags give. A workload
+   profile, `http_routing` a test to carry it first, and a table compares the
+   three builds the flags give. A workload
    runs a smaller input than the benchmark measures, so the table does not
    judge a profile on the run that trained it.
 

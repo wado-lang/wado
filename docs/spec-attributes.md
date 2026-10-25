@@ -299,9 +299,11 @@ Test block attribute. The test runs like any other, and it also states the
 package's real workload: `wado test --pgo` runs the workloads and records how
 often each region ran into a profile the package commits, `pgo/default.pgo`. A compile that reads the
 profile changes only what the program costs, never what it computes. It
-combines with the other test attributes.
+combines with `#[timeout_ms]` and `#[synopsis]`, and is an error with
+`#[expect_trap]` or `#[TODO]`, since a workload must not trap.
 
-> Not yet implemented: the attribute, `--pgo` and the profile.
+> Not yet implemented: `#[workload]` is rejected as an unknown attribute
+> (`UNKNOWN_ATTR`), `wado test` has no `--pgo`, and no compile reads a profile.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
