@@ -914,9 +914,9 @@ assert x > 0, "x must be positive";
 
 A `contract` clause states what a caller owes. An unmarked call checks it in
 every build; a call marked `unchecked` vouches for it, and only a build that
-checks contracts checks it: `wado test`, `-O0` and `-O1` (the default of
-`wado run`, `wado serve` and `wado test`), or `-f contract-checks`. A clause runs at the
-call, so a `return` or `?` inside it is an error. See
+checks contracts checks it: `wado test` at any level, `-O0` and `-O1` (the
+default of `wado run`, `wado serve` and `wado test`), or `-f contract-checks`. A
+clause runs at the call, so a `return` or `?` inside it is an error. See
 [the spec](./spec-assertions.md#contract-checks).
 
 ```wado
