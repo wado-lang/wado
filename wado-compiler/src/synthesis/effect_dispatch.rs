@@ -1947,22 +1947,17 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             }
             let span = block.stmts[i].span;
             let mut jump = block.stmts.remove(i);
-            let value = match &mut jump.kind {
-                TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => value.take(),
+            let carried = match &mut jump.kind {
+                TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => value.as_mut(),
                 _ => None,
             };
-            let payload_type = value.as_ref().map_or(TypeTable::UNIT, |v| v.type_id);
+            let payload_type = carried.as_ref().map_or(TypeTable::UNIT, |v| v.type_id);
             let slot = ExitSlot::new(payload_type, "$exit", self.type_table, self.ctx);
-            let carries_value = value.is_some();
-            let parked =
-                value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
+            let parked = match carried {
+                Some(value) => std::mem::replace(value, slot.take()),
+                None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            };
             let fill = slot.fill(parked, self.type_table);
-            if carries_value
-                && let TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } =
-                    &mut jump.kind
-            {
-                *value = Some(slot.take());
-            }
             let leave = TirStmt::new(
                 TirStmtKind::Break {
                     label: Some(self.label.to_string()),
