@@ -3100,11 +3100,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
     ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(StaticQuery::of(struct_name, method_name))
-            .found()
-            .map(|callee| callee.own_params.clone())
-            .unwrap_or_default()
+        self.resolve_static_callee(StaticQuery {
+            receiver_key,
+            ..StaticQuery::of(struct_name, method_name)
+        })
+        .found()
+        .map(|callee| callee.own_params.clone())
+        .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.

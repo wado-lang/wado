@@ -109,6 +109,14 @@ pub(super) struct StaticCallee<'a> {
     pub receiver_key: Option<&'a ImplTargetKey>,
 }
 
+/// What [`Elaborator::static_call_type_args`] settles for one static call.
+struct StaticTypeArgs {
+    /// The method's own type parameters, `method_args` indexed alike.
+    params: Vec<ast::GenericParam>,
+    impl_args: Vec<TypeId>,
+    method_args: Vec<TypeId>,
+}
+
 /// Where a resolved argument came from, for its diagnostics. A tagged
 /// template's argument is the template itself, which no source spells.
 #[derive(Clone, Copy)]
@@ -1633,79 +1641,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                // The method's own parameters, in the dense space its type
-                // arguments are indexed by — an effect or `fn`-bound parameter
-                // holds no slot in one.
-                let mtype_params: Vec<ast::GenericParam> = self
-                    .lookup_static_method_type_params(prefix, suffix)
-                    .into_iter()
-                    .filter(ast::GenericParam::is_real_type_param)
-                    .collect();
-                // Before anything counts slots, since a pack's arguments are
-                // one per element until they are grouped.
-                let mut written = type_args.clone();
-                if self.group_variadic_type_args_of(suffix, &mtype_params, &mut written, call.span)
-                {
-                    return TypeTable::ERROR;
-                }
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
-                let (mut impl_type_args_inferred, mut method_type_args) = self
-                    .static_call_type_args(
-                        StaticCallee {
-                            type_name: prefix,
-                            method_name: suffix,
-                            receiver_key: None,
-                        },
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        written,
-                    );
-                // A method-level parameter bound only through another's
-                // associated type (`..V` off `Holes`) is projected once the
-                // owner is inferred, as the free-function path does; the
-                // bound check below then sees it concrete.
-                if !method_type_args.is_empty() {
-                    self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
-                }
+                let Some(mut static_args) = self.static_call_type_args(
+                    StaticCallee {
+                        type_name: prefix,
+                        method_name: suffix,
+                        receiver_key: None,
+                    },
+                    &call.args,
+                    &args,
+                    expected_type,
+                    call.span,
+                    type_args.clone(),
+                ) else {
+                    return TypeTable::ERROR;
+                };
                 // Record `[impl_args, method_args]` — the same order
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
                 // The instance type is UNKNOWN: a static call anchors no
                 // `GenericInstance`, so reify reads `expression_types` instead.
                 {
-                    let mut combined = impl_type_args_inferred.clone();
-                    combined.extend_from_slice(&method_type_args);
+                    let mut combined = static_args.impl_args.clone();
+                    combined.extend_from_slice(&static_args.method_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
                 self.report_uninferred_static_method_type_args(
                     prefix,
                     suffix,
-                    &mut impl_type_args_inferred,
-                    &mut method_type_args,
+                    &mut static_args.impl_args,
+                    &mut static_args.method_args,
                     call.span,
                     None,
                 );
-                // The type prefix is what `Self` means here, so a bound written
-                // `Assoc = Self::Item` projects off it as it does on a method call.
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
-                // Enforce the static method's type-arg bounds (shared rule).
-                if !method_type_args.is_empty() {
-                    let self_binding = SelfBinding {
-                        type_id: self.tysys.get_base_type(receiver_type),
-                        declaring_trait: None,
-                    };
-                    self.enforce_type_arg_bounds(
-                        &mtype_params,
-                        &method_type_args,
-                        &[],
-                        Some(self_binding),
-                        call.span,
-                    );
-                }
+                self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
+                let StaticTypeArgs {
+                    impl_args: impl_type_args_inferred,
+                    method_args: method_type_args,
+                    ..
+                } = static_args;
                 if suffix == "from"
                     && !own_from
                     && let [arg_type] = args[..]
@@ -1935,8 +1912,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    let method_type_args = type_args.clone();
-
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at
                     // its own segment, which the walk answered for.
@@ -1971,27 +1946,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
-                    let (mut impl_type_args_inferred, mut method_type_args) = self
-                        .static_call_type_args(
-                            StaticCallee {
-                                type_name,
-                                method_name,
-                                receiver_key: ns_key.as_ref(),
-                            },
-                            &call.args,
-                            &args,
-                            expected_type,
-                            call.span,
-                            method_type_args,
-                        );
+                    let Some(mut static_args) = self.static_call_type_args(
+                        StaticCallee {
+                            type_name,
+                            method_name,
+                            receiver_key: ns_key.as_ref(),
+                        },
+                        &call.args,
+                        &args,
+                        expected_type,
+                        call.span,
+                        type_args.clone(),
+                    ) else {
+                        return TypeTable::ERROR;
+                    };
                     self.report_uninferred_static_method_type_args(
                         type_name,
                         method_name,
-                        &mut impl_type_args_inferred,
-                        &mut method_type_args,
+                        &mut static_args.impl_args,
+                        &mut static_args.method_args,
                         call.span,
                         ns_key.as_ref(),
                     );
+                    self.enforce_static_method_bounds(&static_args, ns_receiver_type, call.span);
+                    let StaticTypeArgs {
+                        impl_args: impl_type_args_inferred,
+                        method_args: method_type_args,
+                        ..
+                    } = static_args;
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
                         receiver_key: ns_key.as_ref(),
@@ -4032,10 +4014,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The type arguments a `Type::method(..)` call dispatches with, as
-    /// `(impl_args, method_args)`: the impl level inferred from the receiver,
-    /// and `explicit` with inference filling each `_`. One function, so the
-    /// bare and namespaced spellings cannot drift apart.
+    /// The type arguments a `Type::method(..)` call dispatches with: the impl
+    /// level inferred from the receiver, and the `written` turbofish with
+    /// inference filling each `_`. One function, so the bare and namespaced
+    /// spellings cannot drift apart. `None` once a pack's grouping is reported.
     fn static_call_type_args(
         &mut self,
         callee: StaticCallee<'_>,
@@ -4043,8 +4025,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: token::Span,
-        explicit: Vec<TypeId>,
-    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        mut written: Vec<TypeId>,
+    ) -> Option<StaticTypeArgs> {
+        // The method's own parameters, in the dense space its type arguments
+        // are indexed by — an effect or `fn`-bound parameter holds no slot in
+        // one.
+        let params: Vec<ast::GenericParam> = self
+            .lookup_static_method_type_params(
+                callee.type_name,
+                callee.method_name,
+                callee.receiver_key,
+            )
+            .into_iter()
+            .filter(ast::GenericParam::is_real_type_param)
+            .collect();
+        // Before anything counts slots, since a pack's arguments are one per
+        // element until they are grouped.
+        if self.group_variadic_type_args_of(callee.method_name, &params, &mut written, span) {
+            return None;
+        }
         // An unwritten turbofish leaves the impl level to infer as well, which
         // the method's own slot count says nothing about.
         let expected_args =
@@ -4058,21 +4057,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &expected_args,
             )
             .map_or(0, |sig| sig.own_type_params().len());
-        if !explicit.is_empty() && !turbofish_leaves_slot(&explicit, own_slots) {
-            return (Vec::new(), explicit);
+        let (impl_args, mut method_args) =
+            if !written.is_empty() && !turbofish_leaves_slot(&written, own_slots) {
+                (Vec::new(), written)
+            } else {
+                let (impl_args, inferred) = self.infer_static_call_type_args(
+                    callee.type_name,
+                    callee.method_name,
+                    raw_args,
+                    args,
+                    expected_type,
+                    span,
+                    callee.receiver_key,
+                );
+                merge_turbofish_type_args(&mut written, &inferred);
+                (impl_args, written)
+            };
+        // A method-level parameter bound only through another's associated
+        // type (`..V` off `Holes`) is projected once the owner is inferred, as
+        // the free-function path does; the bound check then sees it concrete.
+        if !method_args.is_empty() {
+            self.project_assoc_bound_args(&params, &mut method_args);
         }
-        let (impl_args, method_args) = self.infer_static_call_type_args(
-            callee.type_name,
-            callee.method_name,
-            raw_args,
-            args,
-            expected_type,
+        Some(StaticTypeArgs {
+            params,
+            impl_args,
+            method_args,
+        })
+    }
+
+    /// Holds a static call's own type arguments to the method's bounds.
+    /// `receiver` is what `Self` means at the call, so a bound written
+    /// `Assoc = Self::Item` projects off it as it does on a method call.
+    fn enforce_static_method_bounds(
+        &mut self,
+        type_args: &StaticTypeArgs,
+        receiver: Option<TypeId>,
+        span: token::Span,
+    ) {
+        if type_args.method_args.is_empty() {
+            return;
+        }
+        let self_binding = receiver.map(|receiver| SelfBinding {
+            type_id: self.tysys.get_base_type(receiver),
+            declaring_trait: None,
+        });
+        self.enforce_type_arg_bounds(
+            &type_args.params,
+            &type_args.method_args,
+            &[],
+            self_binding,
             span,
-            callee.receiver_key,
         );
-        let mut method_type_args = explicit;
-        merge_turbofish_type_args(&mut method_type_args, &method_args);
-        (impl_args, method_type_args)
     }
 
     /// Whether `struct_name::method_name` is declared, but by no block reaching
