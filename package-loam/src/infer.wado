@@ -730,7 +730,7 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
 /// constant is spelled once around the branches and each branch relabels it to
 /// the axes it read it under. Where `local`, `scope`'s layout, names it as
 /// `own`, the branch's, does, the branch's shape is `scope`'s too: one tensor,
-/// so where the other branch holds it already, its axes are those.
+/// so where `scope` holds it already, its axes are the ones held.
 fn hoist_constants(scope: &mut Checked, branch: &Checked, own: &Schema, local: &Schema) -> Result<(), InferError> {
     for let [name, shape] of branch.shapes.entries() {
         if !scope.known.contains_key(*name) {

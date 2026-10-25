@@ -179,7 +179,10 @@ test "an outer constant both branches read is one tensor, under one name" {
         K = Constant<value_floats = [1.0, 2.0]>()
         Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Mul(K, Z) }> (C)
     }`;
-    assert y_axes(source, [rule("C", ["One"]), rule("K", ["Embed"])]).unwrap() == "Embed=2";
+    assert y_axes(source, [
+        rule("C", ["One"]),
+        rule("K", ["Embed"]),
+    ]).unwrap() == "Embed=2";
 }
 
 test "a class a branch output and a graph output declare takes the graph output's dim_param" {
