@@ -185,6 +185,31 @@ test "an outer constant both branches read is one tensor, under one name" {
     ]).unwrap() == "Embed=2";
 }
 
+test "an outer constant the branches meet with axes the layout names apart stops the build" {
+    let source = `g (bool[1] C, float[2] X, float[2] Z) => (float[2] Y) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Mul(K, Z) }> (C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Seq"]),
+        rule("Z", ["Pos"]),
+    ];
+    assert y_axes(source, layout).unwrap_err().contains("axis Seq on the left meets Pos on the right");
+}
+
+test "an If output's axis the layout gives one word in both branches is that axis" {
+    let source = `g (bool[1] C, float[N, 2] X, float[M, 2] Z) => (float[?, 2] Y) {
+        Y = If <then_branch = t () => (float[?, 2] A) { A = Concat<axis = 0>(X, Z) }, else_branch = e () => (float[?, 2] B) { B = Concat<axis = 0>(X, Z) }> (C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("A", ["Seq", "Embed"]),
+        rule("B", ["Seq", "Embed"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Seq=M + N,X1=2";
+}
+
 test "a class a branch output and a graph output declare takes the graph output's dim_param" {
     let source = `g (bool[1] C, float[N, 2] X, float[M, 2] Z) => (float[total, 2] Y) {
         Y = If <then_branch = t () => (float[part, 2] A) { A = Concat<axis = 0>(X, Z) }, else_branch = e () => (float[part, 2] B) { B = Concat<axis = 0>(X, Z) }> (C)
@@ -506,6 +531,16 @@ fn attention_layout() -> List<LayoutRule> {
         rule("PY", ["Batch", "Kv", "Total", "Head"]),
         rule("VY", ["Batch", "Kv", "Total", "Head"]),
     ];
+}
+
+test "a GroupQueryAttention that names no present stops the build" {
+    let source = `g (float[1, 1, 8] Q, float[1, 1, 8] K, float[1, 1, 8] V, float[1, 1, 3, 8] PK, float[1, 1, 3, 8] PV)
+        => (float[1, 1, 8] Y) {
+        L = Constant<value_ints = [3]>()
+        T = Constant<value_ints = [4]>()
+        Y = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T)
+    }`;
+    assert y_axes(source, []).unwrap_err() == "Y = com.microsoft.GroupQueryAttention: neither present output is named, and the kernel's call spells their positions";
 }
 
 test "GroupQueryAttention's sequence lengths are checked against its shapes" {

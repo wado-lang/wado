@@ -372,7 +372,8 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     // The tensor each `layout` word was first given at, so a second class it
     // reaches is refused.
     let mut authored = HashMap::<String, String>::new();
-    for let root of axes.roots() {
+    let roots = axes.roots();
+    for let root of roots {
         if let Some(w) = axes.word(&root) && w.from_layout {
             if let Some(first) = authored.get(w.word) {
                 builtin::cold_path();
@@ -382,7 +383,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             naming.taken.insert(w.word);
         }
     }
-    name_axes(graph, &mut scope, &axes, &mut naming);
+    name_axes(graph, &mut scope, &axes, &roots, &mut naming);
     return Result::Ok(scope);
 }
 
@@ -433,9 +434,11 @@ fn pascal(text: &String) -> String {
 }
 
 /// Name each class `scope`'s tensors reach that no scope has named yet, then
-/// rewrite each shape it holds, and its branches', in those names. See WEP
-/// 2026-09-20 § "Axis Names Are Inferred From the Graph".
-fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, naming: &mut Naming) {
+/// rewrite each shape it holds, and its branches', in those names. `roots` is
+/// every class, in the order it was minted. The solver is spent once the names
+/// stand, so no scope keeps it. See WEP 2026-09-20 § "Axis Names Are Inferred
+/// From the Graph".
+fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, roots: &List<String>, naming: &mut Naming) {
     let mut sources: List<AxisName> = [];
     let mut tensors: List<String> = [];
     for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
@@ -466,7 +469,7 @@ fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, naming: &mut Namin
             }
         }
     }
-    for let root of axes.roots() {
+    for let root of *roots {
         if reached.contains(root) {
             name_class(
                 &axes.read(&Axis { name: root, extent: Extent::Unstated }),
@@ -482,13 +485,14 @@ fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, naming: &mut Namin
         scope.shapes[*tensor] = Shape { axes: named };
     }
     scope.axis_names = sources;
+    scope.axes = Axes {};
     for let node of &graph.nodes {
         let Some(pair) = scope.branches.get(node.outputs[0]) else {
             continue;
         };
         let [mut then_scope, mut else_scope] = pair;
-        name_axes(&branch_graph(node, "then_branch"), &mut then_scope, axes, naming);
-        name_axes(&branch_graph(node, "else_branch"), &mut else_scope, axes, naming);
+        name_axes(&branch_graph(node, "then_branch"), &mut then_scope, axes, roots, naming);
+        name_axes(&branch_graph(node, "else_branch"), &mut else_scope, axes, roots, naming);
         scope.branches[node.outputs[0]] = [then_scope, else_scope];
     }
 }
@@ -681,7 +685,7 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
         [&then_graph, &then_scope],
         [&else_graph, &else_scope],
     ] {
-        hoist_constants(scope, branch, &schema.within(&graph.name), local)?;
+        hoist_constants(node, scope, branch, &schema.within(&graph.name), local)?;
     }
     for let [i, output] of node.outputs.into_iter().enumerate() {
         let t = then_scope.shapes[then_graph.outputs[i].name];
@@ -707,8 +711,21 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
                 scope.axes.read(&e.axes[j]),
             ];
             let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
-            axes.push(if a.name == b.name {
-                Axis { ..a, extent };
+            let mut met = a.name == b.name;
+            // One word the layout gives in both branches is one axis, whatever
+            // its length in each.
+            if !met
+                && a.parts.is_empty()
+                && b.parts.is_empty()
+                && let Some(wa) = scope.axes.word(&a.name)
+                && let Some(wb) = scope.axes.word(&b.name)
+                && wa.from_layout
+                && wb.from_layout
+                && wa.word == wb.word {
+                met = scope.axes.unify(&a, &b);
+            }
+            axes.push(if met {
+                Axis { ..scope.axes.read(&a), extent };
             } else {
                 new_axis(&output, local, j, t.rank(), extent, &mut scope.axes)?;
             });
@@ -727,7 +744,13 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
 /// the axes it read it under. Where `local`, `scope`'s layout, names it as
 /// `own`, the branch's, does, the branch's shape is `scope`'s too: one tensor,
 /// so where `scope` holds it already, its axes are the ones held.
-fn hoist_constants(scope: &mut Checked, branch: &Checked, own: &Schema, local: &Schema) -> Result<(), InferError> {
+fn hoist_constants(
+    node: &Node,
+    scope: &mut Checked,
+    branch: &Checked,
+    own: &Schema,
+    local: &Schema,
+) -> Result<(), InferError> {
     for let [name, shape] of branch.shapes.entries() {
         if !scope.known.contains_key(*name) {
             continue;
@@ -743,7 +766,7 @@ fn hoist_constants(scope: &mut Checked, branch: &Checked, own: &Schema, local: &
         };
         if shared {
             for let i of 0..<held.rank() {
-                assert scope.axes.unify(&held.axes[i], &shape.axes[i]), "one tensor's axes are one";
+                agree_at(node, &held.axes[i], &shape.axes[i], &mut scope.owed, &mut scope.axes)?;
             }
         }
     }
@@ -1747,11 +1770,13 @@ fn attention(
     let Some(total_extent) = Extent::of(total) else {
         return Result::Err(refusal(node, "the past and the sequence are more than a list holds"));
     };
-    let positions = match named_present(node) {
-        Some(present) => new_axis(&present, schema, 2, 4, total_extent, classes)?,
-        // Nothing reads the caches, so nothing names their positions.
-        None => classes.mint(`${node.name()}[2]`, total_extent),
+    let Some(present) = named_present(node) else {
+        return Result::Err(refusal(
+            node,
+            "neither present output is named, and the kernel's call spells their positions",
+        ));
     };
+    let positions = new_axis(&present, schema, 2, 4, total_extent, classes)?;
     if node.has_operand(ATTENTION_BIAS) {
         let bias = ranked(ATTENTION_BIAS, 4)?;
         agree_at(node, &bias.axes[2], &q.axes[1], owed, classes)?;
