@@ -512,7 +512,7 @@ fn constant_calls(
 /// functions on its path the engine was free to run and did not, under the
 /// names their authors wrote.
 ///
-/// None is an answer: the fold waits on a value the engine cannot represent
+/// Finding none is an answer: the fold waits on a value the engine cannot represent
 /// rather than a body it cannot run, which `WADO_TRACE=ctfe_stmt` locates.
 fn surviving_cause(
     body: &Body,

@@ -221,7 +221,7 @@ pub fn diagnostic_function_name(name: &str) -> String {
             }
             '<' => depth += 1,
             '>' => depth -= 1,
-            '$' if depth == 0 && !out.is_empty() && !out.ends_with("::") => break,
+            '$' if depth == 0 && !out.is_empty() => break,
             _ => {}
         }
         out.push(c);
