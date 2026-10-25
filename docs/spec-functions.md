@@ -1433,6 +1433,11 @@ spelling it returns as many elements as the parameter took:
 fn doubled(values: [..i32]) -> [..i32] {
     return [for let v of values { v * 2 }];
 }
+
+test {
+    let [a, b, c] = doubled([1, 2, 3]);
+    assert a + b + c == 12;
+}
 ```
 
 Two parameters spelling it take tuples of one length, so `total([1], [1, 2])`
