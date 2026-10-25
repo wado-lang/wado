@@ -3454,12 +3454,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_inferable = |p: &ast::GenericParam| p.default.is_none() && !p.has_fn_bound();
         let unresolved: Vec<usize> = if type_args.is_empty() {
             (0..params.len())
-                .filter(|&i| is_inferable(&params[i]))
+                .filter(|&i| is_inferable(params[i]))
                 .collect()
         } else if type_args.len() == params.len() {
             (0..params.len())
                 .filter(|&i| {
-                    is_inferable(&params[i]) && self.slot_unanswered(type_args[i], &scope_params)
+                    is_inferable(params[i]) && self.slot_unanswered(type_args[i], &scope_params)
                 })
                 .collect()
         } else {
