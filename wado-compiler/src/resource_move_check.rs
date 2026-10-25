@@ -172,6 +172,10 @@ impl From<ResourceMoveError> for Diagnostic {
                         "`{holder}` refers into `{owner}`, which a `&mut` use at {}:{} may have moved out of",
                         at.line, at.column,
                     ),
+                    Gone::Replaced(at) => format!(
+                        "`{holder}` refers into `{owner}`, which the assignment at {}:{} replaced",
+                        at.line, at.column,
+                    ),
                 },
             ),
             MoveError::ReturnsLocalReference { owner } => (
@@ -470,19 +474,19 @@ enum Gone {
     /// A `&mut` use of the local, not through the value, which may have moved
     /// a part of it out.
     Disturbed(Span),
+    /// An assignment to a place holding the object, which dropped it.
+    Replaced(Span),
 }
 
 /// A local a reference reaches into: the binding, the field path into it,
 /// which binding of it, since a loop binds its locals afresh each iteration,
-/// how many `&mut` uses of it came before, and how many times an assignment
-/// refilled a moved place of it.
+/// and how many `&mut` uses of it came before.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Owner {
     def: AstId,
     path: Vec<String>,
     instance: u32,
     disturbed: usize,
-    refilled: usize,
 }
 
 #[derive(Clone)]
@@ -496,6 +500,9 @@ struct OwnerSite {
     /// Whether the value may write through to the local: a `&mut`, or a
     /// closure making a `&mut` use of its capture.
     writes: bool,
+    /// Why the object the value names left the local, once an assignment
+    /// refilled or replaced the place holding it.
+    gone: Option<Gone>,
 }
 
 /// A `&mut` use of a place: `via` is the binding it went through.
@@ -511,7 +518,11 @@ type Owners = IndexMap<Owner, OwnerSite>;
 
 fn merge_owners(into: &mut Owners, from: Owners) {
     for (owner, site) in from {
-        into.entry(owner).or_insert(site);
+        let gone = site.gone;
+        let kept = into.entry(owner).or_insert(site);
+        if kept.gone.is_none() {
+            kept.gone = gone;
+        }
     }
 }
 
@@ -521,21 +532,6 @@ struct Flow {
     moved: Moves,
     /// What each local holding a reference refers into.
     holders: IndexMap<AstId, Owners>,
-    /// How many times an assignment refilled a moved place of each local.
-    refills: IndexMap<AstId, usize>,
-    /// The moves a refill forgot. The local holds a new object there, so a
-    /// reference taken before the refill still names the one that moved.
-    refilled_moves: Vec<RefilledMove>,
-}
-
-/// A move of `def.path` at `span`, which an assignment refilled after
-/// `refills_before` earlier refills of `def`.
-#[derive(Clone, PartialEq)]
-struct RefilledMove {
-    def: AstId,
-    path: Vec<String>,
-    refills_before: usize,
-    span: Span,
 }
 
 impl Flow {
@@ -547,15 +543,6 @@ impl Flow {
         }
         for (holder, owners) in from.holders {
             merge_owners(self.holders.entry(holder).or_default(), owners);
-        }
-        for (def, count) in from.refills {
-            let into = self.refills.entry(def).or_default();
-            *into = (*into).max(count);
-        }
-        for refilled in from.refilled_moves {
-            if !self.refilled_moves.contains(&refilled) {
-                self.refilled_moves.push(refilled);
-            }
         }
     }
 }
@@ -831,7 +818,7 @@ impl MoveWalker<'_, '_> {
         };
         let gone = owners.iter().find_map(|(owner, site)| {
             site.affine
-                .then(|| self.owner_gone(holder, owner))
+                .then(|| site.gone.or_else(|| self.owner_gone(holder, owner)))
                 .flatten()
                 .map(|gone| (site.name.clone(), gone))
         });
@@ -858,13 +845,6 @@ impl MoveWalker<'_, '_> {
         let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
         if let Some(moved_at) = self.moved_overlap(owner.def, &path) {
             return Some(Gone::Moved(moved_at));
-        }
-        if let Some(refilled) = self.flow.refilled_moves.iter().find(|m| {
-            m.def == owner.def
-                && owner.refilled <= m.refills_before
-                && paths_overlap(&m.path, &path)
-        }) {
-            return Some(Gone::Moved(refilled.span));
         }
         let since = self.disturbances.get(&owner.def)?.get(owner.disturbed..)?;
         since
@@ -925,12 +905,7 @@ impl MoveWalker<'_, '_> {
             path,
             instance: self.instance(def),
             disturbed: self.disturbed_count(def),
-            refilled: self.refill_count(def),
         }
-    }
-
-    fn refill_count(&self, def: AstId) -> usize {
-        self.flow.refills.get(&def).copied().unwrap_or(0)
     }
 
     /// A by-value use of the place `expr` names, whose value is affine.
@@ -1098,31 +1073,38 @@ impl MoveWalker<'_, '_> {
         affine
     }
 
-    /// Forgets the moves an assignment to `place` refills: the place and every
-    /// place inside it.
-    fn clear_place(&mut self, place: &PlacePath<'_>) {
+    /// An assignment at `at` to `place` refills the moves inside it and drops
+    /// the old objects below it. A reference taken before into either names
+    /// an object the local no longer holds.
+    fn clear_place(&mut self, place: &PlacePath<'_>, at: Span) {
         let Some(def) = self.sem().referenced_symbol(place.root.id) else {
             return;
         };
-        let refills_before = self.refill_count(def);
         let mut refilled = Vec::new();
         self.flow.moved.retain(|(moved_def, moved_path), span| {
-            let kept = *moved_def != def
-                || moved_path.len() < place.fields.len()
-                || !paths_overlap(moved_path, &place.fields);
-            if !kept {
-                refilled.push(RefilledMove {
-                    def,
-                    path: moved_path.clone(),
-                    refills_before,
-                    span: *span,
-                });
+            let inside = *moved_def == def
+                && moved_path.len() >= place.fields.len()
+                && paths_overlap(moved_path, &place.fields);
+            if inside {
+                refilled.push((moved_path.clone(), *span));
             }
-            kept
+            !inside
         });
-        if !refilled.is_empty() {
-            self.flow.refills.insert(def, refills_before + 1);
-            self.flow.refilled_moves.extend(refilled);
+        let instance = self.instance(def);
+        for (owner, site) in self.flow.holders.values_mut().flat_map(|owners| owners.iter_mut()) {
+            if owner.def != def || owner.instance != instance || site.gone.is_some() {
+                continue;
+            }
+            let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
+            site.gone = refilled
+                .iter()
+                .find(|(moved, _)| paths_overlap(moved, &path))
+                .map(|(_, span)| Gone::Moved(*span))
+                .or_else(|| {
+                    (owner.path.len() > place.fields.len()
+                        && paths_overlap(&owner.path, &place.fields))
+                    .then_some(Gone::Replaced(at))
+                });
         }
     }
 
@@ -1296,6 +1278,7 @@ impl MoveWalker<'_, '_> {
                 name: name.clone(),
                 span: closure.span,
                 writes,
+                gone: None,
             };
             owners.insert(self.owner(def, Vec::new()), site);
             if !self.is_own_local(def) {
@@ -1348,7 +1331,7 @@ impl MoveWalker<'_, '_> {
             }
         }
         match self.place_path(place) {
-            Some(place) => self.clear_place(&place),
+            Some(path) => self.clear_place(&path, place.span()),
             None => self.visit_at(place),
         }
     }
@@ -1636,6 +1619,7 @@ impl MoveWalker<'_, '_> {
                             span: expr.span(),
                             affine: self.is_affine_local(def),
                             writes,
+                            gone: None,
                         },
                     );
                 }

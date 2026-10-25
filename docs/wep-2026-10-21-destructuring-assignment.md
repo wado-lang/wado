@@ -201,7 +201,7 @@ functions. It anchors to the statement and adds a note that names the cause:
 
 - the right side is not a permutation of the targets (`[a, b] = [b, b]`,
   `[a, b] = [c, a]`);
-- a reference to an owned target is readable after the statement;
+- a reference to a copyable owned target is readable after the statement;
 - a target is not owned, and the statement is not a transposition within one
   container;
 - the two subscripts name different containers, or a container the compiler

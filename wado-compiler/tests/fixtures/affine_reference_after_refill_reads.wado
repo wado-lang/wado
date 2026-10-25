@@ -1,5 +1,5 @@
-// A reference taken after an affine local was refilled names the new object,
-// and a move on another branch leaves a reference readable on this one.
+// A reference taken after an affine local was refilled names the new object.
+// One path's moves and refills leave a reference taken on another readable.
 
 affine struct Tok {
     id: i32,
@@ -7,6 +7,11 @@ affine struct Tok {
 
 impl Drop for Tok {
     fn drop(self) {}
+}
+
+affine struct Pair {
+    x: Tok,
+    y: Tok,
 }
 
 fn eat(t: Tok) -> i32 {
@@ -28,6 +33,26 @@ test {
     } else {
         assert s.id == 3;
     }
+
+    let z = Tok { id: 5 };
+    let mut c = Tok { id: 6 };
+    let mut t = &z;
+    if builtin::black_box(true) {
+        eat(c);
+        c = Tok { id: 7 };
+        eat(c);
+        c = Tok { id: 8 };
+    } else {
+        eat(c);
+        c = Tok { id: 9 };
+        t = &c;
+    }
+    assert t.id == 5;
+
+    let mut p = Pair { x: Tok { id: 10 }, y: Tok { id: 11 } };
+    let q = &p.y;
+    p.y = Tok { id: 12 };
+    assert q.id == 12;
 }
 
 __DATA__
