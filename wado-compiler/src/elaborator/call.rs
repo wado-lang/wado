@@ -4518,7 +4518,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_args: &[TypeId],
     ) -> Option<(TypeId, Vec<TypeId>)> {
         let def = key.decl()?;
-        let generic = self.lookup_generic_newtype_of_decl(def).is_some();
         let (instance, vars) = match self.lookup_generic_newtype_of_decl(def) {
             Some(info) => {
                 let arity = info.type_params.len();
@@ -4568,16 +4567,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         // Built afresh rather than substituted, so the base the instance
         // carries is written in the answers, as the call's types are.
-        let instance = if generic {
-            let answered = vars
-                .iter()
-                .map(|&var| self.apply_infer_holes(var))
-                .collect();
-            self.generic_newtype_instance(def, answered)
-        } else {
-            instance
-        };
-        Some((instance, shaped))
+        if vars.is_empty() {
+            return Some((instance, shaped));
+        }
+        // Built afresh rather than substituted, so the base the instance
+        // carries is written in the answers, as the call's types are.
+        let answered = vars
+            .iter()
+            .map(|&var| self.apply_infer_holes(var))
+            .collect();
+        Some((self.generic_newtype_instance(def, answered), shaped))
     }
 
     /// The impl level of a derived method called by type path, solved from the
