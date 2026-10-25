@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792901593353,
+  "lastUpdate": 1792903159041,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -70501,6 +70501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c8657d67ec642fef1741819c162f19eabd176868"
         },
         "date": 1792901592623,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 294997,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ae89b2ce3efa2d5e419ecacd3909e73bf675ff1",
+          "message": "Merge pull request #2449 from wado-lang/ccr-8dca5f71-587irx\n\nfix: assign a whole affine aggregate without trapping, and refuse a reference the assignment leaves stale",
+          "timestamp": "2026-10-25T13:19:35+09:00",
+          "tree_id": "c28e32fe1846fd00f93419dfde20b3c7cd9f8e6b",
+          "url": "https://github.com/wado-lang/wado/commit/5ae89b2ce3efa2d5e419ecacd3909e73bf675ff1"
+        },
+        "date": 1792903157975,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
