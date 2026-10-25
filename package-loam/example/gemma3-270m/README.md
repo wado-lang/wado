@@ -54,4 +54,4 @@ has.
   step the attention cache, as `model.wado` does. `generate_test.wado` checks
   Loam's tokens against it:
 
-      wado test -O2 --collector drc generate_test.wado
+      wado test -O1 --collector drc generate_test.wado
