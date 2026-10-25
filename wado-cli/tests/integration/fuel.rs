@@ -8,7 +8,8 @@ use predicates::prelude::*;
 
 use crate::common::wado_in;
 
-/// A package whose one test measures a short loop and then a longer one.
+/// A package whose one test measures a short loop, a longer one, and the
+/// filling of a `HashMap`.
 fn write_package(root: &Path) {
     fs::write(
         root.join("wado.toml"),
@@ -18,6 +19,7 @@ fn write_package(root: &Path) {
     fs::write(
         root.join("loops_test.wado"),
         r#"use { measure } from "core:fuel";
+use { HashMap } from "core:collections";
 
 fn count(n: i32) -> i32 {
     let mut s = 0;
@@ -27,9 +29,18 @@ fn count(n: i32) -> i32 {
     return s;
 }
 
+fn fill(n: i32) -> i32 {
+    let mut map = HashMap::<String, i32>::new();
+    for let i of 0..<n {
+        map[`key-${i}`] = i;
+    }
+    return map.len();
+}
+
 test "loops" {
     assert measure("short", || count(10)) == 45;
     assert measure("long", || count(1000)) == 499_500;
+    assert measure("map", || fill(2000)) == 2000;
 }
 "#,
     )
@@ -41,7 +52,10 @@ fn report(root: &Path) -> String {
         .args(["test", "--format", "verbose", "--report-fuel"])
         .assert()
         .success()
-        .stdout(predicate::str::is_match(r"ok   loops \(\S+, fuel \d+; short \d+; long \d+\)").unwrap());
+        .stdout(
+            predicate::str::is_match(r"ok   loops \(\S+, fuel \d+; short \d+; long \d+; map \d+\)")
+                .unwrap(),
+        );
     fs::read_to_string(root.join("build/fuel.json")).unwrap()
 }
 
@@ -59,11 +73,13 @@ fn regions_are_reported_in_order_and_reproduce() {
     assert_eq!(entry["test"], "loops");
     let regions = entry["regions"].as_array().unwrap();
     let labels: Vec<_> = regions.iter().map(|r| r["label"].as_str().unwrap()).collect();
-    assert_eq!(labels, ["short", "long"]);
+    assert_eq!(labels, ["short", "long", "map"]);
     let fuel = |i: usize| regions[i]["fuel"].as_u64().unwrap();
     assert!(fuel(0) < fuel(1), "{first}");
-    assert!(fuel(0) + fuel(1) < entry["fuel"].as_u64().unwrap(), "{first}");
+    assert!(fuel(0) + fuel(1) + fuel(2) < entry["fuel"].as_u64().unwrap(), "{first}");
 
+    // `HashMap::new` hashes under `wasi:random/insecure-seed`, which a metered
+    // run fixes.
     assert_eq!(report(tmp.path()), first);
 }
 

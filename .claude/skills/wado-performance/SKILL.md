@@ -335,13 +335,25 @@ prices every instruction alike, so a change of branch shape needs a timed A/B: a
 `br_table` counts as one instruction however often it mispredicts
 (`trade-offs.md`).
 
-Write a program that runs the code under test a fixed number of times; the
-`core:benchmark` harness repeats by time, so its fuel varies. Subtract a run
-that does only the setup.
+Wrap the code under test in `core:fuel`'s `measure` inside a `test` block. The
+region's fuel leaves out the setup around it. The `core:benchmark` harness
+repeats by time, so its fuel varies.
+
+```wado
+test "probe" {
+    let input = setup();
+    measure("parse", || parse(&input));
+}
+```
 
 ```sh
-wado run -O2 --report-fuel probe.wado
+wado test -O2 --allocator freelist --report-fuel probe.wado   # ok   probe (…, fuel N; parse M)
 ```
+
+`--allocator freelist` measures the allocator a shipped program gets, not the
+test world's `debug` one. Every benchmark carries such a `test "fuel"` block,
+and `mise run fuel-benchmark` compares them all against `benchmark/fuel.json`,
+which CI holds every pull request to.
 
 ### A/B-ing a compiler change
 

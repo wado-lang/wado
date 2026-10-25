@@ -7,6 +7,7 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 use { assemble_grammar } from "../../package-gale/src/g4/parser.wado";
 use { generate, GenerateOptions } from "../../package-gale/src/codegen.wado";
 use { AtnMode } from "../../package-gale/src/gen_settings.wado";
@@ -38,6 +39,10 @@ test "smoke" {
         Err(_) => panic("smoke: assemble_grammar failed"),
     };
     assert generate(&mut g, &GenerateOptions {}).source.len() > 0;
+}
+
+test "fuel" {
+    assert measure("generate", || gen_rust()) > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock) {

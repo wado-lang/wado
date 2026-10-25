@@ -727,6 +727,14 @@ grep -lE '^#!?\\[TODO\\]' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 description = "Run all benchmarks"
 run = "mise run -C benchmark all"
 
+[tasks.fuel-benchmark]
+description = "Measure the `test \"fuel\"` regions of benchmark/ and fail on any difference from benchmark/fuel.json"
+run = "node benchmark/fuel.ts check"
+
+[tasks.update-fuel-baseline]
+description = "Rewrite benchmark/fuel.json from the `test \"fuel\"` regions of benchmark/"
+run = "node benchmark/fuel.ts write"
+
 # The arm an A/B compares against: `origin/main`'s compiler, kept as the one
 # binary, since the worktree and target dir it was built from are gigabytes and
 # nothing reads them afterwards. Cached under the commit, so a moved main

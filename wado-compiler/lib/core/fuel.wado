@@ -30,7 +30,7 @@ test {
 /// test. `f`'s result passes through `builtin::black_box`, so the work that
 /// produces it is never optimized out of the region.
 #[benign(FuelHost)]
-pub fn measure<T, effect E>(label: String, f: fn() -> T with E) -> T with E {
+pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T with E {
     let Some(start) = FuelHost::spent() else {
         return f();
     };

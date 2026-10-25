@@ -31,6 +31,7 @@ use crate::process_host::{
     add_to_linker as add_process_to_linker,
 };
 use wado_host::engine::default_config;
+use wado_host::random;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
@@ -543,11 +544,19 @@ pub fn create_serve_engine(
 }
 
 /// A store over `state`. On a metering engine it holds fuel it can never
-/// exhaust, so `--report-fuel` observes the guest without stopping it.
+/// exhaust, so `--report-fuel` observes the guest without stopping it. There
+/// `wasi:random/insecure` and `insecure-seed` answer the same on every run, so
+/// the fuel is a function of the program: `HashMap::new` hashes under
+/// `insecure-seed`, and a seed changes how far its probes go.
 #[must_use]
-pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
+pub fn new_store(engine: &Engine, mut state: WasiState) -> Store<WasiState> {
+    let metered = engine.get_consume_fuel();
+    if metered {
+        let mut fixed = random::fixed_seed(&mut WasiCtx::builder()).build();
+        *state.ctx.random() = std::mem::take(fixed.random());
+    }
     let mut store = Store::new(engine, state);
-    if engine.get_consume_fuel() {
+    if metered {
         store.set_fuel(u64::MAX).expect("the engine meters fuel");
         store.data_mut().fuel_start = Some(u64::MAX);
     }

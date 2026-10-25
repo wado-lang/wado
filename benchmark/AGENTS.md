@@ -2,6 +2,17 @@
 
 Performance benchmarks comparing Wado against C and JavaScript.
 
+Two measures live here, and they answer different questions:
+
+- Wall clock, through `core:benchmark`: Wado against other implementations.
+  Only a quiet machine can time it, so it runs locally and fills `README.md`.
+- Fuel, through `core:fuel`: whether a change made Wado's own output do more
+  work. Each benchmark's `test "fuel"` block measures its phases once. Fuel does
+  not depend on the host, so CI holds every pull request to
+  `benchmark/fuel.json` exactly (`mise run fuel-benchmark`), and gh-pages
+  records it per commit. A change that moves it commits the result of
+  `mise run update-fuel-baseline`. Fuel leaves out GC and other host work.
+
 Read the `wado-performance` skill before measuring a change, and its section
 "A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.
 Without `WADO_BIN`, `wado.sh` runs `cargo run --release`, and a release build

@@ -15,6 +15,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     // Minimal valid CitmCatalog with empty maps and no events / performances.
@@ -24,6 +25,14 @@ test "smoke" {
     let bytes = to_bytes::<CitmCatalog>(&catalog).unwrap();
     let back = from_bytes::<CitmCatalog, _>(bytes).unwrap();
     assert event_count(&back) == 0;
+}
+
+test "fuel" {
+    let json_data = #include_bytes("./citm_catalog.json");
+    let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
+    measure("ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = measure("de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
+    assert events == 184;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
