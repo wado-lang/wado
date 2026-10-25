@@ -23,7 +23,7 @@ use crate::name::{
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
@@ -2431,15 +2431,12 @@ impl FunctionTranslator<'_, '_> {
                         .is_some_and(|l| self.multi_value_split_locals.contains_key(&l))
             })
             .collect();
-        // Whether evaluating each argument runs code: a local read runs none,
-        // and a promoted value none unless its tree names an extraction source.
+        // Whether evaluating each argument runs code: a local read or a promoted
+        // value runs none.
         let runs_code: Vec<bool> = ordered
             .iter()
             .zip(&local_read)
-            .map(|(&op, &local)| match op {
-                Operand::Value(v) => self.body.values.names_extraction_source(v),
-                Operand::Expr(_) => !local,
-            })
+            .map(|(&op, &local)| op.as_expr().is_some() && !local)
             .collect();
         // A diverging argument stays in its place: the call after it is dead
         // code, which validates at any arity, and nothing to its right runs.
@@ -2537,9 +2534,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Whether evaluating `op` stores nothing: reads and arithmetic alone.
     fn writes_nothing(&self, op: Operand) -> bool {
-        let e = match op {
-            Operand::Value(v) => return !self.body.values.names_extraction_source(v),
-            Operand::Expr(e) => e,
+        let Operand::Expr(e) = op else {
+            return true;
         };
         match &self.body.exprs[e].kind {
             ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => {
@@ -2749,20 +2745,7 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for a leaf the graph cannot reconstruct (a
-            // local read, a call result). It is re-emitted from the recorded
-            // source the builder/lower scheduled for it.
-            ValueKind::Opaque(id) => {
-                match self
-                    .body
-                    .values
-                    .opaque_source(id)
-                    .expect("promoted Opaque has no recorded extraction source")
-                {
-                    OpaqueSource::Local(idx) => self.local_get(idx),
-                    OpaqueSource::Expr(e) => self.translate_expr_inner(e),
-                }
-            }
+            ValueKind::Opaque(id) => self.local_get(self.body.values.promoted_opaque_local(id)),
             // A `Select` (control-merge of pure values) extracts as a
             // value-producing `if`. Sound because the arms are pure values
             // (the builder constructs `Select` only at merges of pure values);
@@ -2809,8 +2792,9 @@ impl FunctionTranslator<'_, '_> {
                 // materialised), read the split local directly — a `StructGet`
                 // would read an uninitialised slot. Mirrors `translate_expr_inner`.
                 if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
-                    && let Some(OpaqueSource::Local(idx)) = self.body.values.opaque_source(*oid)
-                    && let Some(splits) = self.multi_value_split_locals.get(&idx)
+                    && let Some(splits) = self
+                        .multi_value_split_locals
+                        .get(&self.body.values.promoted_opaque_local(*oid))
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
                     let (held, ty) = (local_get(name, ty), ty.clone());

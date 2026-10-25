@@ -11,7 +11,6 @@ use std::ops::ControlFlow;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, prim_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::ExprId;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -541,31 +540,14 @@ pub struct ValuePool {
     /// reads the value's type here. Populated by the builder / `lower` at
     /// creation; `None` until set.
     types: Vec<Option<TypeId>>,
-    /// Skeleton source for an `Opaque`: how extraction re-emits the leaf the
-    /// graph cannot reconstruct. A `Local` opaque emits `local.get idx` (self-
-    /// contained — no skeleton node to keep alive); an `Expr` opaque lowers a
-    /// scheduled skeleton expression (a call result kept in the skeleton).
-    /// Empty for opaques minted without a recorded source.
-    opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
-    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky: an
-    /// over-estimate costs a walk, a stale `false` would skip a live node.
-    expr_sources: bool,
+    /// The local an `Opaque` reads, which extraction re-emits as `local.get`.
+    /// Absent for an opaque with any other origin, which extraction refuses.
+    opaque_locals: IndexMap<OpaqueId, u32>,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
     /// guard's and check's copies of an induction variable or a hoisted bound.
     canonical_locals: IndexMap<u32, ValueId>,
-}
-
-/// How the extractor re-emits an [`OpaqueId`]'s value (see
-/// [`ValuePool::opaque_source`]).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum OpaqueSource {
-    /// The runtime value of a local: extraction emits `local.get idx`.
-    Local(u32),
-    /// Produced by a skeleton expression (a call result kept in the skeleton):
-    /// extraction lowers that expr.
-    Expr(ExprId),
 }
 
 impl ValuePool {
@@ -684,26 +666,24 @@ impl ValuePool {
         self.intern(ValueKind::Opaque(opaque))
     }
 
-    /// Allocate a fresh `Opaque` with a recorded extraction source.
-    pub fn fresh_opaque_with_source(&mut self, source: OpaqueSource) -> ValueId {
+    /// Allocate a fresh `Opaque` reading local `idx`.
+    pub fn fresh_opaque_local(&mut self, idx: u32) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
-        self.expr_sources |= matches!(source, OpaqueSource::Expr(_));
-        self.opaque_sources.insert(opaque, source);
+        self.opaque_locals.insert(opaque, idx);
         self.intern(ValueKind::Opaque(opaque))
     }
 
-    /// Whether any operand can name a skeleton-external extraction source. False
-    /// lets a reachability walk stay on the skeleton.
+    /// The local an `Opaque` reads, if it reads one.
     #[inline]
-    pub fn has_expr_source(&self) -> bool {
-        self.expr_sources
+    pub fn opaque_local(&self, opaque: OpaqueId) -> Option<u32> {
+        self.opaque_locals.get(&opaque).copied()
     }
 
-    /// The recorded extraction source of an `Opaque`, if any.
-    #[inline]
-    pub fn opaque_source(&self, opaque: OpaqueId) -> Option<OpaqueSource> {
-        self.opaque_sources.get(&opaque).copied()
+    /// The local an `Opaque` in a promoted operand reads, as every one does.
+    pub fn promoted_opaque_local(&self, opaque: OpaqueId) -> u32 {
+        self.opaque_local(opaque)
+            .expect("a promoted Opaque must read a local")
     }
 
     /// A stable `Opaque(Local idx)`, the same value on every call. It is
@@ -720,7 +700,7 @@ impl ValuePool {
         {
             return v;
         }
-        let v = self.fresh_opaque_with_source(OpaqueSource::Local(idx));
+        let v = self.fresh_opaque_local(idx);
         self.set_type(v, ty);
         self.canonical_locals.insert(idx, v);
         v
@@ -737,17 +717,13 @@ impl ValuePool {
         if self.child_count(v) == 0 {
             return self.is_local_opaque(v);
         }
-        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
-            Some(OpaqueSource::Local(_)) => ControlFlow::Break(()),
-            _ => ControlFlow::Continue(()),
-        })
-        .is_some()
+        self.walk_opaque_locals(v, &mut IndexSet::default(), |_, _| ControlFlow::Break(()))
+            .is_some()
     }
 
-    /// Whether `v` is itself an `Opaque` sourced from a local.
+    /// Whether `v` is itself an `Opaque` reading a local.
     fn is_local_opaque(&self, v: ValueId) -> bool {
-        matches!(self.kind(v), ValueKind::Opaque(oid)
-            if matches!(self.opaque_source(*oid), Some(OpaqueSource::Local(_))))
+        matches!(self.kind(v), ValueKind::Opaque(oid) if self.opaque_local(*oid).is_some())
     }
 
     /// Collect into `out` every local index named by an `Opaque(Local)`
@@ -777,29 +753,32 @@ impl ValuePool {
     }
 
     /// Walk the values reachable from `root`, invoking `f` at each `Opaque`
-    /// leaf with its source. `Break` stops the walk and is its result.
+    /// leaf that reads a local, with that local. `Break` stops the walk and is
+    /// its result.
     ///
     /// Worklist with a visited set, not recursion: an induction `LoopPhi` is
     /// self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
     /// would not terminate. The visited set bounds it at each canonical id.
-    fn walk_opaques<T>(
+    fn walk_opaque_locals<T>(
         &self,
         root: ValueId,
         seen: &mut IndexSet<ValueId>,
-        mut f: impl FnMut(Option<OpaqueSource>, ValueId) -> ControlFlow<T>,
+        mut f: impl FnMut(u32, ValueId) -> ControlFlow<T>,
     ) -> Option<T> {
         self.walk_values(root, seen, |v, kind| match kind {
-            ValueKind::Opaque(oid) => match f(self.opaque_source(*oid), v) {
-                ControlFlow::Break(found) => ControlFlow::Break(found),
-                ControlFlow::Continue(()) => ControlFlow::Continue(false),
-            },
+            ValueKind::Opaque(oid) => {
+                if let Some(idx) = self.opaque_local(*oid) {
+                    f(idx, v)?;
+                }
+                ControlFlow::Continue(false)
+            }
             _ => ControlFlow::Continue(true),
         })
     }
 
     /// Walk the values reachable from `root`, `visit` answering at each
     /// whether to go on into its children. `Break` stops the walk and is its
-    /// result. A worklist with a visited set, as [`Self::walk_opaques`] says.
+    /// result. A worklist with a visited set, as [`Self::walk_opaque_locals`] says.
     pub fn walk_values<T>(
         &self,
         root: ValueId,
@@ -820,7 +799,7 @@ impl ValuePool {
         None
     }
 
-    /// Push the pure-value children of `v`, the edges [`Self::walk_opaques`]
+    /// Push the pure-value children of `v`, the edges [`Self::walk_opaque_locals`]
     /// follows. An `Opaque` is a leaf: it stands for what the graph cannot
     /// reconstruct.
     fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
@@ -860,10 +839,10 @@ impl ValuePool {
     pub fn value_reads_local(&self, v: ValueId, idx: u32) -> bool {
         if self.child_count(v) == 0 {
             return matches!(self.kind(v), ValueKind::Opaque(oid)
-                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
+                if self.opaque_local(*oid) == Some(idx));
         }
-        self.walk_opaques(v, &mut IndexSet::default(), |src, _| {
-            if src == Some(OpaqueSource::Local(idx)) {
+        self.walk_opaque_locals(v, &mut IndexSet::default(), |local, _| {
+            if local == idx {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())
@@ -887,34 +866,6 @@ impl ValuePool {
         });
     }
 
-    /// Every expression the value tree at `v` names as an extraction source.
-    /// Those nodes produce this value's code and hang outside the skeleton, so
-    /// a reachability walk that skipped them would call them orphans and let a
-    /// rewrite pass by.
-    pub fn for_each_opaque_expr(
-        &self,
-        v: ValueId,
-        seen: &mut IndexSet<ValueId>,
-        mut f: impl FnMut(ExprId),
-    ) {
-        self.walk_opaques::<()>(v, seen, |src, _| {
-            if let Some(OpaqueSource::Expr(e)) = src {
-                f(e);
-            }
-            ControlFlow::Continue(())
-        });
-    }
-
-    /// Whether the value tree at `v` names an expression as an extraction
-    /// source, which extracting it runs.
-    pub fn names_extraction_source(&self, v: ValueId) -> bool {
-        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
-            Some(OpaqueSource::Expr(_)) => ControlFlow::Break(()),
-            _ => ControlFlow::Continue(()),
-        })
-        .is_some()
-    }
-
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(
@@ -923,10 +874,8 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(u32, ValueId),
     ) {
-        self.walk_opaques::<()>(v, seen, |src, id| {
-            if let Some(OpaqueSource::Local(idx)) = src {
-                f(idx, id);
-            }
+        self.walk_opaque_locals::<()>(v, seen, |idx, id| {
+            f(idx, id);
             ControlFlow::Continue(())
         });
     }
@@ -936,7 +885,7 @@ impl ValuePool {
     pub fn retype_locals(&mut self, types: &[(u32, TypeId)]) {
         for i in 0..self.values.len() {
             if let ValueKind::Opaque(oid) = self.values[i]
-                && let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid)
+                && let Some(idx) = self.opaque_local(oid)
                 && let Some(&(_, ty)) = types.iter().find(|(local, _)| *local == idx)
             {
                 self.set_type(ValueId(i as u32), ty);
@@ -944,31 +893,30 @@ impl ValuePool {
         }
     }
 
-    /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which
-    /// a pass renumbering a body's locals must call so a promoted `Opaque` still
-    /// names the right slot. A `None` entry marks a dropped local, whose source
-    /// is cleared rather than remapped: any use then hits the "no recorded
-    /// extraction source" panic instead of silently reading the wrong slot.
+    /// Remap every `Opaque`'s local through `remap` (old → new), which a pass
+    /// renumbering a body's locals must call so a promoted `Opaque` still names
+    /// the right slot. A `None` entry marks a dropped local, whose entry is
+    /// cleared rather than remapped: a promoted operand still holding it then
+    /// fails the NIR audit and extraction, instead of silently reading the
+    /// wrong slot.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
         self.canonical_locals = self
             .canonical_locals
             .iter()
             .filter_map(|(&idx, &v)| remap[idx as usize].map(|new| (new, v)))
             .collect();
-        self.opaque_sources.retain(|_, src| match src {
-            OpaqueSource::Local(idx) => match remap[*idx as usize] {
+        self.opaque_locals
+            .retain(|_, idx| match remap[*idx as usize] {
                 Some(new) => {
                     *idx = new;
                     true
                 }
                 None => false,
-            },
-            OpaqueSource::Expr(_) => true,
-        });
+            });
     }
 
     /// Whether `id`'s value can be re-emitted purely from the graph and
-    /// position-independent leaves: literal constants and `Local`-sourced
+    /// position-independent leaves: literal constants and local-reading
     /// opaques, composed by `Binary` / `Unary` / `Select`. A `Local` opaque is
     /// sound only when the local holds **one value**, so the caller rejects every
     /// index in `multi_version_locals` (`Engine::local_has_one_version`).
@@ -982,10 +930,9 @@ impl ValuePool {
             | ValueKind::Float(_, _)
             | ValueKind::Bool(_)
             | ValueKind::Char(_) => true,
-            ValueKind::Opaque(op) => match self.opaque_source(op) {
-                Some(OpaqueSource::Local(idx)) => !multi_version_locals.contains(&idx),
-                _ => false,
-            },
+            ValueKind::Opaque(op) => self
+                .opaque_local(op)
+                .is_some_and(|idx| !multi_version_locals.contains(&idx)),
             // Arithmetic is width-uniform: a `Binary`/`Unary` and its operands
             // share the result type, so types stamp consistently from the
             // frozen node. `Cast` is excluded — its operand carries the *source*
@@ -1360,11 +1307,11 @@ mod tests {
         assert!(pool.is_empty());
     }
 
-    /// DAE renumbers the locals it keeps and drops the rest. A source naming a
+    /// DAE renumbers the locals it keeps and drops the rest. An opaque reading a
     /// dropped local belongs to a value no reachable operand carries — the pool
-    /// is append-only — so it is cleared, not remapped onto a live slot.
+    /// is append-only — so its entry is cleared, not remapped onto a live slot.
     #[test]
-    fn remap_opaque_locals_clears_a_source_naming_a_dropped_local() {
+    fn remap_opaque_locals_clears_an_opaque_reading_a_dropped_local() {
         let mut pool = ValuePool::new();
         let kept = pool.canonical_local(1, TypeTable::I32);
         let dropped = pool.canonical_local(2, TypeTable::I32);
@@ -1376,8 +1323,8 @@ mod tests {
 
         pool.remap_opaque_locals(&[None, Some(0), None]);
 
-        assert_eq!(pool.opaque_source(kept_oid), Some(OpaqueSource::Local(0)));
-        assert_eq!(pool.opaque_source(dropped_oid), None);
+        assert_eq!(pool.opaque_local(kept_oid), Some(0));
+        assert_eq!(pool.opaque_local(dropped_oid), None);
     }
 
     #[test]

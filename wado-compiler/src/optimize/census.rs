@@ -187,7 +187,7 @@ pub(super) fn classify(kind: &ExprKind) -> (&'static str, bool) {
     match kind {
         ExprKind::Dead => ("Dead", false),
         ExprKind::PackedArray(_) => ("PackedArray", false),
-        // `ValueKind::Opaque` carries a local through `OpaqueSource::Local`.
+        // `ValueKind::Opaque` carries a local through `ValuePool::opaque_local`.
         ExprKind::Local { .. } => ("Local", true),
         ExprKind::GlobalVarGet { .. } => ("GlobalVarGet", false),
         ExprKind::GlobalVarSet { .. } => ("GlobalVarSet", false),

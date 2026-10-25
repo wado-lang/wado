@@ -1224,8 +1224,6 @@ impl DceWalker<'_> {
         }
     }
 
-    /// The extraction sources are walked too: they produce a promoted operand's
-    /// code, and a type or callee only they name must survive.
     fn walk_body(&mut self, body: &Body) {
         body.for_each_reachable_node(|node| self.record_node(body, node));
     }
@@ -1897,7 +1895,7 @@ pub(super) fn deletable_value(
     let Some(root) = value.as_expr() else {
         return false;
     };
-    body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
+    body.find_in_nodes_under(NodeRef::Expr(root), |node| match node {
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             // A hint goes with the code containing it, but `cold_path();` on
@@ -2570,7 +2568,6 @@ fn mentions_outside(body: &Body, root: NodeRef, regions: &IndexSet<NodeRef>) -> 
         regions: &'a IndexSet<NodeRef>,
         mentions: Mentions,
         seen_locals: IndexSet<ValueId>,
-        seen_sources: IndexSet<ValueId>,
     }
     impl NirRefVisitor for Outside<'_> {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
@@ -2580,7 +2577,6 @@ fn mentions_outside(body: &Body, root: NodeRef, regions: &IndexSet<NodeRef>) -> 
             let Self {
                 mentions: Mentions { locals, reads },
                 seen_locals,
-                seen_sources,
                 ..
             } = self;
             if let NodeRef::Expr(e) = node {
@@ -2597,19 +2593,13 @@ fn mentions_outside(body: &Body, root: NodeRef, regions: &IndexSet<NodeRef>) -> 
                     _ => {}
                 }
             }
-            let mut sources: Vec<ExprId> = Vec::new();
             body.for_each_operand(node, |op| {
                 if let Some(v) = op.as_value() {
                     body.values.for_each_opaque_local(v, seen_locals, |idx, _| {
                         locals.insert(idx);
                     });
-                    body.values
-                        .for_each_opaque_expr(v, seen_sources, |e| sources.push(e));
                 }
             });
-            for e in sources {
-                self.visit_node(body, NodeRef::Expr(e));
-            }
             self.walk_node(body, node);
         }
     }
@@ -2617,7 +2607,6 @@ fn mentions_outside(body: &Body, root: NodeRef, regions: &IndexSet<NodeRef>) -> 
         regions,
         mentions: Mentions::default(),
         seen_locals: IndexSet::default(),
-        seen_sources: IndexSet::default(),
     };
     outside.visit_node(body, root);
     outside.mentions

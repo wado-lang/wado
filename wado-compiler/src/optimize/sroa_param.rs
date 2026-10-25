@@ -107,12 +107,7 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
     }
-    // Copy rather than take. `take_expr` leaves `ExprKind::Dead` behind, and a
-    // promoted operand can still name `src` through `OpaqueSource::Expr` — the
-    // value graph then extracts a dead node, which reads as zero. `src` drops
-    // out of the tree with the literal that held it, so the duplicated child
-    // ids have one live parent either way.
-    body.exprs[id] = body.exprs[src].clone();
+    body.exprs[id] = body.take_expr(src);
 }
 
 // -----------------------------------------------------------------------

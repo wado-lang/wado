@@ -25,7 +25,7 @@ use crate::nir_engine::FieldValues;
 use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::is_const_value;
-use crate::nir_value_graph::{OpaqueSource, ValuePool, value_kind_to_const};
+use crate::nir_value_graph::{ValuePool, value_kind_to_const};
 use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
@@ -252,10 +252,10 @@ fn receiver_available_at(
     };
     let recv = *receiver;
     let local = match e.body.values.kind(recv) {
-        ValueKind::Opaque(o) => e.body.values.opaque_source(*o),
+        ValueKind::Opaque(o) => e.body.values.opaque_local(*o),
         _ => None,
     };
-    let Some(OpaqueSource::Local(i)) = local else {
+    let Some(i) = local else {
         return false;
     };
     leaf_available_at(e, i, before_stmt, param_set)
@@ -660,23 +660,19 @@ fn classify_candidate(
                 .is_primitive_like(engine.body.exprs[id].type_id);
             // Whether a callee can mutate the receiver is deliberately not asked
             // here — `FieldValues::pinnable_before` answers it at the placement.
-            let recv_src = match engine.body.values.kind(recv) {
-                ValueKind::Opaque(o) => Some(*o),
+            let recv_local = match engine.body.values.kind(recv) {
+                ValueKind::Opaque(o) => engine.body.values.opaque_local(*o),
                 _ => None,
-            }
-            .and_then(|o| engine.body.values.opaque_source(o));
-            let recv_stable = match recv_src {
-                Some(OpaqueSource::Local(i)) => {
-                    let owned_enough = ctx.param_set.contains(&i)
-                        || !ctx
-                            .type_table
-                            .is_reference_shaped(engine.locals()[i as usize].type_id);
-                    owned_enough
-                        && !ctx.multi_version_locals.contains(&i)
-                        && !ctx.address_taken.contains(&i)
-                }
-                _ => false,
             };
+            let recv_stable = recv_local.is_some_and(|i| {
+                let owned_enough = ctx.param_set.contains(&i)
+                    || !ctx
+                        .type_table
+                        .is_reference_shaped(engine.locals()[i as usize].type_id);
+                owned_enough
+                    && !ctx.multi_version_locals.contains(&i)
+                    && !ctx.address_taken.contains(&i)
+            });
             scalar_field
                 && recv_stable
                 && engine
@@ -825,10 +821,7 @@ fn apply_value_freeze(
         let (anchor, block) = point.expect("`anchorable` holds only with a point");
         let av = engine.alloc_minted_local(ANCHORED_VALUE, id_ty, /* is_mut */ false);
         let name = engine.local_name(av);
-        let read = engine
-            .body
-            .values
-            .fresh_opaque_with_source(OpaqueSource::Local(av));
+        let read = engine.body.values.fresh_opaque_local(av);
         engine.body.values.set_type(read, id_ty);
         let let_stmt = engine.alloc_stmt(
             StmtKind::Let {
