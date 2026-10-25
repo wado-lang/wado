@@ -1,0 +1,30 @@
+// `core:log`'s shape: the gate reads a global derived from the parameter,
+// never the parameter itself, so nothing at the branch names `log.level`.
+// `black_box` keeps the fold from settling the global and the gate with it.
+
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+global STATIC_LEVEL: i32 = level_from_str(builtin::black_box(LOG_LEVEL));
+
+fn level_from_str(s: String) -> i32 {
+    if s == "trace" {
+        return 0;
+    }
+    return 2;
+}
+
+export fn run() with Stdout {
+    if STATIC_LEVEL < 2 {
+        println(`tracing`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "params": {"log.level": "info"},
+    "remarks": {"O2": [{"contains": ["compile-time parameter `log.level` is still read here through global `STATIC_LEVEL`"]}]}
+}

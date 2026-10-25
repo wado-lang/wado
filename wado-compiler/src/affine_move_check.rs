@@ -12,6 +12,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::divergence::{self, ExprTypes};
+use crate::elaborator::sem::types::{DestructuringFallback, FallbackSite};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
@@ -26,6 +27,8 @@ pub struct AffineMoveError {
     kind: MoveError,
     span: Span,
     module: String,
+    /// Why the destructuring assignment the error sits in copies.
+    note: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +199,10 @@ impl From<AffineMoveError> for Diagnostic {
                 format!("global `{global}` cannot keep a reference into `{owner}`, which drops"),
             ),
         };
+        let message = match e.note {
+            Some(note) => format!("{message}\n  note: {note}"),
+            None => message,
+        };
         Diagnostic {
             severity: Severity::Error,
             code,
@@ -208,6 +215,7 @@ impl From<AffineMoveError> for Diagnostic {
 #[must_use]
 pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
     let drops = Drops::of(sem);
+    let fallbacks = sem.destructuring_fallbacks();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         let mut checker = Checker {
@@ -215,6 +223,8 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             module: src,
             drops: &drops,
             out: &mut out,
+            fallbacks: &fallbacks,
+            in_fallback: None,
         };
         for item in &module.items {
             checker.check_item(item);
@@ -265,14 +275,41 @@ struct Checker<'a> {
     module: &'a ModuleSource,
     drops: &'a Drops,
     out: &'a mut Vec<AffineMoveError>,
+    /// [`Semantics::destructuring_fallbacks`].
+    fallbacks: &'a IndexMap<Span, &'a FallbackSite>,
+    /// The falling-back destructuring assignment whose right side is being
+    /// walked, where it has a cause to note.
+    in_fallback: Option<NotedFallback>,
+}
+
+struct NotedFallback {
+    /// The assignment's span, its first token.
+    at: Span,
+    /// [`FallbackSite::target_reads`].
+    target_reads: Vec<Span>,
+    note: String,
 }
 
 impl<'a> Checker<'a> {
     fn push(&mut self, kind: MoveError, span: Span) {
+        // A copy the fallback makes is a read of a target: a move out of a
+        // reference, or a second read of one the right side moved already,
+        // between the assignment's first token and this read.
+        let note = self
+            .in_fallback
+            .as_ref()
+            .filter(|f| f.target_reads.iter().any(|read| read.encloses(&span)))
+            .filter(|f| match &kind {
+                MoveError::MoveOutOfReference { .. } => true,
+                MoveError::UseAfterMove { moved_at, .. } => f.at.merge(&span).encloses(moved_at),
+                _ => false,
+            })
+            .map(|f| f.note.clone());
         self.out.push(AffineMoveError {
             kind,
             span,
             module: self.module.source_path(),
+            note,
         });
     }
 
@@ -1306,7 +1343,25 @@ impl MoveWalker<'_, '_> {
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
-        self.visit_at(&a.value);
+        let destructuring = matches!(a.target, AssignTarget::Destructuring { .. });
+        match self.checker.fallbacks.get(&a.span) {
+            // An `index_swap` in every walk reads no element out: the right
+            // side names the places the targets write.
+            None if destructuring => {}
+            site => {
+                let noted = site.and_then(|site| match &site.cause {
+                    Some(DestructuringFallback::ReferenceReadable) | None => None,
+                    Some(cause) => Some(NotedFallback {
+                        at: a.span,
+                        target_reads: site.target_reads.clone(),
+                        note: cause.note(),
+                    }),
+                });
+                let enclosing = std::mem::replace(&mut self.checker.in_fallback, noted);
+                self.visit_at(&a.value);
+                self.checker.in_fallback = enclosing;
+            }
+        }
         let places = a.places();
         let owners: Vec<Owners> = match (&a.value, &a.target) {
             (Expr::TupleLiteral(value), AssignTarget::Destructuring { .. })

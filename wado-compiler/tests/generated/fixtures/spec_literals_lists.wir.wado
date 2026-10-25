@@ -3383,32 +3383,14 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
     let keys: ref "Array<core:prelude/string.wado/String>";
     let values: ref Array<i32>;
     let alive: ref Array<bool>;
-    let $av_23: i32;
+    let $av_13: i32;
     keys = builtin::array_new<ref "core:prelude/string.wado//String">(cap);
-    $av_23 = self.count;
-    let $builtin_arg_3: ref "Array<core:prelude/string.wado/String>";
-    $builtin_arg_3 = self.keys;
-    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, $builtin_arg_3, 0, $av_23);
-    let $array_clone_i_6: i32;
-    $array_clone_i_6 = 0;
-    let $array_clone_elem_7: ref null "core:prelude/string.wado//String";
-    $array_copy_deep: block {
-        l258: loop {
-            break_if $array_copy_deep $array_clone_i_6 >= (0 + $av_23);
-            $array_clone_elem_7 = builtin::array_get_value<ref "core:prelude/string.wado//String">(keys, $array_clone_i_6);
-            builtin::array_set<ref "core:prelude/string.wado//String">(keys, $array_clone_i_6, (if ref.is_null($array_clone_elem_7) -> ref null "core:prelude/string.wado//String" {
-                $array_clone_elem_7;
-            } else {
-                "spec_literals_lists.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_7));
-            }));
-            $array_clone_i_6 = $array_clone_i_6 + 1;
-            continue l258;
-        };
-    };
+    $av_13 = self.count;
+    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, self.keys, 0, $av_13);
     self.keys = keys;
-    builtin::array_copy<i32>(local.tee values(builtin::array_new<i32>(cap)), 0, self.values, 0, $av_23);
+    builtin::array_copy<i32>(local.tee values(builtin::array_new<i32>(cap)), 0, self.values, 0, $av_13);
     self.values = values;
-    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_23);
+    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_13);
     self.alive = alive;
 }
 
@@ -3432,7 +3414,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     $array_clone_i_6 = 0;
     let $array_clone_elem_7: ref null "core:prelude/string.wado//String";
     $array_copy_deep: block {
-        l260: loop {
+        l258: loop {
             break_if $array_copy_deep $array_clone_i_6 >= (0 + $av_31);
             $array_clone_elem_7 = builtin::array_get_value<ref "core:prelude/string.wado//String">(nkeys, $array_clone_i_6);
             builtin::array_set<ref "core:prelude/string.wado//String">(nkeys, $array_clone_i_6, (if ref.is_null($array_clone_elem_7) -> ref null "core:prelude/string.wado//String" {
@@ -3441,7 +3423,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                 "spec_literals_lists.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_7));
             }));
             $array_clone_i_6 = $array_clone_i_6 + 1;
-            continue l260;
+            continue l258;
         };
     };
     self.nkeys = nkeys;
@@ -3473,19 +3455,19 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
     buf = builtin::array_new<i32>(n);
     width = 1;
     $licm_repr_20 = self.repr;
-    b264: block {
-        l265: loop {
+    b262: block {
+        l263: loop {
             start = 0;
-            b266: block {
-                l267: loop {
-                    break_if b266 width >= (n - start);
+            b264: block {
+                l265: loop {
+                    break_if b264 width >= (n - start);
                     end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
                     i = start;
                     j = mid;
                     k = start;
-                    b268: block {
-                        l269: loop {
-                            break_if b268 k >= end;
+                    b266: block {
+                        l267: loop {
+                            break_if b266 k >= end;
                             if i < mid {
                                 if j < end {
                                     a_10 = builtin::array_get_value<i32>($licm_repr_20, i);
@@ -3514,17 +3496,17 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                                 j = j + 1;
                             }
                             k = k + 1;
-                            continue l269;
+                            continue l267;
                         };
                     };
                     builtin::array_copy<i32>($licm_repr_20, start, buf, start, end - start);
                     start = end;
-                    continue l267;
+                    continue l265;
                 };
             };
-            break_if b264 width >= (n - width);
+            break_if b262 width >= (n - width);
             width = width * 2;
-            continue l265;
+            continue l263;
         };
     };
 }
@@ -3532,12 +3514,12 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b275: block {
-        l276: loop {
-            break_if b275 i >= n;
+    b273: block {
+        l274: loop {
+            break_if b273 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l276;
+            continue l274;
         };
     };
 }

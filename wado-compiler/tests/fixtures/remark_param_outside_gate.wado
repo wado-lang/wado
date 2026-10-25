@@ -1,0 +1,20 @@
+// Printing a parameter is an ordinary use of its value. The read survives by
+// design, and the branch it sits under reads the parameter not at all.
+
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+export fn run() with Stdout {
+    if builtin::black_box(true) {
+        println(LOG_LEVEL);
+    }
+}
+
+__DATA__
+{
+    "stdout": "info\n",
+    "params": {"log.level": "info"},
+    "remarks": {"O2": [{"contains": ["compile-time parameter"], "count": 0}]}
+}

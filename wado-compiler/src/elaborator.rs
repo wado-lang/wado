@@ -38,6 +38,7 @@ mod tagged_template;
 mod template;
 pub(crate) mod trait_env;
 mod trait_query;
+mod transposition;
 mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
@@ -193,6 +194,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::abstract_selections`] by default body, shared by every module
     /// (`AnnotateState::abstract_selections`).
     pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
+    /// `AnnotateState::transpositions`.
+    transpositions: Rc<hashmap::IndexMap<ast::AstId, transposition::Clean>>,
 }
 
 /// What a default body's author selected at one call through a bound.

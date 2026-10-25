@@ -1,0 +1,33 @@
+// Inspecting the list needs the `List<T>` itself, which the engine writes
+// back, so what is left to blame is a body: the `Inspect` formatter the
+// template still calls. `push` inlines away and leaves `grow` on a cold path
+// the frame never reaches, so naming that would send the reader after the
+// wrong thing. `${table().len()}` would not do: the length is a scalar the
+// engine projects out of the list, so that whole template folds.
+
+use { println, Stdout } from "core:cli";
+
+fn table() -> List<i32> {
+    let mut out: List<i32> = List::<i32>::with_capacity(8);
+    let mut i = 0;
+    while i < 4 {
+        out.push(i * 2);
+        i += 1;
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    println(`n=${table():?}`);
+}
+
+__DATA__
+{
+    "stdout": "n=[0, 2, 4, 6]\n",
+    "remarks": {
+        "O2": [
+            {"contains": ["computes a constant at run time", "write_seq_inspect"]},
+            {"contains": ["computes a constant at run time", "grow"], "count": 0}
+        ]
+    }
+}

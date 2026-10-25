@@ -1894,6 +1894,16 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
+    let remarks_logged = logger.would_log(compiler_host::Severity::Info);
+    // Owned: `sem` is taken apart below.
+    let destructuring_fallbacks = if remarks_logged {
+        let fallbacks = sem.destructuring_fallbacks().into_iter();
+        fallbacks
+            .map(|(site, fallback)| (site, fallback.clone()))
+            .collect()
+    } else {
+        IndexMap::default()
+    };
     let semantics::Semantics {
         entry_module_source,
         export_mappings,
@@ -2173,9 +2183,21 @@ fn compile_after_load<H: CompilerHost>(
     // `remarks` and WEP `wep-2026-06-03-optimizer-remarks.md`. Gated on the log
     // level so the NIR walk is skipped entirely when remarks would be filtered
     // out (the default CLI level is `warn`).
-    if logger.would_log(compiler_host::Severity::Info) {
+    if remarks_logged {
         let residual = remarks::collect_value_copy_remarks(&nir)
             .into_iter()
+            .map(|mut remark| {
+                // A copy a destructuring assignment makes says why it is no move.
+                // The remark anchors to the statement, so a statement reading
+                // no target makes no copy of its own to explain.
+                if let Some(site) = destructuring_fallbacks.get(&remark.span)
+                    && !site.target_reads.is_empty()
+                    && let Some(cause) = &site.cause
+                {
+                    remark.message = format!("{}\n  note: {}", remark.message, cause.note());
+                }
+                remark
+            })
             .chain(remarks::collect_param_gate_remarks(&nir))
             .chain(remarks::collect_const_region_remarks(&nir));
         for remark in residual {

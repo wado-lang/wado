@@ -230,6 +230,9 @@ macro_rules! with_body_facts {
             /// read-side `IndexValue` / `Index` dispatch cohabits under the
             /// same key in `operator_dispatch`, via different traits.
             ann_index_assign_dispatch => index_assign_dispatch: $crate::elaborator::sem::types::OperatorDispatch,
+            /// `IndexSwap` dispatch for a transposition within one container,
+            /// keyed by the destructuring assignment's [`AstId`].
+            ann_index_swap_dispatch => index_swap_dispatch: $crate::elaborator::sem::types::OperatorDispatch,
             /// Resolved `let x: T = …` whole-pattern annotation, keyed by the
             /// `LetStmt`'s `AstId`. A simple binding also has it in
             /// `local_types`, but a destructuring pattern's binding ids carry
@@ -415,6 +418,73 @@ pub(crate) struct TypeAnnotations {
     /// Outside [`BodyFacts`] because a pattern names the same float whichever
     /// element a tuple `for-of` binds.
     pub(crate) inexact_float_patterns: IndexMap<Span, IndexSet<String>>,
+    /// Each destructuring assignment that keeps its desugaring, keyed by its
+    /// span. One that is absent from every walk is an `index_swap`.
+    pub(crate) destructuring_fallbacks: IndexMap<Span, FallbackSite>,
+}
+
+/// A destructuring assignment that keeps its desugaring, which copies each
+/// value it reads (WEP: Destructuring Assignment § A fallback that makes a
+/// value copy is reported, an affine one is an error).
+#[derive(Clone, Debug)]
+pub(crate) struct FallbackSite {
+    /// Why, where the desugaring reports no error of its own.
+    pub(crate) cause: Option<DestructuringFallback>,
+    /// The right side's elements that read a target: the copies the fallback
+    /// makes, and so the ones the cause is noted on.
+    pub(crate) target_reads: Vec<Span>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum DestructuringFallback {
+    NotAPermutation,
+    /// Every target is owned, so a copy survives only for a reference.
+    ReferenceReadable,
+    NotOwned,
+    OtherContainer,
+    UnplainIndex,
+    ContainerNotLocal,
+    Rebindable,
+    NoIndexSwap {
+        container: String,
+        /// The key a read of the subscript selects, where one does.
+        key: Option<String>,
+    },
+}
+
+impl DestructuringFallback {
+    pub(crate) fn note(&self) -> String {
+        match self {
+            Self::NotAPermutation => "the right side is not a permutation of the targets".into(),
+            Self::ReferenceReadable => {
+                "a reference to a target is readable after the statement".into()
+            }
+            Self::NotOwned => "a target is not owned, and the statement is not a \
+                 transposition within one container"
+                .into(),
+            Self::OtherContainer => "the two subscripts name different containers, or one \
+                 the compiler cannot show to be the same"
+                .into(),
+            Self::UnplainIndex => "an index is not a literal, a constant, a local, a field \
+                 path from one, or arithmetic over them, or it reads the container"
+                .into(),
+            Self::ContainerNotLocal => "the container is not reached from a local".into(),
+            Self::Rebindable => "an index reads a mutable global, an index local is \
+                 referenced or captured, or a reference the container is reached through is \
+                 held where something else may rebind it"
+                .into(),
+            Self::NoIndexSwap {
+                container,
+                key: None,
+            } => {
+                format!("`{container}` does not implement `IndexSwap`")
+            }
+            Self::NoIndexSwap {
+                container,
+                key: Some(key),
+            } => format!("`{container}` does not implement `IndexSwap<{key}>`"),
+        }
+    }
 }
 
 impl std::ops::Deref for TypeAnnotations {
@@ -477,6 +547,7 @@ impl BodyFacts {
             .operator_dispatch
             .iter()
             .chain(&self.index_assign_dispatch)
+            .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
             [info.into_iter_def, info.next_def]

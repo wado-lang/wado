@@ -1274,6 +1274,8 @@ affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, 
 affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
 affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+// `[c[i], c[j]] = [c[j], c[i]]` calls it: the elements move, affine ones too
+affine trait IndexSwap<I> with () { fn index_swap(&mut self, a: I, b: I); }
 
 // For string template interpolation
 pub affine trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers

@@ -352,6 +352,15 @@ writing it by value is a distinct operation from handing out a `&mut`.
 
 Assigns a value to the element at the given index.
 
+### `pub affine trait IndexSwap<IndexType> with ()`
+
+Element exchange: `c.index_swap(a, b)` does what `[c[a], c[b]] = [c[b], c[a]]`
+does, moving the two elements rather than copying them, so it serves an
+affine element too. Like that assignment it checks `b` before `a`, and
+`a == b` leaves the container as it was.
+
+#### `fn index_swap(&mut self, a: IndexType, b: IndexType)`
+
 ### `pub trait IndexValue<IndexType> with ()`
 
 Value-copy indexing: `container[i]` yields a copy of the element.
@@ -5674,6 +5683,10 @@ Joins elements into a string with the given separator.
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
 `#[compiler_item("list_index_assign")]`
+
+#### `impl IndexSwap<i32> for List<T>`
+
+##### `fn index_swap(&mut self, a: i32, b: i32)`
 
 #### `impl IndexRef<i32> for List<T>`
 

@@ -1061,6 +1061,16 @@ pub affine trait IndexRefMut<IndexType> with () {
 }
 ```
 
+### IndexSwap - Element Exchange
+
+<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+
+```wado
+pub affine trait IndexSwap<IndexType> with () {
+    fn index_swap(&mut self, a: IndexType, b: IndexType);
+}
+```
+
 ### Dispatch
 
 A use site reads the trait that matches what it does with the element:
@@ -1069,6 +1079,7 @@ A use site reads the trait that matches what it does with the element:
 - An assignment `c[i] = v` writes through `IndexAssign`.
 - `&c[i]` and a `&self` receiver take `IndexRef` when the container has it, and a copy otherwise.
 - A `&mut self` receiver, a field write `c[i].f = v`, and a compound one `c[i].f += v` take `IndexRefMut`. On a container without it they are compile errors.
+- A [destructuring assignment](./spec-expressions.md#destructuring-assignment) `[c[i], c[j]] = [c[j], c[i]]` exchanges through `IndexSwap`, as [Element Exchange](#element-exchange) says.
 
 A write assigns into the element rather than over it, so every subscript the
 target passes through is a `&mut` place: `o[i][j] = v` and `o[i][j].f = v` take
@@ -1076,7 +1087,7 @@ target passes through is a `&mut` place: `o[i][j] = v` and `o[i][j].f = v` take
 a shared reference, which a write cannot go through, and `IndexValue` hands out
 a copy, on which the write would be lost.
 
-The four traits are independent: a container implements only the ones it
+The five traits are independent: a container implements only the ones it
 supports. A subscript names the prelude's declarations, as an operator does, so
 a user trait spelled `IndexValue` does not answer `c[i]`.
 
@@ -1090,7 +1101,13 @@ for it. The read then runs with no check outside a `-f contract-checks` build.
 `Array` states none, since the Wasm array access traps on its own; a map states
 none, and a missing key panics; a range index clamps rather than fails.
 `IndexAssign` states none either: a list assignment past the end traps, and a
-map's inserts the key.
+map's inserts the key. `IndexSwap` on a `List` requires both indices in range.
+
+A transposition that exchanges through `IndexSwap` reads neither subscript on
+its right side, so `unchecked` there vouches for the `index_swap` call. The
+call's contract covers both reads, so marking both
+(`[c[i], c[j]] = [unchecked c[j], unchecked c[i]]`) runs it unchecked; marking
+one leaves it checked. Either way, the callee must state a contract.
 
 `Ref` and `RefMut` are sealed marker traits the compiler provides for every
 eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
@@ -1119,16 +1136,19 @@ is a reference to a copy.
 
 The standard containers implement:
 
-| Container       | `IndexValue` | `IndexAssign` | `IndexRef` | `IndexRefMut` |
-| --------------- | ------------ | ------------- | ---------- | ------------- |
-| `List<T>`       | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   |
-| `Array<T>`      | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   |
-| `Slice<T>`      | every `T`    | —             | `T: Ref`   | —             |
-| `TreeMap<K, V>` | every `V`    | every `V`     | `V: Ref`   | `V: RefMut`   |
+| Container       | `IndexValue` | `IndexAssign` | `IndexRef` | `IndexRefMut` | `IndexSwap`           |
+| --------------- | ------------ | ------------- | ---------- | ------------- | --------------------- |
+| `List<T>`       | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   | every `T`, affine too |
+| `Array<T>`      | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   | every `T`, affine too |
+| `Slice<T>`      | every `T`    | —             | `T: Ref`   | —             | —                     |
+| `HashMap<K, V>` | every `V`    | every `V`     | `V: Ref`   | `V: RefMut`   | every `V`             |
+| `TreeMap<K, V>` | every `V`    | every `V`     | `V: Ref`   | `V: RefMut`   | every `V`             |
 
 `List`, `Array` and `Slice` are indexed by `i32` and by a range, which yields a
-`Slice<T>` (see [The Sequence Family](./spec-types.md#the-sequence-family)); `TreeMap` by `K`.
-A slice is a shared view, so it has nothing to write through.
+`Slice<T>` (see [The Sequence Family](./spec-types.md#the-sequence-family)); a
+map by `K`. A slice is a shared view, so it has nothing to write through. A
+map's `IndexSwap` exchanges the values of two keys it holds, and leaves the
+keys and their order as they were.
 
 <!-- {"fixture":"spec_traits_index_dispatch.wado"} -->
 
@@ -1139,4 +1159,51 @@ arr[1] = 100;      // IndexAssign::index_assign
 assert x == 1 && arr == [1, 100, 3];
 ```
 
-Rationale: [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
+### Element Exchange
+
+A destructuring assignment `[c[i], c[j]] = [c[j], c[i]]` is the call
+`c.index_swap(i, j)` where all of these hold:
+
+- The right side is a tuple literal whose two elements are the two targets, in
+  the other order.
+- `c` is one path written twice: a local, a field path from a local, or a
+  dereference of one. A local a closure captures qualifies; a global does not.
+- Each index is a literal, a constant, a local, a field path from a local, or
+  arithmetic over them. An index read out of `c` (`c[c[0]]`, `c[c.k]`), or one
+  reading a mutable global, does not qualify.
+- No index local is referenced or captured anywhere in the body.
+- No reference the path to `c` passes through is held where something else may
+  rebind it: in a `mut` local that is referenced or captured, or in a field
+  reached through a reference.
+- `c`'s type implements `IndexSwap` at the key a read of `c[i]` selects.
+
+The call evaluates `j`, then `i`, once each, the order in which the
+desugaring first reads them; neither can change the place `c` names. Otherwise
+the statement keeps its desugaring, which copies each element it reads.
+
+The call moves the two elements rather than copying them, so it exchanges an
+affine element, which no read can copy:
+
+<!-- {"fixture":"spec_traits_index_swap.wado"} -->
+
+```wado
+let mut names: List<String> = ["a", "b", "c"];
+[names[0], names[2]] = [names[2], names[0]];   // IndexSwap::index_swap(0, 2)
+assert names == ["c", "b", "a"];
+
+let mut toks: List<Tok> = [];
+toks.push(Tok { id: 1 });
+toks.push(Tok { id: 2 });
+[toks[0], toks[1]] = [toks[1], toks[0]];       // no copy, so no error
+assert toks[0].id == 2 && toks[1].id == 1;
+```
+
+An impl must leave the container as the desugaring would, `a == b` included,
+and fail where the desugaring fails. The desugaring reads `c[b]` before `c[a]`,
+so an impl checks `b` first, then `a`.
+
+A destructuring assignment over affine elements that keeps its desugaring is a
+compile error, with a note naming why it is no exchange.
+
+Rationale: [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md),
+[WEP: Destructuring Assignment](./wep-2026-10-21-destructuring-assignment.md).
