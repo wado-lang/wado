@@ -121,7 +121,8 @@ lock. Each backend fits the confinement into that rule without re-executing
 - macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`,
   which does not fork. `sandbox_init` compiles the profile and allocates, so it
   runs in `sandbox-exec`, a single-threaded process of its own, which then execs
-  the program.
+  the program. Its manual page marks it deprecated, but macOS still ships it,
+  much software depends on it, and nothing public does what it does.
 
 Landlock takes each rule as a descriptor rather than a path. The rules for the
 guest's grants come from the descriptors of its preopens, which the host already
@@ -475,23 +476,28 @@ cannot be taken back.
 
 ## Known gaps
 
+### Not yet decided
+
+- Resources are unlimited. A child can run many children, use memory and CPU
+  without bound, and fork without limit.
 - The CLI surface is not named for a flag that grants the real `HOME`, or for
   the option that sets the grace period, which stays at 3 seconds until it is.
-- The compiler's e2e harness does not link `core:process`, so a fixture cannot
-  spawn; the stdlib's own tests cover it under `wado test`.
 - A component that spawns imports `core:process`, which no WASI world defines,
   so only the `wado` host instantiates it. Nothing at compile time says so: an
   effect the selected world does not import is imported all the same
   ([Worlds](./spec-worlds.md)).
-- Resources are unlimited. A child can run many children, use memory and CPU
-  without bound, and fork without limit. How many children may run at once,
-  rlimits and cgroups are all open.
+- A guest directory granted under a different host path turns spawning off.
+- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
+  inherited terminal or none.
+- The compiler's e2e harness does not link `core:process`, so a fixture cannot
+  spawn; the stdlib's own tests cover it under `wado test`.
+
+### What the OS mechanisms leave open
+
 - Landlock does not restrict `stat`. A child on Linux can learn whether a path
   outside its grants exists, and its metadata. Seatbelt hides it but for the
   directories above a grant, which resolving a path stats, and the `/var` link,
   which dyld stats.
-- A guest directory granted under a different host path turns spawning off, even
-  where a mount namespace could present the guest's view to the child.
 - Seatbelt cannot stop a descendant from calling `setsid`. On macOS such a
   descendant survives its group's kill and keeps the child's grants after the
   guest exits.
@@ -499,10 +505,6 @@ cannot be taken back.
   for a live member the guest's user cannot signal (a setuid program). The
   macOS backend reads `EPERM` as the first, so a group kill that missed such a
   member reports success.
-- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
-  inherited terminal or none.
-- `sandbox-exec` is marked deprecated in its manual page. macOS still ships it,
-  and nothing public replaces it.
 - On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.
