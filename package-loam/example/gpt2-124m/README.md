@@ -53,4 +53,4 @@ has run, and `wado test` leaves them out. `tokenizer_test.wado` needs no
 download and runs. `generate_test.wado` checks Loam's tokens against
 `generate.json`, once `fetch.sh` has run:
 
-    wado test -O1 generate_test.wado
+    wado test generate_test.wado

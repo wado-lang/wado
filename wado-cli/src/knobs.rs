@@ -98,7 +98,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('O'),
                 value: Some("<n>"),
-                desc: "Optimization level: -O0, -O1, -O2, -O3, -Os\n(default: -O2; -O1 under run and serve)",
+                desc: "Optimization level: -O0, -O1, -O2, -O3, -Os\n(default: -O2; -O1 under run, serve and test)",
             },
             Self::InlineThreshold => OptSpec {
                 long: Some("optimize-inline-threshold"),
@@ -229,9 +229,10 @@ impl Default for CompileKnobs {
 
 impl CompileKnobs {
     /// The knobs of a subcommand that runs what it compiles at once (`run`,
-    /// `serve`). They default to `-O1`: there the compile counts against the
-    /// run, which `-O2` costs more than it saves, and `-O1` keeps the contract
-    /// checks a program being developed wants.
+    /// `serve`, `test`). They default to `-O1`: there the compile counts
+    /// against the run, which `-O2` costs more than it saves, and `-O1` keeps
+    /// the contract checks a program being developed wants. `-O0` inlines
+    /// nothing, so a hot loop calls every operator it spells.
     #[must_use]
     pub fn compile_and_run() -> Self {
         Self {

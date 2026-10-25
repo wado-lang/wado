@@ -78,7 +78,7 @@ jobs:
             run: mise run update-golden-format-fixtures
           - name: Refresh Gale kiln caches
             if: steps.precheck.outputs.should-run == 'true'
-            run: scripts/dev-bin.sh wado test --no-run package-gale
+            run: scripts/dev-bin.sh wado test -O2 --no-run package-gale
           - name: Regenerate stdlib docs
             if: steps.precheck.outputs.should-run == 'true'
             run: mise run doc-stdlib
