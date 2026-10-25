@@ -2507,6 +2507,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &ast::Module,
         interface_fqs: &[String],
+        imported_fqs: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) -> Result<(), String> {
@@ -2523,7 +2524,7 @@ impl CmInterfaceRegistry {
         }
         // The bindings declare an imported interface's types too, so each maps
         // back to them; the first component to import one declares it.
-        for fq in host_leaf_imports {
+        for fq in imported_fqs {
             self.cm_interface_module_sources
                 .entry(fq.clone())
                 .or_insert_with(|| module_source.clone());

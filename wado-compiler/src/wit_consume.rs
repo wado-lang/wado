@@ -83,10 +83,34 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 /// excluded via the module's host-leaf import list. Empty for a core-wasm
 /// asset, whose decls carry `#[canonical(...)]`.
 pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
+    interfaces_on(module, Side::Export)
+}
+
+/// The interfaces a component-binding module's dependency imports and its
+/// consumer provides, each with its `#[cm]` import.
+pub fn imported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
+    interfaces_on(module, Side::Import)
+}
+
+/// Which side of a component an interface its bindings declare sits on.
+#[derive(Clone, Copy, PartialEq)]
+enum Side {
+    Export,
+    Import,
+}
+
+fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
     let imports: hashmap::IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
     module.items.iter().filter_map(move |item| match item {
         Item::Interface(decl) => cm_import_of(&decl.attrs)
-            .filter(|cm| !imports.contains(&cm.interface_path()))
+            .filter(|cm| {
+                let on = if imports.contains(&cm.interface_path()) {
+                    Side::Import
+                } else {
+                    Side::Export
+                };
+                on == side
+            })
             .map(|cm| (decl, cm)),
         _ => None,
     })
