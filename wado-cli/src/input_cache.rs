@@ -21,10 +21,9 @@ use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::cache::derived_dir;
 use crate::compile::CompileFlags;
-use crate::fingerprint::{Input, InputKey, binary_digest, hash_field};
+use crate::fingerprint::{Input, InputKey, binary_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::manifest::package_root;
-use wado_host::atomic_write::write_atomic;
 use wado_host::sync::lock;
 
 /// The `WADO_*` environment, sorted. The compiler reads these itself
@@ -135,13 +134,13 @@ impl Slot<'_> {
 
     pub(crate) fn store<T: Serialize>(&self, inputs: Vec<Input>, value: T) {
         let binary = self.cache.binary.clone();
-        let bytes = serde_json::to_vec(&Entry {
-            binary,
-            inputs,
-            value,
-        })
-        .expect("an entry serializes");
-        // Losing the cache is never an error: the next run compiles again.
-        let _ = write_atomic(&self.path("json"), &bytes);
+        write_entry(
+            &self.path("json"),
+            &Entry {
+                binary,
+                inputs,
+                value,
+            },
+        );
     }
 }

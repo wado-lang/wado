@@ -24,18 +24,25 @@ fn wado_bin() -> PathBuf {
     assert_cmd::cargo::cargo_bin!("wado").into()
 }
 
-/// The user cache every `wado` this binary runs is given, so a file a test
-/// writes in no package caches there rather than in the real one.
-pub fn user_cache() -> &'static Path {
+/// The XDG homes every `wado` this binary runs is given. A `static` is never
+/// dropped, so the directory sits under cargo's target tmpdir, which
+/// `cargo clean` removes.
+fn xdg_homes() -> &'static Path {
     static DIR: OnceLock<TempDir> = OnceLock::new();
-    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+    DIR.get_or_init(|| tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap())
+        .path()
 }
 
-/// The `XDG_CONFIG_HOME` every `wado` this binary runs is given: it holds no
-/// `wado/config.toml`, so the real user's config never reaches a test.
-fn user_config_home() -> &'static Path {
-    static DIR: OnceLock<TempDir> = OnceLock::new();
-    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+/// The user cache, so a file a test writes in no package caches there rather
+/// than in the real one.
+fn user_cache() -> PathBuf {
+    xdg_homes().join("cache")
+}
+
+/// `XDG_CONFIG_HOME`: it holds no `wado/config.toml`, so the real user's
+/// config never reaches a test.
+fn user_config_home() -> PathBuf {
+    xdg_homes().join("config")
 }
 
 /// The freshly built `wado`, run in `dir` and kept off the real user's cache

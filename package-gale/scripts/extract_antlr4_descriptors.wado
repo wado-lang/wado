@@ -1977,7 +1977,12 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             exit(1);
         },
     };
-    invoke_stage_b_oracle(&jar);
+    // Finalize reads a missing `.expected` as stale, so an oracle that did not
+    // run must stop here rather than sweep the committed tests.
+    if let Err(message) = invoke_stage_b_oracle(&jar) {
+        eprintln(`extract: ${message}`);
+        exit(1);
+    }
     println("==> Phase 3/3: finalize stage_b_oracle/");
     finalize_stage_b_oracle(&root, &jar.version);
 }
@@ -1985,30 +1990,24 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 /// Run the oracle on every `oracle-pending/<C>/<N>.input` against its
 /// action-body-stripped grammar, writing the tree to `<N>.expected`. A case
 /// the oracle cannot pin gets no `.expected`, which finalize reads as stale.
-fn invoke_stage_b_oracle(jar: &Jar) with (Stdout, Stderr, Environment, Preopens, Process, Random) {
+/// `Err` when the oracle could not run at all.
+fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, Environment, Preopens, Process, Random) {
     let pending_root = fs::join(compat_root_dir(), "oracle-pending");
     let grammars_root = fs::join(compat_root_dir(), grammars_subdir());
     let stripped_dir = "package-gale/build/oracle-stripped";
-    let categories = match fs::read_dir(&pending_root) {
-        Ok(entries) => entries,
-        Err(_) => {
-            println("extract: no oracle-pending/ — nothing to invoke the oracle on.");
-            return;
-        },
-    };
-    if let Err(e) = fs::create_dir_all(stripped_dir) {
-        eprintln(`extract: ${e}`);
-        return;
+    if !fs::try_exists(&pending_root).map_err(|e| `${e}`)? {
+        println("extract: no oracle-pending/ — nothing to invoke the oracle on.");
+        return Ok(());
     }
+    let categories = fs::read_dir(&pending_root).map_err(|e| `${e}`)?;
+    fs::create_dir_all(stripped_dir).map_err(|e| `${e}`)?;
     let mut pending = 0;
     let mut ok = 0;
     let mut oracle_err = 0;
     let mut missing_g4 = 0;
     for let category of categories {
         let category_dir = fs::join(&pending_root, &category.name);
-        let Ok(files) = fs::read_dir(&category_dir) else {
-            continue;
-        };
+        let files = fs::read_dir(&category_dir).map_err(|e| `${e}`)?;
         for let file of files {
             let Some(name) = file.name.strip_suffix(".input") else {
                 continue;
@@ -2064,6 +2063,10 @@ fn invoke_stage_b_oracle(jar: &Jar) with (Stdout, Stderr, Environment, Preopens,
     println(`extract:           ${ok} ok`);
     println(`extract:           ${oracle_err} oracle failures (descriptor needs [stage_b_oracle_skip])`);
     println(`extract:           ${missing_g4} missing .g4 files`);
+    if pending > 0 && ok == 0 {
+        return Err("the oracle pinned no pending entry; leaving committed stage_b_oracle/ tests intact");
+    }
+    return Ok(());
 }
 
 /// The oracle's answer for `start` over the input at `input_path`, the grammar

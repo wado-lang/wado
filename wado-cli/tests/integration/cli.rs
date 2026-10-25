@@ -1494,6 +1494,28 @@ fn test_run_reuses_its_component_until_something_it_read_changes() {
     );
 }
 
+/// A cache entry names every file the compile read, and a path that is not
+/// UTF-8 cannot be written into one: the run goes ahead uncached.
+#[cfg(unix)]
+#[test]
+fn test_run_compiles_a_file_under_a_directory_whose_name_is_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join(std::ffi::OsStr::from_bytes(b"not-utf8-\xff"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n",
+    )
+    .unwrap();
+    wado_in(&dir)
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("hi\n");
+}
+
 /// The package metadata a project's component embeds is read outside the
 /// compile, so the cached component is checked against it too.
 #[test]

@@ -216,29 +216,23 @@ fn resolve_latest_version() -> Result<String, String> with (Process, Preopens, S
 /// for the same version. The jar comes from antlr.org and the digest from an
 /// independent host, so a corrupted or tampered download fails here. The
 /// version is resolved, not pinned, so the digest is the publisher's own
-/// rather than one held here. Best-effort: with no digest to fetch or no SHA-1
-/// tool, warn and accept. Fails only on a definite mismatch.
+/// rather than one held here. A jar that cannot be checked is refused, since
+/// it would run unverified.
 fn verify_jar_checksum(jar: String, version: String) -> Result<(), String> with (Process, Stderr) {
-    let actual = match sha1_of(jar) {
-        Ok(Some(digest)) => digest,
-        Ok(None) => {
-            eprintln("oracle: no sha1 tool (sha1sum/shasum) on PATH; skipping checksum verification");
-            return Ok(());
-        },
-        Err(e) => {
-            return Err(e);
+    let actual = match sha1_of(jar)? {
+        Some(digest) => digest,
+        None => {
+            return Err("no sha1 tool (sha1sum/shasum) on PATH to verify the jar with");
         },
     };
     let sha_url = `https://repo1.maven.org/maven2/org/antlr/antlr4/${version}/antlr4-${version}-complete.jar.sha1`;
     // A `.sha1` file holds the bare hex digest.
     let expected = match Command::new("curl").args(["-fsSL", sha_url]).read() {
         Ok(body) => first_field_lowercase(String::from_utf8_lossy(&body)),
-        Err(_) => "",
+        Err(e) => {
+            return Err(`cannot fetch the published SHA-1 for ${version} to verify the jar with: ${e}`);
+        },
     };
-    if expected.is_empty() {
-        eprintln(`oracle: could not fetch the published SHA-1 for ${version}; skipping checksum verification`);
-        return Ok(());
-    }
     if actual != expected {
         return Err(`SHA-1 mismatch for the downloaded jar (expected ${expected}, got ${actual})`);
     }

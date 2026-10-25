@@ -32,12 +32,11 @@ use wado_lsp::host::discovery::{absolutize, normalize_path};
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::derived_dir;
 use crate::compile::{load_nearest_manifest, render_error_diagnostics};
-use crate::fingerprint::{Input, compiler_digest, hash_field};
+use crate::fingerprint::{Input, compiler_digest, hash_field, write_entry};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
-use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::random;
 use wado_host::sync::{join_in_drop, joined, lock};
@@ -224,9 +223,7 @@ impl EvalHost {
         if !matches!(entry.outcome, Outcome::CompileTimedOut)
             && let Some(path) = &path
         {
-            let bytes = serde_json::to_vec(&entry).expect("an entry serializes");
-            // Losing the cache is never an error: the next run evaluates again.
-            let _ = write_atomic(path, &bytes);
+            write_entry(path, &entry);
         }
         entry.outcome
     }

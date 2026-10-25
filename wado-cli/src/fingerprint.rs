@@ -1,14 +1,26 @@
 //! What a cached outcome is known by: the compiler that produced it, and the
-//! files it read. Shared by the `core:eval` outcome cache and the `wado test`
-//! result cache.
+//! files it read. Shared by the `core:eval` outcome cache and the
+//! [`InputCache`](crate::input_cache) entries `wado test`, `run` and `serve`
+//! keep.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use wado_host::atomic_write::write_atomic;
 use wado_lsp::host::{is_absent, read_prefix};
 
 use crate::kiln_provider::hex32;
+
+/// Writes a cache entry to `path`. Losing one is never an error, since the next
+/// run computes it again, and an entry naming a path that is not UTF-8 is lost
+/// that way: JSON cannot hold the path.
+pub(crate) fn write_entry(path: &Path, entry: &impl Serialize) {
+    if let Ok(bytes) = serde_json::to_vec(entry) {
+        let _ = write_atomic(path, &bytes);
+    }
+}
 
 /// What every outcome depends on beyond its own inputs: the running `wado`
 /// binary, which links the compiler and wasmtime, and the stdlib it compiles
