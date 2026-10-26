@@ -21,7 +21,6 @@ use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
-use crate::name::diagnostic_function_name;
 use crate::{compiler_trace, niri};
 
 impl FrameState {
@@ -816,7 +815,7 @@ impl Interpreter<'_> {
                 .callees
                 .and_then(|m| m.get(key))
                 .map(|c| c.func.borrow())
-                .map_or_else(|| format!("{key:?}"), |f| diagnostic_function_name(&f.name))
+                .map_or_else(|| format!("{key:?}"), |f| f.diagnostic_name())
         );
     }
 

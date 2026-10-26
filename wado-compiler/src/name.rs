@@ -200,49 +200,53 @@ pub fn display_function_name(name: &str) -> String {
     }
 }
 
-/// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
-/// function an author wrote, and the span already carries the module path.
+/// The name a diagnostic shows for a function: a method as source spells it
+/// (`String::grow`), from its structure; any other function by the name it was
+/// declared under, the span already carrying its module. An instantiation's
+/// type arguments and a clone's suffix name no function an author wrote.
+///
+/// A module path may hold any character, so nothing here searches the name
+/// for one: `module` is stripped as the exact prefix it is.
 ///
 /// An effect default spells its interface with the same separator and is left
-/// to [`display_function_name`].
-///
-/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker.
+/// to [`display_function_name`]. A synthesized name opens with
+/// [`INTERNAL_PREFIX`], which is its own first character rather than a suffix
+/// marker.
 #[must_use]
-pub fn diagnostic_function_name(name: &str) -> String {
+pub fn diagnostic_function_name(
+    name: &str,
+    module: &ModuleSource,
+    method: Option<&LocalMethodName>,
+) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name.to_string();
     }
-    let mut unqualified = without_module_paths(name);
-    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
+    if let Some(method) = method {
+        let mut declared = method.clone();
+        declared.method_name = as_declared(&method.method_name).to_string();
+        return declared.to_display_name();
+    }
+    let local = name
+        .strip_prefix(&format!("{}/", module.to_path_string()))
+        .unwrap_or(name);
+    as_declared(local).to_string()
+}
+
+/// `name` without the type arguments or clone suffix that follow the name it
+/// was declared under.
+fn as_declared(name: &str) -> &str {
+    let prefix_len = if name.starts_with(INTERNAL_PREFIX) {
         INTERNAL_PREFIX.len()
     } else {
         0
     };
-    if let Some(suffix) = unqualified[prefix_len..].find(INTERNAL_PREFIX) {
-        unqualified.truncate(prefix_len + suffix);
-    }
-    unqualified
-}
-
-/// `name` with every module path (`core:prelude/string.wado/`) dropped: the
-/// one ahead of the item, each inside its type arguments and trait, and the
-/// one a minted name carries after its `$`.
-fn without_module_paths(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut segment = 0;
-    for c in name.chars() {
-        match c {
-            '/' => out.truncate(segment),
-            '<' | '>' | ',' | '^' | '[' | ']' | '(' | ')' | '&' | ' ' | '$' => {
-                out.push(c);
-                segment = out.len();
-            }
-            _ => out.push(c),
-        }
-    }
-    out
+    let rest = &name[prefix_len..];
+    let end = [rest.find('<'), rest.find(INTERNAL_PREFIX)]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or(rest.len());
+    &name[..prefix_len + end]
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -2813,41 +2817,41 @@ mod tests {
     }
 
     #[test]
-    fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
+    fn diagnostic_name_drops_the_module_and_suffixes_but_keeps_a_minted_name() {
+        let mut interner = ModuleSourceInterner::new();
+        let entry = interner.entry_point("main.wado");
+        let named = |module: &ModuleSource, name: &str| {
+            let mangled = FreeFunctionName::new(module.clone(), name.to_string()).to_string();
+            diagnostic_function_name(&mangled, module, None)
+        };
+        assert_eq!(named(&entry, "run"), "run");
+        assert_eq!(named(&entry, "$cm_export__run"), "$cm_export__run");
         assert_eq!(
-            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]"),
-            "String::grow"
+            named(
+                &interner.core("prelude/fmt.wado"),
+                "write_decimal_digits$sroa[&mut(self.repr)]"
+            ),
+            "write_decimal_digits"
         );
-        assert_eq!(diagnostic_function_name("main.wado/run"), "run");
+        // A module path may hold the characters a mangled name separates with.
+        assert_eq!(
+            named(
+                &interner.local("./src (old)/my lib.wado"),
+                "follow<core:prelude/string.wado/String>$spec0"
+            ),
+            "follow"
+        );
         // A minted name opens with the prefix; cutting there would leave nothing.
-        assert_eq!(diagnostic_function_name("$test_0_adds"), "$test_0_adds");
         assert_eq!(
-            diagnostic_function_name("main.wado/$cm_export__run"),
-            "$cm_export__run"
-        );
-        assert_eq!(
-            diagnostic_function_name("$value_copy$Point$shallow"),
-            "$value_copy"
-        );
-    }
-
-    #[test]
-    fn diagnostic_name_drops_the_module_paths_inside_type_arguments() {
-        assert_eq!(
-            diagnostic_function_name(
-                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
-            ),
-            "Formatter::pad<String>"
+            diagnostic_function_name("$test_0_adds", &entry, None),
+            "$test_0_adds"
         );
         assert_eq!(
             diagnostic_function_name(
-                "core:prelude/list.wado/List<core:prelude/string.wado/String>\
-                 ^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"
+                &value_copy_helper_name("core:prelude/string.wado/String"),
+                &ModuleSource::builtin(),
+                None
             ),
-            "List<String>^IndexRef<i32>::index_ref"
-        );
-        assert_eq!(
-            diagnostic_function_name(&value_copy_helper_name("core:prelude/string.wado/String")),
             "$value_copy"
         );
     }
