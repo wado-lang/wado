@@ -535,7 +535,10 @@ cannot be taken back.
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.
 - A confined child cannot confine a child of its own. Its `setpgid` is refused,
-  so a `wado` that `core:process` started fails every spawn.
+  so a `wado` that `core:process` started fails every spawn. The same refusal
+  meets any descendant that calls `setsid` or `setpgid` itself: a shell with job
+  control, or a program that detaches into the background. A plain `fork` and
+  `exec`, which is how `git` runs its hooks and helpers, is not refused.
 - A file or directory the sandbox refused a child is not reported. Landlock
   answers `EACCES` and leaves no record the host can read, so the child's own
   message is all there is.
