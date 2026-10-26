@@ -1481,7 +1481,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             .load_source(&resolved)
             .await
             .map_err(|e| bail_load(LoadError::reading(e, &prov_path)))?;
-        let provider_src = String::from_utf8_lossy(&bytes).into_owned();
+        let provider_src = String::from_utf8_lossy_owned(bytes);
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
         // the world is overridden, and `providers` stays empty (the
