@@ -14,12 +14,7 @@ use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::name::{COLD_PATH_INTRINSIC, diagnostic_function_name};
-||||||| 5a2ad1349
-use crate::name::diagnostic_function_name;
-=======
->>>>>>> origin/main
+use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
