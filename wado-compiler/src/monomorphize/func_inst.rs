@@ -1024,14 +1024,7 @@ impl Monomorphizer {
     }
 
     fn value_blanket_serves(&self, tid: TypeId, trait_: DefId, type_table: &TypeTable) -> bool {
-        ranked_value_blanket(
-            &self.functions.trait_env,
-            trait_,
-            module_source_for_trait_impl(type_table, tid).as_ref(),
-            tid,
-            type_table,
-        )
-        .is_some()
+        ranked_value_blanket(&self.functions.trait_env, trait_, tid, type_table).is_some()
     }
 
     /// What synthesis gave open shape `origin` — its associated types and
@@ -1712,7 +1705,6 @@ impl Monomorphizer {
                                     ranked_value_blanket(
                                         &self.functions.trait_env,
                                         tn,
-                                        receiver_module.as_ref(),
                                         concrete_type_id,
                                         type_table,
                                     )
@@ -2895,15 +2887,8 @@ impl Monomorphizer {
         if !has_reflect_kind(receiver, type_table) {
             return false;
         }
-        let receiver_module = module_source_for_trait_impl(type_table, receiver);
-        ranked_value_blanket(
-            &self.functions.trait_env,
-            trait_name,
-            receiver_module.as_ref(),
-            receiver,
-            type_table,
-        )
-        .is_some_and(|blanket| blanket_is_reflect_keyed(&blanket.bounds, type_table))
+        ranked_value_blanket(&self.functions.trait_env, trait_name, receiver, type_table)
+            .is_some_and(|blanket| blanket_is_reflect_keyed(&blanket.bounds, type_table))
     }
 
     /// Route a type-param receiver (`T^Trait::method`, resolved to a concrete
@@ -2947,13 +2932,7 @@ impl Monomorphizer {
         let blanket = if generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
-                ranked_value_blanket(
-                    &self.functions.trait_env,
-                    tn,
-                    receiver_module.as_ref(),
-                    recv_inner,
-                    type_table,
-                )
+                ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table)
                 .cloned()
             })
         } else {

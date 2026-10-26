@@ -1503,7 +1503,12 @@ impl TraitEnv {
     }
 
     /// Whether the impl `block` of `trait_` answers a use wanting `wanted`.
-    fn block_answers(&self, block: DefId, trait_: DefId, wanted: &[name::FqTypeName]) -> bool {
+    pub(crate) fn block_answers(
+        &self,
+        block: DefId,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+    ) -> bool {
         let header = &self.impl_headers[&block];
         trait_args_answer(header.trait_arg_ids(), wanted, &|i| {
             self.default_arg_at(trait_, i, &header.target_id)
@@ -1714,30 +1719,6 @@ impl TraitEnv {
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
-    }
-
-    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
-    /// accepts. A trait may carry several disjoint value blankets — the four
-    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
-    /// so a receiver-blind first-wins selection would hand every receiver the
-    /// first-registered kind and then reject it on the bound check.
-    pub(crate) fn value_blanket_for_receiver(
-        &self,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-        satisfies: &dyn Fn(&[BlanketBound]) -> bool,
-    ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(&trait_)?;
-        let mut values = impls
-            .iter()
-            .filter(|b| b.receiver == BlanketReceiver::Value)
-            .filter(|b| satisfies(&b.bounds));
-        if let Some(hint) = type_module
-            && let Some(b) = values.clone().find(|b| &b.module == hint)
-        {
-            return Some(b);
-        }
-        values.next()
     }
 
     /// The universal ref blanket (`impl<T> Trait for &T`) answering

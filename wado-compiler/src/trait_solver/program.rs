@@ -226,6 +226,7 @@ pub enum ImplOrigin {
     Derived,
     /// `impl Tr for T;`, a demand for the derived body (WEP 2026-06-25).
     /// Answering through it owes the body; providing none, it duplicates no pair.
+    /// Beside a written impl it is a no-op, so it yields to one.
     Marker,
     /// Stated by [`pair_comparisons`](super::pair_comparisons) beside a
     /// written impl of the other comparison trait, at its target and bounds:
@@ -240,7 +241,8 @@ impl ImplOrigin {
     #[must_use]
     pub fn yields_to(self) -> &'static [Self] {
         match self {
-            Self::Written | Self::Marker => &[],
+            Self::Written => &[],
+            Self::Marker => &[Self::Written],
             Self::Paired => &[Self::Written, Self::Marker],
             Self::Derived => &[Self::Written, Self::Marker, Self::Paired],
         }

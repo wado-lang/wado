@@ -867,6 +867,63 @@ pub(super) fn answers_args(
     })
 }
 
+/// Whether the impl answers a call that names `args` at an instance, as
+/// [`answers_args`] answers a bound. A parameter in `args` is a binder the
+/// call's own frame leaves unsettled, and fits any type.
+pub(super) fn answers_named_args(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    subject: &SolverType,
+    written: &[SolverType],
+    args: &[SolverType],
+) -> bool {
+    let written = program.per_param(def.trait_, written);
+    let args = program.per_param(def.trait_, args);
+    let selves = vec![ty.clone(), subject.clone()];
+    let said = |i: usize, given: Option<&SolverType>| match given {
+        Some(given) => vec![given.clone()],
+        None => match program.default_arg(def, i) {
+            Some(default) if default == def.target => selves.clone(),
+            Some(default) => vec![default],
+            None => Vec::new(),
+        },
+    };
+    (0..written.len().max(args.len())).all(|i| {
+        let asks = said(i, args.get(i).and_then(Option::as_ref));
+        let offered = said(i, written.get(i).and_then(Option::as_ref));
+        asks.is_empty()
+            || asks
+                .iter()
+                .any(|ask| offered.iter().any(|offer| fits(ask, offer)))
+    })
+}
+
+/// Whether `offered` is `asked`, a parameter in `asked` fitting any type.
+fn fits(asked: &SolverType, offered: &SolverType) -> bool {
+    match (asked, offered) {
+        (SolverType::Param(_) | SolverType::Pack(_), _) => true,
+        (SolverType::Decl(head, args), SolverType::Decl(other, offered)) => {
+            head == other && all_fit(args, offered)
+        }
+        (
+            SolverType::Ref { is_mut, inner },
+            SolverType::Ref {
+                is_mut: other,
+                inner: offered,
+            },
+        ) => is_mut == other && fits(inner, offered),
+        (SolverType::Tuple(elems), SolverType::Tuple(offered)) => {
+            elems.iter().any(|e| matches!(e, SolverType::Pack(_))) || all_fit(elems, offered)
+        }
+        _ => asked == offered,
+    }
+}
+
+fn all_fit(asked: &[SolverType], offered: &[SolverType]) -> bool {
+    asked.len() == offered.len() && asked.iter().zip(offered).all(|(a, o)| fits(a, o))
+}
+
 /// Whether the impl answers its trait at the declared defaults, as a derived
 /// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
 pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
