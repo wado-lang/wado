@@ -7,7 +7,9 @@
 //! A check may index past the guard variable, `a[i + k]` with `k` a constant
 //! or a loop-invariant local, and the checks may bound against different
 //! lengths: each distinct `i + k < B` adds its own residual term, which also
-//! keeps `B - k` and `i + k` clear of the wrap.
+//! keeps `B - k` and `i + k` clear of the wrap. An `i32` index may scale `i`
+//! too, `a[i * s + k]` with `s` a positive constant or an invariant local: the
+//! row walk of a matrix stored row-major.
 //!
 //! Where the entry value reads as no constant, the check's floor joins the
 //! residual too: `i >= FLOOR` at the version point, carried to every later
@@ -78,17 +80,20 @@ struct Plan {
     floor: Option<RuntimeFloor>,
 }
 
-/// What a check adds to the guard variable before comparing: `local + konst`.
-/// `konst` is non-negative, and the residual's term on `local` makes it so too
-/// (see [`limit_terms`]), which keeps `var + shift` from lying below `var`.
+/// What a check makes of the guard variable before comparing: `var * stride +
+/// local + konst`. `konst` is non-negative, and the residual's terms on
+/// `local` and the stride make them so too (see [`limit_terms`]), which keeps
+/// `var + shift` from lying below `var`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Shift {
+    stride: Option<BoundKey>,
     local: Option<u32>,
     konst: i64,
 }
 
 impl Shift {
     const NONE: Shift = Shift {
+        stride: None,
         local: None,
         konst: 0,
     };
@@ -373,6 +378,12 @@ fn parse_versionable_check(
         }
         floor = floor.max(f);
     }
+    // A strided check demands `var >= 0` too: with the residual's
+    // `stride >= 1`, `var * stride` then lies at or above `var`, clear of the
+    // wrap.
+    if limit.shift.stride.is_some() {
+        floor = floor.max(0);
+    }
     Some(Check {
         holder,
         cond,
@@ -382,7 +393,8 @@ fn parse_versionable_check(
 }
 
 /// Read `op` (through copy temps) as `var + shift`: a `+` tree, in any
-/// association, of `var` once, at most one other local, and constants.
+/// association, of `var` or `var * stride` once, at most one other local, and
+/// constants.
 fn parse_shift(engine: &Engine, binds: &Binds, op: Operand, var: u32) -> Option<Shift> {
     let mut terms = Terms::default();
     terms.add_operand(engine, binds, op, var, 0)?;
@@ -400,17 +412,60 @@ fn local_shift(engine: &Engine, binds: &Binds, l: u32, var: u32) -> Option<Shift
 #[derive(Default)]
 struct Terms {
     var: bool,
+    /// What `var` is multiplied by, when it is.
+    stride: Option<BoundKey>,
     local: Option<u32>,
     konst: i64,
 }
 
 impl Terms {
+    const VAR: Terms = Terms {
+        var: true,
+        stride: None,
+        local: None,
+        konst: 0,
+    };
+
     fn shift(self) -> Option<Shift> {
         let local = Shift {
+            stride: self.stride,
             local: self.local,
             konst: 0,
         };
         self.var.then_some(local)?.plus(self.konst)
+    }
+
+    /// `var * stride`, the stride a positive constant or a local other than
+    /// `var` (the caller proves it loop-invariant).
+    fn scaled(
+        engine: &Engine,
+        binds: &Binds,
+        var_side: Operand,
+        stride_side: Operand,
+        var: u32,
+        depth: u32,
+    ) -> Option<Terms> {
+        let mut inner = Terms::default();
+        inner.add_operand(engine, binds, var_side, var, depth + 1)?;
+        let exactly_var = inner.var
+            && inner.stride.is_none()
+            && inner.local.is_none()
+            && inner.konst == 0;
+        if !exactly_var {
+            return None;
+        }
+        let stride = match parse_const_i64(engine, binds, stride_side) {
+            Some(c) if c >= 1 => BoundKey::Const(c),
+            Some(_) => return None,
+            None => match operand_local(engine.body, stride_side)? {
+                l if l == var => return None,
+                l => BoundKey::Local(l),
+            },
+        };
+        Some(Terms {
+            stride: Some(stride),
+            ..Terms::VAR
+        })
     }
 
     fn add_operand(
@@ -431,13 +486,17 @@ impl Terms {
         if let Some(l) = operand_local(engine.body, op) {
             return self.add_local(engine, binds, l, var, depth);
         }
-        let (left, NirBinaryOp::Add, right) =
-            binary_parts(engine.body, resolve(engine, binds, op))?
-        else {
-            return None;
-        };
-        self.add_operand(engine, binds, left, var, depth + 1)?;
-        self.add_operand(engine, binds, right, var, depth + 1)
+        match binary_parts(engine.body, resolve(engine, binds, op))? {
+            (left, NirBinaryOp::Add, right) => {
+                self.add_operand(engine, binds, left, var, depth + 1)?;
+                self.add_operand(engine, binds, right, var, depth + 1)
+            }
+            (left, NirBinaryOp::Mul, right) => self.merge(
+                Terms::scaled(engine, binds, left, right, var, depth)
+                    .or_else(|| Terms::scaled(engine, binds, right, left, var, depth))?,
+            ),
+            _ => None,
+        }
     }
 
     /// A copy temp whose value holds `var` is read through. Any other local is
@@ -452,11 +511,7 @@ impl Terms {
         depth: u32,
     ) -> Option<()> {
         if l == var {
-            return self.merge(Terms {
-                var: true,
-                local: None,
-                konst: 0,
-            });
+            return self.merge(Terms::VAR);
         }
         if let Some(&bound) = binds.get(&l) {
             let mut inner = Terms::default();
@@ -469,9 +524,8 @@ impl Terms {
             }
         }
         self.merge(Terms {
-            var: false,
             local: Some(l),
-            konst: 0,
+            ..Terms::default()
         })
     }
 
@@ -480,6 +534,7 @@ impl Terms {
             return None;
         }
         self.var |= other.var;
+        self.stride = self.stride.or(other.stride);
         self.local = self.local.or(other.local);
         self.konst = self.konst.checked_add(other.konst)?;
         Some(())
@@ -581,6 +636,14 @@ fn analyze_loop(
                 return None;
             }
             invariant.push(s);
+        }
+        // A strided residual is evaluated in `i64`, where an `i32` product
+        // cannot wrap.
+        if let Some(stride) = limit.shift.stride {
+            if key != type_table.type_key(TypeTable::I32) {
+                return None;
+            }
+            invariant.extend(bound_local(stride)?);
         }
     }
     let floor = match demanded {
@@ -766,6 +829,9 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// signed type and `local <= B - konst` for an unsigned one. An unshifted
 /// check needs only the comparison.
 fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
+    if let Some(stride) = limit.shift.stride {
+        return strided_limit_terms(engine, plan, limit, stride, span);
+    }
     let ty = engine.locals()[plan.var as usize].type_id;
     let int = |e: &mut Engine, c: i64| e.const_operand(ValueKind::Int(c as u64, ty), ty);
     let bound = |e: &mut Engine| bound_read(e, plan, limit.bound, span);
@@ -808,7 +874,77 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     };
     let h_read = bound_read(engine, plan, plan.bound, span);
     let fits = alloc_pred(engine, h_read, op, room, span);
-    clear.into_iter().rev().fold(fits, |rest, term| {
+    conjoin(engine, clear, fits, span)
+}
+
+/// The residual terms for an `i32` check `var * stride + local + konst < B`,
+/// compared in `i64`: the largest `var` the guard admits (`H`, or `H - 1`
+/// under `<`) lands under `B`, with `local >= 0` and `stride >= 1`. With the
+/// check's demanded `var >= 0`, every partial sum the loop computes then lies
+/// in `0..B`, so none wraps. `stride >= 1` also puts `H` under `B`, the
+/// headroom a `+ 1` step's wrap rests on (see [`induction_entry`]).
+fn strided_limit_terms(
+    engine: &mut Engine,
+    plan: &Plan,
+    limit: Limit,
+    stride: BoundKey,
+    span: Span,
+) -> Operand {
+    let ty = engine.locals()[plan.var as usize].type_id;
+    let wide = |e: &mut Engine, expr: Operand| {
+        Operand::Expr(e.alloc_expr(
+            ExprKind::Cast {
+                expr,
+                target_type: TypeTable::I64,
+            },
+            TypeTable::I64,
+            span,
+        ))
+    };
+    let long = |e: &mut Engine, c: i64| {
+        e.const_operand(ValueKind::Int(c as u64, TypeTable::I64), TypeTable::I64)
+    };
+    let add = |e: &mut Engine, l, r| alloc_binary(e, l, NirBinaryOp::Add, r, TypeTable::I64, span);
+    let mut clear = Vec::new();
+    let stride = match stride {
+        BoundKey::Local(s) => {
+            let s_read = local_read(engine, s, span);
+            let one = engine.const_operand(ValueKind::Int(1, ty), ty);
+            clear.push(alloc_pred(engine, s_read, NirBinaryOp::GtEq, one, span));
+            let s_read = local_read(engine, s, span);
+            wide(engine, s_read)
+        }
+        BoundKey::Const(c) => long(engine, c),
+        BoundKey::Field(..) => unreachable!("`Terms::scaled` reads a local or a constant"),
+    };
+    let h_read = bound_read(engine, plan, plan.bound, span);
+    let mut reach = wide(engine, h_read);
+    if !plan.guard_le {
+        let minus_one = long(engine, -1);
+        reach = add(engine, reach, minus_one);
+    }
+    reach = alloc_binary(engine, reach, NirBinaryOp::Mul, stride, TypeTable::I64, span);
+    if let Some(l) = limit.shift.local {
+        let l_read = local_read(engine, l, span);
+        let zero = engine.const_operand(ValueKind::Int(0, ty), ty);
+        clear.push(alloc_pred(engine, l_read, NirBinaryOp::GtEq, zero, span));
+        let l_read = local_read(engine, l, span);
+        let l_wide = wide(engine, l_read);
+        reach = add(engine, reach, l_wide);
+    }
+    if limit.shift.konst != 0 {
+        let konst = long(engine, limit.shift.konst);
+        reach = add(engine, reach, konst);
+    }
+    let b_read = bound_read(engine, plan, limit.bound, span);
+    let b_wide = wide(engine, b_read);
+    let fits = alloc_pred(engine, reach, NirBinaryOp::Lt, b_wide, span);
+    conjoin(engine, clear, fits, span)
+}
+
+/// `terms[0] && … && last`, each guarding the ones after it.
+fn conjoin(engine: &mut Engine, terms: Vec<Operand>, last: Operand, span: Span) -> Operand {
+    terms.into_iter().rev().fold(last, |rest, term| {
         alloc_pred(engine, term, NirBinaryOp::And, rest, span)
     })
 }
