@@ -322,9 +322,14 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             value_copy_ids: &value_copy_ids,
             applied: Cell::new(false),
         };
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let body = body.expect("a planned function has a body");
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         // A promoted constant capacity is re-materialized during the rewrite;
         // `materialize_operand` falls back to a decimal repr without the type
         // table, which is exact for the non-negative capacity ints.

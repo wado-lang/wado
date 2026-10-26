@@ -1415,9 +1415,14 @@ fn propagate_scalar_constants(
         if bindings.is_empty() {
             continue;
         }
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let body = body.expect("eligible function has a body");
-        if substitute_locals(body, locals, &mut buffers, &types, &bindings) {
+        if substitute_locals(body, locals, params, &mut buffers, &types, &bindings) {
             gate.mark_changed(id);
             changed = true;
         }
@@ -1644,12 +1649,13 @@ impl BranchSettler {
         &self,
         body: &mut Body,
         locals: &mut Tracked<Vec<NirLocal>>,
+        params: &[NirParam],
         buffers: &mut EngineBuffers,
         types: &TypeTable,
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
         let prune = BranchPruneRule::new(PruneMode::Fixpoint);
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.set_value_graph_type_table(types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
         engine.run(&[&fold, &prune]);
@@ -1710,9 +1716,17 @@ fn build_clone(
     for (alias, base) in param_aliases(body, &params).0 {
         read_through.insert(alias, bound[&base].clone());
     }
-    substitute_fields(body, &mut clone.locals, &mut buffers, &types, &read_through);
-    substitute_locals(body, &mut clone.locals, &mut buffers, &types, &whole);
-    settler.settle(body, &mut clone.locals, &mut buffers, &types);
+    let (locals, own_params) = (&mut clone.locals, &clone.params);
+    substitute_fields(
+        body,
+        locals,
+        own_params,
+        &mut buffers,
+        &types,
+        &read_through,
+    );
+    substitute_locals(body, locals, own_params, &mut buffers, &types, &whole);
+    settler.settle(body, locals, own_params, &mut buffers, &types);
 
     let param_consts: IndexMap<String, ParamSeed> = clone
         .params
@@ -1783,11 +1797,12 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Tracked<Vec<NirLocal>>,
+    params: &[NirParam],
     buffers: &mut EngineBuffers,
     types: &TypeTable,
     bindings: &IndexMap<u32, FieldConsts>,
 ) -> bool {
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals, params);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     engine.body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
@@ -1816,11 +1831,12 @@ fn substitute_fields(
 fn substitute_locals(
     body: &mut Body,
     locals: &mut Tracked<Vec<NirLocal>>,
+    params: &[NirParam],
     buffers: &mut EngineBuffers,
     types: &TypeTable,
     bindings: &IndexMap<u32, FieldConst>,
 ) -> bool {
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals, params);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     engine.body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node

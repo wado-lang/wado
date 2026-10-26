@@ -83,6 +83,7 @@ fn forward_one(
         locals,
         address_taken_locals,
         stores_aliased_locals,
+        params,
         ..
     } = func.parts();
     let body = body.expect("checked above");
@@ -95,7 +96,7 @@ fn forward_one(
         first_param_types,
         call_immutability,
     );
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals, params);
     engine.set_alias_sets(alias);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);

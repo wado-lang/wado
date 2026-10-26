@@ -489,9 +489,14 @@ pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut Descriptor
             fpt: &fpt,
             type_table: &type_table,
         };
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals, params);
         any |= engine.run(&[&rule]);
     }
     any

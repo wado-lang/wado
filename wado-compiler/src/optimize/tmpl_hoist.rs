@@ -115,9 +115,14 @@ pub fn hoist_template_buffers(
             },
             applied: Cell::new(false),
         };
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.run(&[&rule])
     })
 }

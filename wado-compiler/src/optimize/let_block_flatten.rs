@@ -39,7 +39,7 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
             let Some(body) = body else {
                 return false;
             };
-            let flattened = Engine::new(body, buffers, locals).run(&[&rule]);
+            let flattened = Engine::new(body, buffers, locals, params).run(&[&rule]);
             promote_lone_assignments(body, locals, params) || flattened
         },
     )
@@ -352,7 +352,7 @@ mod tests {
         let mut buffers = EngineBuffers::default();
         let rule = LetBlockFlattenRule;
         {
-            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
             engine.run(&[&rule]);
         }
 

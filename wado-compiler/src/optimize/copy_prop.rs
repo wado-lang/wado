@@ -1020,10 +1020,14 @@ pub fn propagate_copies(
             applied: Cell::new(false),
         };
         let FuncParts {
-            body, locals, name, ..
+            body,
+            locals,
+            name,
+            params,
+            ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

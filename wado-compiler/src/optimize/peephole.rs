@@ -149,7 +149,12 @@ pub(super) fn run_peephole(
         let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(type_table));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let Some(body) = body else {
             return false;
         };
@@ -205,7 +210,7 @@ pub(super) fn run_peephole(
         if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
             rules.push(append_fuse_rule);
         }
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(type_table);

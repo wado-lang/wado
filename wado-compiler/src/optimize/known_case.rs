@@ -342,7 +342,7 @@ mod tests {
         }]);
         let mut buffers = EngineBuffers::default();
         let rule = KnownCaseRule;
-        let mut engine = Engine::new(body, &mut buffers, &mut locals);
+        let mut engine = Engine::new(body, &mut buffers, &mut locals, &[]);
         engine.run(&[&rule]);
     }
 

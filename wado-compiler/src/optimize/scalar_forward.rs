@@ -32,11 +32,16 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         let Some(body) = body else {
             return false;
         };
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.run(&[&rule])
     })
 }
