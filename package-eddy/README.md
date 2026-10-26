@@ -60,5 +60,12 @@ notes; the rest is direction, not decision.
 
 - Learn into what can be reviewed: an evaluation set grown from missed
   defects, and rules a person can read and delete.
-- Measure with a grounded benchmark: ReviewBench's split of grounded and
-  augmented scores is the model to follow.
+- Measure once with a grounded benchmark built from the project's own reverts
+  and hotfixes, given the pre-fix diff. ReviewBench's split of grounded and
+  augmented scores is the model to follow, with the judge validated.
+- Measure continuously: the addressed rate weighted by severity, the defects
+  that escaped review, and the comments and cost per review. The offline and
+  online numbers should move in the same direction.
+- Keep part of the offline set out of learning's reach. The outcomes learning
+  feeds on are also what the metrics count, so a set the learning never sees
+  is what tells improvement from fitting.

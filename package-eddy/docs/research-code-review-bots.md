@@ -1,7 +1,8 @@
 # Research: Code Review Bots, August to October 2026
 
 This survey covers how code review bots are built, what raises their quality,
-how they trade cost against quality, and how they learn over time. It reads only work published from
+how they are evaluated, how they trade cost against quality, and how they learn
+over time. It reads only work published from
 2026-08-01 to 2026-10-26: the models changed enough in August 2026 that older
 results say little about current ones.
 
@@ -345,19 +346,79 @@ What carries over: a reproduction proves a finding only when the reproducer is
 written apart from the finding and must fail before the fix. Without the
 environment to run it, a finding stays a claim.
 
-### Measuring It
+## Evaluation
+
+A review bot is measured two ways: once, offline, against a set of PRs whose
+defects are known; and continuously, online, from what happens to its
+comments and to the code after it reviewed.
+
+| Source           | Measure                                                       | Result           |
+| ---------------- | ------------------------------------------------------------- | ---------------- |
+| [reviewbench]    | Senior engineers' agreement with the golden set               | 96.6%            |
+| [dev-benchmarks] | ReviewBench golden findings that came from GitHub's own bot   | about 45%        |
+| [2510.05450]     | Highest resolution rate by comment type, readability          | 43.3%            |
+| [2607.01904]     | PRs with substantive human review, before and after a mandate | about 39% to 21% |
+
+### One-Shot Benchmarks
 
 ReviewBench (GitHub, 2026-10-05) is 219 PRs from 187 repositories in 19
-languages, weighted toward large multi-file changes ([reviewbench]). Its golden
-set merges human comments, issues inferred from follow-up commits, static
-analysis, and several models. It reports two scores:
+languages, weighted toward large multi-file changes ([reviewbench]):
 
-- Grounded precision, recall and F1, against the golden set only.
-- Augmented scores, where a judge credits valid findings the golden set lacks.
+- Its golden set merges human comments, issues inferred from follow-up
+  commits, static analysis, and several models, deduplicated and validated
+  under one rubric: a finding counts if it is true, relevant and non-trivial.
+- It reports grounded precision, recall and F1 against the golden set, and
+  augmented scores where a judge credits valid findings the set lacks.
+- The dataset, the judge and the matcher are versioned, and a 25-PR set for
+  tuning is kept apart from the 219-PR run.
 
-Senior engineers who relabeled the golden set agreed with it 96.6% of the time.
-Its offline predictions for GitHub's ensemble matched the online A/B test in
-direction (see the table below).
+What goes wrong with such benchmarks ([dev-benchmarks], a comparison of nine
+published on 2026-10-08):
+
+- Most are run by a vendor, and rank that vendor first. "Catch rate",
+  "precision" and "resolution rate" count different things.
+- The answer key decides the result. A correct comment missing from it scores
+  as a false positive, and about 45% of ReviewBench's golden findings came from
+  GitHub's own reviewer.
+- Some vendors tuned on the set they published. Small sets separate tools by a
+  couple of catches.
+- Its advice: test on your own merged PRs with known bugs (reverts and
+  hotfixes), give every tool the same pre-fix diff, and count whether the bug
+  was found, how many comments a person had to read, and the time and cost.
+
+Matching a comment to a known defect is the core difficulty: comments are free
+text with approximate lines. Before the window, one study matched in two
+passes, a deterministic one (same file, lines within ±5, compatible type) and
+then an LLM adjudicating the rest ([2606.15689]). Another scored a comment by
+whether the fix it prompted passes tests, which avoids judging text
+([2603.23448]). The judge needs validating in turn: general-purpose models
+judged poorly whether a comment's claim was true ([2609.37216]). Multi-round
+review needs its own set, since quality falls over rounds ([2608.27442]).
+
+### Continuous Metrics
+
+- GitHub calls its online precision the addressed rate: the share of comments
+  an LLM judges to have prompted a matching code change, read from the diff,
+  the thread, reactions, resolution state and the code after review. Online
+  recall is how much human review was still needed. ReviewBench predicted the
+  direction of every online change in its A/B test ([reviewbench]).
+- Cursor's resolution rate counts comments addressed by merge, charted per
+  repository over time ([dev-benchmarks]). Vendors pick different
+  denominators, so the rates do not compare across tools.
+- What is cheap to address gets addressed. At Atlassian, readability comments
+  were resolved most often ([2510.05450], before the window).
+- Coarse outcomes miss what review was for. Under a mandate to double merged
+  PRs, substantive human review fell while silent approvals held near half
+  ([2607.01904], before the window); a secondary summary reports merge and
+  revert rates flat.
+- Anthropic tracks the share of merged PRs later reverted, beside a daily run
+  over its incident set ([claude-code-review]).
+
+What carries over: an offline set built from the project's own reverts and
+hotfixes, scored grounded and by a validated judge; online, the addressed rate
+weighted by severity, defects that escaped review, and the comments and cost
+per review. Offline and online should agree in direction, or one of them is
+measuring something else.
 
 ## Cost and Quality
 
@@ -478,11 +539,18 @@ model's bad habit to reach the others.
 - [2406.04692] Mixture-of-Agents Enhances Large Language Model Capabilities
   (2024-06)
 - [2512.08296] Towards a Science of Scaling Agent Systems (2025-12)
+- [2510.05450] What Types of Code Review Comments Do Developers Most
+  Frequently Resolve? (2025-10)
 - [2511.00262] LLM-Driven Cost-Effective Requirements Change Impact Analysis
   (2025-11)
 - [2602.01011] Multi-Agent Teams Hold Experts Back (2026-02)
 - [2602.11988] Evaluating AGENTS.md: Are Repository-Level Context Files
   Helpful for Coding Agents? (2026-02, revised 2026-09-29)
+- [2603.23448] Code Review Agent Benchmark (2026-03)
+- [2606.15689] Bigger Isn't Always Better: A Comparative Evaluation of LLMs for
+  Automated Code Review (2026-06)
+- [2607.01904] AI Writes Faster Than Humans Can Review: A Longitudinal Study
+  of an Enterprise 2x Mandate (2026-07)
 - [2606.01351] Recognize Your Orchestrator: An Entropy Dynamics Perspective
   for LLM Multi-Agent Systems (2026-06)
 - [2606.26979] How Much Static Structure Do Code Agents Need? A Study of
@@ -539,6 +607,7 @@ model's bad habit to reach the others.
 - [bugbot-learning] Cursor, Bugbot now self-improves with learned rules
   (2026-04)
 - [coderabbit-changelog] CodeRabbit changelog, August to October 2026
+- [dev-benchmarks] Should we trust AI code review benchmarks? (2026-10-08)
 - [sourcegraph-tools] Sourcegraph, 13 Best Automated Code Review Tools in 2026
 - [coderabbit-context] CodeRabbit, The art and science of context engineering
 - [codex-security-cloud] eesel, Codex Security Cloud: how it works
@@ -573,7 +642,12 @@ model's bad habit to reach the others.
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
 [2406.04692]: https://arxiv.org/abs/2406.04692
 [2512.08296]: https://arxiv.org/abs/2512.08296
+[2510.05450]: https://arxiv.org/abs/2510.05450
 [2511.00262]: https://arxiv.org/abs/2511.00262
+[2603.23448]: https://arxiv.org/abs/2603.23448
+[2606.15689]: https://arxiv.org/abs/2606.15689
+[2607.01904]: https://arxiv.org/abs/2607.01904
+[dev-benchmarks]: https://dev.to/izgorodin/should-we-trust-ai-code-review-benchmarks-3p6n
 [2602.01011]: https://arxiv.org/abs/2602.01011
 [2606.26979]: https://arxiv.org/abs/2606.26979
 [2608.13568]: https://arxiv.org/abs/2608.13568
