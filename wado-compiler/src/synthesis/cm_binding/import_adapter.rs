@@ -34,7 +34,7 @@ use super::lower::{
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
     cm_param_store_plan, cm_type_to_type_id, cm_val_type_from_type_id, cm_val_type_to_type_id,
-    flatten_param_type, needs_flat_result_lifting,
+    flat_load_op, flat_store_op, flatten_param_type, needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
@@ -308,6 +308,23 @@ fn result_buffer(type_table: &RefCell<TypeTable>, ptr: TirExpr, size: u32, align
     option_some(buffer, option_type, tt.compiler_items())
 }
 
+/// The `Option<ArgBuffer>` an `AsyncCall` holds: `Some(ArgBuffer { ptr,
+/// release })` for a `record`, or None.
+fn arg_buffer(type_table: &RefCell<TypeTable>, record: Option<(TirExpr, TirExpr)>) -> TirExpr {
+    let mut tt = type_table.borrow_mut();
+    let buffer_type = tt.make_arg_buffer();
+    let option_type = tt.make_option(buffer_type);
+    let Some((ptr, release)) = record else {
+        return option_none(option_type, tt.compiler_items());
+    };
+    let buffer = struct_literal(
+        buffer_type,
+        "ArgBuffer",
+        vec![("ptr", ptr), ("release", release)],
+    );
+    option_some(buffer, option_type, tt.compiler_items())
+}
+
 /// Build the `AsyncCall<T>` struct literal returned by async import paths.
 /// Field order and indices mirror the stdlib `AsyncCall` declaration.
 fn make_async_call_literal(
@@ -315,11 +332,17 @@ fn make_async_call_literal(
     subtask: TirExpr,
     buffer: TirExpr,
     lift: TirExpr,
+    args: TirExpr,
 ) -> TirExpr {
     struct_literal(
         async_call_type,
         "AsyncCall",
-        vec![("subtask", subtask), ("buffer", buffer), ("lift", lift)],
+        vec![
+            ("subtask", subtask),
+            ("buffer", buffer),
+            ("lift", lift),
+            ("args", args),
+        ],
     )
 }
 
@@ -399,7 +422,8 @@ fn synthesize_async_wrap_function(
         option_none(option_type, ctx.type_table.borrow().compiler_items())
     };
     let buffer = result_buffer(ctx.type_table, outptr_expr, outptr_size, outptr_align);
-    let completed = make_async_call_literal(subtask_type, no_subtask, buffer, lift_fn_ref);
+    let no_args = arg_buffer(ctx.type_table, None);
+    let completed = make_async_call_literal(subtask_type, no_subtask, buffer, lift_fn_ref, no_args);
     body_stmts.push(return_stmt(Some(completed)));
 
     make_binding_function(
@@ -426,11 +450,10 @@ fn lift_flat_struct_return(
     locals: &mut Vec<TirLocal>,
     lift_ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let (store_op, byte_width) = match flat {
-        CmValType::I32 => ("i32_store", 4),
-        CmValType::I64 => ("i64_store", 8),
-        CmValType::F32 => ("f32_store", 4),
-        CmValType::F64 => ("f64_store", 8),
+    let store_op = flat_store_op(flat);
+    let byte_width = match flat {
+        CmValType::I32 | CmValType::F32 => 4,
+        CmValType::I64 | CmValType::F64 => 8,
     };
 
     let flat_local = alloc_local(next_local, locals, raw_call_type);
@@ -523,18 +546,23 @@ pub(super) fn synthesize_adapter(
         .params_in_buffer(plans.iter().map(|plan| plan.ty), func_info.is_async);
     let flat_ranges = builder.emit_param_lowering(&plans);
 
-    let async_outptr = if func_info.is_async {
-        builder.prepare_async_args(&plans)
-    } else {
-        None
-    };
+    let async_args = func_info
+        .is_async
+        .then(|| builder.prepare_async_args(&plans, &flat_ranges));
     // A sync callee has read every argument by the time it returns, so the
     // buffers lowering them, the params buffer included, are freed then.
     let sync_frees = if func_info.is_async {
         Vec::new()
     } else if builder.params_in_buffer {
         let buf = builder.emit_indirect_params_buffer(&plans, None);
-        builder.buffered_arg_frees(&plans, buf)
+        buffered_arg_frees(
+            &plans,
+            &local_ref(buf.local, "$params_buf", TypeTable::I32),
+            buf,
+            &shape_ctx(&builder.lower_ctx),
+            &mut builder.next_local,
+            &mut builder.locals,
+        )
     } else {
         builder.flat_arg_frees(&plans, &flat_ranges)
     };
@@ -554,8 +582,8 @@ pub(super) fn synthesize_adapter(
         raw_call = builder.released_after(raw_call, sync_frees);
     }
 
-    let adapter_return_type = if func_info.is_async {
-        builder.emit_async_result(raw_call, async_outptr)
+    let adapter_return_type = if let Some((async_outptr, args)) = async_args {
+        builder.emit_async_result(raw_call, async_outptr, args)
     } else if let Some(outptr) = sync_outptr {
         builder.emit_outptr_result(raw_call, outptr)
     } else if let Some(return_type) = &func_info.return_type {
@@ -703,12 +731,69 @@ fn shape_ctx<'c>(lower_ctx: &'c LowerContext<'_>) -> CmShapeContext<'c> {
 }
 
 fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
-    let base = local_ref(params_buf_local, "$params_buf", TypeTable::I32);
+    offset_addr(
+        local_ref(params_buf_local, "$params_buf", TypeTable::I32),
+        offset,
+    )
+}
+
+fn offset_addr(base: TirExpr, offset: u32) -> TirExpr {
     if offset == 0 {
         base
     } else {
         binary_add(base, i32_const(offset as i32))
     }
+}
+
+/// Whether the caller frees the memory `plan`'s argument was lowered into once
+/// the callee has read it. A view's block is the view's to free.
+fn owns_lowered(plan: &ParamPlan<'_>, ctx: &CmShapeContext<'_>) -> bool {
+    !matches!(plan.lowering, ParamLowering::ListView { .. }) && cm_shape(plan.ty, ctx).owns_memory()
+}
+
+/// The frees of what the arguments in the params buffer at `base` own, then of
+/// the buffer itself.
+fn buffered_arg_frees(
+    plans: &[ParamPlan<'_>],
+    base: &TirExpr,
+    buf: OutptrBuffer,
+    ctx: &CmShapeContext<'_>,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+) -> Vec<TirStmt> {
+    let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
+    let offsets = layout_tuple_with_registry(&param_types, ctx.cm_interface_registry).offsets;
+    let mut frees = Vec::new();
+    for (plan, offset) in plans.iter().zip(offsets) {
+        if !owns_lowered(plan, ctx) {
+            continue;
+        }
+        frees.extend(synthesize_free_cm_value(
+            &cm_shape(plan.ty, ctx),
+            &offset_addr(base.clone(), offset),
+            next_local,
+            locals,
+        ));
+    }
+    frees.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            base.clone(),
+            i32_const(buf.size as i32),
+            i32_const(buf.align as i32),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
+    frees
+}
+
+/// A record of flat slots, one per 8 bytes, which an async call's
+/// `ArgBuffer` keeps the owning arguments' slots in.
+const FLAT_RECORD_STRIDE: u32 = 8;
+
+fn flat_record_bytes(slot_count: usize) -> i32 {
+    slot_count as i32 * FLAT_RECORD_STRIDE as i32
 }
 
 /// Accumulates the adapter function under construction: locals, params, body
@@ -914,13 +999,16 @@ impl<'a> AdapterBuilder<'a> {
         ranges
     }
 
-    /// The frees of what the flat args in `ranges` own, read after the call.
-    /// Each flat arg of an owning parameter is bound to a local first, so the
+    /// The flat args of each owning parameter in `ranges`, bound to locals so a
     /// free reads the address the call was handed.
-    fn flat_arg_frees(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> Vec<TirStmt> {
-        let mut frees = Vec::new();
+    fn bind_owning_slots(
+        &mut self,
+        plans: &[ParamPlan<'a>],
+        ranges: &[Range<usize>],
+    ) -> Vec<(&'a Type, Vec<FlatSlot>)> {
+        let mut owning = Vec::new();
         for (plan, range) in plans.iter().zip(ranges) {
-            if !self.owns_lowered(plan) {
+            if !owns_lowered(plan, &shape_ctx(&self.lower_ctx)) {
                 continue;
             }
             let mut slots = Vec::with_capacity(range.len());
@@ -936,8 +1024,17 @@ impl<'a> AdapterBuilder<'a> {
                     cm_type: cm_val_type_from_type_id(ty),
                 });
             }
+            owning.push((plan.ty, slots));
+        }
+        owning
+    }
+
+    /// The frees of what the flat args in `ranges` own, read after the call.
+    fn flat_arg_frees(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> Vec<TirStmt> {
+        let mut frees = Vec::new();
+        for (ty, slots) in self.bind_owning_slots(plans, ranges) {
             frees.extend(synthesize_free_cm_flat(
-                plan.ty,
+                ty,
                 &slots,
                 &shape_ctx(&self.lower_ctx),
                 &mut self.next_local,
@@ -947,43 +1044,153 @@ impl<'a> AdapterBuilder<'a> {
         frees
     }
 
-    /// The frees of what the arguments in the params buffer `buf` own, then of
-    /// the buffer itself.
-    fn buffered_arg_frees(&mut self, plans: &[ParamPlan<'a>], buf: OutptrBuffer) -> Vec<TirStmt> {
-        let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
-        let offsets =
-            layout_tuple_with_registry(&param_types, self.lower_ctx.cm_interface_registry).offsets;
-        let mut frees = Vec::new();
-        for (plan, offset) in plans.iter().zip(offsets) {
-            if !self.owns_lowered(plan) {
-                continue;
-            }
-            let shape = cm_shape(plan.ty, &shape_ctx(&self.lower_ctx));
-            frees.extend(synthesize_free_cm_value(
-                &shape,
-                &params_buf_addr(buf.local, offset),
-                &mut self.next_local,
-                &mut self.locals,
-            ));
+    /// The `Option<ArgBuffer>` of an async call whose arguments went flat:
+    /// the owning arguments' slots, copied into a record its release function
+    /// frees them from, or None where no argument owns memory.
+    fn flat_arg_buffer(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> TirExpr {
+        let owning = self.bind_owning_slots(plans, ranges);
+        let slot_count = owning.iter().map(|(_, slots)| slots.len()).sum();
+        if slot_count == 0 {
+            return arg_buffer(self.lower_ctx.type_table, None);
         }
-        frees.push(expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(buf.local, "$params_buf", TypeTable::I32),
-                i32_const(buf.size as i32),
-                i32_const(buf.align as i32),
-                i32_const(0),
-            ],
+        let record = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        let record_ref = || local_ref(record, "$args", TypeTable::I32);
+        self.body_stmts.push(let_stmt(
+            "$args",
+            record,
             TypeTable::I32,
-        )));
-        frees
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(FLAT_RECORD_STRIDE as i32),
+                    i32_const(flat_record_bytes(slot_count)),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+        for (index, slot) in owning.iter().flat_map(|(_, slots)| slots).enumerate() {
+            let value = local_ref(
+                slot.local,
+                "$arg_slot",
+                cm_val_type_to_type_id(slot.cm_type),
+            );
+            let addr = offset_addr(record_ref(), index as u32 * FLAT_RECORD_STRIDE);
+            self.body_stmts.push(expr_stmt(builtin_call(
+                flat_store_op(slot.cm_type),
+                vec![addr, value],
+                TypeTable::UNIT,
+            )));
+        }
+        let release = self.push_release_function(|record, ctx, next_local, locals| {
+            let mut frees = Vec::new();
+            let mut index = 0u32;
+            for (ty, slots) in &owning {
+                let mut loaded = Vec::with_capacity(slots.len());
+                for slot in slots {
+                    let cm_type_id = cm_val_type_to_type_id(slot.cm_type);
+                    let local = alloc_local(next_local, locals, cm_type_id);
+                    let addr = offset_addr(record.clone(), index * FLAT_RECORD_STRIDE);
+                    frees.push(let_stmt(
+                        "$arg_slot",
+                        local,
+                        cm_type_id,
+                        builtin_call(flat_load_op(slot.cm_type), vec![addr], cm_type_id),
+                    ));
+                    loaded.push(FlatSlot {
+                        local,
+                        cm_type: slot.cm_type,
+                    });
+                    index += 1;
+                }
+                frees.extend(synthesize_free_cm_flat(
+                    ty,
+                    &loaded,
+                    ctx,
+                    next_local,
+                    locals,
+                ));
+            }
+            frees.push(expr_stmt(builtin_call(
+                "realloc",
+                vec![
+                    record,
+                    i32_const(flat_record_bytes(slot_count)),
+                    i32_const(FLAT_RECORD_STRIDE as i32),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            )));
+            frees
+        });
+        arg_buffer(self.lower_ctx.type_table, Some((record_ref(), release)))
     }
 
-    /// Whether the call frees the memory `plan`'s argument was lowered into
-    /// once it returns. A view's block is the view's to free.
-    fn owns_lowered(&self, plan: &ParamPlan<'a>) -> bool {
-        !matches!(plan.lowering, ParamLowering::ListView { .. })
-            && cm_shape(plan.ty, &shape_ctx(&self.lower_ctx)).owns_memory()
+    /// The `Option<ArgBuffer>` of an async call whose arguments went through
+    /// the params buffer `buf`: the buffer, which its release function frees
+    /// with what the arguments in it own.
+    fn buffered_arg_buffer(&mut self, plans: &[ParamPlan<'a>], buf: OutptrBuffer) -> TirExpr {
+        let release = self.push_release_function(|record, ctx, next_local, locals| {
+            buffered_arg_frees(plans, &record, buf, ctx, next_local, locals)
+        });
+        let ptr = local_ref(buf.local, "$params_buf", TypeTable::I32);
+        arg_buffer(self.lower_ctx.type_table, Some((ptr, release)))
+    }
+
+    /// Push the import's `fn(i32)` release function, whose body `frees` builds
+    /// from the record address its parameter holds, and answer a `FuncRef` to
+    /// it.
+    fn push_release_function(
+        &mut self,
+        frees: impl FnOnce(TirExpr, &CmShapeContext<'_>, &mut u32, &mut Vec<TirLocal>) -> Vec<TirStmt>,
+    ) -> TirExpr {
+        let mut next_local = 0;
+        let mut locals = Vec::new();
+        let record = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
+        let params = vec![TirParam {
+            name: "$args".to_string(),
+            type_id: TypeTable::I32,
+            local_index: record,
+            is_mut: false,
+            is_mut_ref: false,
+            span: synth_span(),
+        }];
+        let body = frees(
+            local_ref(record, "$args", TypeTable::I32),
+            &shape_ctx(&self.lower_ctx),
+            &mut next_local,
+            &mut locals,
+        );
+        let name = self.func_info.release_args_name();
+        self.auxiliary.push(make_binding_function(
+            name.clone(),
+            params,
+            TypeTable::UNIT,
+            block(body),
+            next_local,
+            locals,
+        ));
+        let fn_type = self.lower_ctx.type_table.borrow_mut().make_function(
+            vec![TypeTable::I32],
+            TypeTable::UNIT,
+            Vec::new(),
+        );
+        self.func_ref(name, fn_type)
+    }
+
+    /// A `FuncRef` to a function this adapter synthesizes beside itself.
+    fn func_ref(&self, name: String, fn_type: TypeId) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::FuncRef {
+                module_source: self.entry_source.clone(),
+                name,
+                type_args: Vec::new(),
+                template: None,
+            },
+            fn_type,
+            synth_span(),
+        )
     }
 
     /// The `ListView<T>` a `list<T>` parameter of `elem`s is viewed through.
@@ -1179,16 +1386,24 @@ impl<'a> AdapterBuilder<'a> {
     /// Async canon lower argument setup: allocate the results buffer (only
     /// when the import returns a value — per CM `flatten_functype` the
     /// `results_ptr` exists only then) and switch to a single indirect params
-    /// buffer when the flat params exceed the limit.
-    fn prepare_async_args(&mut self, plans: &[ParamPlan<'a>]) -> Option<OutptrBuffer> {
+    /// buffer when the flat params exceed the limit. Answers the results
+    /// buffer and the `Option<ArgBuffer>` releasing the arguments.
+    fn prepare_async_args(
+        &mut self,
+        plans: &[ParamPlan<'a>],
+        ranges: &[Range<usize>],
+    ) -> (Option<OutptrBuffer>, TirExpr) {
         let async_outptr = self.alloc_async_outptr();
         if self.params_in_buffer {
-            self.emit_indirect_params_buffer(plans, async_outptr);
-        } else if let Some(outptr) = async_outptr {
+            let buf = self.emit_indirect_params_buffer(plans, async_outptr);
+            return (async_outptr, self.buffered_arg_buffer(plans, buf));
+        }
+        let args = self.flat_arg_buffer(plans, ranges);
+        if let Some(outptr) = async_outptr {
             self.flat_args
                 .push(local_ref(outptr.local, "$async_outptr", TypeTable::I32));
         }
-        async_outptr
+        (async_outptr, args)
     }
 
     /// Allocate the async results buffer. For `async fn ... -> AsyncCall<T>`
@@ -1357,12 +1572,13 @@ impl<'a> AdapterBuilder<'a> {
     /// Async result strategy. The WASI P3 lowered function returns a packed
     /// `(subtask_handle << 4) | status`, its result reaching the outptr buffer
     /// only at `Status::Returned`. The adapter neither waits nor lifts: it
-    /// packages the subtask, the result buffer and the lift function into an
-    /// `AsyncCall<T>`, leaving `wait()` to do both.
+    /// packages the subtask, the result buffer, the lift function and the
+    /// argument buffer `args` into an `AsyncCall<T>`, leaving `wait()` to do both.
     fn emit_async_result(
         &mut self,
         raw_call: TirExpr,
         async_outptr: Option<OutptrBuffer>,
+        args: TirExpr,
     ) -> TypeId {
         let func_info = self.func_info;
         let subtask_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
@@ -1413,16 +1629,7 @@ impl<'a> AdapterBuilder<'a> {
             inner_type_id,
             Vec::new(),
         );
-        let lift_fn_ref = TirExpr::new(
-            TirExprKind::FuncRef {
-                module_source: self.entry_source.clone(),
-                name: lift_fn_name,
-                type_args: Vec::new(),
-                template: None,
-            },
-            lift_fn_type,
-            synth_span(),
-        );
+        let lift_fn_ref = self.func_ref(lift_fn_name, lift_fn_type);
 
         let subtask = lift_subtask(
             self.lower_ctx.type_table,
@@ -1432,7 +1639,7 @@ impl<'a> AdapterBuilder<'a> {
             &mut self.body_stmts,
         );
         let subtask_struct =
-            make_async_call_literal(subtask_type, subtask, buffer, lift_fn_ref.clone());
+            make_async_call_literal(subtask_type, subtask, buffer, lift_fn_ref.clone(), args);
         self.body_stmts.push(return_stmt(Some(subtask_struct)));
         self.auxiliary.push(lift_fn);
 

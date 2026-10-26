@@ -209,6 +209,9 @@ pub enum CompilerItem {
     AsyncCall,
     /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
     ResultBuffer,
+    /// `ArgBuffer` — the linear memory an `AsyncCall`'s arguments were lowered
+    /// into, released once its subtask resolves.
+    ArgBuffer,
     /// `CopyBuffer` — the linear memory a started stream copy moves through,
     /// with the copy it belongs to.
     CopyBuffer,
@@ -838,6 +841,7 @@ impl CompilerItem {
         Self::Slice,
         Self::AsyncCall,
         Self::ResultBuffer,
+        Self::ArgBuffer,
         Self::CopyBuffer,
         Self::ListArg,
         Self::ListView,
@@ -1097,6 +1101,7 @@ impl CompilerItem {
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::ResultBuffer => "result_buffer",
+            Self::ArgBuffer => "arg_buffer",
             Self::CopyBuffer => "copy_buffer",
             Self::ListArg => "list_arg",
             Self::ListView => "list_view",
@@ -1411,6 +1416,7 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
+            | Self::ArgBuffer
             | Self::CopyBuffer
             | Self::Future
             | Self::FutureWritable
@@ -1683,6 +1689,7 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
+            | Self::ArgBuffer
             | Self::CopyBuffer
             | Self::ListView => CompilerItemKind::Struct,
             Self::Future

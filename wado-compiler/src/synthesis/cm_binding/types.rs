@@ -1000,13 +1000,27 @@ pub(super) fn handle_load_op(
     let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
         panic!("a handle is one flat value: {ty:?}");
     };
-    let load = match flat {
+    (flat_load_op(flat), cm_val_type_to_type_id(flat))
+}
+
+/// The builtin loading one flat value of type `vt`.
+pub(super) fn flat_load_op(vt: cm_abi::CmValType) -> &'static str {
+    match vt {
         cm_abi::CmValType::I32 => "i32_load",
         cm_abi::CmValType::I64 => "i64_load",
         cm_abi::CmValType::F32 => "f32_load",
         cm_abi::CmValType::F64 => "f64_load",
-    };
-    (load, cm_val_type_to_type_id(flat))
+    }
+}
+
+/// The builtin storing one flat value of type `vt`.
+pub(super) fn flat_store_op(vt: cm_abi::CmValType) -> &'static str {
+    match vt {
+        cm_abi::CmValType::I32 => "i32_store",
+        cm_abi::CmValType::I64 => "i64_store",
+        cm_abi::CmValType::F32 => "f32_store",
+        cm_abi::CmValType::F64 => "f64_store",
+    }
 }
 
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.

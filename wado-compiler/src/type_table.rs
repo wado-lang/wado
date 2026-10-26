@@ -2223,6 +2223,11 @@ impl TypeTable {
         self.make_struct(StructDef::Decl(def))
     }
 
+    pub fn make_arg_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ArgBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
     pub fn make_copy_buffer(&mut self) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::CopyBuffer);
         self.make_struct(StructDef::Decl(def))

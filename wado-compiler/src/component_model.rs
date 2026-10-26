@@ -30,7 +30,8 @@ use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_import_alias,
-    cm_lift_func_name, cm_world_import_label, cm_wrap_async_func_name, ref_type_name, to_cm_name,
+    cm_lift_func_name, cm_release_args_func_name, cm_world_import_label, cm_wrap_async_func_name,
+    ref_type_name, to_cm_name,
 };
 use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
@@ -752,6 +753,11 @@ impl CmFunctionInfo {
     /// The name of the lift `AsyncCall<T>` points to.
     pub fn lift_name(&self) -> String {
         cm_lift_func_name(&self.cm_identifier())
+    }
+
+    /// The name of the function `ArgBuffer` points to.
+    pub fn release_args_name(&self) -> String {
+        cm_release_args_func_name(&self.cm_identifier())
     }
 
     /// The name of the function a handler's result passes through to become
