@@ -497,7 +497,7 @@ pub async fn run_references_by_symbol(
     json_output: bool,
 ) -> Result<(), CliExit> {
     // References span the whole workspace, so load every `.wado` under `base`.
-    let q = Box::pin(prepare_references_query(notation, base)).await?;
+    let q = prepare_references_query(notation, base).await?;
     let result = q
         .engine
         .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)

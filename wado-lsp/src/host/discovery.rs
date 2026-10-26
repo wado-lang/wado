@@ -13,7 +13,8 @@ use wado_manifest::dependency::{
 };
 use wado_manifest::workspace::{MANIFEST_FILENAME, WORKSPACE_FILENAME, workspace_governs};
 use wado_manifest::{
-    DependencySource, LockFile, Manifest, ManifestError, read_workspace_members, registry_url,
+    DependencySource, LOCK_FILENAME, LockFile, Manifest, ManifestError, read_workspace_members,
+    registry_url,
 };
 
 use crate::host::prefetch;
@@ -322,7 +323,7 @@ fn git_dependency_entry(
 /// Parse `manifest_dir`'s `wado.lock`, or `None` when it is absent or
 /// malformed (a cold checkout reads as "nothing pinned").
 fn read_lock(manifest_dir: &Path) -> Option<LockFile> {
-    std::fs::read_to_string(manifest_dir.join("wado.lock"))
+    std::fs::read_to_string(manifest_dir.join(LOCK_FILENAME))
         .ok()?
         .parse::<LockFile>()
         .ok()

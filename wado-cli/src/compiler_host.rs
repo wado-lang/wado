@@ -293,7 +293,7 @@ impl CompilerHost for FilesystemCompilerHost {
     /// A file that fails to open is recorded, as one that fails to load is.
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
         if is_remote(path) {
-            return match RemoteReader::open(path).await {
+            return match Box::pin(RemoteReader::open(path)).await {
                 Ok(reader) => Ok(Arc::new(reader)),
                 Err(e) => {
                     self.run.observe_untracked();
@@ -334,7 +334,7 @@ impl CompilerHost for FilesystemCompilerHost {
         integrity: Option<Integrity>,
     ) -> Result<Vec<u8>, SourceError> {
         let lock_root = package_root(self.base_path());
-        let loaded = remote::load(url, extent, integrity, lock_root.as_deref()).await;
+        let loaded = Box::pin(remote::load(url, extent, integrity, lock_root.as_deref())).await;
         match (&loaded, &lock_root) {
             (Err(_), _) => self.run.observe_untracked(),
             (Ok(_), Some(root)) if integrity.is_none() => {

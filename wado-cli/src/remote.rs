@@ -92,14 +92,12 @@ struct Fetched {
 
 impl Fetched {
     /// The `range` of the file these bytes hold.
-    fn into_range(mut self, range: Range<u64>) -> Vec<u8> {
+    fn into_range(self, range: Range<u64>) -> Vec<u8> {
         if self.whole {
-            let total = self.bytes.len();
-            let clamp = |at: u64| usize::try_from(at).map_or(total, |at| at.min(total));
-            self.bytes.truncate(clamp(range.end));
-            self.bytes.drain(..clamp(range.start));
+            part(&self.bytes, range).to_vec()
+        } else {
+            self.bytes
         }
-        self.bytes
     }
 }
 
@@ -115,48 +113,25 @@ async fn get(url: String, range: Option<Range<u64>>) -> Result<Fetched, SourceEr
         RUNTIME.spawn(async move { fetch(&url, range).await })
     };
     let has_range = range.is_some();
-    let Answer {
-        status,
-        bytes,
-        total,
-        rest,
-    } = joined(task.await).map_err(network)?;
+    let (status, mut fetched) = joined(task.await).map_err(network)?;
     match status {
         StatusCode::NOT_FOUND | StatusCode::GONE => Err(SourceError::NotFound { path: url }),
-        // A server that ignores `Range` sends the whole file. One that does
-        // not say how long it is was read to its end.
-        StatusCode::OK => Ok(Fetched {
-            total: total.or(Some(bytes.len() as u64)),
-            bytes,
-            whole: true,
-            rest,
-        }),
-        StatusCode::PARTIAL_CONTENT => Ok(Fetched {
-            bytes,
-            total,
-            whole: false,
-            rest: None,
-        }),
+        // A server that does not say how long the file is was read to its end.
+        StatusCode::OK => {
+            fetched.total.get_or_insert(fetched.bytes.len() as u64);
+            Ok(fetched)
+        }
+        StatusCode::PARTIAL_CONTENT => Ok(fetched),
         // Past the end: a range the file does not reach holds nothing.
         StatusCode::RANGE_NOT_SATISFIABLE if has_range => Ok(Fetched {
             bytes: Vec::new(),
-            total,
-            whole: false,
-            rest: None,
+            ..fetched
         }),
         status => Err(network(format!("the server answered {status}"))),
     }
 }
 
-/// A response as [`fetch`] read it.
-struct Answer {
-    status: StatusCode,
-    bytes: Vec<u8>,
-    total: Option<u64>,
-    rest: Option<Response>,
-}
-
-async fn fetch(url: &str, range: Option<Range<u64>>) -> Result<Answer, String> {
+async fn fetch(url: &str, range: Option<Range<u64>>) -> Result<(StatusCode, Fetched), String> {
     if let Some(fault) = url_fault(url) {
         return Err(fault.to_string());
     }
@@ -183,12 +158,22 @@ async fn fetch(url: &str, range: Option<Range<u64>>) -> Result<Answer, String> {
     };
     let mut bytes = Vec::new();
     let rest = read_body(response, &mut bytes, upto).await?;
-    Ok(Answer {
+    Ok((
         status,
-        bytes,
-        total,
-        rest,
-    })
+        Fetched {
+            bytes,
+            total,
+            // A server that ignores `Range` sends the whole file.
+            whole: status == StatusCode::OK,
+            rest,
+        },
+    ))
+}
+
+/// The `range` of `bytes`, clamped to their end.
+fn part(bytes: &[u8], range: Range<u64>) -> &[u8] {
+    let clamp = |at: u64| usize::try_from(at).map_or(bytes.len(), |at| at.min(bytes.len()));
+    &bytes[clamp(range.start)..clamp(range.end)]
 }
 
 /// Read `response`'s body onto `bytes` until they hold `upto` bytes, handing
@@ -286,20 +271,13 @@ async fn hold_to_other_extents(
         return Ok(());
     };
     for (other, pin) in pins_of(&lock_file, root, url)? {
-        let covered = match (other, extent) {
-            (Some(other), Some(extent)) => other <= extent,
-            (Some(_), None) => true,
-            (None, _) => false,
+        let digest = match other {
+            Some(other) if extent.is_none_or(|extent| other <= extent) => {
+                Integrity::of(part(bytes, 0..other))
+            }
+            _ => Integrity::of(&fetch_prefix(url, other).await?),
         };
-        let part = if covered {
-            let end = other.map_or(bytes.len(), |other| {
-                usize::try_from(other).map_or(bytes.len(), |other| other.min(bytes.len()))
-            });
-            Integrity::of(&bytes[..end])
-        } else {
-            Integrity::of(&fetch_prefix(url, other).await?)
-        };
-        check_digest(url, part, pin, PinnedBy::Lock)?;
+        check_digest(url, digest, pin, PinnedBy::Lock)?;
     }
     Ok(())
 }
@@ -472,18 +450,21 @@ impl RemoteReader {
     }
 
     fn block(&self, index: u64) -> Result<Arc<Vec<u8>>, SourceError> {
-        if let Blocks::Ranged(blocks) = &*lock(&self.blocks)
-            && let Some(block) = blocks.get(&index)
-        {
-            return Ok(Arc::clone(block));
+        if let Some(block) = self.ranged(|blocks| blocks.get(&index).cloned()) {
+            return Ok(block);
         }
         let range = index * BLOCK..(index + 1) * BLOCK;
         let fetched = futures::executor::block_on(get(self.url.clone(), Some(range.clone())))?;
         let block = Arc::new(fetched.into_range(range));
-        if let Blocks::Ranged(blocks) = &mut *lock(&self.blocks) {
-            blocks.insert(index, Arc::clone(&block));
-        }
+        self.ranged(|blocks| blocks.insert(index, Arc::clone(&block)));
         Ok(block)
+    }
+
+    fn ranged<T>(&self, f: impl FnOnce(&mut IndexMap<u64, Arc<Vec<u8>>>) -> T) -> T {
+        let Blocks::Ranged(blocks) = &mut *lock(&self.blocks) else {
+            unreachable!("only a server honoring `Range` is read by block");
+        };
+        f(blocks)
     }
 
     /// Read `rest` on until `bytes` hold `upto` bytes or the body ends.
@@ -520,8 +501,7 @@ impl SourceReader for RemoteReader {
             {
                 *rest = self.read_on(response, bytes, end)?;
             }
-            let clamp = |at: u64| usize::try_from(at).map_or(bytes.len(), |at| at.min(bytes.len()));
-            let part = &bytes[clamp(start)..clamp(end)];
+            let part = part(bytes, start..end);
             buf[..part.len()].copy_from_slice(part);
             return Ok(part.len());
         }

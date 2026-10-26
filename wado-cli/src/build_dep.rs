@@ -204,7 +204,7 @@ mod tests {
     fn locked_generator_versions_reads_build_dependency_section() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
-            dir.path().join("wado.lock"),
+            dir.path().join(LOCK_FILENAME),
             "version = 1\ndeps-hash = \"sha256:x\"\n\n\
              [[build-dependency]]\n\
              id = \"registry+oci://ghcr.io/wado-lang:gale\"\n\
