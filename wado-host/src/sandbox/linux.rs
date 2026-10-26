@@ -9,7 +9,10 @@
 //! The filter refers each call it refuses to the host through a seccomp
 //! listener, which the child passes back over a socket pair before its `exec`.
 //! A thread records the call as a [`Refusal`] and answers `EPERM`, so the child
-//! sees what a plain `SECCOMP_RET_ERRNO` would have given it.
+//! sees what a plain `SECCOMP_RET_ERRNO` would have given it. Under
+//! [`Trace::Files`] the filter also refers each call Landlock mediates; the
+//! thread checks its paths against the policy and lets it continue, so Landlock
+//! still decides.
 
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};

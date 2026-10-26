@@ -268,22 +268,26 @@ pub enum Refusal {
 
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
+        match self {
             Refusal::Path {
                 path,
                 access: Access::ReadExecute,
-            } => return write!(f, "reading {}", path.display()),
+            } => write!(f, "reading {}", path.display()),
             Refusal::Path {
                 path,
                 access: Access::ReadWrite,
-            } => return write!(f, "writing {}", path.display()),
-            Refusal::Network => "a network socket, with no network granted",
-            Refusal::UnixSocket => "a UNIX socket, which can reach a service outside the sandbox",
-            Refusal::LeaveGroup => "leaving its process group",
-            Refusal::Trace => "tracing another process",
-            Refusal::IoUring => "io_uring, whose operations the sandbox cannot inspect",
-            Refusal::TerminalInput => "typing into a terminal",
-        })
+            } => write!(f, "writing {}", path.display()),
+            Refusal::Network => f.write_str("a network socket, with no network granted"),
+            Refusal::UnixSocket => {
+                f.write_str("a UNIX socket, which can reach a service outside the sandbox")
+            }
+            Refusal::LeaveGroup => f.write_str("leaving its process group"),
+            Refusal::Trace => f.write_str("tracing another process"),
+            Refusal::IoUring => {
+                f.write_str("io_uring, whose operations the sandbox cannot inspect")
+            }
+            Refusal::TerminalInput => f.write_str("typing into a terminal"),
+        }
     }
 }
 
