@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793006275720,
+  "lastUpdate": 1793007421796,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71205,6 +71205,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5afcade77bea39f9085d13ed13128372cfc21bca"
         },
         "date": 1793006275236,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21813,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295362,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bca8aec3b4e927c5fa15333eb68a5e90aeaa2850",
+          "message": "Merge pull request #2464 from wado-lang/claude/peaceful-volta-u08hot\n\nfeat(eddy): start Eddy, a code review bot in Wado, with its design and research",
+          "timestamp": "2026-10-26T18:14:47+09:00",
+          "tree_id": "d3a5b712cdc871756b26c50ad1701eaad0ea28fc",
+          "url": "https://github.com/wado-lang/wado/commit/bca8aec3b4e927c5fa15333eb68a5e90aeaa2850"
+        },
+        "date": 1793007420690,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
