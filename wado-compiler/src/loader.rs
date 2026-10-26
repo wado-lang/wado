@@ -1823,8 +1823,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Check the remote `url` a `use` names, and keep the pin it writes for the
-    /// read.
+    /// Check the remote `url` a `use` names, and keep the pin it writes for
+    /// [`Self::check_remote_pins`].
     fn note_remote(
         &mut self,
         url: &str,
@@ -2041,8 +2041,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths
-    /// (`core:libm.wat`, etc.) hit `stdlib::get_stdlib_wasm_asset`; user
-    /// paths (`./foo.wat`) hit `host.load_source`.
+    /// (`core:libm.wat`, etc.) hit `stdlib::get_stdlib_wasm_asset`, a URL
+    /// [`Self::load_pinned`], and other user paths (`./foo.wat`)
+    /// `host.load_source`.
     async fn fetch_wasm_asset_bytes(
         &mut self,
         source: &ModuleSource,

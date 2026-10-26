@@ -162,15 +162,6 @@ impl LockFile {
 
         out
     }
-
-    /// The pin `wado.lock` holds for the first `extent` bytes of `url`.
-    #[must_use]
-    pub fn remote_pin(&self, url: &str, extent: Option<u64>) -> Option<&str> {
-        self.remotes
-            .iter()
-            .find(|r| r.url == url && r.extent == extent)
-            .map(|r| r.integrity.as_str())
-    }
 }
 
 fn write_locked_package(out: &mut String, pkg: &LockedPackage, header: &str) {
@@ -579,10 +570,15 @@ integrity = "sha256:bb"
 "#;
         let lock: LockFile = text.parse().unwrap();
         let reparsed: LockFile = lock.to_toml().parse().unwrap();
-        assert_eq!(reparsed.remotes.len(), 2);
+        let entries: Vec<_> = reparsed
+            .remotes
+            .iter()
+            .map(|r| (r.url.as_str(), r.extent, r.integrity.as_str()))
+            .collect();
         let url = "https://example.com/m.onnx";
-        assert_eq!(reparsed.remote_pin(url, Some(4096)), Some("sha256:aa"));
-        assert_eq!(reparsed.remote_pin(url, None), Some("sha256:bb"));
-        assert_eq!(reparsed.remote_pin(url, Some(1)), None);
+        assert_eq!(
+            entries,
+            [(url, None, "sha256:bb"), (url, Some(4096), "sha256:aa")]
+        );
     }
 }

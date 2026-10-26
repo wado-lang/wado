@@ -643,7 +643,9 @@ integrity = "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a9
 | `extent`    | a part of a Kiln input | How many leading bytes the digest covers                       |
 | `integrity` | every entry            | The digest of those bytes; with no `extent`, of the whole file |
 
-One URL may have several entries, one per extent read. Entries are sorted by
+One URL may have several entries, one per extent read. A read of a new extent
+is held to the entries the URL already has, since a probe's extent is decided by
+the bytes inside it: content that moved it has changed. Entries are sorted by
 `url`, then by `extent`. `wado update` drops them, so the next build records
 what it reads. That is how a package accepts new content at a URL.
 
