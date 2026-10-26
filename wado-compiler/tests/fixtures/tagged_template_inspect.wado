@@ -47,6 +47,16 @@ test "an affine hole is inspected in place" {
     assert inspected`c=${c:?}` == "`c=${Counter { n: 1 }:?}`";
 }
 
+fn inspected_padded<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:>4?}`;
+}
+
+test "a width pads each hole, not the template" {
+    let n = 1;
+    let s = "a";
+    assert inspected_padded`n=${n}, s=${s}` == "`n=${   1}, s=${\"a\"}`";
+}
+
 fn inspected_generic<X: Inspect>(x: X) -> String {
     return inspected`x=${x:?}`;
 }

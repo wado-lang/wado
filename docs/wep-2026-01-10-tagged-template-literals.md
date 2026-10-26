@@ -191,6 +191,10 @@ too. A struct of the holes was the alternative. It drops the text, and `==`
 compares the text, so a failing `assert` on two values differing only in their
 text would show them alike.
 
+A width in `${t:>4?}` pads each hole's value and leaves the text alone, as a
+list's pads each element. A template value can be a table cell, and Rust's
+`Debug` hands the width to each field in the same way.
+
 ### Desugaring
 
 ```wado
@@ -638,7 +642,7 @@ things the optimizer gains here.
   included.
 - `tagged_template_inspect.wado`: a value inspects as the template it was
   written as, in both forms, through an affine hole and through a hole whose
-  type is a parameter; a hole handle inspects as its fields; and an `assert`
+  type is a parameter; a width pads each hole; a hole handle inspects as its fields; and an `assert`
   captures a template value.
 - `tagged_template_shape_is_its_holes.wado`: two templates differing only in
   their text, or in how a hole is spelled, are one type, each value carrying

@@ -786,7 +786,9 @@ assert `${a:.3?}` == "[1, 2, 3, ...]";
 A container renders its elements with the same spec it was given, so precision
 and width reach every element. A tuple or struct never caps its own arity, but
 its string and sequence fields honour the precision, and `${a:6?}` pads each
-element rather than the whole list.
+element rather than the whole list. A tagged template value is such a container
+for its holes. As in Rust, the `Inspect` of a string or a `char` ignores the
+width, so `${"a":>5?}` renders `"a"`.
 
 ### The Formatter
 
