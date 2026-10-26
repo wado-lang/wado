@@ -188,6 +188,11 @@ the `&mut` rule above forbids. Either is met only by an impl for the refined
 type itself, which is how the compiler's `Deserialize`, `from` and `try_from`
 reach it.
 
+An impl that applies to the refined type itself, a blanket bounded on
+`ReflectRefined` included, wins over its base's, as an impl for a newtype wins
+over the one it inherits. That is how Jade's schema for a refined type adds its
+keywords to the base's.
+
 The base's impl is used as written, with nothing substituted. `Age: Add` has
 `i32` as its `Output`, so `fn twice<T: Add<Output = T>>(a: T) -> T` rejects an
 `Age` without a rule of its own.
@@ -322,6 +327,14 @@ xs.clear();                                      // and now it does not
 A function value may read state it captured, so a clause calling one has the
 same problem. A resource does too, since its state lives in the host, and so a
 resource is never refined (see [What can be refined](#what-can-be-refined)).
+
+### A default for an inline refined field
+
+A field default is an expression, and the three forms that enter a refined type
+give no expression for an inline one: `from` and `try_from` need a name, and a
+type pattern is not an expression. `bio: String contract Length { max: 200 } = ""`
+is a narrowing the rules refuse, so such a field takes no default unless its
+type is named by a newtype.
 
 ### What makes two clauses the same
 

@@ -213,10 +213,10 @@ without bound. They are not reflectable, by the same seal that rejects a user
 `impl`.
 
 A member carries no validation. A value's permitted range is a fact about the
-field's _type_, not about the field, so it is declared once on that type through
-Jade's `Constrained` and read from there by a boundary and a schema alike (see
-[Jade](./wep-2026-06-13-jade.md#constrained)). Reflection stays
-what the compiler alone can answer: a type's structure.
+field's _type_, not about the field, so it is declared once as a
+[refined type](./wep-2026-10-25-refined-types.md), whose `ReflectRefined`
+clauses a boundary and a schema read alike. A member reports its type and
+nothing about the range.
 
 ## Type identity
 
@@ -238,8 +238,8 @@ Identity sits on the root rather than on each kind. A kind bound gates a name
 behind [Visibility](#visibility), so a type whose fields are private
 (`TreeMap<String,i32>`) could not be named by the library that must key it; and
 it would force a derivation to widen its bound to a kind just to name its
-subject, which a schema library's `impl<T: Constrained + Reflect> JsonSchema for T` cannot do — a constrained type may be a newtype or a struct wrapper, and
-`Reflect` admits both.
+subject, which a schema library's blanket over one kind cannot do: its key
+must name the type whatever kind answers for it.
 
 `type_name()` sits beside `type_info()` on the root: the allocation-free
 shorthand serde's `begin_struct` calls, answering the declaration name
@@ -280,7 +280,7 @@ register — the shorthand that drops the quotes where unambiguous — has no
 consumer yet, and `canonical_name()` serves the machine one.
 
 It carries no base type. A newtype's base is `ReflectNewtype::Base` and a
-constrained type's is `Constrained::Base`; a third spelling on `TypeInfo` would
+refined type's is `ReflectRefined::Base`; a third spelling on `TypeInfo` would
 answer the same question twice. `TypeInfo` names a type; it does not open one.
 
 ## Building a struct from a streaming format
