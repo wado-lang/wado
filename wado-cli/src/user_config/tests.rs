@@ -18,7 +18,7 @@ fn reads_the_root_and_the_process_read_paths() {
 fn an_empty_file_sets_nothing() {
     let config = parse(Path::new("config.toml"), "# empty\n").unwrap();
     assert_eq!(config.root, None);
-    assert!(config.process_read.is_empty());
+    assert!(config.process_read.is_empty(), "{:?}", config.process_read);
 }
 
 #[test]

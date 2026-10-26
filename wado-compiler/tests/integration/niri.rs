@@ -1426,7 +1426,8 @@ fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
     let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
         panic!("expected an empty block, got {:?}", body.exprs[e].kind);
     };
-    assert!(body.blocks[blk].stmts.is_empty());
+    let stmts = &body.blocks[blk].stmts;
+    assert!(stmts.is_empty(), "{stmts:?}");
 }
 
 #[test]
@@ -1608,7 +1609,8 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
         span: Span::default(),
     });
     assert!(interp.reduce_local_block_in_body(&mut body, block));
-    assert!(body.blocks[block].stmts.is_empty());
+    let stmts = &body.blocks[block].stmts;
+    assert!(stmts.is_empty(), "{stmts:?}");
 }
 
 #[test]

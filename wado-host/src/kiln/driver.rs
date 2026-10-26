@@ -2230,7 +2230,7 @@ mod tests {
             let tmp = tempfile::tempdir().unwrap();
             let deleted =
                 reconcile_outputs(tmp.path(), &tmp.path().join("no-such-dir"), &[]).unwrap();
-            assert!(deleted.is_empty());
+            assert!(deleted.is_empty(), "{deleted:?}");
         }
 
         #[test]

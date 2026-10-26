@@ -8037,7 +8037,7 @@ mod tests {
             assert_eq!(func.name, "run");
             assert!(func.params.is_empty());
             assert!(func.return_type.is_none());
-            assert!(func.effects.is_empty());
+            assert!(func.effects.is_empty(), "{:?}", func.effects);
         } else {
             panic!("expected function");
         }

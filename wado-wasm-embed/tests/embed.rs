@@ -139,7 +139,8 @@ fn keeps_what_a_kept_export_calls() {
 #[test]
 fn drops_everything_when_no_export_is_kept() {
     let pruned = prune(CALL_CHAIN, &[]);
-    assert!(exports(&pruned).is_empty());
+    let kept = exports(&pruned);
+    assert!(kept.is_empty(), "{kept:?}");
     assert_eq!(function_count(&pruned), 0);
     assert!(memory_import(&pruned).is_some(), "the memory import stays");
 }
@@ -367,7 +368,8 @@ fn only_the_custom_sections_that_stay_true_survive() {
 #[test]
 fn stripping_drops_every_custom_section() {
     let pruned = prune_with(WITH_CUSTOM_SECTIONS, &["live"], true);
-    assert!(custom_sections(&pruned).is_empty());
+    let sections = custom_sections(&pruned);
+    assert!(sections.is_empty(), "{sections:?}");
 }
 
 /// `ref.func` needs its target declared, and an export is a declaration. When
