@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792969929712,
+  "lastUpdate": 1792974778097,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71029,6 +71029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fe39caccd7be039ed9bcfe33b2965eb07209d7cc"
         },
         "date": 1792969929220,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73611c2bfc0ed5050b73c93222f1400df359b76b",
+          "message": "Merge pull request #2461 from wado-lang/loam-inferred-axis-names\n\nfeat(loam)!: name every axis from the graph, with no layout option",
+          "timestamp": "2026-10-26T09:19:58+09:00",
+          "tree_id": "5bac3b3a3f0d1f8c65dbfdcbc2625bed7ee53bf5",
+          "url": "https://github.com/wado-lang/wado/commit/73611c2bfc0ed5050b73c93222f1400df359b76b"
+        },
+        "date": 1792974777373,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
