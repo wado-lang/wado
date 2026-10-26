@@ -1203,6 +1203,11 @@ impl FileCoverage {
         self.counts.get(&region).copied().unwrap_or(0)
     }
 
+    #[must_use]
+    pub fn ran(&self, region: u32) -> bool {
+        self.counts.contains_key(&region)
+    }
+
     /// Each countable line and how often the busiest statement on it ran.
     #[must_use]
     pub fn lines(&self) -> BTreeMap<u32, i64> {

@@ -292,10 +292,11 @@ fn uncovered_regions(coverage: &Coverage) -> Uncovered {
                 body, function.region,
                 "a function's body is its first region"
             );
-            let ran = regions.iter().enumerate().map(|(n, (id, region))| {
-                (format!("{} {n}", region.kind.label()), file.count(*id) > 0)
-            });
-            let missed: Vec<String> = if file.count(body) > 0 {
+            let ran = regions
+                .iter()
+                .enumerate()
+                .map(|(n, (id, region))| (format!("{} {n}", region.kind.label()), file.ran(*id)));
+            let missed: Vec<String> = if file.ran(body) {
                 ran.filter(|(_, hit)| !hit)
                     .map(|(label, _)| label)
                     .collect()
@@ -458,7 +459,7 @@ fn to_json(coverage: &Coverage) -> String {
                         "function": file.plan.functions[region.function as usize].name,
                         "start": [region.start.line, region.start.column],
                         "end": [region.end.line, region.end.column],
-                        "covered": file.count(index) > 0,
+                        "covered": file.ran(index),
                         "count": file.count(index),
                         "tests": tests,
                     })

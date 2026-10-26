@@ -11,10 +11,9 @@
 //! - `zlib_cross_inflate.wado`: inflate/decompress operations
 
 use crate::common::{
-    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file, install_default_crypto_provider,
-    limit_store, report_fuel_used, runtime,
+    CoverageReports, TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file,
+    install_default_crypto_provider, limit_store, report_fuel_used, runtime,
 };
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::OnceLock;
 use wasmtime::Store;
@@ -69,7 +68,7 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             http_ctx: wasmtime_wasi_http::WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
-            coverage_hits: BTreeSet::default(),
+            coverage: CoverageReports::default(),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement.

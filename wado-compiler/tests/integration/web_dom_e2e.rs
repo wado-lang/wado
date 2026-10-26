@@ -1,7 +1,6 @@
 //! A two-level `extends` program run against a host implementing the `wado-lang:web`
 //! imports. See `docs/wep-2026-04-28-resource-inheritance.md`.
 
-use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::ast::HandleClasses;
@@ -14,8 +13,8 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi_http::WasiHttpCtx;
 
 use crate::common::{
-    self, DEFAULT_TIMEOUT_MS, TestHttpCtx, WasiState, build_tls_ctx, compile_against_web, engine,
-    limit_store, runtime,
+    self, CoverageReports, DEFAULT_TIMEOUT_MS, TestHttpCtx, WasiState, build_tls_ctx,
+    compile_against_web, engine, limit_store, runtime,
 };
 
 /// `Element` is two `extends` links below `EventTarget`, so `dispatch_event`
@@ -323,7 +322,7 @@ fn run_against_stub(program: &str) -> DomObjects {
                     mocks: indexmap::IndexMap::default(),
                 },
                 tls_ctx: build_tls_ctx(indexmap::IndexMap::default()),
-                coverage_hits: BTreeSet::default(),
+                coverage: CoverageReports::default(),
             };
             let mut store = Store::new(engine, state);
             limit_store(&mut store, DEFAULT_TIMEOUT_MS);

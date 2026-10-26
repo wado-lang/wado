@@ -717,11 +717,25 @@ pub struct WasiState {
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
     pub tls_ctx: WasiTlsCtx,
-    /// The coverage regions the guest reported, under `CompilerOptions::coverage`.
-    pub coverage_hits: BTreeSet<u32>,
+    /// What the guest reported under `CompilerOptions::coverage`.
+    pub coverage: CoverageReports,
+}
+
+/// What one store's guest reported through `core:coverage`, by global id.
+#[derive(Default)]
+pub struct CoverageReports {
+    /// Each region as it first ran.
+    hits: BTreeSet<u32>,
     /// The runs of each region that ran more than once, reported when a test
     /// returned.
-    pub coverage_repeated: BTreeMap<u32, i64>,
+    repeated: BTreeMap<u32, i64>,
+}
+
+impl CoverageReports {
+    /// The runs of each region the test counted.
+    pub fn counts(&self) -> BTreeMap<u32, i64> {
+        test_counts(&self.hits, &self.repeated)
+    }
 }
 
 impl WasiView for WasiState {
@@ -765,8 +779,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: BTreeSet::new(),
-            coverage_repeated: BTreeMap::new(),
+            coverage: CoverageReports::default(),
         }
     }
 
@@ -779,8 +792,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: BTreeSet::new(),
-            coverage_repeated: BTreeMap::new(),
+            coverage: CoverageReports::default(),
         }
     }
 }
@@ -805,12 +817,12 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut coverage = root.instance("core:coverage/coverage-host@0.1.0")?;
     coverage.func_wrap("hit", |mut store, (id,): (u32,)| {
         let state: &mut WasiState = store.data_mut();
-        state.coverage_hits.insert(id);
+        state.coverage.hits.insert(id);
         Ok(())
     })?;
     coverage.func_wrap("count", |mut store, (id, runs): (u32, i64)| {
         let state: &mut WasiState = store.data_mut();
-        state.coverage_repeated.insert(id, runs);
+        state.coverage.repeated.insert(id, runs);
         Ok(())
     })?;
     Ok(linker)
@@ -1342,8 +1354,7 @@ pub fn run_wasm_with_full_options(
                 mocks: outgoing_mocks,
             },
             tls_ctx: build_tls_ctx(tls_mocks),
-            coverage_hits: BTreeSet::new(),
-            coverage_repeated: BTreeMap::new(),
+            coverage: CoverageReports::default(),
         };
         let mut store = Store::new(engine, state);
         limit_store(&mut store, DEFAULT_TIMEOUT_MS);
@@ -1519,8 +1530,7 @@ pub fn run_test_world(
                 }
             }
 
-            let state = store.data();
-            coverage_counts.push(test_counts(&state.coverage_hits, &state.coverage_repeated));
+            coverage_counts.push(store.data().coverage.counts());
             all_stdout.push_str(&String::from_utf8_lossy(&stdout_clone.contents()));
             all_stderr.push_str(&String::from_utf8_lossy(&stderr_clone.contents()));
         }

@@ -17,7 +17,7 @@ use bytes::Bytes;
 use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -676,8 +676,7 @@ async fn run_http_request_async(
             mocks: outgoing_mocks,
         },
         tls_ctx: common::build_tls_ctx(tls_mocks),
-        coverage_hits: BTreeSet::new(),
-        coverage_repeated: BTreeMap::new(),
+        coverage: common::CoverageReports::default(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)

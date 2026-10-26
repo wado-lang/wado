@@ -202,9 +202,9 @@ internal fn coverage_probe(id: i32) {
     CoverageHost::hit(id as u32);
 }
 
-/// Tells the host how often each region that ran more than once ran; the
-/// first-hit report already counts one. A test under `wado test --coverage`
-/// calls it once its body returns.
+/// Reports each region that ran more than once, with its runs; the first-hit
+/// report already counts one. A test under `wado test --coverage` calls it once
+/// its body returns.
 // Reads the array with builtins alone: a measured prelude call made here would
 // run after its region's count was read.
 #[compiler_item("coverage_report")]
