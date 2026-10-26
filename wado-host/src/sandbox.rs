@@ -114,6 +114,19 @@ impl Policy {
         self.grant_path("/dev/tty", Access::ReadWrite);
     }
 
+    /// Whether a child may execute `program`: what it resolves to lies beneath
+    /// a rule, as the sandbox resolves both. Every rule grants execute.
+    #[must_use]
+    pub fn executes(&self, program: &Path) -> bool {
+        let Ok(program) = std::fs::canonicalize(program) else {
+            return false;
+        };
+        self.rules
+            .iter()
+            .filter_map(|rule| std::fs::canonicalize(&rule.path).ok())
+            .any(|root| program.starts_with(root))
+    }
+
     #[must_use]
     pub fn rules(&self) -> &[Rule] {
         &self.rules

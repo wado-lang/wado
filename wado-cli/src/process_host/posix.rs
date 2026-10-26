@@ -28,11 +28,12 @@ use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
 use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
+use wado_host::sync::lock;
 
 use super::types::{ExitStatus, Input, Output};
-use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned};
+use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
 use crate::external::find_program;
-use crate::user_config::user_config;
+use crate::user_config::{config_path, user_config};
 
 /// How long a child has between `SIGTERM` at its timeout and `SIGKILL`.
 const TIMEOUT_GRACE: Duration = Duration::from_secs(3);
@@ -186,7 +187,7 @@ fn start(
             Some(cwd) => cwd,
             None => Arc::new(File::open(scratch.home())?),
         };
-        let program = resolve(program, &cwd)?;
+        let path = resolve(program, &cwd)?;
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
@@ -198,9 +199,12 @@ fn start(
         if inherits {
             policy.grant_terminal();
         }
+        if path.exists() && !policy.executes(&path) {
+            view.ctx.spawning.warn_refused(program, &path);
+        }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
-            program: &program,
+            program: &path,
             args: &args,
             env: &child_env(env, &scratch, inherits),
             cwd: Some(&cwd),
@@ -220,6 +224,29 @@ fn start(
         }),
         Err(err) => Err(error_code(&err)),
     })
+}
+
+impl Spawning {
+    /// Warn, once per program, that the sandbox refuses to execute `path`,
+    /// which the guest named `program`.
+    fn warn_refused(&self, program: &str, path: &Path) {
+        if lock(&self.0.refused).insert(path.to_path_buf()) {
+            eprintln!("{}", refused_warning(program, path));
+        }
+    }
+}
+
+fn refused_warning(program: &str, path: &Path) -> String {
+    let dir = path.parent().expect("a resolved program is absolute").display();
+    let config = config_path().map_or_else(
+        || "the user config".to_owned(),
+        |config| config.display().to_string(),
+    );
+    format!(
+        "warning: core:process: `{program}` is {}, outside the guest's grants and the system baseline\n\
+         help: let a child run it with `--process-read {dir}`, or with `read` under `[process]` in {config}",
+        path.display()
+    )
 }
 
 /// A child's private `HOME` and `TMPDIR`, removed once it exits.

@@ -3,9 +3,11 @@
 //!
 //! See WEP 2026-10-21 (`core:process`).
 
+use std::collections::HashSet;
+use std::fmt;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use wasmtime::component::{Access, HasData, Resource, ResourceTable};
@@ -44,12 +46,38 @@ use self::core::process::types::{self, Availability, Command, ErrorCode, Spawned
 /// Whether a host offers spawning, settled once when it starts, and the grants
 /// a child receives where it does.
 #[derive(Clone)]
-pub struct Spawning(Arc<Answer>);
+pub struct Spawning(Arc<Shared>);
+
+struct Shared {
+    answer: Answer,
+    /// The programs a refusal was already reported for, so a guest that
+    /// retries one warns once.
+    refused: Mutex<HashSet<PathBuf>>,
+}
 
 enum Answer {
     Available(Grants),
-    Denied(String),
-    Unsupported(String),
+    Denied(Unavailable),
+    Unsupported(Unavailable),
+}
+
+/// Why spawning is not offered, and what would offer it where something can.
+struct Unavailable {
+    reason: String,
+    fix: Option<String>,
+}
+
+impl fmt::Display for Unavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "core:process is unavailable: {}", self.reason)?;
+        if let Some(fix) = &self.fix {
+            write!(f, "\nhelp: {fix}")?;
+        }
+        write!(
+            f,
+            "\nhelp: a guest that can do without spawning asks `availability()` first"
+        )
+    }
 }
 
 /// What a child may reach beyond the baseline.
@@ -83,18 +111,22 @@ impl Spawning {
     ///
     /// Returns an error if a granted directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<Self> {
-        Ok(Self(Arc::new(answer(preopened_dirs, grant)?)))
+        Ok(Self(Arc::new(Shared {
+            answer: answer(preopened_dirs, grant)?,
+            refused: Mutex::default(),
+        })))
     }
 }
 
 fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<Answer> {
     let ProcessGrant::Offered { read } = grant else {
-        return Ok(Answer::Denied(
-            "spawning is turned off by --deny-process".to_owned(),
-        ));
+        return Ok(Answer::Denied(Unavailable {
+            reason: "spawning is turned off by --deny-process".to_owned(),
+            fix: Some("run without `--deny-process`".to_owned()),
+        }));
     };
     if let Some(reason) = unsupported_reason() {
-        return Ok(Answer::Unsupported(reason));
+        return Ok(Answer::Unsupported(Unavailable { reason, fix: None }));
     }
     let mut dirs = Vec::with_capacity(preopened_dirs.len());
     for (index, (host, guest)) in preopened_dirs.iter().enumerate() {
@@ -102,10 +134,16 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
         // The child starts in the first grant, so there `.` names it on both
         // sides; anywhere else `.` names another directory than the child's.
         if !(index == 0 && guest == ".") && Path::new(guest) != path {
-            return Ok(Answer::Denied(format!(
-                "the guest directory `{guest}` is the host directory `{}`, so a path in a child's arguments would name another file",
-                path.display()
-            )));
+            return Ok(Answer::Denied(Unavailable {
+                reason: format!(
+                    "the guest directory `{guest}` is the host directory `{}`, so a path in a child's arguments would name another file",
+                    path.display()
+                ),
+                fix: Some(format!(
+                    "grant it at its own path: `--dir {}`",
+                    path.display()
+                )),
+            }));
         }
         let dir = Arc::new(File::open(&path)?);
         dirs.push(Grant { path, dir });
@@ -156,11 +194,11 @@ impl ProcessCtx {
     /// The grants a child receives. Traps where spawning is not offered: the
     /// interface requires the guest to ask `get-availability` first.
     fn grants(&self) -> wasmtime::Result<&Grants> {
-        match &*self.spawning.0 {
+        match &self.spawning.0.answer {
             Answer::Available(grants) => Ok(grants),
-            Answer::Denied(reason) | Answer::Unsupported(reason) => Err(wasmtime::format_err!(
-                "core:process is unavailable: {reason}"
-            )),
+            Answer::Denied(unavailable) | Answer::Unsupported(unavailable) => {
+                Err(wasmtime::format_err!("{unavailable}"))
+            }
         }
     }
 }
@@ -197,7 +235,7 @@ impl types::HostChild for ProcessView<'_> {
 
 impl process::Host for ProcessView<'_> {
     fn get_availability(&mut self) -> wasmtime::Result<Availability> {
-        Ok(match &*self.ctx.spawning.0 {
+        Ok(match &self.ctx.spawning.0.answer {
             Answer::Available(_) => Availability::Available,
             Answer::Denied(_) => Availability::Denied,
             Answer::Unsupported(_) => Availability::Unsupported,

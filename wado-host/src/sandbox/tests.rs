@@ -514,6 +514,21 @@ fn a_program_outside_the_grants_never_runs() {
 }
 
 #[test]
+fn the_policy_answers_what_the_sandbox_executes() {
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    let granted = write_script(&tree.granted());
+    let outside = write_script(&tree.outside());
+    let linked = tree.granted().join("linked");
+    symlink(&outside, &linked).unwrap();
+    assert!(policy.executes(&granted));
+    assert!(policy.executes(Path::new("/bin/sh")));
+    assert!(!policy.executes(&outside));
+    // The sandbox follows the link to what it names.
+    assert!(!policy.executes(&linked));
+}
+
+#[test]
 fn a_grant_confines_to_exactly_its_path_whatever_it_holds() {
     assert_available();
     let root = tempfile::tempdir().unwrap();
