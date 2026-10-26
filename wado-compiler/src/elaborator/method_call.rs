@@ -2482,11 +2482,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The blanket's own declaration of the method: its bucket is keyed by
         // the receiver *param*, which no name written at a call site reaches.
         let method_def = self.tysys.declared_method(blanket_def, method);
+        // Conformance refuses an unavailable blanket member, so the edge alone.
         if let Some(use_id) = method_id
             && let Some(def) = method_def
-            && self.record_reference_to_decl(use_id, def, span)
         {
-            return Some(TypeTable::ERROR);
+            let node = self.tysys.resolutions.defs().ast_id(def);
+            self.record_reference_to_def(use_id, node);
         }
         // Its defaults come from the template's own signature: no receiver-keyed
         // lookup reaches a blanket, so the call site brings none.
