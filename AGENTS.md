@@ -149,6 +149,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
+- `package-eddy/` - A code review bot in Wado, on the Anthropic API for now; later, models of several providers review a change by exchanging opinions. Its docs and research live in this repository.
 - `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-html` - A syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
 - `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.

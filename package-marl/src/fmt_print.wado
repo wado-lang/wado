@@ -28,6 +28,7 @@ use {
 } from "./fmt_ast.wado";
 use { display_width } from "./unicode_width.wado";
 use { interrupts_paragraph } from "./fmt_parse_block.wado";
+use { fits_bare_dest } from "./fmt_links.wado";
 
 internal fn print_document(doc: &Node) -> String {
     let children = match doc {
@@ -157,13 +158,41 @@ fn print_link_ref_def(def: &LinkReferenceDef, out: &mut String) {
     out.push('[');
     out.push_str(&def.label);
     out.push_str("]: ");
-    out.push_str(&def.url);
-    if def.title.len() > 0 {
-        out.push_str(" \"");
-        out.push_str(&def.title);
-        out.push('"');
-    }
+    print_dest(&def.url, &def.title, out);
 }
+
+/// Prints a destination and title so they parse back as the same pair: a
+/// destination a bare run cannot hold goes in `<...>`, and the title goes in
+/// `"..."` with any unescaped `"` escaped, whichever delimiter it was written
+/// with.
+fn print_dest<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {
+    // An empty bare destination would hand the title the destination's place.
+    if !fits_bare_dest(&url) || url.len() == 0 && title.len() > 0 {
+        out.push('<');
+        out.push_str(url);
+        out.push('>');
+    } else {
+        out.push_str(url);
+    }
+    if title.len() == 0 {
+        return;
+    }
+    out.push_str(" \"");
+    let chars = title.to_chars();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            out.push(chars[i]);
+            i += 1;
+        } else if chars[i] == '"' {
+            out.push('\\');
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out.push('"');
+}
+
 
 // --- fenced and indented code ---
 
@@ -449,12 +478,7 @@ fn print_code_span<S: AsStrSlice>(s: S, out: &mut String) {
 
 fn print_dest_and_title<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {
     out.push_str("(");
-    out.push_str(url);
-    if title.len() > 0 {
-        out.push_str(" \"");
-        out.push_str(title);
-        out.push('"');
-    }
+    print_dest(url, title, out);
     out.push(')');
 }
 
