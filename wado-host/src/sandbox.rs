@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::sync::lock;
 
+#[cfg(unix)]
+mod exec;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -162,6 +164,17 @@ impl ResolvedPolicy {
             .any(|(root, granted)| path.starts_with(root) && *granted >= access)
     }
 
+    /// The first interpreter `exec` of `program`, a real path the policy lets
+    /// the child execute, opens that it does not: Landlock refuses the `exec`
+    /// there, whose program was granted.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn refused_interpreter(&self, program: &Path) -> Option<PathBuf> {
+        exec::interpreters(program)
+            .into_iter()
+            .find(|interpreter| !self.permits(interpreter, Access::ReadExecute))
+    }
+
     /// What Linux grants the child `pid` beyond its policy: its own `/proc`
     /// entry.
     #[cfg(target_os = "linux")]
@@ -269,21 +282,23 @@ pub struct Spawned {
 /// What the sandbox refused a child. Linux alone reports one.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Refusal {
-    /// A path, at its real path, whose call asks `access` where the policy
-    /// grants it not: of the file an open names, of the directory holding an
-    /// entry made, removed or moved. Seen under [`Trace::Files`]. Landlock
-    /// refuses the call, which the child sees fail with `EACCES`.
+    /// A path a call names, at its real path, asking `access` the policy does
+    /// not grant. `dir` is the directory a grant must cover: the one holding
+    /// the file opened or the entry made, removed or moved, or the directory
+    /// opened itself. Seen under [`Trace::Files`]. Landlock refuses the call,
+    /// which the child sees fail with `EACCES`.
     Path {
         path: PathBuf,
+        dir: PathBuf,
         access: Access,
     },
-    /// A path in a process's `/proc` entry, which the child alone is granted
-    /// of its own, seen under [`Trace::Files`]. Named without the pid, which no
-    /// grant can name ahead of the process.
-    ProcessEntry,
-    /// A file call whose path the host may not read, under [`Trace::Files`],
-    /// so whether Landlock refused it goes unsaid.
-    Unseen,
+    /// A path in a process's `/proc` entry: of another process, or one the
+    /// child writes, its own being granted for reading alone. Seen under
+    /// [`Trace::Files`], and named without the pid, which no grant can name
+    /// ahead of the process.
+    ProcessEntry {
+        access: Access,
+    },
     // The rest are calls the filter refuses, which the child sees fail with
     // `EPERM`.
     /// A socket, with the network not granted.
@@ -305,19 +320,19 @@ impl fmt::Display for Refusal {
             Refusal::Path {
                 path,
                 access: Access::ReadExecute,
+                ..
             } => write!(f, "reading {}", path.display()),
             Refusal::Path {
                 path,
                 access: Access::ReadWrite,
+                ..
             } => write!(f, "writing {}", path.display()),
-            Refusal::ProcessEntry => f.write_str(
-                "reading a process's /proc entry, which only the child it started may read",
-            ),
-            Refusal::Unseen => f.write_str(
-                "a file call whose path the host may not read (Yama's `ptrace_scope`, or a \
-                 process that made itself non-dumpable), so `--process-trace` cannot say \
-                 whether it was refused",
-            ),
+            Refusal::ProcessEntry {
+                access: Access::ReadExecute,
+            } => f.write_str("reading the /proc entry of a process other than the child"),
+            Refusal::ProcessEntry {
+                access: Access::ReadWrite,
+            } => f.write_str("writing a process's /proc entry, which no grant allows"),
             Refusal::Network => f.write_str("a network socket, with no network granted"),
             Refusal::UnixSocket => {
                 f.write_str("a UNIX socket, which can reach a service outside the sandbox")
@@ -336,17 +351,39 @@ impl fmt::Display for Refusal {
 /// it is recorded, so once [`Child::wait`] returns, the set holds every refusal
 /// the child itself met; a descendant that outlives it may add more.
 #[derive(Clone, Default)]
-pub struct Refusals(Arc<Mutex<BTreeSet<Refusal>>>);
+pub struct Refusals(Arc<Mutex<Seen>>);
+
+#[derive(Default)]
+struct Seen {
+    refused: BTreeSet<Refusal>,
+    /// A file call whose path the host may not read, so whether Landlock
+    /// refused it goes unsaid.
+    unseen: bool,
+}
 
 impl Refusals {
     #[must_use]
     pub fn collect(&self) -> BTreeSet<Refusal> {
-        lock(&self.0).clone()
+        lock(&self.0).refused.clone()
+    }
+
+    /// Why [`Trace::Files`] missed a file call, where it did.
+    #[must_use]
+    pub fn unseen(&self) -> Option<&'static str> {
+        lock(&self.0).unseen.then_some(
+            "the host may not read the path of a file call (Yama's `ptrace_scope`, or a \
+             process that made itself non-dumpable)",
+        )
     }
 
     #[cfg(target_os = "linux")]
     fn record(&self, refusal: Refusal) {
-        lock(&self.0).insert(refusal);
+        lock(&self.0).refused.insert(refusal);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn record_unseen(&self) {
+        lock(&self.0).unseen = true;
     }
 }
 

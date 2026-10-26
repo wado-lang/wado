@@ -1,9 +1,11 @@
 #[cfg(unix)]
 use std::collections::BTreeSet;
-
 #[cfg(unix)]
-use wado_host::sandbox::Refusal;
+use std::path::PathBuf;
+
 use wado_host::sandbox::Trace;
+#[cfg(unix)]
+use wado_host::sandbox::{Access as Reach, Refusal};
 
 #[cfg(unix)]
 use super::posix::refusals_warning;
@@ -58,4 +60,18 @@ fn a_timed_out_child_reports_what_the_sandbox_refused_it() {
         warning
             .is_some_and(|warning| warning.contains("`job` timed out after the sandbox refused"))
     );
+}
+
+/// A write is granted on the directory the sandbox judged, which an
+/// `O_TMPFILE` open names itself, the root included.
+#[cfg(unix)]
+#[test]
+fn a_refused_write_is_granted_on_the_directory_judged() {
+    let refusals = BTreeSet::from([Refusal::Path {
+        path: PathBuf::from("/"),
+        dir: PathBuf::from("/"),
+        access: Reach::ReadWrite,
+    }]);
+    let warning = refusals_warning("job", &ExitStatus::Exited(1), &refusals, Trace::Off).unwrap();
+    assert!(warning.contains("with `--dir /`"), "{warning}");
 }

@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::{
-    Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Spawned, Stdio, Trace,
-    availability, spawn,
+    Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Refusals, Spawned, Stdio,
+    Trace, availability, spawn,
 };
 
 const PROBE_VAR: &str = "WADO_SANDBOX_PROBE";
@@ -125,12 +125,15 @@ fn blind() {
         return;
     }
     let tree = Tree::new();
-    let (_, refused) = probe_refused(
+    let (status, refusals) = probe_reported(
         tree.policy(Network::Denied),
         Trace::Files,
         "undumpable:/etc/passwd",
     );
-    assert!(refused.contains(&Refusal::Unseen), "{refused:?}");
+    assert_eq!(status, OK);
+    // Nothing was refused: the trace only could not see.
+    assert_eq!(refusals.collect(), BTreeSet::new());
+    assert!(refusals.unseen().is_some());
 }
 
 /// Not a test of its own: the half of the test above that runs enclosed.
@@ -267,6 +270,16 @@ fn probe() {
             execveat(fd, "", flags.parse().unwrap())
         }
         #[cfg(target_os = "linux")]
+        "memfd" => {
+            // SAFETY: plain system calls on NUL-terminated paths.
+            unsafe {
+                let fd = libc::memfd_create(c_path("x").as_ptr(), 0);
+                assert!(fd >= 0);
+                let link = c_path(&format!("/proc/self/fd/{fd}"));
+                libc::open(link.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o600)
+            }
+        }
+        #[cfg(target_os = "linux")]
         "undumpable" => {
             // SAFETY: plain system calls on a NUL-terminated path.
             unsafe {
@@ -367,6 +380,17 @@ fn run_refused(
     args: &[&str],
     env: &[(&str, &str)],
 ) -> (ExitStatus, BTreeSet<Refusal>) {
+    let (status, refusals) = run_reported(policy, trace, program, args, env);
+    (status, refusals.collect())
+}
+
+fn run_reported(
+    policy: &Policy,
+    trace: Trace,
+    program: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> (ExitStatus, Refusals) {
     let args: Vec<OsString> = args.iter().map(OsString::from).collect();
     let env: Vec<(OsString, OsString)> = env
         .iter()
@@ -385,7 +409,7 @@ fn run_refused(
     })
     .unwrap();
     let status = spawned.child.wait().unwrap();
-    (status, spawned.refusals.collect())
+    (status, spawned.refusals)
 }
 
 /// `sh -c script` under `policy`, watching its file calls.
@@ -415,10 +439,15 @@ fn probe_under(policy: Policy, act: &str) -> ExitStatus {
     probe_refused(policy, Trace::Off, act).0
 }
 
-fn probe_refused(mut policy: Policy, trace: Trace, act: &str) -> (ExitStatus, BTreeSet<Refusal>) {
+fn probe_refused(policy: Policy, trace: Trace, act: &str) -> (ExitStatus, BTreeSet<Refusal>) {
+    let (status, refusals) = probe_reported(policy, trace, act);
+    (status, refusals.collect())
+}
+
+fn probe_reported(mut policy: Policy, trace: Trace, act: &str) -> (ExitStatus, Refusals) {
     let exe = std::env::current_exe().unwrap();
     policy.grant_path(exe.parent().unwrap(), Access::ReadExecute);
-    run_refused(
+    run_reported(
         &policy,
         trace,
         &exe,
@@ -620,10 +649,7 @@ fn a_traced_call_is_judged_as_its_flags_and_spelling_say() {
     let paths = |paths: &[(PathBuf, Access)]| -> BTreeSet<Refusal> {
         paths
             .iter()
-            .map(|(path, access)| Refusal::Path {
-                path: path.clone(),
-                access: *access,
-            })
+            .map(|(path, access)| refused_path(path, *access))
             .collect()
     };
     let o = outside.display();
@@ -653,6 +679,55 @@ fn a_traced_call_is_judged_as_its_flags_and_spelling_say() {
         exec
     );
     assert_eq!(refused(format!("exec_fd:0:{s}")), paths(&[]));
+    // A descriptor's link names an object, not the path its text spells: a
+    // memfd lies on no path a grant covers, and Landlock lets it through.
+    let (_, refusals) = probe_refused(tree.policy(Network::Denied), Trace::Files, "memfd");
+    assert!(
+        !refusals.iter().any(
+            |refusal| matches!(refusal, Refusal::Path { path, .. } if path.to_string_lossy().contains("memfd"))
+        ),
+        "{refusals:?}"
+    );
+}
+
+/// A refused path, with the directory a grant must cover: the path itself
+/// where it is one, else the directory holding it.
+#[cfg(target_os = "linux")]
+fn refused_path(path: &Path, access: Access) -> Refusal {
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().unwrap()
+    };
+    Refusal::Path {
+        path: path.to_owned(),
+        dir: dir.to_owned(),
+        access,
+    }
+}
+
+/// `exec` opens what a script's `#!` names, and Landlock judges that too.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_child_reports_an_interpreter_outside_its_grants() {
+    assert_available();
+    let tree = Tree::new();
+    let outside = tree.outside().canonicalize().unwrap();
+    let granted = tree.granted().canonicalize().unwrap();
+    let interpreter = outside.join("interp");
+    fs::copy("/bin/sh", &interpreter).unwrap();
+    let tool = granted.join("tool");
+    fs::write(&tool, format!("#!{}\nexit 0\n", interpreter.display())).unwrap();
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+    let policy = tree.policy(Network::Denied);
+    assert_eq!(
+        policy.resolved().refused_interpreter(&tool),
+        Some(interpreter.clone())
+    );
+    assert_eq!(
+        sh_traced(&policy, &tool.display().to_string()).1,
+        BTreeSet::from([refused_path(&interpreter, Access::ReadExecute)])
+    );
 }
 /// `sh` reads with a builtin, so the child itself opens each file: a
 /// descendant's `/proc/self` is not the child's.
@@ -688,10 +763,7 @@ fn a_traced_child_reports_each_path_outside_its_grants() {
         o = outside.display(),
         g = granted.display(),
     );
-    let path = |name: &str, access| Refusal::Path {
-        path: outside.join(name),
-        access,
-    };
+    let path = |name: &str, access| refused_path(&outside.join(name), access);
     assert_eq!(
         sh_traced(&policy, &script).1,
         BTreeSet::from([
@@ -724,10 +796,12 @@ fn a_traced_child_reports_only_what_landlock_judges() {
     let granted = tree.granted().canonicalize().unwrap();
     fs::write(outside.join("out.txt"), "out").unwrap();
     fs::write(outside.join("linked.txt"), "linked").unwrap();
+    fs::create_dir(outside.join("sub")).unwrap();
     let policy = tree.policy(Network::Denied);
     let script = format!(
         "{{ echo x > /dev/stdout; }} | cat; mkdir {o}; mkdir -p {o}; rm -f {o}/missing.txt; \
-         touch /; rmdir /; rmdir {g}/.; ln -s {o}/linked.txt {g}/link && rm {g}/link; \
+         touch /; rmdir /; rmdir {g}/.; rmdir {o}/sub/./; rmdir {o}/sub/../; \
+         ln -s {o}/linked.txt {g}/link && rm {g}/link; \
          cat {o}/out.txt/; mv {o}/missing.txt {o}/moved.txt; rm {o}/out.txt; rmdir {g}",
         o = outside.display(),
         g = granted.display(),
@@ -736,10 +810,11 @@ fn a_traced_child_reports_only_what_landlock_judges() {
     let refused: BTreeSet<Refusal> = sh_traced(&policy, &script)
         .1
         .into_iter()
-        .filter(|refusal| *refusal != Refusal::ProcessEntry)
+        .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
         .collect();
     // Removing the grant itself takes a right on the directory above it.
     let removed = |path: PathBuf| Refusal::Path {
+        dir: path.parent().unwrap().to_owned(),
         path,
         access: Access::ReadWrite,
     };
@@ -759,7 +834,16 @@ fn a_descendant_s_own_proc_entry_is_reported_without_its_pid() {
     let policy = tree.policy(Network::Denied);
     assert_eq!(
         sh_traced(&policy, "sh -c 'read l < /proc/self/status'").1,
-        BTreeSet::from([Refusal::ProcessEntry])
+        BTreeSet::from([Refusal::ProcessEntry {
+            access: Access::ReadExecute
+        }])
+    );
+    // The child's own entry is granted for reading alone.
+    assert_eq!(
+        sh_traced(&policy, "echo 0 > /proc/self/oom_score_adj").1,
+        BTreeSet::from([Refusal::ProcessEntry {
+            access: Access::ReadWrite
+        }])
     );
 }
 

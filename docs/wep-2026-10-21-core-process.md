@@ -289,7 +289,8 @@ more, and says it on its own stderr, with the fix where one exists:
   `--deny-process` or a grant at another host path, the flag that changes it.
 - A program outside the grants and the baseline warns at its spawn with the
   resolved path, and names the `--process-read` grant and the user config entry
-  that would let it run. A program that does not exist stays silent: a guest
+  that would let it run. So does a program whose `#!` interpreter or ELF loader
+  lies outside them, which `exec` opens too. A program that does not exist stays silent: a guest
   that probes for an optional tool expects `not-found`.
 - A child that fails, with a nonzero status, a signal or its timeout, after the
   filter refused it a call warns with the calls refused. The refusal may not be
@@ -318,13 +319,16 @@ rather than the refusals. The filter refers each call Landlock mediates (`open`,
 forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
 the path from the child's memory and resolves it as the kernel does for the
 child: against its working directory or the descriptor the call names, one
-component at a time, with `/proc/self` naming the child. It leaves out a call
-that fails before Landlock's hook, as its flags and the spelling of its path
-decide, and checks the rest against the policy where Landlock does: a call
-that makes, removes or moves an entry on the directory holding it, an open on
-the file. A call whose path the host may not read, under Yama's
-`ptrace_scope` or from a non-dumpable process, is reported as unseen rather
-than left out.
+component at a time, with `/proc/self` naming the child. A link in a
+process's `/proc` entry (`cwd`, `fd/N`) leads to an object rather than its
+text, so its text counts only where it still names that object. The thread
+leaves out a call that fails before Landlock's hook, as its flags and the
+spelling of its path decide, and checks the rest against the policy where
+Landlock does: a call that makes, removes or moves an entry on the directory
+holding it, an open on the file, an `exec` on the program and on each
+interpreter it needs. A call whose path the host may not read, under Yama's
+`ptrace_scope` or from a non-dumpable process, is not reported as refused: a
+warning says the trace missed calls, and why.
 The kernel then runs the call, and Landlock judges it as it would have. Moving
 enforcement itself to seccomp was rejected: the path a call names can change
 after the host reads it, and no filter can emulate `execve`.

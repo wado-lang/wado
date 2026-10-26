@@ -294,9 +294,8 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     // SAFETY: a plain system call.
     message.pid = unsafe { libc::getpid() };
     let header = message.header();
-    // SAFETY: the control buffer holds one header and one descriptor, and
-    // `message` outlives the calls.
-    let sent = unsafe {
+    // SAFETY: the control buffer holds one header and one descriptor.
+    unsafe {
         let control = libc::CMSG_FIRSTHDR(header);
         (*control).cmsg_level = libc::SOL_SOCKET;
         (*control).cmsg_type = libc::SCM_RIGHTS;
@@ -304,18 +303,30 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
         libc::CMSG_DATA(control)
             .cast::<RawFd>()
             .write_unaligned(listener);
-        libc::sendmsg(socket, header, 0)
-    };
-    if sent == -1 {
-        return Err(io::Error::last_os_error());
     }
+    // SAFETY: `message` outlives the call.
+    retried(|| unsafe { libc::sendmsg(socket, header, 0) })?;
     let mut errno = 0u8;
     // SAFETY: reads one byte into `errno`, which outlives the call.
-    match unsafe { libc::recv(socket, (&raw mut errno).cast(), 1, 0) } {
-        -1 => Err(io::Error::last_os_error()),
+    match retried(|| unsafe { libc::recv(socket, (&raw mut errno).cast(), 1, 0) })? {
         0 => Err(io::ErrorKind::BrokenPipe.into()),
         _ if errno == 0 => Ok(()),
         _ => Err(io::Error::from_raw_os_error(i32::from(errno))),
+    }
+}
+
+/// `call` until a signal no longer interrupts it. Safe between `fork` and
+/// `exec`.
+fn retried(mut call: impl FnMut() -> isize) -> io::Result<isize> {
+    loop {
+        let ret = call();
+        if ret != -1 {
+            return Ok(ret);
+        }
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::Interrupted {
+            return Err(err);
+        }
     }
 }
 
@@ -425,8 +436,11 @@ fn answer_refusals(listener: &OwnedFd, refusals: &Refusals, traced: Option<&Reso
         let notif = unsafe { call.as_ptr().cast::<libc::seccomp_notif>().read() };
         let reply = if let Some(paths) = file_call(libc::c_long::from(notif.data.nr)) {
             let policy = traced.expect("the filter refers a file call only when traced");
-            for refusal in refused_paths(listener, &notif, paths, policy) {
-                refusals.record(refusal);
+            match refused_paths(listener, &notif, paths, policy) {
+                Ok(refused) => refused
+                    .into_iter()
+                    .for_each(|refusal| refusals.record(refusal)),
+                Err(Unseen) => refusals.record_unseen(),
             }
             libc::seccomp_notif_resp {
                 id: notif.id,
@@ -594,13 +608,18 @@ struct Named {
 impl Named {
     fn of(path: &Path) -> Self {
         let bytes = path.as_os_str().as_bytes();
-        let last = bytes
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != b'/')
+            .map_or(0, |last| last + 1);
+        let last = bytes[..end]
             .rsplit(|&byte| byte == b'/')
             .next()
             .unwrap_or_default();
         Self {
             dot: matches!(last, b"." | b".."),
-            slash: bytes.len() > 1 && bytes.ends_with(b"/"),
+            // The root alone is no directory asked for.
+            slash: end > 0 && end < bytes.len(),
         }
     }
 }
@@ -822,13 +841,13 @@ fn file_call(nr: libc::c_long) -> Option<&'static [(PathArg, Asks)]> {
 /// The paths of a file call the policy does not grant the access it asks.
 /// A path the call fails on before Landlock judges it is left out, as [`Ask`]
 /// says. So is one the caller's memory no longer holds, which a child that
-/// exits mid-call leaves. One the host may not read is [`Refusal::Unseen`].
+/// exits mid-call leaves.
 fn refused_paths(
     listener: &OwnedFd,
     notif: &libc::seccomp_notif,
     paths: &[(PathArg, Asks)],
     policy: &ResolvedPolicy,
-) -> Vec<Refusal> {
+) -> Result<Vec<Refusal>, Unseen> {
     let caller = Caller {
         pid: notif.pid as libc::pid_t,
         args: notif.data.args,
@@ -847,14 +866,11 @@ fn refused_paths(
         )
     } == -1
     {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let asked = match asked {
-        Ok(Some(asked)) => asked,
-        // A path the call fails on, or an `O_PATH` open, leaves nothing to
-        // judge.
-        Ok(None) => return Vec::new(),
-        Err(Unseen) => return vec![Refusal::Unseen],
+    // A path the call fails on, or an `O_PATH` open, leaves nothing to judge.
+    let Some(asked) = asked? else {
+        return Ok(Vec::new());
     };
     // Landlock judges a call once, on all its paths, so a call that fails on
     // any of them first is judged on none.
@@ -867,7 +883,7 @@ fn refused_paths(
         })
         .collect::<Option<Vec<_>>>()
     else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     if let [(_, from, _, _), (_, _, to, _)] = resolved.as_slice()
         && *from != Found::Dir
@@ -875,35 +891,53 @@ fn refused_paths(
     {
         // Moving anything but a directory onto a path ending in `/` fails
         // with `ENOTDIR`, and linking it there with `ENOENT`.
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let Some(judged) = resolved
         .into_iter()
         .map(|(path, found, named, ask)| {
             let (at, access) = ask.judged(&path, found, named)?;
-            Some((path, at, access))
+            Some((path, found, ask, at, access))
         })
         .collect::<Option<Vec<_>>>()
     else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    if let [(_, from, _), (_, to, _)] = judged.as_slice()
+    if let [(_, _, _, from, _), (_, _, _, to, _)] = judged.as_slice()
         && !same_filesystem(from, to)
     {
         // A rename or link between filesystems fails with `EXDEV`.
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    judged
-        .into_iter()
-        .filter(|(_, at, access)| !policy.permits(at, *access))
-        .map(|(path, _, access)| {
-            if is_process_entry(&path) {
-                Refusal::ProcessEntry
+    let mut refused = Vec::new();
+    for (path, found, ask, at, access) in judged {
+        if !policy.permits(&at, access) {
+            // A file's grant is the directory's holding it.
+            let dir = if at != path || found == Found::Dir {
+                at
             } else {
-                Refusal::Path { path, access }
-            }
-        })
-        .collect()
+                at.parent().expect("a file has a parent").to_owned()
+            };
+            refused.push(path_refusal(path, dir, access));
+        } else if let Ask::Exec { .. } = ask
+            && let Some(interpreter) = policy.refused_interpreter(&path)
+        {
+            let dir = interpreter
+                .parent()
+                .expect("a file has a parent")
+                .to_owned();
+            refused.push(path_refusal(interpreter, dir, Access::ReadExecute));
+        }
+    }
+    Ok(refused)
+}
+
+fn path_refusal(path: PathBuf, dir: PathBuf, access: Access) -> Refusal {
+    if is_process_entry(&path) {
+        Refusal::ProcessEntry { access }
+    } else {
+        Refusal::Path { path, dir, access }
+    }
 }
 
 fn same_filesystem(a: &Path, b: &Path) -> bool {
@@ -947,15 +981,13 @@ impl Caller {
             libc::AT_FDCWD => format!("/proc/{}/cwd", self.pid),
             fd => format!("/proc/{}/fd/{fd}", self.pid),
         };
-        let Some(base) = seen(std::fs::read_link(base))? else {
+        let Some(base) = seen(magic_target(Path::new(&base)))?.flatten() else {
             return Ok(None);
         };
-        Ok(base.is_absolute().then(|| {
-            if path.as_os_str().is_empty() {
-                base
-            } else {
-                base.join(path)
-            }
+        Ok(Some(if path.as_os_str().is_empty() {
+            base
+        } else {
+            base.join(path)
         }))
     }
 
@@ -1014,11 +1046,13 @@ impl Caller {
             if links > MAX_LINKS {
                 return None;
             }
-            let target = std::fs::read_link(&next).ok()?;
+            let target = if is_process_entry(&next) {
+                magic_target(&next).ok().flatten()?
+            } else {
+                std::fs::read_link(&next).ok()?
+            };
             if target.is_absolute() {
                 real = PathBuf::from("/");
-            } else if is_process_entry(&next) {
-                return None;
             }
             pending.extend(names(&target));
         }
@@ -1157,8 +1191,20 @@ fn seen<T>(result: io::Result<T>) -> Result<Option<T>, Unseen> {
     }
 }
 
-/// Whether `path` lies in a process's `/proc` entry, where a link whose target
-/// is not absolute (`pipe:[…]`, `net:[…]`) names an object rather than a path.
+/// The path a link in a process's `/proc` entry (`cwd`, `fd/N`) spells, where
+/// it still leads to the object the link holds. The kernel follows such a link
+/// to its object, never its text, which for a pipe, a memfd or a deleted file
+/// names no path at all, or another file.
+fn magic_target(link: &Path) -> io::Result<Option<PathBuf>> {
+    let target = std::fs::read_link(link)?;
+    let object = std::fs::metadata(link)?;
+    let spelled = std::fs::metadata(&target);
+    Ok((target.is_absolute()
+        && spelled.is_ok_and(|named| named.dev() == object.dev() && named.ino() == object.ino()))
+    .then_some(target))
+}
+
+/// Whether `path` lies in a process's `/proc` entry.
 fn is_process_entry(path: &Path) -> bool {
     path.strip_prefix("/proc")
         .ok()

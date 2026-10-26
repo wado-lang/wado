@@ -212,12 +212,18 @@ fn start(
         if inherits {
             policy.grant_terminal();
         }
-        if let Ok(real) = fs::canonicalize(&path)
-            && !policy.resolved().permits(&real, Reach::ReadExecute)
-        {
-            view.ctx
-                .spawning
-                .warn(refused_warning(program, &path, &real));
+        if let Ok(real) = fs::canonicalize(&path) {
+            let resolved = policy.resolved();
+            let refused = if resolved.permits(&real, Reach::ReadExecute) {
+                resolved.refused_interpreter(&real)
+            } else {
+                Some(real.clone())
+            };
+            if let Some(refused) = refused {
+                view.ctx
+                    .spawning
+                    .warn(refused_warning(program, &path, &real, &refused));
+            }
         }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
@@ -298,7 +304,7 @@ pub(super) fn refusals_warning(
 /// takes a directory the guest is granted too: nothing grants a child more
 /// than its guest but reading.
 fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
-    let sandbox::Refusal::Path { path, access } = refusal else {
+    let sandbox::Refusal::Path { path, dir, access } = refusal else {
         return None;
     };
     Some(match access {
@@ -307,23 +313,19 @@ fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
             path.display(),
             path.display()
         ),
-        Reach::ReadWrite => {
-            let dir = path
-                .parent()
-                .expect("every write naming the root fails before Landlock judges it");
-            format!(
-                "let the guest and its children write {} with `--dir {}`",
-                path.display(),
-                dir.display()
-            )
-        }
+        Reach::ReadWrite => format!(
+            "let the guest and its children write {} with `--dir {}`",
+            path.display(),
+            dir.display()
+        ),
     })
 }
 
-/// The warning for a program at `path` the sandbox will not execute. The help
-/// names the directory of `real`, which the sandbox judges.
-fn refused_warning(program: &str, path: &Path, real: &Path) -> String {
-    let dir = real
+/// The warning for a program at `path`, `real` once resolved, the sandbox
+/// will not execute: `refused` is `real` itself or the interpreter it needs.
+/// The help names the directory of `refused`.
+fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> String {
+    let dir = refused
         .parent()
         .expect("a resolved program is absolute")
         .display();
@@ -331,11 +333,14 @@ fn refused_warning(program: &str, path: &Path, real: &Path) -> String {
         || "the user config".to_owned(),
         |config| config.display().to_string(),
     );
-    let at = if path == real {
+    let mut at = if path == real {
         path.display().to_string()
     } else {
         format!("{}, a link to {}", path.display(), real.display())
     };
+    if refused != real {
+        at = format!("{at}, run by {}", refused.display());
+    }
     format!(
         "warning: core:process: `{program}` is {at}, outside the guest's grants and the system baseline\n\
          help: let a child run it with `--process-read {dir}`, or with `read` under `[process]` in {config}"
@@ -505,6 +510,13 @@ fn supervise(
                     refusals_warning(&program, status, &refusals.collect(), trace)
             {
                 spawning.warn(warning);
+            }
+            if trace == Trace::Files
+                && let Some(reason) = refusals.unseen()
+            {
+                spawning.warn(format!(
+                    "warning: core:process: `--process-trace` missed calls `{program}` made: {reason}"
+                ));
             }
             // The guest may have dropped the future without waiting.
             let _ = report.send(status);
