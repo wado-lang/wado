@@ -818,7 +818,7 @@ impl Interpreter<'_> {
                 .map(|c| c.func.borrow())
                 .map_or_else(
                     || format!("{key:?}"),
-                    |f| diagnostic_function_name(&f.name).to_string(),
+                    |f| diagnostic_function_name(&f.name),
                 )
         );
     }

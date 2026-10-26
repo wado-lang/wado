@@ -210,20 +210,38 @@ pub fn display_function_name(name: &str) -> String {
 /// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
 /// character rather than a suffix marker.
 #[must_use]
-pub fn diagnostic_function_name(name: &str) -> &str {
+pub fn diagnostic_function_name(name: &str) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
-        return name;
+        return name.to_string();
     }
-    let unqualified = name.rsplit('/').next().unwrap_or(name);
+    let mut unqualified = without_module_paths(name);
     let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
         INTERNAL_PREFIX.len()
     } else {
         0
     };
-    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
-        Some(suffix) => &unqualified[..prefix_len + suffix],
-        None => unqualified,
+    if let Some(suffix) = unqualified[prefix_len..].find(INTERNAL_PREFIX) {
+        unqualified.truncate(prefix_len + suffix);
     }
+    unqualified
+}
+
+/// `name` with every module path (`core:prelude/string.wado/`) dropped: the
+/// one ahead of the item, and each inside its type arguments and trait.
+fn without_module_paths(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut segment = 0;
+    for c in name.chars() {
+        match c {
+            '/' => out.truncate(segment),
+            '<' | '>' | ',' | '^' | '[' | ']' | '(' | ')' | '&' | ' ' => {
+                out.push(c);
+                segment = out.len();
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -2809,6 +2827,23 @@ mod tests {
         assert_eq!(
             diagnostic_function_name("$value_copy$Point$shallow"),
             "$value_copy"
+        );
+    }
+
+    #[test]
+    fn diagnostic_name_drops_the_module_paths_inside_type_arguments() {
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
+            ),
+            "Formatter::pad<String>"
+        );
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/list.wado/List<core:prelude/string.wado/String>\
+                 ^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"
+            ),
+            "List<String>^IndexRef<i32>::index_ref"
         );
     }
 

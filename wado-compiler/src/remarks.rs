@@ -524,7 +524,7 @@ fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name).to_string())
+            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name))
         })
         .collect()
 }
