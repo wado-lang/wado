@@ -304,6 +304,12 @@ static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
 static NO_CTFE_BUILTINS: std::sync::LazyLock<CtfeBuiltinMap> =
     std::sync::LazyLock::new(CtfeBuiltinMap::default);
 
+/// The parameters a value-graph build seeds: all of them once a pass asked
+/// ([`Engine::seed_params`]), none before.
+fn seeded(params: &[u32], seeds: bool) -> &[u32] {
+    if seeds { params } else { &[] }
+}
+
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.
@@ -329,12 +335,12 @@ pub struct Engine<'a> {
     alias: AliasSets,
     /// The owning function's parameter locals, which no `let` binds: what
     /// [`Engine::local_has_one_version`] answers a binding-less local by.
-    params: IndexSet<u32>,
-    /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
-    /// seeding makes parameters visible in the loop-entry snapshots, so
-    /// passes consuming [`Engine::loop_entry_value`] must call
+    params: Vec<u32>,
+    /// Whether the value graph seeds `params` as stable `Opaque`s. Only
+    /// up-front seeding makes parameters visible in the loop-entry snapshots,
+    /// so passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::seed_params`] first.
-    param_locals: Vec<u32>,
+    seeds_params: bool,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
     pure_calls: IndexSet<ExprId>,
@@ -394,7 +400,7 @@ impl<'a> Engine<'a> {
             body_address_taken: None,
             alias: AliasSets::default(),
             params: params.iter().map(|p| p.local_index).collect(),
-            param_locals: Vec::new(),
+            seeds_params: false,
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
             call_writes: IndexMap::default(),
@@ -545,7 +551,7 @@ impl<'a> Engine<'a> {
             self.body,
             root,
             0,
-            &self.param_locals,
+            seeded(&self.params, self.seeds_params),
             &empty,
             &self.alias,
             self.vg_type_table,
@@ -610,7 +616,7 @@ impl<'a> Engine<'a> {
             self.body,
             root,
             0,
-            &self.param_locals,
+            seeded(&self.params, self.seeds_params),
             &empty,
             &self.alias,
             self.vg_type_table,
@@ -718,10 +724,10 @@ impl<'a> Engine<'a> {
     }
 
     /// Have the value graph seed the parameters up front (see the field doc on
-    /// `param_locals`). Used by the one build-once construction; the graph is
+    /// `seeds_params`). Used by the one build-once construction; the graph is
     /// never rebuilt on a later change.
     pub fn seed_params(&mut self) {
-        self.param_locals = self.params.iter().copied().collect();
+        self.seeds_params = true;
     }
 
     /// Record the per-call verdicts the build reads. Supply before the first
@@ -825,7 +831,7 @@ impl<'a> Engine<'a> {
         }
         let build = build(
             &mut *self.body,
-            &self.param_locals,
+            seeded(&self.params, self.seeds_params),
             &self.alias,
             CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
