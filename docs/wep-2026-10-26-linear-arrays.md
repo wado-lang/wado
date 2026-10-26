@@ -300,10 +300,10 @@ in a cell are two runs, the arms alternated.
 | ms a token, tokens 1–100   | 3.74 / 3.72                 | 4.42 / 4.45                   |
 | ms a token, tokens 101–200 | 3.80 / 3.82                 | 3.81 / 3.77                   |
 
-The first hundred tokens are slower after a lent load only once. Copying built
-a `ByteList` per write, which touched the GC heap's pages during the load. A
-lent load touches almost none, so the first tokens fault those pages in: 746
-page faults while decoding against 30, all from guest code.
+The first tokens after a lent load pay a one-time cost. Copying built a
+`ByteList` per write, which touched the GC heap's pages during the load. A lent
+load touches almost none, so the first tokens fault those pages in: 746 page
+faults while decoding against 30, all from guest code.
 
 ## Known gaps
 
