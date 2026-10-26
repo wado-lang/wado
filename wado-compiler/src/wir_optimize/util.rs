@@ -107,7 +107,7 @@ impl Footprint {
         self.call || self.fields.contains(name)
     }
 
-    fn touches_heap(&self) -> bool {
+    pub(super) fn touches_heap(&self) -> bool {
         self.heap || self.call || !self.fields.is_empty()
     }
 
@@ -413,6 +413,11 @@ impl OwnTraps {
     /// The positions of the operands it traps on when null, in evaluation order.
     pub(super) fn on_null(&self) -> impl Iterator<Item = usize> {
         self.on_null.into_iter().flatten()
+    }
+
+    /// Whether it can trap at all, whatever its operands hold.
+    pub(super) fn any(&self) -> bool {
+        self.otherwise || self.on_null().next().is_some()
     }
 }
 

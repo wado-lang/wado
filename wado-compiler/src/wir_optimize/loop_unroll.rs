@@ -12,8 +12,9 @@
 //!
 //! wasmtime checks each `array.get` against its array's length and shares part
 //! of that check only between gets in one basic block, so iterations in one
-//! block pay less per get than one alone. A matrix product's inner loop ran
-//! +35% at four, and one twice its size +9% at two, where four ran slower.
+//! block pay less per get than one alone. A matrix-vector product's inner loop
+//! ran +32% at four, and one twice its size +9% at two, where four ran slower.
+//! Gemma 3's next token came +30% sooner.
 //!
 //! The tests ahead are computed before the first `WORK` runs, so the pass needs
 //! `EXIT` and `STEP` to read only locals `WORK` never writes, and to compute
@@ -23,7 +24,7 @@
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::util::Footprint;
+use super::util::{Footprint, is_side_effect_free, own_traps};
 
 /// The most nodes the copy's iterations may hold together, which picks the
 /// largest of [`FACTORS`] that fits.
@@ -75,7 +76,10 @@ fn unrolled(instr: &WirInstr) -> Option<WirInstr> {
             condition: exit,
         },
         work @ ..,
-        WirInstr::LocalSet { name: var, value: step },
+        WirInstr::LocalSet {
+            name: var,
+            value: step,
+        },
         WirInstr::Br { depth: 0 },
     ] = body.as_slice()
     else {
@@ -188,62 +192,16 @@ fn scan(instr: &WirInstr, nesting: u32, f: &mut impl FnMut(&WirInstr, u32)) {
     }
 }
 
-/// Whether `instr` computes from locals and constants by integer arithmetic
-/// that cannot trap, so evaluating it early or twice changes nothing.
+/// Whether `instr` computes from locals alone, writing nothing and trapping
+/// nowhere, so evaluating it early or twice changes nothing.
 fn is_local_arith(instr: &WirInstr) -> bool {
-    use WirInstr as I;
-    let node_ok = matches!(
-        instr,
-        I::LocalGet { .. }
-            | I::I32Const(_)
-            | I::I64Const(_)
-            | I::I32Add(..)
-            | I::I32Sub(..)
-            | I::I32Mul(..)
-            | I::I32And(..)
-            | I::I32Or(..)
-            | I::I32Xor(..)
-            | I::I32Shl(..)
-            | I::I32ShrS(..)
-            | I::I32ShrU(..)
-            | I::I32Eqz(_)
-            | I::I32Eq(..)
-            | I::I32Ne(..)
-            | I::I32LtS(..)
-            | I::I32LtU(..)
-            | I::I32GtS(..)
-            | I::I32GtU(..)
-            | I::I32LeS(..)
-            | I::I32LeU(..)
-            | I::I32GeS(..)
-            | I::I32GeU(..)
-            | I::I32WrapI64(_)
-            | I::I64Add(..)
-            | I::I64Sub(..)
-            | I::I64Mul(..)
-            | I::I64And(..)
-            | I::I64Or(..)
-            | I::I64Xor(..)
-            | I::I64Shl(..)
-            | I::I64ShrS(..)
-            | I::I64ShrU(..)
-            | I::I64Eqz(_)
-            | I::I64Eq(..)
-            | I::I64Ne(..)
-            | I::I64LtS(..)
-            | I::I64LtU(..)
-            | I::I64GtS(..)
-            | I::I64GtU(..)
-            | I::I64LeS(..)
-            | I::I64LeU(..)
-            | I::I64GeS(..)
-            | I::I64GeU(..)
-            | I::I64ExtendI32S(_)
-            | I::I64ExtendI32U(_)
-    );
-    let mut ok = node_ok;
-    instr.for_each_child(&mut |child| ok = ok && is_local_arith(child));
-    ok
+    is_side_effect_free(instr) && !Footprint::reads(instr).touches_heap() && !may_trap(instr)
+}
+
+fn may_trap(instr: &WirInstr) -> bool {
+    let mut trap = own_traps(instr).any();
+    instr.for_each_child(&mut |child| trap = trap || may_trap(child));
+    trap
 }
 
 /// Replace each read of `var` under `instr` with `value`.
