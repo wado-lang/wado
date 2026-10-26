@@ -226,7 +226,7 @@ fn a_pinned_module_is_read_from_the_cache_once_fetched() {
     server.serve("util.wado", UTIL.as_bytes());
     let dir = tempfile::tempdir().unwrap();
     let wado_root = tempfile::tempdir().unwrap();
-    let pin = format!("sha256:{}", sha256_hex(UTIL.as_bytes()));
+    let pin = Integrity::of(UTIL.as_bytes());
     std::fs::write(
         dir.path().join("main.wado"),
         main_using(
@@ -318,11 +318,7 @@ fn a_remote_kiln_input_is_fetched_by_range_and_pinned_to_its_extent() {
     let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
     assert!(lock.contains("extent = 2"), "{lock}");
     assert!(
-        lock.contains(&format!("integrity = \"sha256:{}\"", sha256_hex(b"7\n"))),
+        lock.contains(&format!("integrity = \"{}\"", Integrity::of(b"7\n"))),
         "{lock}"
     );
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    Integrity::of(bytes).hex()
 }

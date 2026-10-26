@@ -497,8 +497,8 @@ impl std::fmt::Display for SourceError {
             }
             SourceError::Unpinned { url, actual } => write!(
                 f,
-                "'{url}' is not pinned: no `wado.lock` governs this module, so the `use` \
-                 pins it with `integrity: \"{actual}\"`"
+                "'{url}' is not pinned, and no `wado.lock` governs this module to record \
+                 a pin: add `integrity: \"{actual}\"`"
             ),
         }
     }
