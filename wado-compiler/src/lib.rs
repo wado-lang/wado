@@ -1397,23 +1397,37 @@ async fn resolve_inline_providers<H: CompilerHost>(
     let entry_source = load_result.entry_module_source.clone();
     let entry_dir = entry_dir_of(Some(&entry_source));
 
-    // (importing module source, use decl, provider path) for every provider
-    // directive, collected before the on-demand compiles below.
-    let mut jobs: Vec<(ModuleSource, UseDecl, String)> = Vec::new();
+    // (importing module source, use decl, provider path, where the path is
+    // written) for every provider directive, collected before the on-demand
+    // compiles below.
+    let mut jobs: Vec<(ModuleSource, UseDecl, String, DiagnosticSpan)> = Vec::new();
     for (src, module) in &load_result.modules {
         for item in &module.items {
             if let Item::Use(use_decl) = item
-                && let Some(path) = use_decl.attributes.as_ref().and_then(|a| a.provider_path())
+                && let Some((path, span)) =
+                    use_decl.attributes.as_ref().and_then(|a| a.provider_path())
             {
-                jobs.push((src.clone(), use_decl.clone(), path.to_string()));
+                let at = DiagnosticSpan::from_span(&span, Some(&src.source_path()));
+                jobs.push((src.clone(), use_decl.clone(), path.to_string(), at));
             }
         }
     }
 
-    let bail = |msg: String| bail_with(logger, Code::ModuleNotFound, msg);
-
     let mut providers = Vec::new();
-    for (src, use_decl, prov_path) in jobs {
+    for (src, use_decl, prov_path, at) in jobs {
+        let report = |diagnostic: Diagnostic| {
+            let _ = logger.error(diagnostic);
+            Bail
+        };
+        let bail = |code: Code, message: String| {
+            report(Diagnostic {
+                severity: Severity::Error,
+                code,
+                message,
+                span: Some(at.clone()),
+            })
+        };
+        let bail_load = |error: LoadError| report(Diagnostic::from(error.at_path(at.clone())));
         // Resolve against the loader's own interner so the `ModuleSource`'s
         // interned strings match the loaded binding module's key (identity, not
         // string, equality).
@@ -1425,10 +1439,13 @@ async fn resolve_inline_providers<H: CompilerHost>(
             &load_result.invocations,
         );
         let Some(dep_module) = dep_source.and_then(|s| load_result.modules.get(&s)) else {
-            return Err(bail(format!(
-                "`provider` on `{}` names an import that is not a component",
-                use_decl.source
-            )));
+            return Err(bail(
+                Code::ImportAttrInvalid,
+                format!(
+                    "`provider` on `{}` names an import that is not a component",
+                    use_decl.source
+                ),
+            ));
         };
         let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
@@ -1437,27 +1454,33 @@ async fn resolve_inline_providers<H: CompilerHost>(
         let fq = match guest_fqs.as_slice() {
             [fq] => fq.clone(),
             [] => {
-                return Err(bail(format!(
-                    "`provider` on `{}`, which imports no guest effect to satisfy",
-                    use_decl.source
-                )));
+                return Err(bail(
+                    Code::ImportAttrInvalid,
+                    format!(
+                        "`provider` on `{}`, which imports no guest effect to satisfy",
+                        use_decl.source
+                    ),
+                ));
             }
             _ => {
-                return Err(bail(format!(
-                    "`provider` on `{}` imports multiple guest effects ({}); a single \
-                     provider file for several interfaces is not yet supported",
-                    use_decl.source,
-                    guest_fqs.join(", ")
-                )));
+                return Err(bail(
+                    Code::ImportAttrInvalid,
+                    format!(
+                        "`provider` on `{}` imports multiple guest effects ({}); a single \
+                         provider file for several interfaces is not yet supported",
+                        use_decl.source,
+                        guest_fqs.join(", ")
+                    ),
+                ));
             }
         };
 
-        let resolved = loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir)
-            .map_err(|_| bail(format!("cannot resolve provider path `{prov_path}`")))?;
+        let resolved =
+            loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir).map_err(bail_load)?;
         let bytes = host
             .load_source(&resolved)
             .await
-            .map_err(|e| bail(format!("cannot read provider `{prov_path}`: {e}")))?;
+            .map_err(|e| bail_load(LoadError::reading(e, &prov_path)))?;
         let provider_src = String::from_utf8_lossy(&bytes).into_owned();
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
@@ -1480,7 +1503,12 @@ async fn resolve_inline_providers<H: CompilerHost>(
             opts,
         ))
         .await
-        .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
+        .map_err(|e| {
+            bail(
+                Code::EffectHandlerInvalid,
+                format!("provider `{prov_path}` failed to compile: {e}"),
+            )
+        })?;
         providers.push(ProviderComponent {
             source: prov_path,
             import_fq: fq,
@@ -2302,6 +2330,9 @@ fn compile_after_load<H: CompilerHost>(
                 panic_on_invalid_artifact(logger.host(), &invalid)
             }
             Err(EmitFailure::Provider(mismatch)) => {
+                // TODO: room for improvement: this reports without a position.
+                // Pointing at the provider path in the `use` needs
+                // `ProviderComponent` to carry that path's span.
                 return Err(bail_with(
                     logger,
                     Code::EffectHandlerInvalid,

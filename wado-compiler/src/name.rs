@@ -56,9 +56,12 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 }
 
 /// Split a `ns$member` alias into its namespace and member. The member is an
-/// identifier, so the last separator splits them, a minted `$ns` included.
+/// identifier, so the last separator splits them, a minted `$ns` included. A
+/// minted name holds its one `$` first, so it splits off no namespace and is
+/// no alias: `$a:x/trip::Inner` is a type of the interface minted `$a:x/trip`.
 pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
     name.rsplit_once(NAMESPACE_MEMBER_SEP)
+        .filter(|(namespace, _)| !namespace.is_empty())
 }
 
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a

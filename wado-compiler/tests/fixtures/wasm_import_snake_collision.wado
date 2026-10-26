@@ -1,0 +1,10 @@
+// Two exports that read as one snake_case name leave no way to tell them
+// apart, so the asset is rejected at the use that imports it.
+use { a_b } from "./sub/wasm_import_snake_collision.wat" with { type: "wat" };
+
+export fn run() {
+    let _ = a_b();
+}
+
+__DATA__
+{"compile_error": ":3:18: analysis error: wasm import error in ./sub/wasm_import_snake_collision.wat: exports `a-b` and `a_b` both read as `a_b`"}

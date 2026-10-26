@@ -1,0 +1,13 @@
+// A declared dependency whose entry file is missing names that file, not the
+// specifier, so it reads apart from an undeclared dependency.
+
+use { sin } from "lib:gone";
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":4:18: analysis error: module not found: sub/no_such_dependency.wado",
+  "compile_error_codes": ["MODULE_NOT_FOUND"],
+  "dependencies": { "lib:gone": "sub/no_such_dependency.wado" }
+}

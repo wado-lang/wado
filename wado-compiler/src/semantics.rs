@@ -1470,6 +1470,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             .iter()
             .map(|(source, module)| (module.ast_id_space(), source.clone())),
     );
+    logger.register_asset_origins(std::mem::take(&mut load_result.asset_origins));
 
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
