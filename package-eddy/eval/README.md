@@ -11,16 +11,16 @@ reverts, so the defects come from fix pull requests rather than reverts.
   fix changed, by `git blame -w`, with line counts. `addsTest` says whether the
   fix touched a test. Generated and vendored files, tests and Markdown are left
   out of the blame.
-- `judged.json` holds a model's verdict on each pair whose top pull request
-  holds at least half of the blamed lines. Each verdict says whether the fix
-  corrects a defect, whether the blamed pull request introduced it, and whether
-  a reviewer reading only that pull request's diff could have pointed at it.
+- `judged.json` (Claude Opus 5.5) and `judged-sonnet.json` (Claude Sonnet 5.5)
+  hold a model's verdict on each pair whose top pull request holds at least
+  half of the blamed lines. Each verdict says whether the fix corrects a
+  defect, whether the blamed pull request introduced it, and whether a reviewer
+  reading only that pull request's diff could have pointed at it.
 
-A pair whose fix or culprit diff runs past 60,000 bytes, generated and
-vendored files left out, gets an error instead of a verdict: the part cut off
-may be the part that shows the defect. That is about a third of the pairs.
-`-D diff_limit=…` raises the limit, and a rerun judges only the pairs left
-unsettled.
+The model reads both diffs whole, generated, vendored and Markdown files left
+out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
+instead of a verdict, since clipping it may cut the part that shows the defect.
+Every pair fits under that limit. A rerun judges only the pairs left unsettled.
 
 An entry is usable when all three verdicts hold. Its review input is the
 culprit's diff, and its expected finding is the defect the fix names.
@@ -34,6 +34,8 @@ git fetch --unshallow origin main   # in a shallow clone
 wado run package-eddy/tools/szz.wado -- package-eddy/eval/szz.json
 CLAUDE_API_KEY=... wado run package-eddy/tools/judge.wado -- \
     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
+CLAUDE_API_KEY=... CLAUDE_MODEL=claude-sonnet-5-5 wado run package-eddy/tools/judge.wado -- \
+    package-eddy/eval/szz.json 0.5 package-eddy/eval/judged-sonnet.json
 ```
 
 Both run `git` through `core:process`, which needs no flag: `git` is under
@@ -55,6 +57,21 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
 - The judge is not deterministic. Two runs over the 43 pairs above an 80% share
   found 16 and 17 usable entries, and three entries changed sides. Its verdicts
   need a human sample before they count.
+- The two models agree on the yield but not on the entries. The table counts
+  the 96 pairs both models judged. They disagree mostly on whether the culprit
+  introduced the defect and whether its diff shows it, rarely on whether the
+  fix fixes a defect (7 pairs).
+
+  | Pairs                       | Opus 5.5 | Sonnet 5.5 | Both |
+  | --------------------------- | -------: | ---------: | ---: |
+  | Defect fix                  |       83 |         90 |      |
+  | Introduced by the culprit   |       45 |         60 |      |
+  | Visible in the culprit diff |       49 |         42 |      |
+  | Usable                      |       42 |         41 |   25 |
+  | Usable, fix adds a test     |       32 |         29 |   18 |
+
+  The models give the same usable-or-not answer on 63 of the 96. The 25 both
+  call usable are the strongest candidates for the human sample.
 
 ## To Do
 
