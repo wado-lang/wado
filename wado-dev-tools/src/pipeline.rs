@@ -704,7 +704,8 @@ mod tests {
         written.insert("a".to_string());
         written.insert("b".to_string());
 
-        assert!(collect_stale(existing, &written).is_empty());
+        let stale = collect_stale(existing, &written);
+        assert!(stale.is_empty(), "{stale:?}");
     }
 
     #[test]

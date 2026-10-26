@@ -396,7 +396,7 @@ mod tests {
         for file in dev_stdlib_files() {
             assert!(run.inputs().is_watching(&root.join(file)), "{file}");
         }
-        assert!(run.inputs().changed().is_empty());
+        assert_eq!(run.inputs().changed(), Vec::<PathBuf>::new());
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests {
         write(&file, "fn a() {}");
         let watch = SourceWatch::default();
         watch.observe(&file, None, b"fn a() {}");
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -432,7 +432,7 @@ mod tests {
         let watch = SourceWatch::default();
         watch.observe(&file, None, b"fn a() {}");
         write(&file, "fn a() {}");
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -460,7 +460,7 @@ mod tests {
         // The declaring file compiles later than one that read the output.
         write(&file, "// v2");
         watch.mark_generated_dir(out_dir);
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -521,7 +521,7 @@ mod tests {
         watch.observe(&file, Some(4), b"head");
         assert!(watch.is_watching(&file));
         write(&file, "headPAYLOAD and more");
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -547,7 +547,7 @@ mod tests {
         let watch = SourceWatch::default();
         watch.observe(&file, None, b"headpayload");
         watch.observe(&file, Some(4), b"head");
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -559,7 +559,7 @@ mod tests {
         let watch = SourceWatch::default();
         watch.observe(&file, None, b"v1");
         watch.observe(&file, None, b"v1");
-        assert!(watch.changed().is_empty());
+        assert_eq!(watch.changed(), Vec::<PathBuf>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

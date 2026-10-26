@@ -1563,8 +1563,8 @@ version = "0.1.0"
 "wasi:cli/command" = "main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(m.test.exclude.is_empty());
-        assert!(m.test.include.is_empty());
+        assert!(m.test.exclude.is_empty(), "{:?}", m.test.exclude);
+        assert!(m.test.include.is_empty(), "{:?}", m.test.include);
     }
 
     #[test]
@@ -1619,8 +1619,8 @@ version = "0.1.0"
 "wasi:cli/command" = "main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(m.format.exclude.is_empty());
-        assert!(m.format.include.is_empty());
+        assert!(m.format.exclude.is_empty(), "{:?}", m.format.exclude);
+        assert!(m.format.include.is_empty(), "{:?}", m.format.include);
     }
 
     #[test]
@@ -1678,7 +1678,7 @@ publish = false
         let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
         let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
         assert!(pkg.description.is_none());
-        assert!(pkg.authors.is_empty());
+        assert!(pkg.authors.is_empty(), "{:?}", pkg.authors);
         assert!(pkg.wado_version.is_none());
         assert!(pkg.publish, "publish defaults to true");
         assert!(pkg.repository_directory.is_none());

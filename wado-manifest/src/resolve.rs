@@ -594,7 +594,7 @@ default = "https://wa.dev"
             assert_eq!(p.version, "0.2.0");
             assert_eq!(p.integrity.as_deref(), Some("sha256:beef"));
             assert!(!p.dev);
-            assert!(p.deps.is_empty());
+            assert!(p.deps.is_empty(), "{:?}", p.deps);
         });
     }
 

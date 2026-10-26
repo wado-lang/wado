@@ -5335,7 +5335,7 @@ test "addition" {
             .into_iter()
             .map(|(id, _)| id)
             .collect();
-        assert!(!ids.is_empty());
+        assert!(!ids.is_empty(), "SAMPLE parses to no nodes");
 
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for id in &ids {
