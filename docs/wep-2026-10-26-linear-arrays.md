@@ -105,7 +105,11 @@ Each way linear memory goes wrong maps to a rule the language already enforces:
   owner.
 - Out of bounds. Every element access states its range as a `contract`. An
   unmarked call checks it in every build. `loop_version_bce` deletes the check
-  in a loop that keeps the index in range.
+  in a loop that keeps the index in range, so a loop rarely needs more.
+  `unchecked a[i]` skips it outside a build that checks contracts, as it does
+  on a `List`, and is written only where the index is proven in range and the
+  check is left standing. A wrong vouch here writes past the block and nothing
+  traps, so the test world, which checks every contract, is where it shows.
 - Overlap. The allocator hands out disjoint blocks.
 - Reading garbage. Every constructor writes all of the elements, and `AnyBits`
   admits only types for which every bit pattern is a value.
@@ -186,10 +190,6 @@ at the offset already filled. No byte is lifted into the GC heap. A file of
 
 ## Known gaps
 
-- Whether `unchecked a[i]` may skip the index's contract is open. On a `List`
-  it may, and a wrong vouch reads a stale slot or traps on the engine's check.
-  Here a wrong vouch on a write corrupts the allocator or a canonical ABI
-  buffer, and nothing traps.
 - `AnyBits` and `FromLeBytes` admit nearly the same types, and nothing relates
   the two.
 - A 32-bit memory addresses 4 GiB, shared with the canonical ABI's buffers, so
