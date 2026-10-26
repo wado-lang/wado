@@ -55,6 +55,23 @@ fn normalize_ast_debug(debug: &str) -> String {
             continue;
         }
 
+        // Strip the Module's own `source` line: it is the text parsed, which
+        // the formatter rewrites by design. Keyed on `Module {` so a `source`
+        // field nested in an item is still compared.
+        if bytes[i..].starts_with(b"Module {\n") {
+            result.extend_from_slice(b"Module {\n");
+            i += b"Module {\n".len();
+            let field = i + bytes[i..].iter().take_while(|b| **b == b' ').count();
+            if bytes[field..].starts_with(b"source: ") {
+                let line = bytes[field..]
+                    .iter()
+                    .position(|b| *b == b'\n')
+                    .expect("a `{:#?}` field is followed by its own line");
+                i = field + line + 1;
+            }
+            continue;
+        }
+
         // Normalize any `AstIdSpace(N)` occurrence (the Module's
         // `ast_id_space` field): every parse mints a fresh space, so the
         // original and formatted parses always differ here by design.
