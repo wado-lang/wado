@@ -39,6 +39,7 @@ pub const TODO: &str = "TODO";
 pub const UNAVAILABLE: &str = "unavailable";
 pub const WASM_MODULE: &str = "wasm_module";
 pub const WIRE: &str = "wire";
+pub const WORKLOAD: &str = "workload";
 
 /// A place an attribute may be written. `Module` is the inner-attribute
 /// position (`#![…]`); every other target takes an outer `#[…]`.
@@ -548,6 +549,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         stdlib_only: false,
         bodyless: None,
     },
+    AttributeSchema {
+        name: WORKLOAD,
+        targets: TEST_TARGET,
+        args: AttrArgs::None,
+        summary: "the test states the package's real workload, which `wado test --pgo` records",
+        stdlib_only: false,
+        bodyless: None,
+    },
 ];
 
 /// The schema for `name`, or `None` where no attribute is written that way.
@@ -589,6 +598,8 @@ pub enum AttributeFault {
     NamePolicy { value: String },
     /// A standard library attribute written in a program.
     StdlibOnly,
+    /// `#[workload]` on a test that `other` marks as trapping by design.
+    TrapsByDesign { other: &'static str },
 }
 
 impl AttributeFault {
@@ -634,6 +645,10 @@ impl AttributeFault {
                 )
             }
             Self::StdlibOnly => format!("`{name}` is valid only in the standard library"),
+            Self::TrapsByDesign { other } => format!(
+                "`{WORKLOAD}` cannot mark a test that `{other}` marks: a workload must return, \
+                 and such a test traps by design"
+            ),
         }
     }
 }
@@ -694,7 +709,26 @@ pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<Attribu
     if name == COVERAGE && !matches!(args, [AttrArg::Ident(word)] if word == "off") {
         return Some(AttributeFault::Arguments { schema });
     }
-    None
+    traps_by_design_beside_workload(name, written.earlier)
+        .map(|other| AttributeFault::TrapsByDesign { other })
+}
+
+/// The test attributes that say a test traps by design, which a workload must
+/// not: recording one stops at the trap.
+const TRAPS_BY_DESIGN: &[&str] = &[EXPECT_TRAP, TODO];
+
+/// The attribute marking a test as trapping by design that meets `#[workload]`
+/// when `name` is written after `earlier`, so the later of the two reports.
+fn traps_by_design_beside_workload(name: &str, earlier: &[Attribute]) -> Option<&'static str> {
+    let trapping = |name: &str| TRAPS_BY_DESIGN.iter().copied().find(|t| *t == name);
+    if name == WORKLOAD {
+        return earlier.iter().find_map(|attr| trapping(&attr.name));
+    }
+    let other = trapping(name)?;
+    earlier
+        .iter()
+        .any(|attr| attr.name == WORKLOAD)
+        .then_some(other)
 }
 
 /// Whether `attrs` holds `#[coverage(off)]`, which [`check`] admits in no other
