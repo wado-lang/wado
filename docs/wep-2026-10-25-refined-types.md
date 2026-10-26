@@ -200,10 +200,18 @@ one base are.
 
 ### What can be refined
 
-A base that is a resource, or holds one at any depth, cannot be refined, and
-`B contract C` over one is a compile error. A resource's state lives in the
-host: `contract self.is_open()` can turn false when the host closes the file,
-with nothing on the Wado side entering the type again.
+A base that is a resource, holds one at any depth, or is
+[affine](./spec-types.md#affine-types) cannot be refined, and `B contract C`
+over one is a compile error.
+
+A resource's state lives in the host: `contract self.is_open()` can turn false
+when the host closes the file, with nothing on the Wado side entering the type
+again.
+
+Nearly every affine type holds a resource, so the first rule refuses it
+already. The rest are refused because `try_from` consumes its argument: a failed
+conversion would drop the value it could not refine. No program needs one yet,
+and admitting affine bases later breaks no program that compiles today.
 
 ### Serialization enforces the clauses
 
