@@ -2748,9 +2748,11 @@ impl TypeTable {
         // `List` is the compiler's, so no struct registers its fields: it is
         // its backing array and the elements.
         if let Some(elem) = self.list_element(ty) {
-            let backing = self.intern_map.get(&ResolvedType::BuiltinArray(elem));
-            return matches!(target, Reach::Object(kind)
-                    if backing.is_some_and(|&array| self.object_kind(array) == kind))
+            let backs = |kind: TypeKey| {
+                matches!(self.get(kind.0), ResolvedType::BuiltinArray(array_elem)
+                    if self.type_key(*array_elem) == self.type_key(elem))
+            };
+            return matches!(target, Reach::Object(kind) if backs(kind))
                 || self.reaches_in(elem, target, args, walked);
         }
         let (template_args, members): (Vec<TypeId>, Vec<TypeId>) = match self.get(ty) {
