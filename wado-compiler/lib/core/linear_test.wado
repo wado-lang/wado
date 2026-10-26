@@ -1,0 +1,113 @@
+use { LinearArray } from "core:linear";
+use { f32x4 } from "core:simd";
+
+type Meters = f64;
+
+test "filled writes every element, at each width" {
+    let bytes = LinearArray::<i8>::filled(5, -3);
+    assert bytes.to_list() == [-3, -3, -3, -3, -3];
+    let halves = LinearArray::<f16>::filled(3, 1.5);
+    assert halves[2] == 1.5;
+    let wide = LinearArray::<u64>::filled(2, u64::MAX);
+    assert wide[1] == u64::MAX;
+    let lanes = LinearArray::<f32x4>::filled(3, f32x4::splat(2.0));
+    assert lanes[2].extract_lane(3) == 2.0;
+    let lengths = LinearArray::<Meters>::filled(2, 4.5 as Meters);
+    assert lengths[1] == 4.5 as Meters;
+}
+
+test "an empty array holds nothing" {
+    let empty = LinearArray::<f32>::filled(0, 1.0);
+    assert empty.len() == 0;
+    assert empty.is_empty();
+    assert empty.to_list() == [];
+    assert empty.duplicate().is_empty();
+}
+
+test "from_slice copies each element of a list" {
+    let source: List<i32> = [7, -1, 0, 2147483647];
+    let array = LinearArray::from_slice(&source);
+    assert array.len() == 4;
+    assert !array.is_empty();
+    assert array.to_list() == source;
+}
+
+test "from_slice reads a byte list" {
+    let source: ByteList = b"\x01\x02\xff";
+    let array = LinearArray::from_slice(&source);
+    assert array.at(2) == 0xFF;
+}
+
+test "set and an index assignment write one element" {
+    let mut array = LinearArray::<i16>::filled(4, 0);
+    array.set(1, -5);
+    array[3] = 9;
+    assert array.at(1) == -5;
+    assert array[3] == 9;
+    assert array.to_list() == [0, -5, 0, 9];
+}
+
+test "duplicate holds the elements apart from its source" {
+    let mut source = LinearArray::<i32>::filled(3, 1);
+    let copy = source.duplicate();
+    source[0] = 5;
+    assert copy.to_list() == [1, 1, 1];
+    assert source.to_list() == [5, 1, 1];
+}
+
+test "cast reads the same bytes as another type" {
+    let floats = LinearArray::<f32>::filled(2, 1.0);
+    let bits = floats.cast::<u32>();
+    assert bits.to_list() == [0x3F800000, 0x3F800000];
+    let bytes = bits.cast::<u8>();
+    assert bytes.len() == 8;
+    assert bytes.to_list() == [0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x80, 0x3F];
+    let back = bytes.cast::<f32>();
+    assert back.to_list() == [1.0, 1.0];
+}
+
+#[expect_trap]
+test "cast traps where the bytes are not whole elements of the new type" {
+    let bytes = LinearArray::<u8>::filled(6, 0);
+    let _ = bytes.cast::<f32>();
+}
+
+#[expect_trap]
+test "filled traps on a negative length" {
+    let _ = LinearArray::<u8>::filled(-1, 0);
+}
+
+#[expect_trap]
+test "filled traps past the address space" {
+    let _ = LinearArray::<f64>::filled(i32::MAX / 8 + 1, 0.0);
+}
+
+#[expect_trap]
+test "at traps past the end" {
+    let array = LinearArray::<i32>::filled(2, 0);
+    let _ = array.at(2);
+}
+
+#[expect_trap]
+test "at traps below zero" {
+    let array = LinearArray::<i32>::filled(2, 0);
+    let _ = array.at(-1);
+}
+
+#[expect_trap]
+test "set traps past the end" {
+    let mut array = LinearArray::<i32>::filled(2, 0);
+    array.set(2, 1);
+}
+
+#[expect_trap]
+test "an index read traps past the end" {
+    let array = LinearArray::<i32>::filled(2, 0);
+    let _ = array[2];
+}
+
+#[expect_trap]
+test "an index assignment traps past the end" {
+    let mut array = LinearArray::<i32>::filled(2, 0);
+    array[2] = 1;
+}

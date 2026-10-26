@@ -1994,6 +1994,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
+- [`core:linear`](./stdlib-core-linear.md) — `LinearArray<T: AnyBits>`, plain
+  data in linear memory outside the GC heap, freed where it drops
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`

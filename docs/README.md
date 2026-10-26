@@ -231,6 +231,7 @@
 - [core:jsonc](./stdlib-core-jsonc.md)
 - [core:jwt](./stdlib-core-jwt.md)
 - [core:kiln](./stdlib-core-kiln.md)
+- [core:linear](./stdlib-core-linear.md)
 - [core:log](./stdlib-core-log.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)

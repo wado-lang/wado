@@ -65,7 +65,8 @@ impl<T: AnyBits> LinearArray<T> {
         contract 0 <= len <= i32::MAX / builtin::size_of::<T>();
     pub fn from_slice<S: AsSlice<Elem = T>>(source: &S) -> LinearArray<T>;
     pub fn len(&self) -> i32;
-    pub fn get(&self, index: i32) -> T
+    pub fn is_empty(&self) -> bool;
+    pub fn at(&self, index: i32) -> T
         contract 0 <= index < self.len();
     pub fn set(&mut self, index: i32, value: T)
         contract 0 <= index < self.len();
@@ -79,7 +80,12 @@ impl<T: AnyBits> LinearArray<T> {
 It implements `IndexValue<i32>` and `IndexAssign<i32>`, so `a[i]` and
 `a[i] = v` read as they do on a `List`. It implements neither `IndexRef` nor
 `IndexRefMut`: an element is read and written by value, and no reference points
-into linear memory.
+into linear memory. An affine type implements only an `affine trait`, so
+`IndexValue` is one: an affine container hands out copyable elements by value
+as a `List` does. `at` is the contracted read, named as on the `Sequence`
+family, where `get` returns an `Option`.
+
+`LinearArray` is not a `Sequence`, since that family is not affine.
 
 The block's address is private, so no API hands out a pointer. Every byte is
 written before anything can read it: there is no uninitialized constructor.
@@ -90,7 +96,9 @@ of the new type are aligned too.
 
 `cast` moves the array and reinterprets its bytes in place, little-endian, as
 Wasm reads them. Moving it leaves no second view, so no element is ever seen as
-two types at once.
+two types at once. The block's `Drop` belongs to a private `Block` the array
+holds, not to the array: a `Drop` type is never partially moved, and `cast`
+moves the block out of the array it takes.
 
 A value that holds a `LinearArray` is affine, as one holding a resource is.
 
@@ -152,7 +160,7 @@ The `core:linear` module needs three built-ins:
 
 | Built-in                                          | Lowers to                      | Used by                                |
 | ------------------------------------------------- | ------------------------------ | -------------------------------------- |
-| `builtin::load<T: AnyBits>(addr: i32) -> T`       | the `load` of `T`'s Wasm type  | `get`, `IndexValue`, `to_list`         |
+| `builtin::load<T: AnyBits>(addr: i32) -> T`       | the `load` of `T`'s Wasm type  | `at`, `IndexValue`, `to_list`          |
 | `builtin::store<T: AnyBits>(addr: i32, value: T)` | the `store` of `T`'s Wasm type | `set`, `IndexAssign`, the constructors |
 | `builtin::size_of<T: AnyBits>() -> i32`           | a constant                     | addresses, the contracts               |
 
@@ -181,7 +189,7 @@ In order:
 - [x] `AnyBits` and the four built-ins, written into the specification, each
   with an e2e fixture: the loads and stores at every `AnyBits` width, and
   the refusal of any other type argument.
-- [ ] `core:linear` with `LinearArray` and its tests. A fixture shows the hot
+- [x] `core:linear` with `LinearArray` and its tests. A fixture shows the hot
   loop of a product indexing two arrays losing every check in its fast
   version.
 - [ ] `fs::read_linear`.

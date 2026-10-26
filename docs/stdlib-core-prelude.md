@@ -322,6 +322,13 @@ See WEP 2026-01-20.
 Marker every affine resource holds, and nothing else. Sealed and
 compiler-stated; user impls are rejected. See WEP: Affine Types.
 
+### `pub trait AnyBits with ()`
+
+Marker of a type every bit pattern of its width is a value of: the
+fixed-width integers, the floats, `v128`, and a newtype or `flags` type over
+one. `builtin::load` reads one from any bytes. Sealed and compiler-stated;
+user impls are rejected. See WEP: Linear Arrays.
+
 ### `pub affine trait IndexRef<IndexType> with ()`
 
 Immutable reference indexing: `&container[i]` reads through this.
@@ -361,11 +368,12 @@ affine element too. Like that assignment it checks `b` before `a`, and
 
 #### `fn index_swap(&mut self, a: IndexType, b: IndexType)`
 
-### `pub trait IndexValue<IndexType> with ()`
+### `pub affine trait IndexValue<IndexType> with ()`
 
 Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
-aliased by reference (scalars, resources).
+aliased by reference (scalars, resources). An affine container hands out
+copyable elements by value too (`LinearArray`).
 
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 

@@ -1,0 +1,145 @@
+#![stdlib("core:linear")]
+//! Arrays of plain data in linear memory, outside the GC heap.
+//!
+//! A `LinearArray<T>` owns one block from the program's allocator and gives it
+//! back when it drops. An element is any `AnyBits` type: an integer, a float,
+//! `v128` or a newtype over one, which every byte pattern is a value of. The
+//! engine checks no element access against the array, since linear memory has
+//! no per-allocation bounds; each access states its range as a `contract`
+//! instead, which `loop_version_bce` deletes in a loop that keeps the index in
+//! range.
+//!
+//! The array is affine, so one block has one owner, and no reference into it
+//! outlives that owner. Its address is never handed out, every element is
+//! written before anything reads it, and it never crosses a component
+//! boundary: `to_list` copies it into one that can. See WEP: Linear Arrays.
+
+#[synopsis]
+test {
+    let mut weights = LinearArray::<f32>::filled(4, 0.0);
+    weights[2] = 1.5;
+    assert weights[2] == 1.5;
+    assert weights.to_list() == [0.0, 0.0, 1.5, 0.0];
+}
+
+/// The allocator's alignment for every block, whatever the element type, so a
+/// `cast` keeps any element aligned.
+global ALIGN: i32 = 16;
+
+/// One block of linear memory, `bytes` long, given back where it drops.
+affine struct Block {
+    ptr: i32,
+    bytes: i32,
+}
+
+impl Drop for Block {
+    fn drop(self) {
+        let _ = builtin::realloc(self.ptr, self.bytes, ALIGN, 0);
+    }
+}
+
+/// A fixed-length array of `T` in linear memory.
+pub affine struct LinearArray<T: AnyBits> {
+    block: Block,
+    len: i32,
+}
+
+impl<T: AnyBits> LinearArray<T> {
+    /// An array of `len` elements whose bytes the caller writes before any
+    /// read.
+    fn unwritten(len: i32) -> LinearArray<T>
+        contract 0 <= len <= i32::MAX / builtin::size_of::<T>()
+    {
+        let bytes = len * builtin::size_of::<T>();
+        let block = Block { ptr: builtin::realloc(0, 0, ALIGN, bytes), bytes };
+        return LinearArray::<T> { block, len };
+    }
+
+    /// An array of `len` elements, each `value`.
+    pub fn filled(len: i32, value: T) -> LinearArray<T>
+        contract 0 <= len <= i32::MAX / builtin::size_of::<T>()
+    {
+        let mut array = unchecked LinearArray::<T>::unwritten(len);
+        for let i of 0..<len {
+            unchecked array.set(i, value);
+        }
+        return array;
+    }
+
+    /// An array holding a copy of each element of `source`.
+    pub fn from_slice<S: AsSlice<Elem = T>>(source: &S) -> LinearArray<T> {
+        let mut array = LinearArray::<T>::unwritten(source.len());
+        for let i of 0..<source.len() {
+            unchecked array.set(i, unchecked source.at(i));
+        }
+        return array;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.len;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.len == 0;
+    }
+
+    /// The element at `index`.
+    pub fn at(&self, index: i32) -> T
+        contract 0 <= index < self.len()
+    {
+        return builtin::load::<T>(self.block.ptr + index * builtin::size_of::<T>());
+    }
+
+    /// Writes `value` at `index`.
+    pub fn set(&mut self, index: i32, value: T)
+        contract 0 <= index < self.len()
+    {
+        builtin::store(self.block.ptr + index * builtin::size_of::<T>(), value);
+    }
+
+    /// A second array holding the same elements.
+    pub fn duplicate(&self) -> LinearArray<T> {
+        let copy = unchecked LinearArray::<T>::unwritten(self.len);
+        builtin::memory_copy(copy.block.ptr, self.block.ptr, self.block.bytes);
+        return copy;
+    }
+
+    /// The elements, copied into a `List`.
+    pub fn to_list(&self) -> List<T> {
+        let mut list = List::<T>::with_capacity(self.len);
+        for let i of 0..<self.len {
+            list.push(unchecked self.at(i));
+        }
+        return list;
+    }
+
+    /// The same bytes as an array of `U`, read little-endian, with no element
+    /// copied. The array moves, so its bytes are never seen as two types at once.
+    pub fn cast<U: AnyBits>(self) -> LinearArray<U>
+        contract self.len() * builtin::size_of::<T>() % builtin::size_of::<U>() == 0
+    {
+        let LinearArray { block, .. } = self;
+        let len = block.bytes / builtin::size_of::<U>();
+        return LinearArray::<U> { block, len };
+    }
+}
+
+impl<T: AnyBits> IndexValue<i32> for LinearArray<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output
+        contract 0 <= index < self.len()
+    {
+        return unchecked self.at(index);
+    }
+}
+
+impl<T: AnyBits> IndexAssign<i32> for LinearArray<T> {
+    type Output = T;
+
+    fn index_assign(&mut self, index: i32, value: Self::Output)
+        contract 0 <= index < self.len()
+    {
+        unchecked self.set(index, value);
+    }
+}

@@ -788,9 +788,10 @@ pub affine trait IndexSwap<IndexType> with () {
 
 /// Value-copy indexing: `container[i]` yields a copy of the element.
 /// The value-semantics counterpart to `IndexRef` for elements that cannot be
-/// aliased by reference (scalars, resources).
+/// aliased by reference (scalars, resources). An affine container hands out
+/// copyable elements by value too (`LinearArray`).
 #[compiler_item("index_value")]
-pub trait IndexValue<IndexType> with () {
+pub affine trait IndexValue<IndexType> with () {
     type Output;
 
     /// Returns a copy of the element at the given index.
