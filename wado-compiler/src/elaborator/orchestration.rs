@@ -936,20 +936,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
-        for sealed_item in [
-            CompilerItem::Reflect,
-            CompilerItem::ReflectStruct,
-            CompilerItem::ReflectVariant,
-            CompilerItem::ReflectEnum,
-            CompilerItem::ReflectFlags,
-            CompilerItem::ReflectNewtype,
-            CompilerItem::ReflectTemplate,
+        for sealed_item in CompilerItem::REFLECT_KINDS.into_iter().chain([
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
             CompilerItem::Waitable,
-        ] {
+        ]) {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
                 continue;
             };

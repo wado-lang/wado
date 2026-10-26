@@ -420,6 +420,12 @@ pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
     format!("$hole_get${mangled_shape}${mangled_hole}")
 }
 
+/// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
+/// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
+pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
+    format!("$hole_ref${mangled_shape}${mangled_hole}")
+}
+
 /// Name of the synthesized segment-read helper for a template shape. Lowering
 /// rewrites `builtin::template_segment::<T>` calls to it (WEP 2026-01-10).
 pub fn template_segment_helper_name(mangled_shape: &str) -> String {

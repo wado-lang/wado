@@ -32,10 +32,20 @@ use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
+<<<<<<< HEAD
     COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
     case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
     hole_fmt_helper_name, hole_get_helper_name, template_segment_helper_name,
     variant_tag_helper_name,
+||||||| bca8aec3b
+    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
+    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
+    template_segment_helper_name, variant_tag_helper_name,
+=======
+    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
+    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
+    hole_ref_helper_name, template_segment_helper_name, variant_tag_helper_name,
+>>>>>>> origin/main
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -2572,12 +2582,16 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
+        // A field read names the struct and the field type, a hole read the
+        // shape and the hole type.
         for (builtin, helper_name) in [
             (
                 "struct_field_get",
                 field_get_helper_name as fn(&str, &str) -> String,
             ),
             ("struct_field_ref", field_ref_helper_name),
+            ("hole_get", hole_get_helper_name),
+            ("hole_ref", hole_ref_helper_name),
         ] {
             if func.is_builtin_named(builtin) {
                 let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
@@ -2592,19 +2606,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
-        // and `template_segment<T>` the shape only.
-        if func.is_builtin_named("hole_get") {
-            let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
-            let name = {
-                let tt = self.base.type_table.borrow();
-                hole_get_helper_name(
-                    &tt.mangle_type_arg_unboxed(ta[0]),
-                    &tt.mangle_type_arg_unboxed(ta[1]),
-                )
-            };
-            return Some(self.bridge_call(ta[0], name, args, "hole_get"));
-        }
+        // `hole_fmt<T>` and `template_segment<T>` name the shape only.
         for (builtin, helper_name) in [
             ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
             ("template_segment", template_segment_helper_name),

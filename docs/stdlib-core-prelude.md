@@ -3518,8 +3518,8 @@ The flags value with only this bit set.
 ### `pub struct TemplateHole<T, affine V>`
 
 A hole handle minted by `ReflectTemplate::members()`: the hole's position
-and specifier presence are constants of the shape, and `lit` / `raw` /
-`get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
+and specifier are constants of the shape, and `lit` / `raw` / `get` /
+`get_ref` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 
 _Fields are private._
 
@@ -3540,6 +3540,15 @@ this one, escapes processed.
 
 Whether the hole wrote a `:spec`.
 
+#### `pub fn spec(&self) -> Option<String>`
+
+The specifier as written after the `:`, or `None` without one.
+
+#### `pub fn get_ref(&self, t: &T) -> &V`
+
+A reference to the hole's value in `t`, which copies nothing, so it
+reaches a hole of an affine type as well.
+
 #### `pub fn fmt(&self, t: &T, f: &mut Formatter)`
 
 Renders the value through the trait method the specifier's type
@@ -3549,6 +3558,10 @@ the specifier's settings over `f`'s buffer.
 #### `pub fn get(&self, t: &T) -> V`
 
 The hole's value in `t`.
+
+#### `impl Inspect for TemplateHole<T, V>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
 
 ### `pub struct StructField<affine T, affine F>`
 

@@ -34,10 +34,10 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
     flat.functions.extend(generated);
 }
 
-/// `$field_get$S$F` for each monomorphized struct instantiated from a
-/// `ReflectStruct`-derived generic base, and for each anonymous shape only a
-/// substitution reached; `$hole_get$S$V` and `$template_segment$S` where that
-/// shape is a template's.
+/// `$field_get$S$F` and `$field_ref$S$F` for each monomorphized struct
+/// instantiated from a `ReflectStruct`-derived generic base, and for each
+/// anonymous shape only a substitution reached; `$hole_get$S$V`,
+/// `$hole_ref$S$V` and `$template_segment$S` where that shape is a template's.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     let targets: Vec<usize> = {
         let tt = flat.type_table.borrow();

@@ -301,6 +301,12 @@ fn test_template_specifiers_inspect() with Stdout {
     assert `${i128_pos:<10?}` == "42        ";
     assert `${true:10?}` == "      true";
     assert `${false:<10?}` == "false     ";
+    // Quoted text ignores the width, as Rust's `{:>5?}` does.
+    assert `${"a":>5?}` == "\"a\"";
+    assert `${"a".as_str_slice():*<5?}` == "\"a\"";
+    assert `${'c':^5?}` == "'c'";
+    let cell: [i32, String] = [1, "a"];
+    assert `${cell:>4?}` == "[   1, \"a\"]";
     println("inspect ok");
 }
 
