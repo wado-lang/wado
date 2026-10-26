@@ -82,7 +82,7 @@ test "read_linear reads what a Stream handler serves" {
     fs::write(&path, &b"real").unwrap();
     let mut substitute = Substitute { content: b"virtual" as List<u8> };
     let array = with &mut substitute do {
-        fs::read_linear(&path).unwrap()
+        fs::read_linear(&path).unwrap();
     };
     assert array.to_list() == b"virtual" as List<u8>;
 }

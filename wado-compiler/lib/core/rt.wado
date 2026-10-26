@@ -390,7 +390,7 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
     return count * elem_size;
 }
 
-/// CM adapter for stream.read(max) on Stream<u8>: one copy, started.
+/// CM adapter for stream.read(max, into) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32, into: ReadInto) -> StartedRead<u8> {
     let room = cm_buffer_bytes(cm_copy_count(max), 1);
