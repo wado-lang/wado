@@ -26,7 +26,7 @@ since removing it changes what the program does.
 | `-O1` | 2          | 4                | on              | The default of `wado run` and `wado serve`            |
 | `-O2` | 15         | 16               | off             | The default of every other subcommand                 |
 | `-O3` | 20         | 26               | off             |                                                       |
-| `-Os` | 15         | 16               | off             | Strips the name section; a failed `assert` only traps |
+| `-Os` | 15         | 16               | off             | Strips the name section; a failed `assert` only traps; no loop unrolling |
 
 The levels differ in what a program does, not only in its speed: below `-O2`, a
 call marked `unchecked` traps when it breaks its contract (see
@@ -221,7 +221,10 @@ settles the locals (step 11).
 6. Write-only local elimination.
 7. Global cleanup (constant initializers, duplicate globals, dead data), then
    `br_if` selection, the calls to a function left empty and the once-flags
-   guarding them, and branch hints.
+   guarding them, loop unrolling, and branch hints. A small loop that reads GC
+   arrays gains a copy running several iterations per test of its condition,
+   so wasmtime shares part of each `array.get`'s bounds check across them. The
+   original loop runs what is left.
 8. DCE and compaction.
 9. Local coalescing: a local read once is first forwarded into its read. Then
    locals of one Wasm type whose live ranges never overlap share a slot. A

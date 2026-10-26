@@ -17,6 +17,7 @@ mod empty_work;
 mod local_coalesce;
 mod local_layout;
 mod local_nullability;
+mod loop_unroll;
 mod nullability;
 mod nullable_ref;
 mod peephole;
@@ -49,6 +50,7 @@ use empty_work::elide_empty_work;
 use local_coalesce::coalesce_locals;
 use local_layout::lay_out_locals;
 use local_nullability::relax_unset_nonnull_locals;
+use loop_unroll::unroll_array_loops;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
@@ -281,6 +283,13 @@ fn optimize_scoped(
         wir_pass(scope, "elide_empty_work", module, profiler, |m| {
             elide_empty_work(m);
         });
+        // After `select_br_if`, which gives a loop's exit the `br_if` it reads,
+        // and before branch hints wrap that exit's condition.
+        if opt_level != OptLevel::Os {
+            wir_pass(scope, "unroll_array_loops", module, profiler, |m| {
+                unroll_array_loops(m);
+            });
+        }
         if flags.branch_hinting {
             wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
                 infer_branch_hints(m);
