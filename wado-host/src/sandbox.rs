@@ -5,7 +5,9 @@
 //! re-executing `wado`, so a host embedded in another binary spawns as `wado`
 //! does.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs::File;
 use std::io;
 use std::os::fd::OwnedFd;
@@ -206,6 +208,54 @@ pub struct Spawned {
     pub stdin: Option<OwnedFd>,
     pub stdout: Option<OwnedFd>,
     pub stderr: Option<OwnedFd>,
+    pub refusals: Refusals,
+}
+
+/// A system call the filter refused a child, which saw it fail with `EPERM`.
+/// Linux alone reports one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Refusal {
+    /// A socket, with the network not granted.
+    Network,
+    /// A UNIX socket, which a path can connect to a service outside.
+    UnixSocket,
+    /// `setsid` or `setpgid`, out of the group the host kills.
+    LeaveGroup,
+    Trace,
+    /// `io_uring`, whose operations the filter never sees.
+    IoUring,
+    /// `TIOCSTI` or `TIOCLINUX`, typing into the terminal.
+    TerminalInput,
+}
+
+impl fmt::Display for Refusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Refusal::Network => "a network socket, with no network granted",
+            Refusal::UnixSocket => "a UNIX socket, which can reach a service outside the sandbox",
+            Refusal::LeaveGroup => "leaving its process group",
+            Refusal::Trace => "tracing another process",
+            Refusal::IoUring => "io_uring, whose operations the sandbox cannot inspect",
+            Refusal::TerminalInput => "typing into a terminal",
+        })
+    }
+}
+
+/// What a child's group has been refused so far. A refused call blocks until
+/// it is recorded, so once [`Child::wait`] returns, the set holds every refusal
+/// the child itself met; a descendant that outlives it may add more.
+#[derive(Clone, Default)]
+pub struct Refusals(Arc<Mutex<BTreeSet<Refusal>>>);
+
+impl Refusals {
+    #[must_use]
+    pub fn collect(&self) -> BTreeSet<Refusal> {
+        lock(&self.0).clone()
+    }
+
+    fn record(&self, refusal: Refusal) {
+        lock(&self.0).insert(refusal);
+    }
 }
 
 /// Start `command` confined to its policy, in a process group of its own,

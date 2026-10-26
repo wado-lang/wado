@@ -5,6 +5,7 @@
 //! re-executed under the sandbox: [`probe`] performs the act its environment
 //! names and exits with what came of it.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::Read;
@@ -15,7 +16,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::{
-    Access, Availability, Command, ExitStatus, Network, Policy, Spawned, Stdio, availability, spawn,
+    Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Spawned, Stdio,
+    availability, spawn,
 };
 
 const PROBE_VAR: &str = "WADO_SANDBOX_PROBE";
@@ -154,6 +156,16 @@ fn assert_available() {
 }
 
 fn run(policy: &Policy, program: &Path, args: &[&str], env: &[(&str, &str)]) -> ExitStatus {
+    run_refused(policy, program, args, env).0
+}
+
+/// How the child ended, and what the filter refused it on the way.
+fn run_refused(
+    policy: &Policy,
+    program: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> (ExitStatus, BTreeSet<Refusal>) {
     let args: Vec<OsString> = args.iter().map(OsString::from).collect();
     let env: Vec<(OsString, OsString)> = env
         .iter()
@@ -170,7 +182,8 @@ fn run(policy: &Policy, program: &Path, args: &[&str], env: &[(&str, &str)]) -> 
         policy,
     })
     .unwrap();
-    spawned.child.wait().unwrap()
+    let status = spawned.child.wait().unwrap();
+    (status, spawned.refusals.collect())
 }
 
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
@@ -184,10 +197,14 @@ fn sh(policy: &Policy, script: &str) -> ExitStatus {
 
 /// This test binary under `policy`, with its own directory readable, performing
 /// `act`.
-fn probe_under(mut policy: Policy, act: &str) -> ExitStatus {
+fn probe_under(policy: Policy, act: &str) -> ExitStatus {
+    probe_refused(policy, act).0
+}
+
+fn probe_refused(mut policy: Policy, act: &str) -> (ExitStatus, BTreeSet<Refusal>) {
     let exe = std::env::current_exe().unwrap();
     policy.grant_path(exe.parent().unwrap(), Access::ReadExecute);
-    run(
+    run_refused(
         &policy,
         &exe,
         &[
@@ -331,6 +348,41 @@ fn no_io_uring() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn the_host_learns_each_call_the_filter_refused() {
+    assert_available();
+    let tree = Tree::new();
+    let socket = tree.outside().join("service.sock");
+    let _listener = UnixListener::bind(&socket).unwrap();
+    let host = std::process::id();
+    for (network, act, refusal) in [
+        (Network::Denied, "tcp".to_owned(), Refusal::Network),
+        (
+            Network::Granted,
+            format!("unix:{}", socket.display()),
+            Refusal::UnixSocket,
+        ),
+        (Network::Denied, "setsid".to_owned(), Refusal::LeaveGroup),
+        (Network::Denied, format!("ptrace:{host}"), Refusal::Trace),
+        (Network::Denied, "io_uring".to_owned(), Refusal::IoUring),
+        (
+            Network::Denied,
+            "tiocsti".to_owned(),
+            Refusal::TerminalInput,
+        ),
+    ] {
+        assert_eq!(
+            probe_refused(tree.policy(network), &act),
+            (REFUSED, BTreeSet::from([refusal])),
+            "{act}"
+        );
+    }
+    assert_eq!(
+        probe_refused(tree.policy(Network::Granted), "tcp"),
+        (OK, BTreeSet::new())
+    );
+}
 #[test]
 fn no_escape_through_a_symbolic_link_or_dot_dot() {
     assert_available();

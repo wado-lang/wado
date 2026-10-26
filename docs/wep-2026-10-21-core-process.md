@@ -279,6 +279,26 @@ child may read more than the guest. It is defined, not open-ended:
   built can run. This adds no authority, since the child cannot leave the grants
   either way.
 
+### Diagnostics
+
+The guest learns a failure as an `error-code` or an exit status. The host knows
+more, and says it on its own stderr, with the fix where one exists:
+
+- A trap from a host that offers no spawning names the reason and, for
+  `--deny-process` or a grant at another host path, the flag that changes it.
+- A program outside the grants and the baseline warns at its spawn with the
+  resolved path, and names the `--process-read` grant and the user config entry
+  that would let it run. A program that does not exist stays silent: a guest
+  that probes for an optional tool expects `not-found`.
+- A child that fails, with a nonzero status or a signal, after the filter
+  refused it a call warns with the calls refused. The refusal may not be why it
+  failed, so the warning puts the two side by side and claims no cause. Linux
+  alone reports this: the filter refers each such call to the host through a
+  seccomp listener, and a host thread records it and answers `EPERM`, so the
+  child sees what a plain `SECCOMP_RET_ERRNO` would give it.
+
+Each warning prints once per run however often the guest repeats the spawn.
+
 ### WIT
 
 The interface ships as `core:process@0.1.0`, as `core:eval` and `core:kiln`
@@ -514,6 +534,11 @@ cannot be taken back.
 - On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.
+- A confined child cannot confine a child of its own. Its `setpgid` is refused,
+  so a `wado` that `core:process` started fails every spawn.
+- A file or directory the sandbox refused a child is not reported. Landlock
+  answers `EACCES` and leaves no record the host can read, so the child's own
+  message is all there is.
 
 ## Related WEPs
 

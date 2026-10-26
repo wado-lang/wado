@@ -5,6 +5,11 @@
 //!
 //! Everything the child reads is built before the fork, so the window between
 //! `fork` and `exec` makes only system calls.
+//!
+//! The filter refers each call it refuses to the host through a seccomp
+//! listener, which the child passes back over a socket pair before its `exec`.
+//! A thread records the call as a [`Refusal`] and answers `EPERM`, so the child
+//! sees what a plain `SECCOMP_RET_ERRNO` would have given it.
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -15,8 +20,11 @@ use std::path::PathBuf;
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
+use std::thread;
 
-use super::{Access, Availability, Child, Command, Network, Policy, Spawned, Stdio};
+use super::{
+    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, Spawned, Stdio,
+};
 
 /// ABI 6 adds the scopes that isolate signals and abstract UNIX sockets.
 const LANDLOCK_ABI_REQUIRED: libc::c_long = 6;
@@ -108,6 +116,7 @@ fn probe_availability() -> Availability {
 pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let ruleset = ruleset(command.policy)?;
     let filter = seccomp_filter(command.policy.network());
+    let [listener_tx, listener_rx] = socket_pair()?;
     let cwd = command.cwd.map(File::try_clone).transpose()?;
 
     let mut std_command = StdCommand::new(command.program);
@@ -121,15 +130,229 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     // SAFETY: the closure makes only system calls, on memory built before the
     // fork, so it is safe in the child of a multithreaded process.
     unsafe {
-        std_command.pre_exec(move || confine_self(&ruleset, &filter, cwd.as_ref()));
+        std_command.pre_exec(move || {
+            confine_self(&ruleset, &filter, cwd.as_ref(), listener_tx.as_raw_fd())
+        });
     }
     let mut child = std_command.spawn()?;
+    // The child sent it before the `exec` that `spawn` waited for.
+    let listener = receive_listener(&listener_rx).expect("the child sends its listener");
+    let refusals = Refusals::default();
+    let recorded = refusals.clone();
+    thread::Builder::new()
+        .name("sandbox-refusals".to_owned())
+        .spawn(move || answer_refusals(&listener, &recorded))?;
     Ok(Spawned {
         child: Child::new(child.id() as libc::pid_t),
         stdin: child.stdin.take().map(OwnedFd::from),
         stdout: child.stdout.take().map(OwnedFd::from),
         stderr: child.stderr.take().map(OwnedFd::from),
+        refusals,
     })
+}
+
+fn socket_pair() -> io::Result<[OwnedFd; 2]> {
+    let mut fds = [0 as RawFd; 2];
+    // SAFETY: `fds` has room for the two descriptors the call writes.
+    check(unsafe {
+        libc::socketpair(
+            libc::AF_UNIX,
+            libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC,
+            0,
+            fds.as_mut_ptr(),
+        )
+    })?;
+    // SAFETY: the kernel just returned these descriptors to us alone.
+    Ok(fds.map(|fd| unsafe { OwnedFd::from_raw_fd(fd) }))
+}
+
+/// The control data of a message carrying one descriptor.
+#[repr(C)]
+union FdControl {
+    header: libc::cmsghdr,
+    // SAFETY: `CMSG_SPACE` only computes a size.
+    bytes: [u8; unsafe { libc::CMSG_SPACE(size_of::<RawFd>() as u32) } as usize],
+}
+
+/// A one-byte message with room for one descriptor, all on the stack, since
+/// the child builds one between `fork` and `exec`.
+struct FdMessage {
+    byte: u8,
+    iov: libc::iovec,
+    control: FdControl,
+    header: libc::msghdr,
+}
+
+impl FdMessage {
+    fn new() -> Self {
+        // SAFETY: all-zero is a valid value of each field.
+        unsafe { std::mem::zeroed() }
+    }
+
+    /// The header, pointing into `self`, which must not move while it is used.
+    fn header(&mut self) -> *mut libc::msghdr {
+        self.iov = libc::iovec {
+            iov_base: (&raw mut self.byte).cast(),
+            iov_len: 1,
+        };
+        self.header.msg_iov = &raw mut self.iov;
+        self.header.msg_iovlen = 1;
+        self.header.msg_control = (&raw mut self.control).cast();
+        self.header.msg_controllen = size_of::<FdControl>() as _;
+        &raw mut self.header
+    }
+}
+
+/// Runs in the child between `fork` and `exec`.
+fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
+    let mut message = FdMessage::new();
+    let header = message.header();
+    // SAFETY: the control buffer holds one header and one descriptor, and
+    // `message` outlives the calls.
+    let sent = unsafe {
+        let control = libc::CMSG_FIRSTHDR(header);
+        (*control).cmsg_level = libc::SOL_SOCKET;
+        (*control).cmsg_type = libc::SCM_RIGHTS;
+        (*control).cmsg_len = libc::CMSG_LEN(size_of::<RawFd>() as u32) as _;
+        libc::CMSG_DATA(control)
+            .cast::<RawFd>()
+            .write_unaligned(listener);
+        libc::sendmsg(socket, header, 0)
+    };
+    if sent == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+fn receive_listener(socket: &OwnedFd) -> io::Result<OwnedFd> {
+    let mut message = FdMessage::new();
+    let header = message.header();
+    // SAFETY: `message` outlives the call.
+    let received = unsafe { libc::recvmsg(socket.as_raw_fd(), header, libc::MSG_CMSG_CLOEXEC) };
+    if received == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the kernel filled the control buffer `header` points to.
+    let control = unsafe { libc::CMSG_FIRSTHDR(header) };
+    assert!(!control.is_null(), "the child sends its listener");
+    // SAFETY: a header the kernel wrote, holding the one descriptor sent, which
+    // `SCM_RIGHTS` installed in our table for us alone.
+    Ok(unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) })
+}
+
+/// Answer each call the filter refers to the host with `EPERM`, recording it
+/// first, until no task uses the filter any more.
+fn answer_refusals(listener: &OwnedFd, refusals: &Refusals) {
+    let sizes = notif_sizes();
+    let mut call = notif_buffer(sizes.seccomp_notif, size_of::<libc::seccomp_notif>());
+    let mut answer = notif_buffer(
+        sizes.seccomp_notif_resp,
+        size_of::<libc::seccomp_notif_resp>(),
+    );
+    loop {
+        let mut ready = libc::pollfd {
+            fd: listener.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: `ready` outlives the call.
+        if unsafe { libc::poll(&raw mut ready, 1, -1) } == -1 {
+            let err = io::Error::last_os_error();
+            assert_eq!(err.kind(), io::ErrorKind::Interrupted, "poll: {err}");
+            continue;
+        }
+        // `POLLHUP` alone: the last task using the filter is gone.
+        if ready.revents & libc::POLLIN == 0 {
+            return;
+        }
+        // The kernel refuses a buffer that is not zeroed.
+        call.fill(0);
+        // SAFETY: `call` is at least the size the kernel writes.
+        if unsafe {
+            libc::ioctl(
+                listener.as_raw_fd(),
+                libc::SECCOMP_IOCTL_NOTIF_RECV,
+                call.as_mut_ptr(),
+            )
+        } == -1
+        {
+            match io::Error::last_os_error().raw_os_error() {
+                // Interrupted, or the caller died before we read its call.
+                Some(libc::EINTR | libc::ENOENT) => continue,
+                errno => panic!("SECCOMP_IOCTL_NOTIF_RECV: {errno:?}"),
+            }
+        }
+        // SAFETY: the kernel wrote a `seccomp_notif` at the start of `call`.
+        let notif = unsafe { call.as_ptr().cast::<libc::seccomp_notif>().read() };
+        refusals.record(refusal(&notif.data));
+        answer.fill(0);
+        // SAFETY: `answer` is at least the size of a `seccomp_notif_resp`.
+        unsafe {
+            answer
+                .as_mut_ptr()
+                .cast::<libc::seccomp_notif_resp>()
+                .write(libc::seccomp_notif_resp {
+                    id: notif.id,
+                    val: 0,
+                    error: -libc::EPERM,
+                    flags: 0,
+                });
+        }
+        // SAFETY: as above, `answer` is large enough.
+        if unsafe {
+            libc::ioctl(
+                listener.as_raw_fd(),
+                libc::SECCOMP_IOCTL_NOTIF_SEND,
+                answer.as_ptr(),
+            )
+        } == -1
+        {
+            let err = io::Error::last_os_error();
+            // The caller died while it waited.
+            assert_eq!(
+                err.raw_os_error(),
+                Some(libc::ENOENT),
+                "SECCOMP_IOCTL_NOTIF_SEND: {err}"
+            );
+        }
+    }
+}
+
+/// The sizes of the notification structures the running kernel reads and
+/// writes, which may exceed the ones `libc` declares.
+fn notif_sizes() -> libc::seccomp_notif_sizes {
+    // SAFETY: an all-zero `seccomp_notif_sizes` is valid.
+    let mut sizes: libc::seccomp_notif_sizes = unsafe { std::mem::zeroed() };
+    // SAFETY: `sizes` outlives the call, which writes it.
+    check_long(unsafe {
+        libc::syscall(
+            libc::SYS_seccomp,
+            libc::SECCOMP_GET_NOTIF_SIZES,
+            0u32,
+            &raw mut sizes,
+        )
+    })
+    .expect("a kernel that installed the listener reports its sizes");
+    sizes
+}
+
+/// A zeroed, 8-byte aligned buffer of at least `kernel` and `declared` bytes.
+fn notif_buffer(kernel: u16, declared: usize) -> Vec<u64> {
+    vec![0; usize::from(kernel).max(declared).div_ceil(8)]
+}
+
+/// What the filter refers to the host, by the call and the argument it tested.
+fn refusal(call: &libc::seccomp_data) -> Refusal {
+    match libc::c_long::from(call.nr) {
+        libc::SYS_socket if call.args[0] as libc::c_int == libc::AF_UNIX => Refusal::UnixSocket,
+        libc::SYS_socket => Refusal::Network,
+        libc::SYS_setsid | libc::SYS_setpgid => Refusal::LeaveGroup,
+        libc::SYS_ptrace => Refusal::Trace,
+        libc::SYS_io_uring_setup => Refusal::IoUring,
+        libc::SYS_ioctl => Refusal::TerminalInput,
+        nr => unreachable!("the filter refers no other call: {nr}"),
+    }
 }
 
 pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
@@ -149,6 +372,7 @@ fn confine_self(
     ruleset: &OwnedFd,
     filter: &[libc::sock_filter],
     cwd: Option<&File>,
+    listener_tx: RawFd,
 ) -> io::Result<()> {
     // A group of its own, so the host's kill reaches every descendant; the
     // filter below keeps them from leaving it.
@@ -165,14 +389,17 @@ fn confine_self(
         len: u16::try_from(filter.len()).expect("the filter is built short"),
         filter: filter.as_ptr().cast_mut(),
     };
-    check_long(unsafe {
+    let listener = unsafe {
         libc::syscall(
             libc::SYS_seccomp,
             libc::SECCOMP_SET_MODE_FILTER,
-            0u32,
+            libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
             &raw const program,
         )
-    })?;
+    };
+    check_long(listener)?;
+    send_listener(listener_tx, listener as RawFd)?;
+    check(unsafe { libc::close(listener as RawFd) })?;
     // Confinement mediates what the child opens, never what it already holds.
     // Marked close-on-exec rather than closed, so the descriptor the standard
     // library reports a failed `exec` through survives until the `exec`.
@@ -286,7 +513,7 @@ const fn seccomp_data_arg(index: u32) -> u32 {
 
 fn seccomp_filter(network: Network) -> Vec<libc::sock_filter> {
     let arch = AUDIT_ARCH.expect("availability refuses an architecture without a filter");
-    let deny = libc::SECCOMP_RET_ERRNO | (libc::EPERM as u32 & libc::SECCOMP_RET_DATA);
+    let deny = libc::SECCOMP_RET_USER_NOTIF;
     let mut asm = Assembler::default();
     asm.load(SECCOMP_DATA_ARCH);
     asm.jump_if_eq(arch, Label::ArchOk);

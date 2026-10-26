@@ -3,7 +3,7 @@
 //!
 //! See WEP 2026-10-21 (`core:process`).
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -50,9 +50,9 @@ pub struct Spawning(Arc<Shared>);
 
 struct Shared {
     answer: Answer,
-    /// The programs a refusal was already reported for, so a guest that
-    /// retries one warns once.
-    refused: Mutex<HashSet<PathBuf>>,
+    /// The warnings already printed, so a guest that retries a program warns
+    /// once.
+    warned: Mutex<BTreeSet<String>>,
 }
 
 enum Answer {
@@ -113,7 +113,7 @@ impl Spawning {
     pub fn new(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<Self> {
         Ok(Self(Arc::new(Shared {
             answer: answer(preopened_dirs, grant)?,
-            refused: Mutex::default(),
+            warned: Mutex::default(),
         })))
     }
 }

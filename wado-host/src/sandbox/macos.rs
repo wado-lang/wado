@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::OnceLock;
 
-use super::{Access, Availability, Child, Command, Network, Policy, Spawned, Stdio};
+use super::{Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
@@ -236,6 +236,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         stdin,
         stdout,
         stderr,
+        refusals: Refusals::default(),
     })
 }
 

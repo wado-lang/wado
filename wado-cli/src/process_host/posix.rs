@@ -1,10 +1,10 @@
 //! Spawning on a POSIX host, where `wado_host::sandbox` confines the child.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::os::fd::OwnedFd;
-use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
 use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
-use wado_host::sync::lock;
+use wado_host::sync::{join, lock};
 
 use super::types::{ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
@@ -131,7 +131,17 @@ pub(super) fn spawn<U>(
     let mut copies = Vec::new();
     let stdout = route(&mut store, stdout, spawned.stdout, &mut copies)?;
     let stderr = route(&mut store, stderr, spawned.stderr, &mut copies)?;
-    let exited = supervise(child, timeout.map(Duration::from_nanos), scratch, copies)?;
+    let exited = supervise(
+        Supervised {
+            child,
+            refusals: spawned.refusals,
+            program,
+            spawning: store.get().ctx.spawning.clone(),
+        },
+        timeout.map(Duration::from_nanos),
+        scratch,
+        copies,
+    )?;
     let exit = FutureReader::new(&mut store, async move {
         wasmtime::error::Ok(exited.await.expect("the waiter reports every child"))
     })?;
@@ -200,7 +210,7 @@ fn start(
             policy.grant_terminal();
         }
         if path.exists() && !policy.executes(&path) {
-            view.ctx.spawning.warn_refused(program, &path);
+            view.ctx.spawning.warn(refused_warning(program, &path));
         }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
@@ -227,17 +237,42 @@ fn start(
 }
 
 impl Spawning {
-    /// Warn, once per program, that the sandbox refuses to execute `path`,
-    /// which the guest named `program`.
-    fn warn_refused(&self, program: &str, path: &Path) {
-        if lock(&self.0.refused).insert(path.to_path_buf()) {
-            eprintln!("{}", refused_warning(program, path));
+    fn warn(&self, warning: String) {
+        let mut warned = lock(&self.0.warned);
+        if !warned.contains(&warning) {
+            eprintln!("{warning}");
+            warned.insert(warning);
         }
     }
 }
 
+/// What the filter refused a child that then failed. It may not be why the
+/// child failed, so the warning states the two side by side.
+fn refusals_warning(
+    program: &str,
+    status: &ExitStatus,
+    refusals: &BTreeSet<sandbox::Refusal>,
+) -> Option<String> {
+    let ended = match status {
+        ExitStatus::Exited(0) | ExitStatus::TimedOut => return None,
+        ExitStatus::Exited(code) => format!("exited with status {code}"),
+        ExitStatus::Signaled(signal) => format!("was killed by signal {signal}"),
+    };
+    if refusals.is_empty() {
+        return None;
+    }
+    let refused: Vec<String> = refusals.iter().map(ToString::to_string).collect();
+    Some(format!(
+        "warning: core:process: `{program}` {ended} after the sandbox refused it {}",
+        refused.join("; ")
+    ))
+}
+
 fn refused_warning(program: &str, path: &Path) -> String {
-    let dir = path.parent().expect("a resolved program is absolute").display();
+    let dir = path
+        .parent()
+        .expect("a resolved program is absolute")
+        .display();
     let config = config_path().map_or_else(
         || "the user config".to_owned(),
         |config| config.display().to_string(),
@@ -361,11 +396,20 @@ fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<JoinHandle<(
         })
 }
 
-/// Wait for `child` on a thread of its own, enforcing `timeout`, and remove
+/// A running child, and what its host reports once it ends.
+struct Supervised {
+    child: Arc<Child>,
+    refusals: sandbox::Refusals,
+    /// As the guest named it.
+    program: String,
+    spawning: Spawning,
+}
+
+/// Wait for the child on a thread of its own, enforcing `timeout`, and remove
 /// its scratch directory once it exits. The exit is reported once `copies`
 /// have drained what the child wrote, so the guest never sees it first.
 fn supervise(
-    child: Arc<Child>,
+    supervised: Supervised,
     timeout: Option<Duration>,
     scratch: TempDir,
     copies: Vec<JoinHandle<()>>,
@@ -374,6 +418,12 @@ fn supervise(
     thread::Builder::new()
         .name("process-wait".to_owned())
         .spawn(move || {
+            let Supervised {
+                child,
+                refusals,
+                program,
+                spawning,
+            } = supervised;
             let (alive, deadline) = mpsc::channel::<()>();
             let timer = timeout.map(|timeout| {
                 let child = Arc::clone(&child);
@@ -381,18 +431,20 @@ fn supervise(
             });
             let waited = child.wait();
             drop(alive);
-            let timed_out =
-                timer.is_some_and(|timer| timer.join().unwrap_or_else(|p| resume_unwind(p)));
+            let timed_out = timer.is_some_and(join);
             drop(scratch);
-            for copy in copies {
-                copy.join().unwrap_or_else(|p| resume_unwind(p));
-            }
+            copies.into_iter().for_each(join);
             let status = match waited {
                 Err(_) => Err(ErrorCode::Io),
                 Ok(_) if timed_out => Ok(ExitStatus::TimedOut),
                 Ok(sandbox::ExitStatus::Exited(code)) => Ok(ExitStatus::Exited(code)),
                 Ok(sandbox::ExitStatus::Signaled(signal)) => Ok(ExitStatus::Signaled(signal)),
             };
+            if let Ok(status) = &status
+                && let Some(warning) = refusals_warning(&program, status, &refusals.collect())
+            {
+                spawning.warn(warning);
+            }
             // The guest may have dropped the future without waiting.
             let _ = report.send(status);
         })?;

@@ -1903,6 +1903,33 @@ fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
         .stderr(predicate::str::contains("core:process").not());
 }
 
+/// A child that fails after the filter refused it a call is reported with the
+/// call, once however often the guest runs it. `setsid --wait` from util-linux
+/// exits 1 when its `setsid` is refused.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_names_what_the_sandbox_refused_a_failing_child() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { Command, Process } from \"core:process\";\n\nexport fn run() with Process {\n    for let _ of 0..<2 {\n        let _ = Command::new(\"setsid\").arg(\"--wait\").arg(\"true\").status();\n    }\n}\n",
+    )
+    .unwrap();
+    let stderr = wado_in(work.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(stderr).unwrap();
+    let warning = "warning: core:process: `setsid` exited with status 1 after the sandbox refused it leaving its process group";
+    assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
+}
+
 #[test]
 fn test_run_unavailable_spawning_names_its_fix() {
     let tmp = tempfile::tempdir().unwrap();

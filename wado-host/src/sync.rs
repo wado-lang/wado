@@ -30,6 +30,11 @@ pub async fn next_joined<T: 'static>(tasks: &mut JoinSet<T>) -> T {
     }
 }
 
+/// What `thread` returned. Its panic continues in the caller.
+pub fn join<T>(thread: JoinHandle<T>) -> T {
+    thread.join().unwrap_or_else(|panic| resume_unwind(panic))
+}
+
 /// Join `thread` from a `Drop`. Its panic continues here, unless the drop is
 /// itself part of an unwind, where a second panic would abort the process.
 pub fn join_in_drop(thread: JoinHandle<()>) {
