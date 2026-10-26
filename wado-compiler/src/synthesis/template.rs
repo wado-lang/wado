@@ -685,15 +685,15 @@ pub(crate) fn answering_link(
         ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
             trait_,
             type_module_hint_tt(receiver, tt).as_ref(),
-            &|bounds| {
-                blanket_is_reflect_keyed(bounds, tt)
-                    && receiver_satisfies_blanket_bounds(receiver, bounds, tt)
+            &|blanket| {
+                blanket_is_reflect_keyed(&blanket.bounds, tt)
+                    && blanket_serves(trait_env, blanket, receiver, tt)
             },
         ),
         _ => trait_env.value_blanket_for_receiver(
             trait_,
             type_module_hint_tt(receiver, tt).as_ref(),
-            &|bounds| receiver_satisfies_blanket_bounds(receiver, bounds, tt),
+            &|blanket| blanket_serves(trait_env, blanket, receiver, tt),
         ),
     };
     if let Some(blanket) = blanket {
@@ -866,8 +866,8 @@ pub(crate) fn ranked_value_blanket<'a>(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<&'a BlanketImpl> {
-    if let Some(blanket) = trait_env.value_blanket_for_receiver(trait_, type_module, &|bounds| {
-        receiver_satisfies_blanket_bounds(receiver, bounds, tt)
+    if let Some(blanket) = trait_env.value_blanket_for_receiver(trait_, type_module, &|blanket| {
+        blanket_serves(trait_env, blanket, receiver, tt)
     }) {
         return Some(blanket);
     }
@@ -895,9 +895,25 @@ pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) 
         .any(|bound| reflect_bound_item(bound, tt).is_some())
 }
 
+/// Whether `blanket` serves `receiver`: its reflection kind first, then every
+/// other bound, decided in the blanket's module as a written block's are, so a
+/// blanket never answers where a written block was refused on the same bound
+/// (`reflect_blanket_payload_bound_unproven.wado`).
+fn blanket_serves(
+    trait_env: &TraitEnv,
+    blanket: &BlanketImpl,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    receiver_satisfies_blanket_bounds(receiver, &blanket.bounds, tt)
+        && trait_env
+            .solver()
+            .blocks_applying_at(tt, tt.peel_refs(receiver))(blanket.def)
+}
+
 /// Whether `type_id` itself is the reflection kind a blanket's `bounds` ask for.
-/// Any other bound reads as held: only the elaborator's trait query decides one.
-pub(crate) fn receiver_satisfies_blanket_bounds(
+/// Any other bound reads as held: [`blanket_serves`] asks the solver for those.
+fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
     tt: &TypeTable,
@@ -947,7 +963,7 @@ pub(crate) fn blanket_dispatch_for(
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
+        &|blanket| blanket_serves(trait_env, blanket, type_id, tt),
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(

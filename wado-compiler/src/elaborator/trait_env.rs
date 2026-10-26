@@ -1716,22 +1716,22 @@ impl TraitEnv {
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
     }
 
-    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
-    /// accepts. A trait may carry several disjoint value blankets — the four
-    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
-    /// so a receiver-blind first-wins selection would hand every receiver the
-    /// first-registered kind and then reject it on the bound check.
+    /// The value blanket for `trait_name` that `serves` accepts. A trait may
+    /// carry several disjoint value blankets — the four reflection kinds each
+    /// derive `Inspect` over their own `Reflect*` bound — so a receiver-blind
+    /// first-wins selection would hand every receiver the first-registered kind
+    /// and then reject it on the bound check.
     pub(crate) fn value_blanket_for_receiver(
         &self,
         trait_: DefId,
         type_module: Option<&ModuleSource>,
-        satisfies: &dyn Fn(&[BlanketBound]) -> bool,
+        serves: &dyn Fn(&BlanketImpl) -> bool,
     ) -> Option<&BlanketImpl> {
         let impls = self.blanket_impls.get(&trait_)?;
         let mut values = impls
             .iter()
             .filter(|b| b.receiver == BlanketReceiver::Value)
-            .filter(|b| satisfies(&b.bounds));
+            .filter(|b| serves(b));
         if let Some(hint) = type_module
             && let Some(b) = values.clone().find(|b| &b.module == hint)
         {

@@ -2308,6 +2308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 target_type_id,
                 &static_call.method,
                 static_call.id,
+                Some(static_call.method_id),
                 &method_type_args,
                 &args,
                 &arg_sites,
@@ -2455,12 +2456,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// statics are indexed under the receiver param name (`T`) and the concrete
     /// receiver's bucket never sees them. Select the blanket whose bounds the
     /// receiver satisfies and dispatch to its template, the way an instance
-    /// method reached through the same impl already does.
+    /// method reached through the same impl already does. `method_id` is the
+    /// segment spelling the method, where the source writes one.
     pub(super) fn resolve_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method: &str,
         call_id: AstId,
+        method_id: Option<AstId>,
         method_type_args: &[TypeId],
         args: &[TypeId],
         arg_sites: &[ArgSite],
@@ -2479,6 +2482,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The blanket's own declaration of the method: its bucket is keyed by
         // the receiver *param*, which no name written at a call site reaches.
         let method_def = self.tysys.declared_method(blanket_def, method);
+        if let Some(use_id) = method_id
+            && let Some(def) = method_def
+            && self.record_reference_to_decl(use_id, def, span)
+        {
+            return Some(TypeTable::ERROR);
+        }
         // Its defaults come from the template's own signature: no receiver-keyed
         // lookup reaches a blanket, so the call site brings none.
         let (static_method_defaults, template_defaults_module) = method_def
