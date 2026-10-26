@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -11,15 +12,19 @@ use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio::task::JoinHandle;
+use wado_compiler::TestSelection;
 use wado_compiler::ast::TodoMark;
-use wado_compiler::coverage::{CoverageScope, Registered, read_from_component};
+use wado_compiler::coverage::{CoverageScope, read_from_component};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
-use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_coverage_include};
+use crate::coverage_host::{
+    CoverageFormats, CoverageOptions, CoverageRun, Measurement, Registration,
+    parse_coverage_include,
+};
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
@@ -74,7 +79,8 @@ pub struct TestOptions {
     /// without the per-test timeout, which is counted in the epoch it samples on.
     pub profile: ProfileMode,
     /// `--coverage`: instrument the package and report what the tests ran.
-    pub coverage: Option<CoverageOptions>,
+    /// `--pgo`: run only the workloads, and record what they ran.
+    pub measurement: Option<Measurement>,
 }
 
 /// What a test's store preopens.
@@ -142,8 +148,11 @@ impl TestOptions {
         CompileFlags {
             knobs: self.knobs.clone(),
             target_world: Some("test".to_string()),
-            test_name_filters: self.test_name_filters.clone(),
-            coverage: self.coverage.as_ref().map(|c| c.scope),
+            test_selection: TestSelection {
+                names: self.test_name_filters.clone(),
+                workloads_only: matches!(self.measurement, Some(Measurement::Pgo)),
+            },
+            coverage: self.measurement.as_ref().map(Measurement::scope),
             ..CompileFlags::default()
         }
     }
@@ -169,6 +178,7 @@ enum Opt {
     Coverage,
     CoverageInclude,
     CoverageBaseline,
+    Pgo,
     Help,
 }
 
@@ -186,6 +196,7 @@ impl Opt {
         Self::Coverage,
         Self::CoverageInclude,
         Self::CoverageBaseline,
+        Self::Pgo,
         Self::Help,
     ];
 
@@ -275,6 +286,13 @@ impl Opt {
                 value: Some("FILE"),
                 desc: "Fail unless the regions left unrun are exactly those FILE lists\n\
                        (`--coverage=baseline` writes one)",
+            },
+            Self::Pgo => args::OptSpec {
+                long: Some("pgo"),
+                short: None,
+                value: None,
+                desc: "Run only the `#[workload]` tests and record what they ran into\n\
+                       pgo/default.pgo, or pgo/<stem>.pgo for a program in no package",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -374,6 +392,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut format = TestFormat::Heartbeat;
     let mut profile = ProfileMode::None;
     let mut coverage: Option<CoverageOptions> = None;
+    let mut pgo = false;
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
@@ -446,12 +465,31 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 Opt::CoverageBaseline => {
                     baseline = Some(PathBuf::from(args::require_string(&mut parser)?));
                 }
+                Opt::Pgo => pgo = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
             paths.push(val.to_string_lossy().into_owned());
         } else {
             return Err(args::unexpected_arg(arg, &usage));
+        }
+    }
+
+    if pgo {
+        // A profile is one package's whole set of workloads, so a run that
+        // leaves some out would overwrite it with part of them.
+        if !filters.is_empty() || !test_name_filters.is_empty() || !cli_excludes.is_empty() {
+            return Err(CliExit::error(
+                "--pgo records every workload, so it takes no --filter, --test-name or --exclude",
+            ));
+        }
+        if coverage.is_some() {
+            return Err(CliExit::error(
+                "--pgo and --coverage each measure the run; pick one",
+            ));
+        }
+        if no_run {
+            return Err(CliExit::error("--pgo has nothing to record under --no-run"));
         }
     }
 
@@ -499,6 +537,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         }
     }
     package_runs.retain(|run| !run.paths.is_empty());
+    if pgo {
+        check_whole_packages(&package_runs)?;
+    }
 
     if package_runs.is_empty() {
         let message = if filters.is_empty() {
@@ -554,6 +595,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     } else if baseline.is_some() {
         return Err(CliExit::error("--coverage-baseline needs --coverage"));
     }
+    let measurement = match coverage {
+        Some(coverage) => Some(Measurement::Coverage(coverage)),
+        None => pgo.then_some(Measurement::Pgo),
+    };
 
     Ok(TestOptions {
         package_runs,
@@ -568,8 +613,38 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         test_name_filters,
         format,
         profile,
-        coverage,
+        measurement,
     })
+}
+
+/// Fail unless `runs` hold every test file of each package they reach into:
+/// `--pgo` writes one profile per package, from all of its workloads.
+fn check_whole_packages(runs: &[PackageRun]) -> Result<(), CliExit> {
+    let canonical = |path: &Path| {
+        path.canonicalize()
+            .map_err(|e| CliExit::error(format!("reading {}: {e}", path.display())))
+    };
+    let mut files = BTreeSet::new();
+    for path in runs.iter().flat_map(|run| &run.paths) {
+        files.insert(canonical(Path::new(path))?);
+    }
+    let roots: BTreeSet<PathBuf> = files
+        .iter()
+        .filter_map(|file| package_root(file.parent().expect("a test file has a directory")))
+        .collect();
+    for root in roots {
+        for file in discover::package_files(&root, &|pkg| test_filters(pkg, &[]))? {
+            if !files.contains(&canonical(&file)?) {
+                return Err(CliExit::error(format!(
+                    "--pgo records all of a package's workloads into one profile, but this \
+                     run leaves out {} of the package at {}",
+                    discover::display_path(file.strip_prefix(&root).unwrap_or(&file)),
+                    root.display()
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Compile-stage output. Flows into the load stage, or — under `--no-run`
@@ -602,8 +677,9 @@ struct LoadedModule {
     /// `--profile`: the run's one sampler and its sampling period, shared with
     /// `run` so it can write the profile once every test has fed it.
     profiler: Option<(GuestProfilerSlot, Duration)>,
-    /// `--coverage`: the run's report, and where this component's hits land.
-    coverage: Option<(Arc<CoverageRun>, Vec<Registered>)>,
+    /// `--coverage` or `--pgo`: the run's reports, and where this component's
+    /// hits land.
+    coverage: Option<(Arc<CoverageRun>, Registration)>,
     /// What the compile read, where those reads decide every test's outcome,
     /// so a pass can be cached.
     cache_reads: Option<Vec<Input>>,
@@ -1030,10 +1106,12 @@ fn load_module(
 
             // A component without the section measured no module, so every
             // one it counts is in a component that has it.
-            let coverage = coverage_run.and_then(|run| {
-                let plans = read_from_component(&artifact.wasm)?;
-                Some((Arc::clone(run), run.register(&artifact.path, &plans)))
-            });
+            let coverage = coverage_run
+                .filter(|run| run.measures(tests.len()))
+                .and_then(|run| {
+                    let plans = read_from_component(&artifact.wasm)?;
+                    Some((Arc::clone(run), run.register(&artifact.path, &plans)))
+                });
             let cache_reads = artifact.reads.filter(|_| {
                 test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
             });
@@ -1791,9 +1869,9 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         ),
     };
 
-    if let Some((run, registered)) = &module.coverage {
+    if let Some((run, registration)) = &module.coverage {
         let test = format!("{}::{}", module.path, job.display_name);
-        run.record(registered, store.data_mut().coverage_report(), &test);
+        run.record(registration, store.data_mut().coverage_report(), &test);
     }
 
     TestResult {
@@ -1876,6 +1954,15 @@ impl PackageTotals {
         self.todo_pending += other.todo_pending;
         self.todo_resolved += other.todo_resolved;
         self.timings.merge(other.timings);
+    }
+
+    /// Whether the run fails: a file did not compile or load, a test failed,
+    /// or a `#[TODO]` test passed.
+    pub(crate) fn failed(&self) -> bool {
+        self.compile_failed > 0
+            || self.load_failed > 0
+            || self.test_failed > 0
+            || self.todo_resolved > 0
     }
 }
 
@@ -2432,7 +2519,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let mut package_runs = opts.package_runs;
     let grants = Arc::new(opts.grants);
     let coverage_run = opts
-        .coverage
+        .measurement
         .map(CoverageRun::new)
         .transpose()?
         .map(Arc::new);
@@ -2526,7 +2613,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             coverage_run.map_or(Ok(()), |run| {
                 Arc::into_inner(run)
                     .expect("every stage holding the coverage run has finished")
-                    .finish(reporter.as_ref())
+                    .finish(reporter.as_ref(), &grand)
             })
         })
         .and_then(|()| {
@@ -2543,11 +2630,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     if report_changed_inputs(&run_cache) {
         return Err(CliExit::silent_failure(1));
     }
-    if grand.compile_failed > 0
-        || grand.load_failed > 0
-        || grand.test_failed > 0
-        || grand.todo_resolved > 0
-    {
+    if grand.failed() {
         return Err(CliExit::silent_failure(1));
     }
     Ok(())

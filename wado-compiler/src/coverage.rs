@@ -11,6 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
+use sha2::{Digest, Sha256};
+
 use crate::ast::{
     self, AstId, AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr,
     Stmt, walk_condition, walk_expr, walk_stmt,
@@ -169,6 +171,9 @@ pub struct PlannedFunction {
     pub line: u32,
     /// Its body region.
     pub region: u32,
+    /// What a profile's counts for it were recorded against: see
+    /// [`function_hash`].
+    pub hash: u64,
 }
 
 /// The regions a module's source implies, numbered from zero.
@@ -336,6 +341,7 @@ impl CoverageMap {
                 w.str(&f.name);
                 w.u32(f.line);
                 w.u32(f.region);
+                w.u64(f.hash);
             }
             w.u32(plan.regions.len() as u32);
             for r in &plan.regions {
@@ -387,6 +393,7 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
                 name: r.str()?,
                 line: r.u32()?,
                 region: r.u32()?,
+                hash: r.u64()?,
             });
         }
         for _ in 0..r.u32()? {
@@ -440,6 +447,10 @@ impl Writer {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
 
+    fn u64(&mut self, v: u64) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+
     fn pos(&mut self, p: Pos) {
         self.u32(p.line);
         self.u32(p.column);
@@ -467,6 +478,12 @@ impl Reader<'_> {
         let bytes = self.data.get(self.pos..self.pos + 4)?;
         self.pos += 4;
         Some(u32::from_le_bytes(bytes.try_into().ok()?))
+    }
+
+    fn u64(&mut self) -> Option<u64> {
+        let bytes = self.data.get(self.pos..self.pos + 8)?;
+        self.pos += 8;
+        Some(u64::from_le_bytes(bytes.try_into().ok()?))
     }
 
     fn pos(&mut self) -> Option<Pos> {
@@ -524,6 +541,7 @@ pub(crate) fn plan_module(
         owner: None,
         last_choice: Vec::new(),
         for_of_bodies: Vec::new(),
+        texts: Vec::new(),
     };
     if !module.has_coverage_off() {
         for item in &module.items {
@@ -533,11 +551,15 @@ pub(crate) fn plan_module(
     planner.plan.lines.sort_unstable();
     planner.plan.lines.dedup();
     let Planner {
-        plan,
+        mut plan,
         mut sites,
         for_of_bodies,
+        texts,
         ..
     } = planner;
+    for (index, text) in texts.iter().enumerate() {
+        plan.functions[index].hash = function_hash(module.source(), text, &plan, index as u32);
+    }
     sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
     (plan, sites, for_of_bodies)
 }
@@ -554,6 +576,36 @@ struct Planner<'a> {
     /// The sides of the choice the walk finished last.
     last_choice: Vec<u32>,
     for_of_bodies: ForOfBodies,
+    /// Where each function's text lies, from its name to the end of its body.
+    texts: Vec<FunctionText>,
+}
+
+struct FunctionText {
+    bytes: Range<usize>,
+    start: Pos,
+}
+
+/// What a profile's counts for `function` were recorded against: its text,
+/// and each of its regions' kind and span relative to where the text starts.
+/// The text catches an edit that changes which region runs, the plan what
+/// decides the regions from outside the text, such as a `#[coverage(off)]`
+/// on the enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
+fn function_hash(source: &str, text: &FunctionText, plan: &ModulePlan, function: u32) -> u64 {
+    let mut h = Sha256::new();
+    h.update(source[text.bytes.clone()].as_bytes());
+    for region in plan.regions.iter().filter(|r| r.function == function) {
+        h.update([region.kind.code()]);
+        for pos in [region.start, region.end] {
+            h.update((pos.line - text.start.line).to_le_bytes());
+            h.update(pos.column.to_le_bytes());
+        }
+    }
+    let digest = h.finalize();
+    u64::from_le_bytes(
+        digest[..8]
+            .try_into()
+            .expect("a digest is longer than 8 bytes"),
+    )
 }
 
 impl Planner<'_> {
@@ -606,6 +658,11 @@ impl Planner<'_> {
             name,
             line: at.line as u32,
             region: self.plan.regions.len() as u32,
+            hash: 0,
+        });
+        self.texts.push(FunctionText {
+            bytes: at.start..body.end,
+            start: Pos::start(at),
         });
         self.new_region(kind, Pos::start(body), Pos::end(body), None)
     }
@@ -1408,6 +1465,7 @@ mod tests {
                 name: "f".to_string(),
                 line: 1,
                 region: 0,
+                hash: 0x0123_4567_89ab_cdef,
             }],
             regions: vec![
                 Region {
@@ -1493,7 +1551,29 @@ mod tests {
     fn parse(source: &str) -> ast::Module {
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
-        Parser::new(lexed.tokens).parse_strict().expect("parse")
+        Parser::from_lex(lexed).parse_strict().expect("parse")
+    }
+
+    /// Each function's hash in `source`, by name.
+    fn hashes(source: &str) -> BTreeMap<String, u64> {
+        let module = parse(source);
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default());
+        plan.functions
+            .into_iter()
+            .map(|f| (f.name, f.hash))
+            .collect()
+    }
+
+    #[test]
+    fn a_function_hash_follows_its_own_text_alone() {
+        let f = "fn f(x: i32) -> i32 {\n    if x == 0 { return 1; }\n    return 2;\n}\n";
+        let g = "fn g() -> i32 {\n    return 3;\n}\n";
+        let base = hashes(&format!("{f}{g}"));
+        let edited = hashes(&format!("{}{g}", f.replace("x == 0", "x <= 0")));
+        assert_ne!(base["f"], edited["f"]);
+        assert_eq!(base["g"], edited["g"]);
+        let moved = hashes(&format!("{g}\n\n{f}"));
+        assert_eq!(base, moved);
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

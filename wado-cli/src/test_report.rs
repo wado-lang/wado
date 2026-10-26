@@ -148,8 +148,9 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
     /// The last output of the run, after every summary.
     fn on_recap(&self) {}
-    /// The `--coverage` summary, after the run is done.
-    fn on_coverage(&self, summary: &str) {
+    /// The `--coverage` summary, or the profiles `--pgo` wrote, after the run
+    /// is done.
+    fn on_measured(&self, summary: &str) {
         print!("{summary}");
     }
 }
@@ -861,7 +862,7 @@ impl TestReporter for TapReporter {
         }
     }
 
-    fn on_coverage(&self, summary: &str) {
+    fn on_measured(&self, summary: &str) {
         for line in summary.lines() {
             self.comment(line);
         }

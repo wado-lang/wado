@@ -1870,6 +1870,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_todo,
             timeout_ms,
             is_synopsis,
+            is_workload,
         } = meta;
         let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
@@ -1924,6 +1925,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_todo,
             timeout_ms,
             is_synopsis,
+            is_workload,
         };
 
         Some((tir_func, tir_test))

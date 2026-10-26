@@ -25,6 +25,7 @@ use crate::name::{
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
+use std::sync::Arc;
 use wit_parser::{
     Handle, Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
 };
@@ -217,6 +218,8 @@ pub fn build_bindings(
     }
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
+        // Synthesized from WIT: there is no text.
+        Arc::from(""),
         b.items,
         inner_attributes,
         None,
@@ -225,7 +228,6 @@ pub fn build_bindings(
         b.space,
         b.count,
         false,
-        // Synthesized from WIT, never highlighted: no source text to key on.
         Vec::new(),
     );
     let interfaces = b

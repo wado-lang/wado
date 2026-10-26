@@ -96,7 +96,7 @@ pub fn link(package: Package) -> FlatPackage {
         is_test_world,
         &package.target_world,
         entry_tests,
-        &package.test_name_filters,
+        &package.test_selection,
         &package.export_binding_names,
         &package.post_return_binding_names,
         &package.world_registry,

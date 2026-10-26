@@ -1687,6 +1687,7 @@ wado test --test-name 'addition'     # run only test blocks whose name contains 
 wado test file.wado --test-name add  # narrow both: this file, those test names
 wado compile --world test file.wado  # compile a single file with the test world
 wado test --coverage                 # also report the lines, branches and functions run
+wado test --pgo                      # run the #[workload] tests into pgo/default.pgo
 ```
 
 `#[coverage(off)]` on a `fn` or an `impl` (`#![coverage(off)]` on a module)
@@ -1735,6 +1736,13 @@ test "not yet implemented" {
 #[timeout_ms(30000)]
 test "large data processing" {
     process_large_dataset();
+}
+
+// Workload: runs like any test, and `wado test --pgo` records what it ran into
+// the profile the optimizer reads. It must not trap.
+#[workload]
+test "typical request" {
+    assert route("/users/42").is_some();
 }
 
 // Synopsis test: runs like any test; `wado doc` renders its body as the
