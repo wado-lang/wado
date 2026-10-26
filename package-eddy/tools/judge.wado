@@ -67,7 +67,7 @@ struct Judged {
 fn source_diff(sha: &String, paths: &List<String>, what: String) -> Result<String, String> with Process {
     let base = `${sha}^1`;
     let gen = generated(&base, paths);
-    let mut diff_args = ["diff", "-w", base, *sha, "--"] as List<String>;
+    let mut diff_args = ["diff", base, *sha, "--"] as List<String>;
     let mut any = false;
     for let p of paths {
         if !gen.contains_str(p) && !p.ends_with(".md") {

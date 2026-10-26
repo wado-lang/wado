@@ -65,13 +65,17 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   | Pairs                       | Opus 5.5 | Sonnet 5.5 | Both |
   | --------------------------- | -------: | ---------: | ---: |
   | Defect fix                  |       83 |         90 |      |
-  | Introduced by the culprit   |       45 |         60 |      |
-  | Visible in the culprit diff |       49 |         42 |      |
-  | Usable                      |       42 |         41 |   25 |
-  | Usable, fix adds a test     |       32 |         29 |   18 |
+  | Introduced by the culprit   |       46 |         61 |      |
+  | Visible in the culprit diff |       47 |         44 |      |
+  | Usable                      |       38 |         43 |   26 |
+  | Usable, fix adds a test     |       30 |         29 |   18 |
 
-  The models give the same usable-or-not answer on 63 of the 96. The 25 both
-  call usable are the strongest candidates for the human sample.
+  The models give the same usable-or-not answer on 67 of the 96, while each
+  model alone keeps its answer on 86 (Opus) and 84 (Sonnet) of the 96 across
+  two runs, one of them on diffs that ignored whitespace. The 26 both call
+  usable are the strongest candidates for the human sample.
+- Sonnet 5.5 sometimes answers with malformed JSON, such as a field given
+  twice. Such a pair gets an error, and a rerun judges it again.
 
 ## To Do
 

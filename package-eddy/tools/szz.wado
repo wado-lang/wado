@@ -125,6 +125,7 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, Str
     let all = changes(&base, &m.sha);
     let mut paths: List<String> = [];
     for let c of &all {
+        paths.push(c.old_path);
         paths.push(c.new_path);
     }
     // The attributes the fix was made under: a rule since dropped still counts.
@@ -133,7 +134,7 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, Str
     let mut blamed = TreeMap::<i32, Blamed>::new();
     let mut old_lines = 0;
     for let c of &all {
-        if gen.contains_str(&c.new_path) {
+        if gen.contains_str(&c.old_path) || gen.contains_str(&c.new_path) {
             continue;
         }
         if is_test(&c.new_path) {
