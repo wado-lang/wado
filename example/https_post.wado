@@ -1,0 +1,68 @@
+//! An HTTPS POST over `wasi:http`, shared by the API-calling examples.
+
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http";
+
+/// POSTs `body` to `https://{authority}{path}` with `headers` and returns the
+/// status code and the whole response body.
+pub fn post<B: AsByteSlice>(
+    authority: String,
+    path: String,
+    headers: List<[String, String]>,
+    body: B,
+) -> [i32, ByteList] with Client {
+    let resp = send(authority, path, headers, body);
+    let status = resp.get_status_code() as i32;
+    return [status, read_body(resp)];
+}
+
+fn send<B: AsByteSlice>(
+    authority: String,
+    path: String,
+    headers: List<[String, String]>,
+    body: B,
+) -> Response with Client {
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    let fields = Headers::new();
+    for let [name, value] of headers {
+        fields.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    fields.append("user-agent" as FieldName, #file.bytes().collect() as FieldValue);
+
+    let [req, _req_future] = Request::new(
+        fields,
+        Option::<Stream<u8>>::Some(body_rx),
+        trailers_rx,
+        null,
+    );
+    req.set_method(Method::Post);
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some(authority));
+    req.set_path_with_query(Option::<String>::Some(path));
+
+    // Start the send as a subtask. The host begins consuming the
+    // request body stream immediately, so subsequent `body_tx.write`
+    // calls rendezvous with it and the whole body flows out without
+    // deadlock.
+    let subtask = Client::send(req);
+    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    return match subtask.wait() {
+        Ok(resp) => resp,
+        Err(e) => panic(`HTTP request failed: ${e:?}`),
+    };
+}
+
+fn read_body(resp: Response) -> ByteList {
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
+
+    let buf = body_stream_rx.read_to_end_bytes();
+    body_stream_rx.drop();
+    res_tx.write(Result::Ok(()));
+    return buf;
+}
