@@ -306,10 +306,14 @@ fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
     for let bit of ReflectFlags::<L>::members() {
         member.enum_.push(Value::String(wire_name(&bit, policy)));
     }
-    let mut s = Schema::of_type("array");
-    s.items = Option::Some(member);
-    s.unique_items = true;
-    return s;
+    return Schema { ..array_of(member), unique_items: true };
+}
+
+fn array_of(items: Schema) -> Schema {
+    return Schema {
+        ..Schema::of_type("array"),
+        items: Option::Some(items),
+    };
 }
 
 // ── The leaves ──
@@ -321,10 +325,11 @@ impl JsonSchema for bool {
 }
 
 fn integer(minimum: f64, maximum: f64) -> Schema {
-    let mut s = Schema::of_type("integer");
-    s.minimum = Option::Some(minimum);
-    s.maximum = Option::Some(maximum);
-    return s;
+    return Schema {
+        ..Schema::of_type("integer"),
+        minimum: Option::Some(minimum),
+        maximum: Option::Some(maximum),
+    };
 }
 
 impl JsonSchema for i8 {
@@ -380,7 +385,10 @@ impl JsonSchema for i64 {
 impl JsonSchema for u64 {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema {
-            any_of: [integer(0.0, f64::MAX_SAFE_INTEGER), unsigned_decimal(`${u64::MAX}`)],
+            any_of: [
+                integer(0.0, f64::MAX_SAFE_INTEGER),
+                unsigned_decimal(`${u64::MAX}`),
+            ],
         };
     }
 }
@@ -398,9 +406,10 @@ impl JsonSchema for u128 {
 }
 
 fn decimal_string(pattern: String) -> Schema {
-    let mut s = Schema::of_type("string");
-    s.pattern = Option::Some(pattern);
-    return s;
+    return Schema {
+        ..Schema::of_type("string"),
+        pattern: Option::Some(pattern),
+    };
 }
 
 /// A decimal string in `0..=max`, spelled as `core:json` spells it.
@@ -453,18 +462,18 @@ fn any_digits(min: i32, max: i32) -> String {
     return `[0-9]{${min},${max}}`;
 }
 
-test "one_to matches exactly the numbers up to max" {
-    assert one_to("9") == "([1-8]|9)";
-    assert one_to("10") == "([1-9]|10)";
-    assert one_to("255") == "([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-4]|255)";
-    assert one_to("3000") == "([1-9][0-9]{0,2}|[1-2][0-9]{3}|3000)";
-}
-
 fn digit_class(low: u8, high: u8) -> String {
     if low == high {
         return `${low as char}`;
     }
     return `[${low as char}-${high as char}]`;
+}
+
+test "one_to matches exactly the numbers up to max" {
+    assert one_to("9") == "([1-8]|9)";
+    assert one_to("10") == "([1-9]|10)";
+    assert one_to("255") == "([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-4]|255)";
+    assert one_to("3000") == "([1-9][0-9]{0,2}|[1-2][0-9]{3}|3000)";
 }
 
 impl JsonSchema for f32 {
@@ -493,10 +502,11 @@ impl JsonSchema for bf16 {
 
 impl JsonSchema for char {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut s = Schema::of_type("string");
-        s.min_length = Option::Some(1);
-        s.max_length = Option::Some(1);
-        return s;
+        return Schema {
+            ..Schema::of_type("string"),
+            min_length: Option::Some(1),
+            max_length: Option::Some(1),
+        };
     }
 }
 
@@ -507,9 +517,10 @@ impl JsonSchema for String {
 }
 
 fn base64url() -> Schema {
-    let mut s = Schema::of_type("string");
-    s.content_encoding = Option::Some("base64url");
-    return s;
+    return Schema {
+        ..Schema::of_type("string"),
+        content_encoding: Option::Some("base64url"),
+    };
 }
 
 impl JsonSchema for ByteList {
@@ -539,40 +550,44 @@ impl JsonSchema for () {
 // `anyOf` rather than `oneOf`: in `Option<Option<T>>` both branches accept null.
 impl<T: JsonSchema> JsonSchema for Option<T> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return Schema { any_of: [T::json_schema(gen), Schema::of_type("null")] };
+        return Schema {
+            any_of: [
+                T::json_schema(gen),
+                Schema::of_type("null"),
+            ],
+        };
     }
 }
 
 impl<T: JsonSchema, E: JsonSchema> JsonSchema for Result<T, E> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema {
-            one_of: [one_property("Ok", T::json_schema(gen)), one_property("Err", E::json_schema(gen))],
+            one_of: [
+                one_property("Ok", T::json_schema(gen)),
+                one_property("Err", E::json_schema(gen)),
+            ],
         };
     }
 }
 
 impl<T: JsonSchema> JsonSchema for List<T> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut s = Schema::of_type("array");
-        s.items = Option::Some(T::json_schema(gen));
-        return s;
+        return array_of(T::json_schema(gen));
     }
 }
 
 impl<T: Ord + JsonSchema> JsonSchema for TreeSet<T> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut s = Schema::of_type("array");
-        s.items = Option::Some(T::json_schema(gen));
-        s.unique_items = true;
-        return s;
+        return Schema { ..array_of(T::json_schema(gen)), unique_items: true };
     }
 }
 
 impl<V: JsonSchema> JsonSchema for TreeMap<String, V> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut s = Schema::of_type("object");
-        s.additional_properties = Option::Some(V::json_schema(gen));
-        return s;
+        return Schema {
+            ..Schema::of_type("object"),
+            additional_properties: Option::Some(V::json_schema(gen)),
+        };
     }
 }
 

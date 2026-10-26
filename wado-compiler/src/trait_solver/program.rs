@@ -256,7 +256,7 @@ pub struct ModuleId(pub u32);
 /// settled an instance's parameters proved its bounds where it stands
 /// (spec-reflection.md § Visibility), so the instance sees every member.
 /// Asking again from the module declaring the body refused an impl that use
-/// site had chosen (`reflect_blanket_payload_bound_unproven.wado`).
+/// site had chosen (`reflect_derivation_nested_private_fields.wado`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Asker {
     Module(ModuleId),
