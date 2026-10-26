@@ -270,3 +270,9 @@ level.
 - [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
   an arm `match_to_switch` turns into a `br_table` target reaches no hint the
   engine reads.
+- [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
+  first arm's guard runs on every path through the `match`, so a marker under
+  it covers the `match` but is not read that way.
+- [ ] The inliner reads a caller's cold code once, before it splices. A callee
+  whose whole body is cold, spliced in, covers what precedes the call in its
+  block, and those statements are not repriced as cold.
