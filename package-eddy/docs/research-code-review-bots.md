@@ -248,18 +248,10 @@ just before it measure one inside coding agents.
   report more findings and more noise than CodeRabbit's ([sourcegraph-tools],
   a vendor comparison).
 
-What carries over:
-
-- Split with the language service, not by file. Its call and reference graph
-  gives the first cut deterministically.
-- Check the split with the build. A unit is sound when it compiles and its
-  tests collect on its own.
-- Give a reviewer callers more readily than callees.
-- Let the language service answer what a symbol is and who uses it. Leave text
-  search for what it cannot see: comments, strings, and generated code.
-- Implicit dependencies are project knowledge. They can come from rules the
-  repository states and from the learning loop: a defect that landed in
-  another unit is a link the split missed.
+What carries over: a language service answers what a symbol is and who uses it
+exactly, and its graph cuts a change better than file boundaries; text search
+still sees what it cannot, comments, strings and generated code. A cut is
+sound when the build accepts each unit.
 
 ### Context
 
@@ -460,38 +452,6 @@ What carries over: a learned item is safest as data a person can read, scope
 and delete, and as a change that must pass a fixed evaluation set before it
 takes effect. A memory shared by several models is also a channel for one
 model's bad habit to reach the others.
-
-## What This Suggests for Eddy
-
-These are directions the findings point to, not decisions.
-
-- Spend the model where judgment is needed: a fast dispatcher, bounded tools
-  for review, a verifier with a narrower view than the reviewer. A System One
-  model may beat rules at dispatch, but only shadow-evaluated against labelled
-  history first.
-- Reproduce what is severe. A reproducer written apart from the finding, run
-  where the code runs, turns a claim into evidence; the label says which.
-- Give `AGENTS.md` only where it is used as written: to the agent that builds
-  and runs the project, or as the rules that govern the touched files, naming
-  which were applied.
-- Learn into what can be reviewed: an evaluation set grown from missed defects,
-  and rules a person can read and delete.
-- Make disagreement explicit and grounded. Choose models for what they find
-  that the others do not, measured as how rarely they miss the same defect,
-  and aggregate by evidence rather than by vote count. Hide authorship from
-  every judge.
-- Cut the change along the language service's call and reference graph,
-  checked by the build, and learn the implicit links from missed defects.
-- Put the strongest model where findings merge, not where work is split, and
-  hand it structured, verified findings so that its context holds evidence
-  rather than transcripts.
-- Post less. Every comment should survive a refutation step against the
-  repository and carry its evidence.
-- Keep risk estimation and the accept/block policy in separate stages, with the
-  policy in code.
-- Review one PR at a time, and track open findings across rounds.
-- Measure with a grounded benchmark: ReviewBench's split of grounded and
-  augmented scores is the model to follow.
 
 ## Sources
 

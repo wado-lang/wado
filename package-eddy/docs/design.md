@@ -34,8 +34,10 @@ them is in [the research](./research-code-review-bots.md).
   occurrence too, each labelled as a definition, a reference, a comment, a
   string, or generated code. A location-only answer misses the comments and
   strings a rename must touch; a plain text search mixes them with unrelated
-  symbols of the same name. For Wado it is built on `wado query`. Rust, which
-  much of the repository is written in, gets a dedicated tool of its own.
+  symbols of the same name. Each language's tool is built on that language's
+  own service: `wado query` for Wado, rust-analyzer for Rust, which much of
+  the repository is written in. The method carries to any language with a
+  language server. What the tool answers is not settled yet.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation.
 
