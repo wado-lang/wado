@@ -28,10 +28,14 @@ them is in [the research](./research-code-review-bots.md).
   - Quarantine by model. A learning written from one model's run reaches the
     other models only after it passed the gate, since reward hacking spreads
     through shared memory.
-- [x] Code search is a tool backed by a language service, because precision
-  matters most. For Wado it is built on `wado query`. Rust, which much of the
-  repository is written in, gets a dedicated tool of its own. Plain text
-  search is not the primary way to find code.
+- [x] Code search is an MCP tool shaped for the agent, not the LSP protocol
+  passed through. Its answers are built to raise the agent's precision and
+  recall: exact references from the language service, and every textual
+  occurrence too, each labelled as a definition, a reference, a comment, a
+  string, or generated code. A location-only answer misses the comments and
+  strings a rename must touch; a plain text search mixes them with unrelated
+  symbols of the same name. For Wado it is built on `wado query`. Rust, which
+  much of the repository is written in, gets a dedicated tool of its own.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation.
 
