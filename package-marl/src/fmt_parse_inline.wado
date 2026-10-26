@@ -667,7 +667,9 @@ fn try_inline_link_tail(cur: &StrCursor, open: i32, close: i32, refs: &RefTable)
     if pclose < 0 {
         return null;
     }
-    let [url, title] = parse_dest_and_title(&cur.slice(close + 2, pclose));
+    let Some([url, title]) = parse_dest_and_title(&cur.slice(close + 2, pclose)) else {
+        return null;
+    };
     return Option::Some([
         Node::InlineLink(LinkNode {
             children: parse_inline_chars(cur.sub(open + 1, close), refs),
@@ -732,8 +734,9 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
         if pclose < 0 {
             return null;
         }
-        let dest_raw = cur.slice(close + 2, pclose);
-        let [url, title] = parse_dest_and_title(&dest_raw);
+        let Some([url, title]) = parse_dest_and_title(&cur.slice(close + 2, pclose)) else {
+            return null;
+        };
         return Option::Some([Node::InlineImage(ImageNode { alt, url, title }), pclose + 1]);
     }
     if close + 1 < end && cur.is_at(close + 1, '[') {

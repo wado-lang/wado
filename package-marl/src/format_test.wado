@@ -11,6 +11,16 @@ test "format normalizes a heading and collapses inline whitespace runs" {
     assert format("#   Title   \n\nhello   world") == "# Title\n\nhello world\n";
 }
 
+test "format keeps a list item that only looks like a reference definition" {
+    let source = "- [a]: Who Verifies the Tools? How Warped\n  Formatters Mislead (2026)\n\n[a]: https://example.com\n";
+    assert format(source) == source;
+}
+
+test "format keeps an inline link whose title is malformed as text" {
+    let source = "see [x](https://example.com not a title) here\n";
+    assert format(source) == source;
+}
+
 test "format leaves a bare url as plain text" {
     assert format("see https://example.com/x here\n") == "see https://example.com/x here\n";
 }

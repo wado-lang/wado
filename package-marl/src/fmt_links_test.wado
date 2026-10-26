@@ -42,19 +42,31 @@ test "ref_table_insert keeps the first definition for a duplicate label" {
 }
 
 test "parse_dest_and_title splits a bare url" {
-    let [url, title] = parse_dest_and_title("https://example.com");
+    let [url, title] = parse_dest_and_title("https://example.com").unwrap();
     assert url == "https://example.com";
     assert title == "";
 }
 
 test "parse_dest_and_title splits a url and a double-quoted title" {
-    let [url, title] = parse_dest_and_title("https://example.com \"Example Title\"");
+    let [url, title] = parse_dest_and_title("https://example.com \"Example Title\"").unwrap();
     assert url == "https://example.com";
     assert title == "Example Title";
 }
 
 test "parse_dest_and_title handles an angle-bracketed url with spaces" {
-    let [url, title] = parse_dest_and_title("<https://example.com/a b> \"Title\"");
+    let [url, title] = parse_dest_and_title("<https://example.com/a b> \"Title\"").unwrap();
     assert url == "https://example.com/a b";
     assert title == "Title";
+}
+
+test "parse_dest_and_title keeps an escaped quote in a title" {
+    let [_, title] = parse_dest_and_title("https://example.com \"a \\\" b\"").unwrap();
+    assert title == "a \\\" b";
+}
+
+test "parse_dest_and_title rejects what is not a destination and an optional title" {
+    assert parse_dest_and_title("https://example.com not a title") matches { None };
+    assert parse_dest_and_title("https://example.com \"unclosed") matches { None };
+    assert parse_dest_and_title("https://example.com \"title\" trailing") matches { None };
+    assert parse_dest_and_title("<https://example.com") matches { None };
 }

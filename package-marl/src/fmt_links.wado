@@ -42,8 +42,10 @@ pub fn normalize_label<S: AsStrSlice>(raw: S) -> String {
 /// into `[url, title]` (`title` is `""` when absent). The destination is a
 /// bare run up to the first space, or an angle-bracketed `<...>` run that may
 /// contain spaces; the title is an optional `"..."`, `'...'`, or `(...)`
-/// string after it.
-pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> [String, String] {
+/// string after it. Anything else makes the field not a destination, so the
+/// result is `null` and the caller keeps the text as written, as CommonMark
+/// rules for link reference definitions and inline links.
+pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> Option<[String, String]> {
     let trimmed = raw.trim();
     let chars = trimmed.to_chars();
     let len = chars.len();
@@ -55,9 +57,10 @@ pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> [String, String] {
             dest.push(chars[p]);
             p += 1;
         }
-        if p < len {
-            p += 1;
+        if p == len {
+            return null;
         }
+        p += 1;
     } else {
         while p < len && !chars[p] matches { ' ' | '\t' } {
             dest.push(chars[p]);
@@ -67,25 +70,41 @@ pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> [String, String] {
     while p < len && chars[p] matches { ' ' | '\t' } {
         p += 1;
     }
-    let title = if p < len { read_title(&chars, p) } else { "" };
-    return [dest, title];
+    if p == len {
+        return Option::Some([dest, ""]);
+    }
+    let Some(title) = read_title(&chars, p) else {
+        return null;
+    };
+    return Option::Some([dest, title]);
 }
 
-fn read_title(chars: &List<char>, start: i32) -> String {
+/// Reads a title that starts at `start` and closes on the last char.
+fn read_title(chars: &List<char>, start: i32) -> Option<String> {
     let closing = match chars[start] {
         '"' => '"',
         '\'' => '\'',
         '(' => ')',
         _ => {
-            return "";
+            return null;
         },
     };
-    let len = chars.len();
+    let last = chars.len() - 1;
+    if last == start || chars[last] != closing {
+        return null;
+    }
     let mut title = String::new();
     let mut p = start + 1;
-    while p < len && chars[p] != closing {
+    while p < last {
+        if chars[p] == closing {
+            return null;
+        }
+        if chars[p] == '\\' && p + 1 < last {
+            title.push(chars[p]);
+            p += 1;
+        }
         title.push(chars[p]);
         p += 1;
     }
-    return title;
+    return Option::Some(title);
 }
