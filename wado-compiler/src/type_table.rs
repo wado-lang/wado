@@ -2690,15 +2690,32 @@ impl TypeTable {
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
     pub fn reaches_mut_ref(&self, ty: TypeId) -> bool {
-        self.reaches_mut_ref_in(ty, &[], &mut IndexSet::default())
+        self.reaches_in(ty, Reach::MutRef, &[], &mut IndexSet::default())
     }
 
-    /// [`Self::reaches_mut_ref`] of `ty` as written inside a template
-    /// instantiated with `args`. `walked` holds what the walk is already
-    /// inside, which adds nothing.
-    fn reaches_mut_ref_in(
+    /// The kind of GC object a place of `ty` reads its fields or elements
+    /// from: a reference names its referent's object, a `Box<T>` its payload's,
+    /// and a newtype its base's. Two places of different kinds are two objects.
+    #[must_use]
+    pub fn object_kind(&self, ty: TypeId) -> TypeKey {
+        self.type_key(self.representation_head(self.peel_refs_and_box(ty)))
+    }
+
+    /// Whether a value of `ty` is, holds or references, at any depth, an object
+    /// of `kind` (an [`Self::object_kind`]): what a callee handed one may write.
+    /// A type whose members are not registered may hold anything, so it does.
+    #[must_use]
+    pub fn reaches_object(&self, ty: TypeId, kind: TypeKey) -> bool {
+        self.reaches_in(ty, Reach::Object(kind), &[], &mut IndexSet::default())
+    }
+
+    /// Whether `ty`, as written inside a template instantiated with `args`,
+    /// reaches `target`. `walked` holds what the walk is already inside, which
+    /// adds nothing.
+    fn reaches_in(
         &self,
         ty: TypeId,
+        target: Reach,
         args: &[TypeId],
         walked: &mut IndexSet<(TypeKey, Vec<TypeKey>)>,
     ) -> bool {
@@ -2710,11 +2727,26 @@ impl TypeTable {
             return true;
         };
         let ty = self.representation_head(ty);
+        if let Reach::Object(kind) = target
+            && self.object_kind(ty) == kind
+        {
+            return true;
+        }
         if !walked.insert((self.type_key(ty), self.type_keys(args))) {
             return false;
         }
+        if let Reach::Object(_) = target
+            && let Some(payload) = self.box_payload_of(ty)
+        {
+            return self.reaches_in(payload, target, args, walked);
+        }
+        // `List` is the compiler's, so no struct registers its fields: it is
+        // its backing array and the elements.
         if let Some(elem) = self.list_element(ty) {
-            return self.reaches_mut_ref_in(elem, args, walked);
+            let backing = self.intern_map.get(&ResolvedType::BuiltinArray(elem));
+            return matches!(target, Reach::Object(kind)
+                    if backing.is_some_and(|&array| self.object_kind(array) == kind))
+                || self.reaches_in(elem, target, args, walked);
         }
         let (template_args, members): (Vec<TypeId>, Vec<TypeId>) = match self.get(ty) {
             ResolvedType::Primitive(_)
@@ -2722,8 +2754,11 @@ impl TypeTable {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. } => return false,
-            ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => {
-                return self.reaches_mut_ref_in(*inner, args, walked);
+            ResolvedType::MutRef(_) if target == Reach::MutRef => return true,
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::BuiltinArray(inner) => {
+                return self.reaches_in(*inner, target, args, walked);
             }
             ResolvedType::Struct {
                 def: StructDef::Anon(shape),
@@ -2765,10 +2800,9 @@ impl TypeTable {
                 None => return true,
             },
             ResolvedType::Newtype { base_type, .. } => {
-                return self.reaches_mut_ref_in(*base_type, args, walked);
+                return self.reaches_in(*base_type, target, args, walked);
             }
-            ResolvedType::MutRef(_)
-            | ResolvedType::Function { .. }
+            ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
             | ResolvedType::TypeParam { .. }
@@ -2781,7 +2815,7 @@ impl TypeTable {
         };
         members
             .into_iter()
-            .any(|member| self.reaches_mut_ref_in(member, &template_args, walked))
+            .any(|member| self.reaches_in(member, target, &template_args, walked))
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
@@ -7329,6 +7363,14 @@ impl Leaves<'_> {
         }
         out
     }
+}
+
+/// What [`TypeTable::reaches_in`] looks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    MutRef,
+    /// An object of this [`TypeTable::object_kind`].
+    Object(TypeKey),
 }
 
 /// What a [`TypeId`] resolves to, as a value to compare or key a map by.
