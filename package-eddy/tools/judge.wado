@@ -168,7 +168,8 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             out.pairs.push(pair);
             continue;
         }
-        match ask(api_key, CLAUDE_MODEL, SYSTEM, user, 2000) {
+        // Thinking spends from the same budget as the answer.
+        match ask(api_key, CLAUDE_MODEL, SYSTEM, user, 16_000) {
             Ok(text) => match verdict_of(&text) {
                 Ok(v) => pair.verdict = Some(v),
                 Err(e) => pair.error = Some(e),
