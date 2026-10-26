@@ -22,11 +22,16 @@ test {
     assert weights.to_list() == [0.0, 0.0, 1.5, 0.0];
 }
 
+use { CopyResult } from "core:prelude/types.wado";
+use { copy_result, cm_packed_upper, STREAM_CHUNK_ELEMENTS } from "core:prelude/types.wado";
+use { cm_await_blocked, cm_copy_count } from "core:rt";
+
 /// The allocator's alignment for every block, whatever the element type, so a
 /// `cast` keeps any element aligned.
 global ALIGN: i32 = 16;
 
-/// One block of linear memory, `bytes` long, given back where it drops.
+/// One block of linear memory, `bytes` long, given back where it drops. An
+/// array may use less of it than it holds.
 affine struct Block {
     ptr: i32,
     bytes: i32,
@@ -100,7 +105,7 @@ impl<T: AnyBits> LinearArray<T> {
     /// A second array holding the same elements.
     pub fn duplicate(&self) -> LinearArray<T> {
         let copy = unchecked LinearArray::<T>::unwritten(self.len);
-        builtin::memory_copy(copy.block.ptr, self.block.ptr, self.block.bytes);
+        builtin::memory_copy(copy.block.ptr, self.block.ptr, copy.block.bytes);
         return copy;
     }
 
@@ -118,10 +123,71 @@ impl<T: AnyBits> LinearArray<T> {
     pub fn cast<U: AnyBits>(self) -> LinearArray<U>
         contract self.len() * builtin::size_of::<T>() % builtin::size_of::<U>() == 0
     {
-        let LinearArray { block, .. } = self;
-        let len = block.bytes / builtin::size_of::<U>();
-        return LinearArray::<U> { block, len };
+        let LinearArray { block, len } = self;
+        let cast_len = len * builtin::size_of::<T>() / builtin::size_of::<U>();
+        return LinearArray::<U> { block, len: cast_len };
     }
+}
+
+impl LinearArray<u8> {
+    /// Every byte `stream` delivers until its writer drops, each copy landing
+    /// in the array's own block, so no byte passes through the GC heap. The
+    /// block takes `expected` bytes up front and grows only for a stream that
+    /// runs past them.
+    internal fn internal_read_stream(stream: &Stream<u8>, expected: i32) -> LinearArray<u8>
+        contract expected >= 0
+    {
+        let handle = builtin::resource_handle(stream);
+        let mut block = Block { ptr: builtin::realloc(0, 0, ALIGN, expected), bytes: expected };
+        let mut len = 0;
+        loop {
+            if len < block.bytes {
+                let packed = read_copy(handle, block.ptr + len, block.bytes - len);
+                len += cm_packed_upper(packed);
+                if copy_result(packed) != CopyResult::Completed {
+                    break;
+                }
+                continue;
+            }
+            // A full block reads into a chunk of its own, so a stream exactly
+            // as long as `expected` ends without growing it.
+            let chunk = Block {
+                ptr: builtin::realloc(0, 0, ALIGN, STREAM_CHUNK_ELEMENTS),
+                bytes: STREAM_CHUNK_ELEMENTS,
+            };
+            let packed = read_copy(handle, chunk.ptr, chunk.bytes);
+            let count = cm_packed_upper(packed);
+            if count > 0 {
+                block = grown(block, len, count);
+                builtin::memory_copy(block.ptr + len, chunk.ptr, count);
+                len += count;
+            }
+            if copy_result(packed) != CopyResult::Completed {
+                break;
+            }
+        }
+        return LinearArray::<u8> { block, len };
+    }
+}
+
+/// One copy of up to `room` bytes from the stream on `handle` into `ptr`,
+/// waited for. Returns the packed word the copy settled on.
+fn read_copy(handle: i32, ptr: i32, room: i32) -> i32 {
+    return cm_await_blocked(handle, builtin::stream_read(handle, ptr, cm_copy_count(room)));
+}
+
+/// A block holding the `len` bytes `block` starts with and room for `more`
+/// after them, at least twice as large, so a stream of unknown length copies
+/// each byte a bounded number of times.
+fn grown(block: Block, len: i32, more: i32) -> Block {
+    if more > i32::MAX - len {
+        builtin::cold_path();
+        panic("a stream runs past what linear memory can address");
+    }
+    let bytes = if block.bytes > i32::MAX / 2 { i32::MAX } else { i32::max(block.bytes * 2, len + more) };
+    let moved = Block { ptr: builtin::realloc(0, 0, ALIGN, bytes), bytes };
+    builtin::memory_copy(moved.ptr, block.ptr, len);
+    return moved;
 }
 
 impl<T: AnyBits> IndexValue<i32> for LinearArray<T> {

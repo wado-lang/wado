@@ -1834,6 +1834,7 @@ use { Preopens } from "core:fs";                 // the effect, re-exported: no 
 
 let text = fs::read_to_string("docs/spec-overview.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
+let weights = fs::read_linear("w.bin")?.cast::<f32>();  // LinearArray, outside the GC heap
 fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
                                                  // (a non-regular file is refused)
 fs::write_in_place("big.bin", &bytes)?;          // truncates instead of replacing

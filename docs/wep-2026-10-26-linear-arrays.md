@@ -182,6 +182,11 @@ the safe API. `LinearArray` is.
 at the offset already filled. No byte is lifted into the GC heap. A file of
 `f32`s then becomes a `LinearArray<f32>` by `cast`, with no element copied.
 
+The stated size is a hint. A block it fills reads the next copy into a chunk of
+its own, so a file as long as it says ends without growing the block. A longer
+one doubles the block, which may then hold more bytes than the array uses;
+`len` bounds every access, `cast` included.
+
 ## Roadmap
 
 In order:
@@ -192,7 +197,7 @@ In order:
 - [x] `core:linear` with `LinearArray` and its tests. A fixture shows the hot
   loop of a product indexing two arrays losing every check in its fast
   version.
-- [ ] `fs::read_linear`.
+- [x] `fs::read_linear`.
 - [ ] Loam's `Cpu` backend keeps `Packed` in a `LinearArray<f32x4>` and loads
   weights through `read_linear`. `Backend` declares
   `affine type Rhs<K, N>`, so `Prepared<Cpu>` and `Model<Cpu>` become
