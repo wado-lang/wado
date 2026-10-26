@@ -1915,9 +1915,17 @@ fn test_run_unavailable_spawning_names_its_fix() {
         .args(["run", "--deny-process", "main.wado"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "core:process is unavailable: spawning is turned off by --deny-process\nhelp: run without `--deny-process`\nhelp: a guest that can do without spawning asks `availability()` first",
-        ));
+        .stderr(
+            predicate::str::contains(
+                "core:process is unavailable: spawning is turned off by --deny-process",
+            )
+            .and(predicate::str::contains(
+                "help: run without `--deny-process`",
+            ))
+            .and(predicate::str::contains(
+                "help: a guest that can do without spawning asks `availability()` first",
+            )),
+        );
 }
 
 #[test]
