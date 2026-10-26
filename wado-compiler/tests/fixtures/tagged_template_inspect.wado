@@ -47,9 +47,32 @@ test "an affine hole is inspected in place" {
     assert inspected`c=${c:?}` == "`c=${Counter { n: 1 }:?}`";
 }
 
+fn inspected_generic<X: Inspect>(x: X) -> String {
+    return inspected`x=${x:?}`;
+}
+
+test "a hole whose type is a parameter is read once substituted" {
+    assert inspected_generic(3) == "`x=${3:?}`";
+    assert inspected_generic("a") == "`x=${\"a\":?}`";
+}
+
+fn inspected_holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`${h:?}`);
+    }
+    return out;
+}
+
+test "a hole handle inspects as its fields" {
+    let n = 1;
+    assert inspected_holes`a${n:04}${n}` == "TemplateHole { index: 0, spec: Option::Some(\"04\") }TemplateHole { index: 1, spec: Option::None }";
+}
+
 test "an assert captures a template value" {
     let n = 1;
-    assert id`n=${n}` == id`n=${n}`;
+    let m = 1;
+    assert id`n=${n}` == id`n=${m}`;
 }
 
 __DATA__

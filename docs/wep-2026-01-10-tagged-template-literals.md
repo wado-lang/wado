@@ -188,7 +188,8 @@ and each hole's value inspected and followed by its specifier. The form is a
 blanket `impl Inspect` over `ReflectTemplate` in the prelude, as every other
 kind's is, reading the holes through `get_ref` so that an affine hole renders
 too. A struct of the holes was the alternative. It drops the text, and `==`
-compares the text, so a failing `assert` would show two unequal values alike.
+compares the text, so a failing `assert` on two values differing only in their
+text would show them alike.
 
 ### Desugaring
 
@@ -478,7 +479,7 @@ introduces a mechanism; each item names the existing one it extends.
   carrying its own `compiler_item`.
 - `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, spec }` with the constant accessors reading fields, and four bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `get_ref` is
-  `builtin::hole_get_ref::<T, V>(t, self.index)`, `fmt` is
+  `builtin::hole_ref::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`, and `lit` / `raw` are
   `builtin::template_segment::<T>(t, 2 * self.index)` and `… + 1`. The
   builtins are bodyless markers beside `struct_field_get`. `core:prelude`
@@ -587,7 +588,7 @@ serial advances on read, so a template nested inside a hole mints its own
   a constant at every site `TemplateHole::fmt` reaches once `members()` folds, so the
   splice keeps one arm where a call would keep the whole dispatch, which the
   threshold refuses.
-- `lower/translate.rs` folds `builtin::hole_get` / `hole_get_ref` /
+- `lower/translate.rs` folds `builtin::hole_get` / `hole_ref` /
   `hole_fmt` / `template_segment` calls to the bridge names beside its `struct_field_get`
   arm; `name.rs` owns the names.
 - An open template shape gets no bridge. Each concrete shape only a
@@ -636,8 +637,9 @@ things the optimizer gains here.
 - `tagged_template_type_name.wado`: the reader's name, specifiers and the cut
   included.
 - `tagged_template_inspect.wado`: a value inspects as the template it was
-  written as, in both forms and through an affine hole, and an `assert`
-  captures one.
+  written as, in both forms, through an affine hole and through a hole whose
+  type is a parameter; a hole handle inspects as its fields; and an `assert`
+  captures a template value.
 - `tagged_template_shape_is_its_holes.wado`: two templates differing only in
   their text, or in how a hole is spelled, are one type, each value carrying
   its own text.
@@ -722,13 +724,14 @@ The items below closed that, in this order.
     holds the holes of a closed shape's literal, and monomorphization those
     of an open one once substituted, marking a local it takes `&` of as
     address-taken.
-  - Synthesis gives an open shape no `$hole_fmt` and no `$hole_get`. Their
-    bodies read the fields, so neither can be substituted from the open
+  - Synthesis gives an open shape no `$hole_fmt`, `$hole_get` or `$hole_ref`.
+    Their bodies read the fields, so none can be substituted from the open
     shape.
   - Each concrete shape only a substitution reaches is given its own helpers.
     `$hole_fmt` is built inside the monomorphization fixpoint, so what it calls
-    is instantiated in turn. `$hole_get` is minted after monomorphization, as
-    `$field_get` is, because it groups the holes by their type. Two holes of
+    is instantiated in turn. `$hole_get` and `$hole_ref` are minted after
+    monomorphization, as `$field_get` is, because they group the holes by their
+    type. Two holes of
     `X` and `Y` share that type only once both are `i32`.
 
   Done: `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,

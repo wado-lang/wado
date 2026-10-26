@@ -393,7 +393,7 @@ pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
 }
 
 /// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
-/// lowering rewrites `builtin::hole_get_ref::<T, V>` calls to.
+/// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
 pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
     format!("$hole_ref${mangled_shape}${mangled_hole}")
 }

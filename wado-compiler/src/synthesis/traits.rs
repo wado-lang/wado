@@ -1272,31 +1272,46 @@ pub(super) fn generate_field_bridge_helpers(
             value_type: *field_type,
         })
         .collect();
-    [
-        (
-            field_get_helper_name as fn(&str, &str) -> String,
-            Read::Value,
-        ),
-        (field_ref_helper_name, Read::Ref),
-    ]
-    .into_iter()
-    .flat_map(|helper| {
-        generate_read_bridge_helpers(
-            type_table,
-            &members,
-            helper,
-            struct_type,
-            ref_struct_type,
-            span,
-        )
-    })
-    .collect()
+    generate_value_and_ref_bridges(
+        type_table,
+        &members,
+        (field_get_helper_name, field_ref_helper_name),
+        struct_type,
+        ref_struct_type,
+        span,
+    )
 }
 
-/// `$hole_get$S$V` and `$template_segment$S` for template shape `struct_type`.
-/// A hole's field holds it by handle unless it would box, so the read through
-/// it derefs; `$hole_get` is otherwise `$field_get`. `$template_segment` reads
-/// the segment field a [`TemplateShape::segment_key`] numbers.
+/// The read bridges answering each member's value, then those answering a
+/// reference to it.
+fn generate_value_and_ref_bridges(
+    type_table: &RefCell<TypeTable>,
+    members: &[ReadBridgeMember],
+    (value_name, ref_name): (fn(&str, &str) -> String, fn(&str, &str) -> String),
+    struct_type: TypeId,
+    ref_struct_type: TypeId,
+    span: Span,
+) -> Vec<TirFunction> {
+    [(value_name, Read::Value), (ref_name, Read::Ref)]
+        .into_iter()
+        .flat_map(|helper| {
+            generate_read_bridge_helpers(
+                type_table,
+                members,
+                helper,
+                struct_type,
+                ref_struct_type,
+                span,
+            )
+        })
+        .collect()
+}
+
+/// `$hole_get$S$V`, `$hole_ref$S$V` and `$template_segment$S` for template
+/// shape `struct_type`. A hole's field holds it by handle unless it would box,
+/// so the read through it derefs; the hole bridges are otherwise `$field_get`
+/// and `$field_ref`. `$template_segment` reads the segment field a
+/// [`TemplateShape::segment_key`] numbers.
 pub(super) fn generate_hole_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     shape: &TemplateShape,
@@ -1332,25 +1347,14 @@ pub(super) fn generate_hole_bridge_helpers(
         })
         .collect();
     let ref_struct_type = type_table.borrow_mut().make_ref(struct_type);
-    let mut helpers: Vec<TirFunction> = [
-        (
-            hole_get_helper_name as fn(&str, &str) -> String,
-            Read::Value,
-        ),
-        (hole_ref_helper_name, Read::Ref),
-    ]
-    .into_iter()
-    .flat_map(|helper| {
-        generate_read_bridge_helpers(
-            type_table,
-            &holes,
-            helper,
-            struct_type,
-            ref_struct_type,
-            span,
-        )
-    })
-    .collect();
+    let mut helpers = generate_value_and_ref_bridges(
+        type_table,
+        &holes,
+        (hole_get_helper_name, hole_ref_helper_name),
+        struct_type,
+        ref_struct_type,
+        span,
+    );
     helpers.extend(generate_read_bridge_helpers(
         type_table,
         &segments,
@@ -1537,7 +1541,8 @@ fn generate_type_name_fn(
 
 /// Generate the `ReflectTemplate` impl of every tagged template shape
 /// (WEP 2026-01-10): `type_name()`, `wire_name_policy()`, `members()`,
-/// `tail()`, `raw_tail()`, plus the per-hole-type `$hole_get` bridge. The
+/// `tail()`, `raw_tail()`, plus the per-hole-type `$hole_get` and `$hole_ref`
+/// bridges. The
 /// `$hole_fmt` bridge is minted by `synthesis::template`, beside the
 /// specifier lowering it reuses.
 pub fn synthesize_reflect_template(project: &mut Package) {
@@ -1598,7 +1603,6 @@ fn generate_template_reflect_impls(
     }
 
     let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
-    let option_string_type = module.type_table.borrow_mut().make_option(env.string_type);
     let (hole_struct_name, hole_struct_def) = resolve_member_struct(
         &module.type_table.borrow(),
         CompilerItem::ReflectTemplateHole,
@@ -1669,6 +1673,16 @@ fn generate_template_reflect_impls(
                 span,
             )
         };
+        let members_fn = generate_template_members_fn(
+            &module.type_table,
+            &env,
+            &target.shape,
+            &member_types,
+            members_tuple_type,
+            &hole_struct_name,
+            trait_method_info(receiver, template_trait_name, &members_method),
+            span,
+        );
         let mut functions = vec![
             generate_type_name_fn(
                 receiver,
@@ -1687,20 +1701,11 @@ fn generate_template_reflect_impls(
                 &env.wire_name_policy_method,
                 span,
             ),
-            generate_template_members_fn(
-                &module.type_table,
-                (env.string_type, option_string_type),
-                &target.shape,
-                &member_types,
-                members_tuple_type,
-                &hole_struct_name,
-                trait_method_info(receiver, template_trait_name, &members_method),
-                span,
-            ),
+            members_fn,
             tail_fn(&tail_method, false),
             tail_fn(&raw_tail_method, true),
         ];
-        // An open shape's `$hole_get` would group its holes by a parameter,
+        // An open shape's hole bridges would group its holes by a parameter,
         // which two holes may share only once substituted, so each concrete
         // shape a substitution reaches mints its own after monomorphization.
         if !target.open {
@@ -1775,7 +1780,7 @@ fn generate_template_tail_fn(
 /// `{ index, spec }` in the handle's declaration order.
 fn generate_template_members_fn(
     type_table: &RefCell<TypeTable>,
-    (string_type, option_string_type): (TypeId, TypeId),
+    env: &ReflectSynthEnv,
     shape: &TemplateShape,
     member_types: &[TypeId],
     members_tuple_type: TypeId,
@@ -1783,6 +1788,7 @@ fn generate_template_members_fn(
     method_info: LocalMethodName,
     span: Span,
 ) -> TirFunction {
+    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
     let rows: Vec<Vec<TirStructField>> = shape
         .holes
         .iter()
@@ -1794,7 +1800,7 @@ fn generate_template_members_fn(
                     name: "spec".to_string(),
                     value: optional_string_literal(
                         type_table,
-                        string_type,
+                        env.string_type,
                         option_string_type,
                         hole.spec.as_deref(),
                         span,

@@ -496,7 +496,7 @@ impl<T, affine V> TemplateHole<T, V> {
     /// A reference to the hole's value in `t`, which copies nothing, so it
     /// reaches a hole of an affine type as well.
     pub fn get_ref(&self, t: &T) -> &V {
-        return builtin::hole_get_ref(t, self.index);
+        return builtin::hole_ref(t, self.index);
     }
 
     /// Renders the value through the trait method the specifier's type
@@ -564,14 +564,14 @@ impl<affine T, affine F> Member for StructField<T, F> {
     }
 }
 
-// The four member handles are sealed against reflection (WEP 2026-06-13), so
+// The member handles are sealed against reflection (WEP 2026-06-13), so
 // they cannot use the `ReflectStruct` derivations above and write their own
 // impls instead. The output matches what a derived struct produces.
 
 // `Option<String>`'s own `Inspect` is synthesized in `prelude/types.wado`,
 // which is not yet resolvable while this module is elaborated. Render the two
 // cases directly, matching what the variant derive emits.
-internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
+internal fn inspect_option_string(v: &Option<String>, f: &mut Formatter) {
     match v {
         Option::Some(s) => {
             f.write_str("Option::Some(");
@@ -631,7 +631,7 @@ impl<affine T, affine F> Inspect for StructField<T, F> {
         self.field_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_field(f, "has_default", false);
         self.has_default.inspect(f);
@@ -653,7 +653,7 @@ impl<affine T, affine P> Inspect for VariantCase<T, P> {
         self.case_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_field(f, "is_unit", false);
         self.is_unit.inspect(f);
@@ -675,7 +675,7 @@ impl<T: Inspect> Inspect for EnumCase<T> {
         self.case_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_close(f);
     }
@@ -692,6 +692,19 @@ impl<T: Inspect> Inspect for FlagsBit<T> {
         struct_field_end(f);
         struct_field(f, "member_name", false);
         self.member_name.inspect(f);
+        struct_field_end(f);
+        struct_close(f);
+    }
+}
+
+impl<T, affine V> Inspect for TemplateHole<T, V> {
+    fn inspect(&self, f: &mut Formatter) {
+        struct_open(f, "TemplateHole");
+        struct_field(f, "index", true);
+        self.index.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "spec", false);
+        inspect_option_string(&self.spec, f);
         struct_field_end(f);
         struct_close(f);
     }

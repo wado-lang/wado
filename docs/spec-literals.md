@@ -962,6 +962,7 @@ The output follows Wado's literal syntax where it has one:
 | Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`              |
 | Flags, none set          | `Type::none()`                            | `Perms::none()`                            |
 | Newtype                  | base value, then `as Name`                | `1.5 as Meters`                            |
+| Tagged template value    | the template as written, holes inspected  | `` `n=${7:04}` ``                          |
 | `&T`, `&mut T`           | `&` or `&mut`, then the referent          | `&42`, `&mut Point { x: 1, y: 2 }`         |
 | Closure                  | its signature                             | `\|i32, i32\| -> i32`                      |
 | Affine resource          | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                              |
@@ -1116,8 +1117,8 @@ shape. A hole handle is minted only by `members()`.
 A template value inspects as the template it was written as: each segment raw,
 and each hole as its value inspected, followed by its specifier.
 `` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
-`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so two
-values that differ render differently.
+`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so the form
+shows the text.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple

@@ -2576,7 +2576,7 @@ impl FunctionTranslator<'_, '_> {
             ),
             ("struct_field_ref", field_ref_helper_name),
             ("hole_get", hole_get_helper_name),
-            ("hole_get_ref", hole_ref_helper_name),
+            ("hole_ref", hole_ref_helper_name),
         ] {
             if func.is_builtin_named(builtin) {
                 let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
