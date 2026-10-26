@@ -553,7 +553,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `pending_local_structs` and reify-owned for the same reason.
     pub(crate) pending_template_structs: Vec<TirStruct>,
     /// The coverage plan whose probes reify puts in, under
-    /// `wado test --coverage`. See `probe.rs`.
+    /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,

@@ -154,7 +154,7 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
-    /// `wado test --coverage`. Forwarded to `CompilerOptions::coverage`.
+    /// `wado test --coverage` or `--pgo`. Forwarded to `CompilerOptions::coverage`.
     pub coverage: Option<wado_compiler::coverage::CoverageScope>,
 }
 

@@ -32,10 +32,7 @@ pub fn to_text(coverage: &Coverage) -> String {
     let mut out = format!("{HEADER}\n");
     for (module, file) in &coverage.files {
         let _ = writeln!(out, "module {module}");
-        let mut regions: Vec<Vec<u32>> = vec![Vec::new(); file.plan.functions.len()];
-        for (id, region) in file.plan.regions.iter().enumerate() {
-            regions[region.function as usize].push(id as u32);
-        }
+        let regions = file.plan.regions_by_function();
         for (function, ids) in file.plan.functions.iter().zip(&regions) {
             let _ = writeln!(
                 out,

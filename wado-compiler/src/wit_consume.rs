@@ -228,6 +228,7 @@ pub fn build_bindings(
         b.space,
         b.count,
         false,
+        // Never highlighted: no source text to key on.
         Vec::new(),
     );
     let interfaces = b

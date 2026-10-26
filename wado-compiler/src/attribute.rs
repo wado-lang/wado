@@ -384,7 +384,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         name: COVERAGE,
         targets: &[AttrTarget::Module, AttrTarget::Function, AttrTarget::Impl],
         args: AttrArgs::Read("`off`"),
-        summary: "`wado test --coverage` leaves this code unmeasured",
+        summary: "`wado test --coverage` and `--pgo` leave this code unmeasured",
         stdlib_only: false,
         bodyless: None,
     },

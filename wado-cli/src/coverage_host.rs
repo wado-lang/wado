@@ -1,6 +1,7 @@
-//! `wado test --coverage`: the `core:coverage` host each test store reports its
-//! runs through, and the run-wide report those runs and the components' plans
-//! make. See WEP 2026-09-28 (Test Coverage).
+//! `wado test --coverage` and `--pgo`: the `core:coverage` host each test store
+//! reports its runs through, and the run-wide reports those runs and the
+//! components' plans make. See WEP 2026-09-28 (Test Coverage) and WEP
+//! 2026-10-25 (Profile-Guided Optimization).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -8,8 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use wado_compiler::coverage::{
-    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region, Registered,
-    TestReport,
+    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Registered, TestReport,
 };
 use wado_compiler::pgo;
 #[cfg(debug_assertions)]
@@ -449,10 +449,7 @@ type Uncovered = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 fn uncovered_regions(coverage: &Coverage) -> Uncovered {
     let mut out = Uncovered::new();
     for (path, file) in &coverage.files {
-        let mut by_function: Vec<Vec<(u32, &Region)>> = vec![Vec::new(); file.plan.functions.len()];
-        for (id, region) in file.plan.regions.iter().enumerate() {
-            by_function[region.function as usize].push((id as u32, region));
-        }
+        let by_function = file.plan.regions_by_function();
         let mut seen: BTreeMap<&str, u32> = BTreeMap::new();
         for (function, regions) in file.plan.functions.iter().zip(&by_function) {
             let count = seen.entry(&function.name).or_default();
@@ -461,15 +458,11 @@ fn uncovered_regions(coverage: &Coverage) -> Uncovered {
                 1 => function.name.clone(),
                 n => format!("{}#{n}", function.name),
             };
-            let (body, _) = regions[0];
-            assert_eq!(
-                body, function.region,
-                "a function's body is its first region"
-            );
-            let ran = regions
-                .iter()
-                .enumerate()
-                .map(|(n, (id, region))| (format!("{} {n}", region.kind.label()), file.ran(*id)));
+            let body = function.region;
+            let ran = regions.iter().enumerate().map(|(n, &id)| {
+                let kind = file.plan.regions[id as usize].kind;
+                (format!("{} {n}", kind.label()), file.ran(id))
+            });
             let missed: Vec<String> = if file.ran(body) {
                 ran.filter(|(_, hit)| !hit)
                     .map(|(label, _)| label)

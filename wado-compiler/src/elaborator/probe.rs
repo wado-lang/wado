@@ -1,4 +1,4 @@
-//! Coverage probes: where `wado test --coverage` asks for them, reify puts a
+//! Coverage probes: where `wado test --coverage` or `--pgo` asks for them, reify puts a
 //! call to `core:rt::coverage_probe(id)` at the start of each region the plan
 //! numbers. See [WEP: Test Coverage](../../../docs/wep-2026-09-28-test-coverage.md).
 

@@ -557,8 +557,9 @@ pub(crate) fn plan_module(
         texts,
         ..
     } = planner;
-    for (index, text) in texts.iter().enumerate() {
-        plan.functions[index].hash = function_hash(module.source(), text, &plan, index as u32);
+    for (index, ids) in plan.regions_by_function().iter().enumerate() {
+        let regions = ids.iter().map(|&id| &plan.regions[id as usize]);
+        plan.functions[index].hash = function_hash(module.source(), &texts[index], regions);
     }
     sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
     (plan, sites, for_of_bodies)
@@ -585,15 +586,19 @@ struct FunctionText {
     start: Pos,
 }
 
-/// What a profile's counts for `function` were recorded against: its text,
-/// and each of its regions' kind and span relative to where the text starts.
-/// The text catches an edit that changes which region runs, the plan what
-/// decides the regions from outside the text, such as a `#[coverage(off)]`
-/// on the enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
-fn function_hash(source: &str, text: &FunctionText, plan: &ModulePlan, function: u32) -> u64 {
+/// What a profile's counts for a function were recorded against: its text,
+/// and each of its `regions`' kind and span relative to where the text starts.
+/// The text catches an edit that changes which region runs, the regions what
+/// decides them from outside the text, such as a `#[coverage(off)]` on the
+/// enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
+fn function_hash<'r>(
+    source: &str,
+    text: &FunctionText,
+    regions: impl Iterator<Item = &'r Region>,
+) -> u64 {
     let mut h = Sha256::new();
     h.update(source[text.bytes.clone()].as_bytes());
-    for region in plan.regions.iter().filter(|r| r.function == function) {
+    for region in regions {
         h.update([region.kind.code()]);
         for pos in [region.start, region.end] {
             h.update((pos.line - text.start.line).to_le_bytes());
@@ -1255,6 +1260,24 @@ impl TestReport {
 }
 
 impl ModulePlan {
+    /// Each function's region ids in plan order, by function; the first is
+    /// its body.
+    #[must_use]
+    pub fn regions_by_function(&self) -> Vec<Vec<u32>> {
+        let mut out = vec![Vec::new(); self.functions.len()];
+        for (id, region) in self.regions.iter().enumerate() {
+            out[region.function as usize].push(id as u32);
+        }
+        for (function, ids) in self.functions.iter().zip(&out) {
+            assert_eq!(
+                ids.first(),
+                Some(&function.region),
+                "a function's body is its first region"
+            );
+        }
+        out
+    }
+
     /// Count each derived region as the sum of its children: every run of it
     /// enters exactly one. A child is numbered after its parent, so one pass
     /// from the last region reaches a derived region's children before it.
