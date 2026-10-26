@@ -213,15 +213,16 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                        | Linux                                                    | macOS                                 |
-| ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| System configuration           | `/etc`, name resolution and TLS certificates among it    | `/private/etc`, the keychain          |
-| Name resolution (network only) | nothing beyond `/etc`                                    | mDNSResponder                         |
-| Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
-| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
-| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
+| Purpose                        | Linux                                                                                         | macOS                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Loader and shared libraries    | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache   |
+| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`   |
+| System configuration           | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the keychain            |
+| Name resolution (network only) | nothing beyond `/etc`                                                                         | mDNSResponder                           |
+| Locale and time zones          | `/usr/share/zoneinfo`, locale data                                                            | the same                                |
+| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same                                |
+| System and own process state   | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl` |
+| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                |
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
@@ -561,9 +562,10 @@ cannot be taken back.
   host predicts the refusal from the policy rather than observing Landlock's:
   a path whose final component is a symbolic link is judged at its target
   even for a call, such as `unlink`, that acts on the link itself.
-- `/proc` is outside the baseline, so a child reads nothing there, its own
-  entries (`/proc/self/status`) and `/proc/cpuinfo` included. `--process-trace`
-  then suggests `--process-read` for a path that names one process.
+- Of the per-process entries of `/proc`, a child reads only its own. A process
+  it starts in turn cannot read its own `/proc/self`: Landlock rules name a
+  path when the rule is made, and that process's pid does not exist yet.
+  Another process's entry stays unreadable by design.
 
 ## Related WEPs
 

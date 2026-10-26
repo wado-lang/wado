@@ -397,6 +397,22 @@ fn the_host_learns_each_call_the_filter_refused() {
         (OK, BTreeSet::new())
     );
 }
+/// `sh` reads with a builtin, so the child itself opens each file: a
+/// descendant's `/proc/self` is not the child's.
+#[cfg(target_os = "linux")]
+#[test]
+fn reads_its_own_proc_entry_and_the_system_s_but_no_other_process_s() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    let own = "read l < /proc/self/status && read l < /proc/cpuinfo && read l < /proc/mounts \
+               && cd /proc && read l < self/status";
+    assert_eq!(sh(&policy, own), OK);
+    assert_eq!(sh_traced(&policy, own), (OK, BTreeSet::new()));
+    let host = format!("read l < /proc/{}/status", std::process::id());
+    assert_ne!(sh(&policy, &host), OK);
+}
+
 /// A path counts once it exists for the call: a read of a missing file fails
 /// with `ENOENT` whatever the grants.
 #[cfg(target_os = "linux")]

@@ -157,6 +157,14 @@ impl ResolvedPolicy {
             .iter()
             .any(|(root, granted)| path.starts_with(root) && *granted >= access)
     }
+
+    /// What Linux grants the child `pid` beyond its policy: its own `/proc`
+    /// entry, which only the child can open.
+    #[cfg(target_os = "linux")]
+    fn grant_own_proc(&mut self, pid: libc::pid_t) {
+        self.0
+            .push((PathBuf::from(format!("/proc/{pid}")), Access::ReadExecute));
+    }
 }
 
 /// Read and execute: the loader, the shared libraries, installed programs, the
@@ -178,6 +186,16 @@ const BASELINE_READ: &[&str] = &[
     "/dev/urandom",
     "/dev/random",
     "/dev/zero",
+    // What the system says of itself, which every user reads. A process's
+    // own entry is granted per child, never another's.
+    "/proc/cpuinfo",
+    "/proc/meminfo",
+    "/proc/stat",
+    "/proc/loadavg",
+    "/proc/uptime",
+    "/proc/version",
+    "/proc/filesystems",
+    "/proc/sys",
 ];
 
 #[cfg(target_os = "macos")]

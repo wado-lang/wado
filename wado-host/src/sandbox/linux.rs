@@ -44,6 +44,8 @@ const ACCESS_FS_READ_FILE: u64 = 1 << 2;
 const ACCESS_FS_READ_DIR: u64 = 1 << 3;
 const ACCESS_FS_TRUNCATE: u64 = 1 << 14;
 const ACCESS_FS_IOCTL_DEV: u64 = 1 << 15;
+/// What `Access::ReadExecute` grants.
+const ACCESS_FS_READ: u64 = ACCESS_FS_EXECUTE | ACCESS_FS_READ_FILE | ACCESS_FS_READ_DIR;
 /// Every filesystem right ABI 6 handles, `EXECUTE` through `IOCTL_DEV`.
 const ACCESS_FS_ALL: u64 = (1 << 16) - 1;
 /// The rights a rule on a file, rather than a directory, may hold.
@@ -152,7 +154,11 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         .spawn(move || {
             // `None` once every sender is closed: the spawn failed before the
             // child confined itself.
-            if let Some(listener) = receive_listener(&listener_rx) {
+            if let Some((listener, pid)) = receive_listener(&listener_rx) {
+                let traced = traced.map(|mut policy| {
+                    policy.grant_own_proc(pid);
+                    policy
+                });
                 answer_refusals(&listener, &recorded, traced.as_ref());
             }
         })?;
@@ -192,10 +198,10 @@ union FdControl {
     bytes: [u8; unsafe { libc::CMSG_SPACE(size_of::<RawFd>() as u32) } as usize],
 }
 
-/// A one-byte message with room for one descriptor, all on the stack, since
-/// the child builds one between `fork` and `exec`.
+/// The child's pid with room for one descriptor, all on the stack, since the
+/// child builds one between `fork` and `exec`.
 struct FdMessage {
-    byte: u8,
+    pid: libc::pid_t,
     iov: libc::iovec,
     control: FdControl,
     header: libc::msghdr,
@@ -210,8 +216,8 @@ impl FdMessage {
     /// The header, pointing into `self`, which must not move while it is used.
     fn header(&mut self) -> *mut libc::msghdr {
         self.iov = libc::iovec {
-            iov_base: (&raw mut self.byte).cast(),
-            iov_len: 1,
+            iov_base: (&raw mut self.pid).cast(),
+            iov_len: size_of::<libc::pid_t>(),
         };
         self.header.msg_iov = &raw mut self.iov;
         self.header.msg_iovlen = 1;
@@ -224,6 +230,8 @@ impl FdMessage {
 /// Runs in the child between `fork` and `exec`.
 fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     let mut message = FdMessage::new();
+    // SAFETY: a plain system call.
+    message.pid = unsafe { libc::getpid() };
     let header = message.header();
     // SAFETY: the control buffer holds one header and one descriptor, and
     // `message` outlives the calls.
@@ -243,8 +251,8 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-/// The listener the child sends, or `None` once no sender is left.
-fn receive_listener(socket: &OwnedFd) -> Option<OwnedFd> {
+/// The listener the child sends, and its pid, or `None` once no sender is left.
+fn receive_listener(socket: &OwnedFd) -> Option<(OwnedFd, libc::pid_t)> {
     let mut message = FdMessage::new();
     let header = message.header();
     let received = loop {
@@ -264,7 +272,9 @@ fn receive_listener(socket: &OwnedFd) -> Option<OwnedFd> {
     assert!(!control.is_null(), "the child sends its listener");
     // SAFETY: a header the kernel wrote, holding the one descriptor sent, which
     // `SCM_RIGHTS` installed in our table for us alone.
-    Some(unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) })
+    let listener =
+        unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) };
+    Some((listener, message.pid))
 }
 
 /// Answer each call the filter refers to the host, until no task uses the
@@ -566,13 +576,55 @@ impl Caller {
         };
         let path = PathBuf::from(OsString::from_vec(self.read_c_string(self.args[path])?));
         if path.is_absolute() {
-            return Some(path);
+            return self.own_proc(path);
         }
         let base = match dir {
             libc::AT_FDCWD => format!("/proc/{}/cwd", self.pid),
             fd => format!("/proc/{}/fd/{fd}", self.pid),
         };
-        Some(std::fs::read_link(base).ok()?.join(path))
+        self.own_proc(std::fs::read_link(base).ok()?.join(path))
+    }
+
+    /// `path` with an entry of `/proc` that leads through `self` or
+    /// `thread-self` (`/proc/mounts` is `self/mounts`) naming the caller, as it
+    /// does for the caller, rather than the host that resolves the path.
+    fn own_proc(&self, path: PathBuf) -> Option<PathBuf> {
+        let Ok(under_proc) = path.strip_prefix("/proc") else {
+            return Some(path);
+        };
+        let mut parts = under_proc.components();
+        let Some(entry) = parts.next() else {
+            return Some(path);
+        };
+        let entry = Path::new(entry.as_os_str());
+        let target = if entry == "self" || entry == "thread-self" {
+            entry.to_path_buf()
+        } else {
+            let Ok(target) = std::fs::read_link(Path::new("/proc").join(entry)) else {
+                return Some(path);
+            };
+            target
+        };
+        let own = if let Ok(rest) = target.strip_prefix("thread-self") {
+            Path::new(&format!("/proc/{}/task/{}", self.tgid()?, self.pid)).join(rest)
+        } else if let Ok(rest) = target.strip_prefix("self") {
+            Path::new(&format!("/proc/{}", self.tgid()?)).join(rest)
+        } else {
+            return Some(path);
+        };
+        Some(own.join(parts.as_path()))
+    }
+
+    /// The process the calling thread belongs to: the notification names the
+    /// thread.
+    fn tgid(&self) -> Option<libc::pid_t> {
+        let status = std::fs::read_to_string(format!("/proc/{}/status", self.pid)).ok()?;
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix("Tgid:"))?
+            .trim()
+            .parse()
+            .ok()
     }
 
     /// The access `asks` names, or `None` for an `O_PATH` open, which Landlock
@@ -674,6 +726,7 @@ fn confine_self(
         check(unsafe { libc::fchdir(dir.as_raw_fd()) })?;
     }
     check(unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) })?;
+    grant_own_proc(ruleset)?;
     check_long(unsafe {
         libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0u32)
     })?;
@@ -763,29 +816,59 @@ fn ruleset(policy: &Policy) -> io::Result<OwnedFd> {
             },
         };
         let mut allowed = match rule.access {
-            Access::ReadExecute => ACCESS_FS_EXECUTE | ACCESS_FS_READ_FILE | ACCESS_FS_READ_DIR,
+            Access::ReadExecute => ACCESS_FS_READ,
             Access::ReadWrite => ACCESS_FS_ALL,
         };
         if !file.metadata()?.is_dir() {
             allowed &= ACCESS_FS_FILE;
         }
-        let beneath = PathBeneathAttr {
-            allowed_access: allowed,
-            parent_fd: file.as_raw_fd(),
-        };
-        // SAFETY: `beneath` outlives the call.
-        check_long(unsafe {
-            libc::syscall(
-                libc::SYS_landlock_add_rule,
-                ruleset.as_raw_fd(),
-                LANDLOCK_RULE_PATH_BENEATH,
-                &raw const beneath,
-                0u32,
-            )
-        })
-        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", rule.path.display())))?;
+        add_rule(&ruleset, file.as_raw_fd(), allowed)
+            .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", rule.path.display())))?;
     }
     Ok(ruleset)
+}
+
+/// Grant `allowed` beneath the file `parent` names. The child calls it too,
+/// between `fork` and `exec`.
+fn add_rule(ruleset: &OwnedFd, parent: RawFd, allowed: u64) -> io::Result<()> {
+    let beneath = PathBeneathAttr {
+        allowed_access: allowed,
+        parent_fd: parent,
+    };
+    // SAFETY: `beneath` outlives the call.
+    check_long(unsafe {
+        libc::syscall(
+            libc::SYS_landlock_add_rule,
+            ruleset.as_raw_fd(),
+            LANDLOCK_RULE_PATH_BENEATH,
+            &raw const beneath,
+            0u32,
+        )
+    })
+}
+
+/// Let the child read its own `/proc` entry. Only the child can open it: in
+/// the host, `/proc/self` names the host. A host without `/proc` grants
+/// nothing.
+fn grant_own_proc(ruleset: &OwnedFd) -> io::Result<()> {
+    // SAFETY: a plain system call on a static string.
+    let own = unsafe {
+        libc::open(
+            c"/proc/self".as_ptr(),
+            libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    };
+    if own == -1 {
+        let err = io::Error::last_os_error();
+        return match err.kind() {
+            io::ErrorKind::NotFound => Ok(()),
+            _ => Err(err),
+        };
+    }
+    let added = add_rule(ruleset, own, ACCESS_FS_READ);
+    // SAFETY: `own` is ours, opened above.
+    check(unsafe { libc::close(own) })?;
+    added
 }
 
 /// System calls refused whatever the policy grants.
