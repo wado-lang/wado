@@ -1,0 +1,35 @@
+// A newtype inherits its base's impls, a generic one among them, so a bound
+// `S: AsSlice<Elem = T>` settles `T` from a `ByteList` through `List<u8>`'s
+// impl, as it does from the `List` itself.
+use { println, Stdout } from "core:cli";
+
+struct Wrap<T> {
+    first: T,
+}
+
+impl<T> Wrap<T> {
+    fn of<S: AsSlice<Elem = T>>(source: &S) -> Wrap<T> {
+        return Wrap::<T> { first: source.at(0) };
+    }
+}
+
+fn first_of<T, S: AsSlice<Elem = T>>(source: &S) -> T {
+    return source.at(0);
+}
+
+fn bytes() -> ByteList {
+    return [7, 8];
+}
+
+fn ints() -> List<i32> {
+    return [5, 6];
+}
+
+export fn run() with Stdout {
+    let local = bytes();
+    println(`${first_of(&local)} ${first_of(&bytes())} ${first_of(&ints())}`);
+    println(`${Wrap::of(&local).first} ${Wrap::of(&bytes()).first} ${Wrap::of(&ints()).first}`);
+}
+
+__DATA__
+{"stdout": "7 7 5\n7 7 5\n"}

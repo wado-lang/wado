@@ -3580,8 +3580,40 @@ impl TypeTable {
         {
             return Some(resolved);
         }
+        // A newtype inherits its immediate base's impls, a link at a time as
+        // `inheriting` reads them, a generic impl among them: `ByteList`
+        // answers `List<u8>`'s `AsSlice::Elem`.
+        let mut receiver = concrete;
+        loop {
+            if let Some(resolved) =
+                self.receiver_projection_family(receiver, owning_trait, trait_args, assoc_name)
+            {
+                return Some(resolved);
+            }
+            // A scalar primitive's arithmetic is compiler-supplied, so nothing
+            // registered its `Output`: it is the receiver itself, a newtype
+            // over one included. `v128` is not one — only a lane type's own
+            // impl names its output.
+            if assoc_name == "Output" && self.is_scalar_primitive_like(receiver) {
+                return Some(receiver);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(receiver) else {
+                return None;
+            };
+            receiver = *base_type;
+        }
+    }
+
+    /// [`Self::projection_family`] answered by an impl on `receiver` itself.
+    fn receiver_projection_family(
+        &mut self,
+        receiver: TypeId,
+        owning_trait: &DefId,
+        trait_args: Option<&[TypeId]>,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
         if let Some(resolved) =
-            self.resolve_assoc_type_of_trait_at(concrete, owning_trait, trait_args, assoc_name)
+            self.resolve_assoc_type_of_trait_at(receiver, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
@@ -3590,7 +3622,7 @@ impl TypeTable {
         // name on one implementor stay apart (WEP-2026-08-12). The name-keyed
         // forms below give up on that case rather than choosing.
         if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
-            concrete,
+            receiver,
             owning_trait,
             trait_args,
             assoc_name,
@@ -3598,18 +3630,11 @@ impl TypeTable {
             return Some(resolved);
         }
         if let Some(resolved) =
-            self.resolve_assoc_type_qualified(concrete, owning_trait, trait_args, assoc_name)
+            self.resolve_assoc_type_qualified(receiver, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
-        if let Some(resolved) = self.resolve_generic_assoc_type_mono(concrete, assoc_name) {
-            return Some(resolved);
-        }
-        // A scalar primitive's arithmetic is compiler-supplied, so nothing
-        // registered its `Output`: it is the receiver itself, a newtype over
-        // one included. `v128` is not one — only a lane type's own impl names
-        // its output.
-        (assoc_name == "Output" && self.is_scalar_primitive_like(concrete)).then_some(concrete)
+        self.resolve_generic_assoc_type_mono(receiver, assoc_name)
     }
 
     /// Register `<concrete_id as trait_ref>::assoc_name` → `resolved_id`: for
