@@ -1,34 +1,20 @@
 //! A length spelled as arithmetic over a name, the name bound from the length.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Odd, Prepared, Seq, forward } from "./spelled.onnxtext"
+use { Prepared, V0, X0, forward } from "./spelled.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "V",
-                        axes: ["Odd"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
-fn seq(data: List<f32>) -> Tensor<f32, [Seq]> {
+fn seq(data: List<f32>) -> Tensor<f32, [X0]> {
     return Tensor {
         data,
         extents: [data.len()],
     };
 }
 
-fn odd(data: List<f32>) -> Tensor<f32, [Odd]> {
+fn odd(data: List<f32>) -> Tensor<f32, [V0]> {
     return Tensor {
         data,
         extents: [data.len()],

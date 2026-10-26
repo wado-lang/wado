@@ -300,6 +300,11 @@ pub fn run(mut parser: lexopt::Parser) {
     if let Some(arg) = parser.next().expect("failed to parse args") {
         panic!("unexpected argument: {arg:?}");
     }
+    verify();
+}
+
+/// Exit with the drift reported when there is any.
+pub fn verify() {
     let drift = check();
     if drift.is_empty() {
         println!("highlight vocabulary: in sync");

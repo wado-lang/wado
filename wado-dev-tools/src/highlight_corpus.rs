@@ -3,7 +3,9 @@
 //!
 //! The sibling of [`crate::grammar_corpus`], which compares parse verdicts on
 //! the same corpus and through the same split — the compiler in-process, Gale
-//! under `wado run`, `scripts/check-highlight.sh` driving both.
+//! under `wado run`. It checks [`crate::highlight_vocab`] first: that check is
+//! cheap and explains most class divergences, so it fails there rather than
+//! through thousands of corpus rows.
 //!
 //! Both vocabularies project onto [`Class`], and the projection is what keeps
 //! the comparison honest about a context-free grammar. The grammar must carry
@@ -18,9 +20,10 @@
 
 use std::fmt::Write as _;
 use std::fs;
+use std::path::Path;
 
-use crate::grammar_corpus::{collect_corpus, emit_corpus_to};
-use lexopt::Arg::{Long, Value};
+use crate::grammar_corpus::{collect_corpus, run_gale_side};
+use crate::highlight_vocab;
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::semantic_tokens::{
     ClassifiedToken, TOKEN_TYPES, classify_all, token_modifier, token_type,
@@ -224,36 +227,25 @@ fn accepted_source(path: &str, theirs: &GaleFile) -> Option<String> {
 }
 
 pub fn run(mut parser: lexopt::Parser) {
-    let mut emit_corpus: Option<String> = None;
-    let mut compare: Option<String> = None;
-    let mut report: Option<String> = None;
-    while let Some(arg) = parser.next().expect("failed to parse args") {
-        match arg {
-            Long("emit-corpus") => emit_corpus = Some(value(&mut parser)),
-            Long("compare") => compare = Some(value(&mut parser)),
-            Long("report") => report = Some(value(&mut parser)),
-            Value(v) => panic!("unexpected argument: {}", v.to_string_lossy()),
-            other => panic!("unexpected argument: {other:?}"),
-        }
+    if let Some(arg) = parser.next().expect("failed to parse args") {
+        panic!("unexpected argument: {arg:?}");
     }
-
-    if let Some(out) = emit_corpus {
-        emit_corpus_to(&out);
-        return;
-    }
-
-    let gale_tsv = compare.expect("pass --emit-corpus <file> or --compare <gale.tsv>");
-    compare_with_gale(&gale_tsv, report.as_deref());
-}
-
-fn value(parser: &mut lexopt::Parser) -> String {
-    parser.value().unwrap().to_string_lossy().into_owned()
+    highlight_vocab::verify();
+    let dir = Path::new("package-gale-highlight-wado/build/check-highlight");
+    let corpus = collect_corpus();
+    let gale_tsv = run_gale_side(
+        dir,
+        &corpus,
+        "package-gale-highlight-wado/tools/highlight_dump.wado",
+    );
+    compare_with_gale(&corpus, &gale_tsv, &dir.join("divergences.tsv"));
 }
 
 /// Parse `tools/highlight_dump.wado`'s output: a capture table, then one
 /// header per file followed by its spans.
-fn read_gale_dump(path: &str) -> IndexMap<String, GaleFile> {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
+fn read_gale_dump(path: &Path) -> IndexMap<String, GaleFile> {
+    let text =
+        fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{}': {e}", path.display()));
     let mut captures: Vec<Class> = Vec::new();
     let mut files: IndexMap<String, GaleFile> = IndexMap::default();
     let mut current: Option<String> = None;
@@ -424,15 +416,14 @@ fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<D
     (out, refinements)
 }
 
-fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
+fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
     let gale = read_gale_dump(gale_tsv);
-    let corpus = collect_corpus();
 
     let mut divergences: Vec<Divergence> = Vec::new();
     let mut compared = 0usize;
     let mut skipped = 0usize;
     let mut refinements = 0usize;
-    for path in &corpus {
+    for path in corpus {
         let Some(theirs) = gale.get(path) else {
             panic!("the Gale side dumped nothing for '{path}' — the two corpora differ");
         };
@@ -447,10 +438,8 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
     }
 
     let patterns = group(&divergences);
-    if let Some(path) = report_path {
-        fs::write(path, render_report(&patterns))
-            .unwrap_or_else(|e| panic!("writing '{path}': {e}"));
-    }
+    fs::write(report_path, render_report(&patterns))
+        .unwrap_or_else(|e| panic!("writing '{}': {e}", report_path.display()));
     println!(
         "corpus: {} files | compared: {compared} | skipped (either side rejects): {skipped} | \
          divergences: {} in {} patterns | template refinements: {refinements}",

@@ -20,11 +20,6 @@ test "a symbol proves nothing about a number" {
     assert !Extent::Static(4).agrees(&Extent::symbol(&"seq"));
 }
 
-test "an unstated extent agrees with nothing, itself included" {
-    assert !Extent::Unstated.agrees(&Extent::Unstated);
-    assert !Extent::Unstated.agrees(&Extent::Static(4));
-}
-
 test "a polynomial with no symbol left is a static extent" {
     let seq = Poly::symbol(&"seq");
     assert Extent::of(seq.try_sub(&seq).unwrap().try_add(&Poly::constant(3)).unwrap()) matches { Some(Static(3)) };
@@ -36,7 +31,6 @@ test "a polynomial with no symbol left is a static extent" {
 test "an extent renders as what a diagnostic should name it" {
     assert `${Extent::Static(512)}` == "512";
     assert `${Extent::symbol(&"seq")}` == "seq";
-    assert `${Extent::Unstated}` == "?";
 }
 
 test "agreement owes only what the extents' difference reads" {

@@ -70,6 +70,7 @@ fn tensor_type(dtype: &String, rank: &Rank) -> Result<String, PrintError> {
             for let d of *dims {
                 spelled.push(match d {
                     Static(n) => `${n}`,
+                    Bound([_, n]) => `${n}`,
                     Symbol(s) => name(&s)?,
                     Unknown => "?",
                 });

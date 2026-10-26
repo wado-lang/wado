@@ -8,28 +8,10 @@
 
 use { println, Stdout } from "core:cli";
 use { Cpu, Tensor } from "lib:loam";
-use { Batch, In, Out, Weights, forward } from "./half.onnxtext"
+use { N as Batch, Weights, X1 as In, Y1 as Out, forward } from "./half.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Batch", "In"],
-                    },
-                    {
-                        pattern: "W",
-                        axes: ["In", "Out"],
-                    },
-                    {
-                        pattern: "B",
-                        axes: ["Out"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 fn halves(count: i32, value: f32) -> List<f16> {

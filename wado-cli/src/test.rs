@@ -24,7 +24,7 @@ use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::fuel_host::{self, FuelRegion};
-use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
@@ -377,13 +377,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
-    // Tests compile unoptimized by default: the compile stage dominates a run,
-    // and `-O` opts back in. Each file's optimizer runs on one thread, since
-    // `--parallel` already spreads the files across the cores.
+    // Each file's optimizer runs on one thread, since `--parallel` already
+    // spreads the files across the cores.
     let mut knobs = CompileKnobs {
-        opt_level: OptLevel::O0,
         opt_threads: Some(1),
-        ..CompileKnobs::default()
+        ..CompileKnobs::compile_and_run()
     };
     // `core:log`'s own default is `trace`, which buries a run in the events a
     // library emits while working. `-D log.level=` wins over this.

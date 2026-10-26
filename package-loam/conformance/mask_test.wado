@@ -2,34 +2,16 @@
 //! float.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Batch, Head, Key, Query, Weights, forward } from "./mask.onnxtext"
+use { M0, M1, Weights, Y1, Y2, forward } from "./mask.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "M",
-                        axes: ["Batch", "Key"],
-                    },
-                    {
-                        pattern: "U",
-                        axes: ["Batch", "Head", "Key"],
-                    },
-                    {
-                        pattern: "V",
-                        axes: ["Batch", "Head", "Query", "Key"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "a masked key becomes -f32::MAX and a kept one 0" {
-    let got: Tensor<f32, [Batch, Head, Query, Key]> = forward(
+    let got: Tensor<f32, [M0, Y1, Y2, M1]> = forward(
         &mut Cpu {},
-        &Tensor::<i64, [Batch, Key]> {
+        &Tensor::<i64, [M0, M1]> {
             data: [1, 1, 0],
             extents: [1, 3],
         },
