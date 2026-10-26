@@ -35,7 +35,7 @@ use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, ColdRuns, unreached_through};
+use super::arena_query::{self, ColdRuns, stmt_diverges, unreached_through};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
@@ -130,15 +130,6 @@ fn is_zero_extension(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
         )
     );
     unsigned && wasm_shape(type_table, to) == Some(PrimitiveType::I64)
-}
-
-/// Whether a statement diverges unconditionally (a `return` / `break` /
-/// `continue`, or a call to a `-> !` function such as `panic`), so the tail of
-/// its block after it is unreachable and never emitted.
-fn diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
-    body.terminates(stmt)
-        || matches!(&body.stmts[stmt].kind, StmtKind::Expr(e)
-            if e.as_expr().is_some_and(|e| type_table.is_never(body.exprs[e].type_id)))
 }
 
 /// Which of a body's two prices a walk is computing. Both are counted in
@@ -378,7 +369,7 @@ impl<'a> CostWalk<'a> {
                 continue;
             }
             total += self.stmt(stmt, seen);
-            if diverges(self.body, stmt, self.type_table) {
+            if stmt_diverges(self.body, stmt, self.type_table) {
                 break;
             }
         }
@@ -863,7 +854,7 @@ fn has_safepoint(
                 if self.node(NodeRef::Stmt(stmt)) {
                     return true;
                 }
-                if diverges(self.body, stmt, self.type_table) {
+                if stmt_diverges(self.body, stmt, self.type_table) {
                     break;
                 }
             }
@@ -2184,6 +2175,12 @@ pub fn inline_functions(
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
+    let cold_runs: Vec<ColdRuns> = exec.map_indices(functions.len(), |i| {
+        let func = functions[i].borrow();
+        func.body
+            .as_ref()
+            .map_or_else(ColdRuns::default, |b| ColdRuns::of(b, cold))
+    });
     let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = func.body.as_ref() else {
@@ -2194,7 +2191,7 @@ pub fn inline_functions(
         {
             return 0;
         }
-        let gross = inline_cost(body, type_table, &ColdRuns::of(body, cold), &[]);
+        let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
         if func.inline_hint == InlineHint::Always
             || net_cost(gross, func.params.len()) <= effective_threshold(&func, inline_threshold)
         {
@@ -2205,12 +2202,9 @@ pub fn inline_functions(
     });
     let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
-        let runs = func
-            .body
-            .as_ref()
-            .map_or_else(ColdRuns::default, |b| ColdRuns::of(b, cold));
+        let runs = &cold_runs[i];
         let size = match func.body.as_ref() {
-            Some(b) if pricing => inline_size(b, type_table, &runs),
+            Some(b) if pricing => inline_size(b, type_table, runs),
             _ => 0,
         };
         let view = func
@@ -2227,7 +2221,7 @@ pub fn inline_functions(
             &barred_cycle_members,
             type_table,
             inline_threshold,
-            &runs,
+            runs,
             &foldable,
             &loopy,
             &safepoint_calls,
@@ -2247,14 +2241,14 @@ pub fn inline_functions(
         let candidate = (verdict.reach != Reach::Nowhere).then(|| {
             let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(body, type_table, &runs, &spliced),
+                InlineHint::Always => inline_cost(body, type_table, runs, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
             let shrinks = called_cold[i] && {
                 let written = if pricing {
                     size
                 } else {
-                    inline_size(body, type_table, &runs)
+                    inline_size(body, type_table, runs)
                 };
                 net_cost(written, func.params.len()) == 0
             };
@@ -2451,7 +2445,8 @@ pub fn inline_functions(
             if entry == Site::Loop {
                 frame.loop_calls.push(call_counts(body, root, &carried));
             }
-            let mut runs = ColdRuns::of(body, cold);
+            // Priced on this same body: only this visit writes it.
+            let mut runs = cold_runs[fid.index()].clone();
             inline_calls_in_block(
                 body,
                 root,

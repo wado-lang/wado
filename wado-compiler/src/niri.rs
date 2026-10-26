@@ -7,6 +7,7 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncCell, FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
@@ -301,7 +302,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("array_copy" | "array_move") => CtfeBuiltin::ArrayCopy,
             Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
             Some("array_release") => CtfeBuiltin::ArrayRelease,
-            Some("cold_path") => CtfeBuiltin::ColdPath,
+            Some(COLD_PATH_INTRINSIC) => CtfeBuiltin::ColdPath,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,

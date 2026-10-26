@@ -1,8 +1,22 @@
 // `-f no-cold-paths` leaves no branch to hint where only a marker would: the
-// author's, the one on a `?`, and the one past a global's once-guard. With
-// the markers, each of the three hints its branch.
+// author's, in a block or as a `match` arm's whole body, the one on a `?`, and
+// the one past a global's once-guard. With the markers, each hints its branch.
 
 global START: i32 = builtin::black_box(3);
+
+enum Kind {
+    Common,
+    Rare,
+}
+
+#[inline(never)]
+fn arm(k: Kind) -> i32 {
+    match k {
+        Rare => builtin::cold_path(),
+        Common => {},
+    }
+    return 1;
+}
 
 #[inline(never)]
 fn guarded(x: i32) -> i32 {
@@ -22,6 +36,7 @@ fn propagated(o: Option<i32>) -> Option<i32> {
 export fn run() {
     let _ = guarded(5);
     let _ = propagated(builtin::black_box(Option::Some(1)));
+    let _ = arm(builtin::black_box(Kind::Common));
 }
 
 __DATA__

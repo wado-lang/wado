@@ -20,6 +20,7 @@ use crate::nir_arena::{
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::tir::{ResolvedType, TypeId};
@@ -497,6 +498,45 @@ pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
     .is_some()
 }
 
+/// Whether `stmt` never falls through to the statement after it: a `return` /
+/// `break` / `continue`, a call to a `-> !` function such as `panic`, or a
+/// `loop` whose only exits are labeled breaks to an enclosing block.
+pub(super) fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
+    match &body.stmts[stmt].kind {
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
+        StmtKind::Expr(e) => e
+            .as_expr()
+            .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
+        StmtKind::Loop { body: b } => !block_breaks_innermost_loop(body, *b),
+        StmtKind::Let { .. }
+        | StmtKind::LetDestructure { .. }
+        | StmtKind::If { .. }
+        | StmtKind::LabeledBlock { .. } => false,
+    }
+}
+
+/// Whether an unlabeled `break` binds to the loop whose body is `block`. A
+/// nested loop captures its own, so its subtree is skipped.
+fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
+    struct Search(bool);
+    impl NirRefVisitor for Search {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node {
+                if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+                    return;
+                }
+                if matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. }) {
+                    self.0 = true;
+                }
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut search = Search(false);
+    search.visit_node(body, NodeRef::Block(block));
+    search.0
+}
+
 /// Whether `stmt` is a bare `cold_path()` call.
 fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
     let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
@@ -516,7 +556,7 @@ fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
 /// statement covers its block as a marker does when every path through it
 /// passes one: a loop or a labeled block whose block is cold from its start,
 /// or a branch each of whose arms is.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct ColdRuns {
     marker: Option<FuncId>,
     starts: IndexMap<BlockId, usize>,
@@ -529,7 +569,16 @@ impl ColdRuns {
             marker,
             starts: IndexMap::default(),
         };
-        if let Some(mut scan) = runs.scan(body) {
+        // Nearly every body holds no marker, which one pass over the arena
+        // settles more cheaply than the walk.
+        let named = |m| {
+            body.exprs
+                .values()
+                .any(|n| matches!(&n.kind, ExprKind::Call { func_id, .. } if *func_id == m))
+        };
+        if marker.is_some_and(named)
+            && let Some(mut scan) = runs.scan(body)
+        {
             scan.block(body.root());
         }
         runs
@@ -554,6 +603,11 @@ impl ColdRuns {
     pub(crate) fn is_marker(&self, body: &Body, stmt: StmtId) -> bool {
         self.marker
             .is_some_and(|marker| is_cold_marker(body, stmt, marker))
+    }
+
+    /// Whether no block turns cold.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.starts.is_empty()
     }
 
     /// Where `block` turns cold, if it does.
@@ -610,7 +664,7 @@ impl RunScan<'_> {
         };
         let start = stmts[..first]
             .iter()
-            .rposition(|&s| control_escapes(body, &[s]))
+            .rposition(|&s| node_escapes(body, NodeRef::Stmt(s)))
             .map_or(0, |i| i + 1);
         self.starts.insert(block, start);
         start == 0
@@ -619,9 +673,6 @@ impl RunScan<'_> {
     /// Whether every path through `stmt` passes a marker.
     fn covers(&mut self, stmt: StmtId) -> bool {
         let body = self.body;
-        if is_cold_marker(body, stmt, self.marker) {
-            return true;
-        }
         match &body.stmts[stmt].kind {
             StmtKind::If {
                 condition,
@@ -653,6 +704,17 @@ impl RunScan<'_> {
     fn expr(&mut self, e: ExprId) -> bool {
         let body = self.body;
         match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } if *func_id == self.marker => true,
+            // The right operand runs only when the left does not decide.
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::And | NirBinaryOp::Or,
+                right,
+            } => {
+                let left = self.operand(*left);
+                self.operand(*right);
+                left
+            }
             ExprKind::If {
                 condition,
                 then_branch,
@@ -685,17 +747,51 @@ impl RunScan<'_> {
                 }
                 scrutinee || every_arm
             }
-            // Every other expression evaluates each of its operands.
-            _ => {
-                let mut covered = false;
-                body.for_each_child(NodeRef::Expr(e), |child| {
-                    if let NodeRef::Expr(c) = child {
-                        covered |= self.expr(c);
-                    }
-                });
-                covered
+            ExprKind::Dead
+            | ExprKind::PackedArray(_)
+            | ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Unary { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::Call { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::VariantConstruct { .. }
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. } => {
+                let mut operands = Vec::new();
+                body.for_each_child(NodeRef::Expr(e), |child| operands.push(child));
+                self.in_order(operands)
             }
         }
+    }
+
+    /// Whether every path through operands evaluated one after another passes
+    /// a marker: one of them covers, and none ahead of it can leave first.
+    fn in_order(&mut self, operands: Vec<NodeRef>) -> bool {
+        let mut covered = false;
+        let mut left = false;
+        for operand in operands {
+            let NodeRef::Expr(e) = operand else {
+                unreachable!("an operand is an expression");
+            };
+            // Visited whatever the answer, so the runs under it are recorded.
+            let covers = self.expr(e);
+            covered |= covers && !left;
+            left = left || (!covered && node_escapes(self.body, operand));
+        }
+        covered
     }
 
     /// Whether every path through a branch passes a marker: through the part
@@ -720,10 +816,12 @@ impl RunScan<'_> {
 /// target — a label, or the nearest enclosing loop — is outside, which the
 /// statements' own labels and loop depth decide.
 pub(super) fn control_escapes(body: &Body, stmts: &[StmtId]) -> bool {
-    let mut labels: Vec<&str> = Vec::new();
-    stmts
-        .iter()
-        .any(|&s| escapes_from(body, NodeRef::Stmt(s), &mut labels, 0))
+    stmts.iter().any(|&s| node_escapes(body, NodeRef::Stmt(s)))
+}
+
+/// [`control_escapes`] for one node.
+fn node_escapes(body: &Body, node: NodeRef) -> bool {
+    escapes_from(body, node, &mut Vec::new(), 0)
 }
 
 fn escapes_from<'a>(

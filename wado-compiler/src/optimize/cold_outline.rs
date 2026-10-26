@@ -140,18 +140,12 @@ fn find_region(
         return None;
     }
     let body = func.body.as_ref()?;
-    // Nearly every function has no marker, so settle that with one linear scan
-    // of the arena before classifying its blocks.
-    if !body
-        .exprs
-        .values()
-        .any(|n| matches!(&n.kind, ExprKind::Call { func_id, .. } if *func_id == cold))
-    {
+    let runs = ColdRuns::of(body, Some(cold));
+    if runs.is_empty() {
         return None;
     }
     let params = func.params.len();
     let type_table = project.type_table.borrow();
-    let runs = ColdRuns::of(body, Some(cold));
     let root = root_copied.then_some((body.root(), false));
     for (block, under_loop) in root.into_iter().chain(valueless_blocks(body, &type_table)) {
         let Some(start) = runs.start(block) else {
