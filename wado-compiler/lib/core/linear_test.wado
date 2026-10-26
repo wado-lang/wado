@@ -66,6 +66,26 @@ test "cast reads the same bytes as another type" {
     assert back.to_list() == [1.0, 1.0];
 }
 
+test "to_list_of reads a byte range as little-endian elements" {
+    let source: ByteList = [0xFF, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0xC0];
+    let bytes = LinearArray::from_slice(&source);
+    assert bytes.to_list_of::<f32>(1, 9) == [1.0, -2.0];
+    assert bytes.to_list_of::<u16>(0, 2) == [0x00FF];
+    assert bytes.to_list_of::<u8>(3, 3) == [];
+}
+
+#[expect_trap]
+test "to_list_of traps on a range past the end" {
+    let bytes = LinearArray::<u8>::filled(4, 0);
+    let _ = bytes.to_list_of::<u8>(2, 5);
+}
+
+#[expect_trap]
+test "to_list_of traps where the range is not whole elements" {
+    let bytes = LinearArray::<u8>::filled(6, 0);
+    let _ = bytes.to_list_of::<f32>(0, 6);
+}
+
 #[expect_trap]
 test "cast traps where the bytes are not whole elements of the new type" {
     let bytes = LinearArray::<u8>::filled(6, 0);

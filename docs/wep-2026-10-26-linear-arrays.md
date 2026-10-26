@@ -75,7 +75,17 @@ impl<T: AnyBits> LinearArray<T> {
     pub fn cast<U: AnyBits>(self) -> LinearArray<U>
         contract self.len() * builtin::size_of::<T>() % builtin::size_of::<U>() == 0;
 }
+
+impl LinearArray<u8> {
+    pub fn to_list_of<U: AnyBits>(&self, start: i32, end: i32) -> List<U>
+        contract 0 <= start <= end <= self.len()
+        contract (end - start) % builtin::size_of::<U>() == 0;
+}
 ```
+
+`to_list_of` decodes one part of a byte array, such as one tensor of a
+checkpoint file, as little-endian `U`s at any alignment. A `cast` cannot: it
+takes the whole array, and a part may start off an element boundary.
 
 It implements `IndexValue<i32>` and `IndexAssign<i32>`, so `a[i]` and
 `a[i] = v` read as they do on a `List`. It implements neither `IndexRef` nor

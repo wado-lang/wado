@@ -130,6 +130,22 @@ impl<T: AnyBits> LinearArray<T> {
 }
 
 impl LinearArray<u8> {
+    /// The bytes from `start` to `end` as `U`s, read little-endian at any
+    /// alignment, copied into a `List`: a part of a file `read_linear` read,
+    /// decoded with no copy of the bytes before it.
+    pub fn to_list_of<U: AnyBits>(&self, start: i32, end: i32) -> List<U>
+        contract 0 <= start <= end <= self.len()
+        contract (end - start) % builtin::size_of::<U>() == 0
+    {
+        let width = builtin::size_of::<U>();
+        let count = (end - start) / width;
+        let mut list = List::<U>::with_capacity(count);
+        for let i of 0..<count {
+            list.push(builtin::load::<U>(self.block.ptr + start + i * width));
+        }
+        return list;
+    }
+
     /// Every byte `stream` delivers until its writer drops, each copy landing
     /// in the array's own block, so no byte passes through the GC heap. The
     /// block takes `expected` bytes up front and grows only for a stream that
