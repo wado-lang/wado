@@ -193,6 +193,10 @@ strip = false
 # `cargo build --profile debugger --bin wado`; it lives in its own
 # `target/debugger/` dir, so it never invalidates the `dev` cache.
 # See the `debugger` skill.
+#
+# It is not Cargo's built-in `debug` profile (as of Rust 1.99), which serves
+# the same purpose: `--profile debug` writes to `target/debug/`, the directory
+# `dev` writes to, so `target/debug/wado` would be whichever was built last.
 [profile.debugger]
 inherits = "dev"
 debug = 2
