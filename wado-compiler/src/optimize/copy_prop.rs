@@ -612,10 +612,10 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 }
 
 /// Whether `let target = source` binds two locals nothing ever writes, which
-/// then name one permanent value: a reference to the target may name the
+/// then name one permanent value. Even a reference to the target may name the
 /// source instead, since no write can tell the two places apart and `ref_eq`
 /// leaves open whether two places are one. An inlined `fn f(xs: Array<T>)`
-/// reading `&xs` leaves this shape (`core:simd`'s `lane(&lanes, k)`).
+/// reading `&xs` leaves that shape (`core:simd`'s `lane(&lanes, k)`).
 fn names_one_value(
     binding: &CopyBinding,
     target_usage: &LocalUsage,
@@ -660,8 +660,10 @@ fn can_propagate_copy(
             // the target (the target's reads are confined to the binding's
             // scope), so the coarse whole-function source gates below — which
             // would otherwise reject e.g. a loop counter copied inside the loop
-            // — do not apply.
-            if binding.source_scope_stable {
+            // — do not apply. Nor do they to two bindings nothing writes: nothing
+            // can observe the sharing, whatever the read counts, and the gates
+            // exist to keep two mutable views apart.
+            if binding.source_scope_stable || names_one_value(binding, target_usage, usage) {
                 return true;
             }
             let source_usage = usage.get(index);
@@ -671,20 +673,6 @@ fn can_propagate_copy(
                 return false;
             }
             let is_value_type = needs_value_copy(binding.type_id, type_table);
-            // Neither binding is ever written — the target is already known
-            // unassigned and not address-taken, and the source is neither
-            // assigned, field-mutated, nor address-taken — so the copy only
-            // names a second, permanently identical object. Nothing can observe
-            // the sharing, whatever the read counts, so the coarse value-type
-            // gates below (which exist to keep two mutable views apart) do not
-            // apply.
-            if is_value_type
-                && !target_usage.has_field_mutation
-                && source_usage
-                    .is_none_or(|su| !su.is_assigned && !su.has_field_mutation && !su.address_taken)
-            {
-                return true;
-            }
             if is_value_type
                 && target_usage.read_count == 1
                 && let Some(su) = source_usage
