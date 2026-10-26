@@ -31,9 +31,9 @@ use crate::synthesis::common::{
 };
 use crate::tir;
 use crate::tir::{
-    FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId,
+    FunctionRef, MonomorphInfo, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
+    TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -776,6 +776,8 @@ fn drop_impl_of(func: &TirFunction, tt: &TypeTable) -> Option<DefId> {
 /// Whether lowering copies `func` to each caller, so it owns no parameter: a
 /// trait's clause holder, clauses alone, or a function's `contract` clauses and
 /// a call handing every parameter to its `unchecked` twin, which owns them.
+/// An instance and its twin's are named by their templates, since an instance's
+/// own name spells its type arguments after the twin's suffix.
 fn copied_to_callers(func: &TirFunction) -> bool {
     if is_contract_holder(&func.name) {
         return true;
@@ -787,8 +789,15 @@ fn copied_to_callers(func: &TirFunction) -> bool {
     else {
         return false;
     };
-    matches!(&call.kind, TirExprKind::Call { func: callee, .. }
-        if callee.name != func.name && checked_name(&callee.name) == func.name)
+    let TirExprKind::Call { func: callee, .. } = &call.kind else {
+        return false;
+    };
+    fn template<'n>(name: &'n str, mono: Option<&'n MonomorphInfo>) -> &'n str {
+        mono.map_or(name, |m| &m.generic_name)
+    }
+    let own = template(&func.name, func.monomorph_info.as_ref());
+    let called = template(&callee.name, callee.monomorph_info.as_ref());
+    called != own && checked_name(called) == own
 }
 
 /// Cheap pre-check: does the body produce or bind any affine
