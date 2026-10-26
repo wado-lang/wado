@@ -2684,7 +2684,11 @@ impl<'a> Analyzer<'a> {
                 }
                 self.kill_local(*local_index, live);
                 if record && place_moves {
-                    self.collect_place_moves(&[value], live);
+                    let mut tails = Vec::new();
+                    result_tails(value, &mut tails);
+                    for tail in tails {
+                        self.collect_place_moves(&[tail], live);
+                    }
                 }
                 self.walk_stored_value(*local_index, value, live, record);
             }
@@ -2969,6 +2973,9 @@ impl<'a> Analyzer<'a> {
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.walk_labeled_block(label, block, live, record);
             }
+            // Drop glue's test reads the place's drop flag, never what it
+            // holds, so a field moved out before it is read no later.
+            TirExprKind::Call { func, .. } if func.is_builtin_named("is_moved") => {}
             TirExprKind::Call { func, args, .. } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let receiver = args.receiver().map(|r| &r.expr);
@@ -3216,6 +3223,38 @@ fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&
         // A scalar read out of a local carries none of its storage.
         _ if is_scalar_type(expr.type_id, type_table) => {}
         _ => leaf(expr),
+    }
+}
+
+/// Each expression a `let` may take its value from, on the path that runs it:
+/// the value itself, or the arm and tail values of a control form. Each runs
+/// last on its path, so it materializes into the binding as a `let` of it
+/// alone would (`let items = if done { started.items } else { lift() }`). A
+/// labeled block's `break` values are left out.
+fn result_tails<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
+    let tail_of = |block: &'e TirBlock, out: &mut Vec<&'e TirExpr>| {
+        if let Some(tail) = block.tail_expr() {
+            result_tails(tail, out);
+        }
+    };
+    match &strip_casts(expr).kind {
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                result_tails(&arm.body, out);
+            }
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            tail_of(then_branch, out);
+            if let Some(eb) = else_branch {
+                tail_of(eb, out);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => tail_of(block, out),
+        _ => out.push(expr),
     }
 }
 
