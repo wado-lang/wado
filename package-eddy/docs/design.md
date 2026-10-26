@@ -38,6 +38,8 @@ them is in [the research](./research-code-review-bots.md).
   own service: `wado query` for Wado, rust-analyzer for Rust, which much of
   the repository is written in. The method carries to any language with a
   language server. What the tool answers is not settled yet.
+- [x] Eddy points at problems and proposes no fixes.
+- [x] Every model call uses prompt caching.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation.
 
@@ -50,6 +52,15 @@ them is in [the research](./research-code-review-bots.md).
   still correlate; what pays is the pair that rarely misses the same defect on
   Eddy's evaluation set, a verifier no weaker than the code's author, and
   judges that cannot see who wrote the code or the finding.
+
+- [ ] Run on a GitHub Actions runner, Google Cloud Run, or a Cloudflare
+  Worker.
+
+## Deferred
+
+- How models of different providers exchange findings is worked out by trial
+  during implementation.
+- How learnings are stored is decided later.
 
 ## Outcome Signals
 

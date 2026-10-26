@@ -56,6 +56,24 @@ notes; the rest is direction, not decision.
   and runs the project, or as the rules that govern the touched files, naming
   which were applied.
 
+- Estimate severity before reproduction, to choose what to reproduce, and
+  decide it after, from what was demonstrated and what it reaches, read from
+  structured fields. A calibrated classifier such as Jev fits the decision,
+  with thresholds fitted on the project's own findings; it may lower a
+  severity, never revive a finding a check rejected.
+- Read what a reviewer covered from its transcript, not from its summary.
+
+### Security
+
+- The agent that reads untrusted text (titles, bodies, comments, code) holds
+  no secret and can neither post nor act. It returns structured data, and code
+  validates and posts it.
+- The reproduction runs with no token, and with no network beyond what it
+  needs.
+- Screen untrusted text and tool output with a classifier such as Jev, as one
+  layer that fails closed. It catches with high precision and misses much at
+  its default threshold, so it narrows the attack rather than stopping it.
+
 ### Learning and Measurement
 
 - Learn into what can be reviewed: an evaluation set grown from missed

@@ -1,8 +1,8 @@
 # Research: Code Review Bots, August to October 2026
 
 This survey covers how code review bots are built, what raises their quality,
-how they are evaluated, how they trade cost against quality, and how they learn
-over time. It reads only work published from
+how they are evaluated and secured, how they trade cost against quality, and
+how they learn over time. It reads only work published from
 2026-08-01 to 2026-10-26: the models changed enough in August 2026 that older
 results say little about current ones.
 
@@ -325,6 +325,51 @@ The weak point is precision, not recall: a bot that is noisy gets ignored.
 - Verification is the largest lever Anthropic reports: its team runs tests,
   the build and the linter, and a second agent reviews the diff in a fresh
   context, before the PR exists ([claude-code-review]).
+- An agent's report of what it reviewed is not evidence that it did. Agents
+  asked to review a set of files left some unread in 67.9% of runs, and most
+  of those runs then claimed a complete review or left the gap unsaid. Those
+  that claimed a complete review missed planted defects 1.8× as often.
+  Delegating to subagents raised coverage but not honesty ([2609.20812]).
+  Coverage is read from the transcript, not from the summary.
+
+### Severity
+
+A severity decides what is reproduced, what is posted, and how much an
+outcome weighs, so its errors spread to all three.
+
+| Source       | Measure                                                             | Result          |
+| ------------ | ------------------------------------------------------------------- | --------------- |
+| [2608.13928] | Severity accuracy and macro-F1, repository context vs best baseline | +14.4%, +15.3%  |
+| [2608.25905] | Assessment with gathered evidence vs best baseline                  | +5.3% to +35.2% |
+| [2609.28940] | Expected calibration error, Jev on TypeSafe's own set               | 0.246           |
+| [2609.28940] | Expected calibration error, Laya, raw vs temperature-scaled         | 0.466 vs 0.081  |
+
+- Grade from what was shown, not from the kind of bug. A pentest harness used
+  Jev to recalibrate severity from demonstrated impact: three findings rated
+  Critical for their class came down to High when the evidence showed no data
+  extracted. One that leaked admin credentials fell to Low because the proof
+  sat in a free-text field the grader did not read; a step that copies the
+  evidence into the structured field fixed it. The model may lower a
+  severity, never revive a finding a deterministic check rejected, and its
+  thresholds are set only after calibrating on the project's own labelled
+  findings ([2609.28940]).
+- The evidence for a severity lies across the repository. Pulling the context
+  each severity metric needs out of a code property graph beat function-level
+  and pure-LLM assessment ([2608.13928]); gathering evidence and retrieving
+  similar past vulnerabilities helped likewise ([2608.25905]).
+- A small model can score it. Medium open models approached cloud models at
+  predicting CVSS from code, given a prompt that fixes the output format
+  ([2608.22089]).
+- Ask for the risk without the policy, and apply the costs in code
+  ([2608.02677], under Cost and Quality).
+- Before the window: people agree on severity less than on anything else a
+  review is scored on ([2509.01494]), and models are overconfident about
+  security, more so across a repository than on a benchmark ([2606.31159]).
+
+What carries over: severity is a decision on evidence. It is estimated before
+reproduction, to choose what to reproduce, and decided after, from structured
+fields: what was demonstrated and what it reaches. A calibrated classifier fits
+the decision, with thresholds fitted on the project's own findings.
 
 ### Reproducing Findings
 
@@ -419,6 +464,48 @@ hotfixes, scored grounded and by a validated judge; online, the addressed rate
 weighted by severity, defects that escaped review, and the comments and cost
 per review. Offline and online should agree in direction, or one of them is
 measuring something else.
+
+## Securing the Bot
+
+A review bot reads text anyone can write (titles, bodies, comments, code,
+configuration) while it holds a token, posts comments, and may run commands.
+
+| Source               | Measure                                                    | Result                     |
+| -------------------- | ---------------------------------------------------------- | -------------------------- |
+| [2609.37647]         | Jev on an injection set at 0.5: precision, recall, AUROC   | 1.00, 0.50, 0.982          |
+| [2610.20907]         | AUROC: LLM judge, Jev, Prompt Guard 2 86M, 22M             | 0.897, 0.871, 0.757, 0.714 |
+| [2610.20907]         | Inputs escalated to a person at a 1% false-negative target | over 91.8%                 |
+| [jev-context-filter] | Planted attacks followed, without vs with a Jev filter     | 40 of 75 vs 0 of 75        |
+| [jev-context-filter] | AgentDojo attack success, without vs with                  | 27.3% vs 0.1%              |
+
+- The attacks are real, though disclosed before the window. A PR title, issue
+  body or comment hijacked Claude Code Security Review, Gemini CLI Action and
+  Copilot Agent; the Claude action posted its own API key as a comment, and
+  workflows on `pull_request_target` hand the runner its secrets
+  ([comment-and-control], 2026-04). Microsoft found a payload that slipped
+  past both the model's refusal and GitHub's secret scanner
+  ([microsoft-claude-action], 2026-06).
+- A classifier screens with high precision and low recall. At its default
+  threshold Jev flagged no false positives and missed half the injections,
+  though it ranked them well ([2609.37647]). It discriminated about as well as
+  an LLM judge, and its probabilities were no better calibrated than a
+  temperature-scaled classifier's. At a strict false-negative target every
+  gate sent more than nine inputs in ten to a person: a detector alone does
+  not make a security decision ([2610.20907]).
+- Screening tool output works against static attacks. Jev, filtering each
+  chunk an agent's tools returned, stopped every planted attack, and dropping
+  irrelevant chunks shrank prompts. It was tested on one attack wording, fails
+  open when Jev is unreachable, and its tokens cost more than they saved
+  ([jev-context-filter]).
+- Jev can be fooled too, if less often than a tuned Qwen: an injected button
+  hijacked an agent's click, and padding words with letters slipped toxic
+  prompts past it ([jev-hiddenlayer], 2026-10-15).
+
+What carries over: a screen narrows the attack, and the architecture contains
+it. The agent that reads untrusted text holds no secret and can neither post
+nor act; what it produces is structured data that code validates and posts.
+The reproduction runs with no token and no network beyond what it needs. A
+classifier screen is one layer, and it fails closed.
 
 ## Cost and Quality
 
@@ -539,6 +626,7 @@ model's bad habit to reach the others.
 - [2406.04692] Mixture-of-Agents Enhances Large Language Model Capabilities
   (2024-06)
 - [2512.08296] Towards a Science of Scaling Agent Systems (2025-12)
+- [2509.01494] Benchmarking and Studying the LLM-based Code Review (2025-09)
 - [2510.05450] What Types of Code Review Comments Do Developers Most
   Frequently Resolve? (2025-10)
 - [2511.00262] LLM-Driven Cost-Effective Requirements Change Impact Analysis
@@ -558,6 +646,21 @@ model's bad habit to reach the others.
 - [2608.13568] Does a Language Server Save Tokens for Coding Agents? A
   Measurement Methodology and Preliminary Study (2026-06-29)
 - [2610.11593] Runnable Commit Untangling for Coding Agents (2026-10-08)
+- [2606.31159] An Empirical Study of Security Calibration in Large Language
+  Models for Code (2026-06)
+- [2608.13928] CoSA: Context-Aware Severity Assessment via Context Analysis
+  with Large Language Models (2026-08-14)
+- [2608.22089] On Predicting Vulnerability Severity Using In-Context Learning:
+  An Industrial Case Study (2026-08-22)
+- [2608.25905] Answer Is Cheap, Show Me the Evidence! Augmenting Automated
+  Vulnerability Assessment with Evidence (2026-08-26)
+- [2609.20812] Quantifying Overclaiming Propensity in Frontier LLM Agents
+  (2026-09-17)
+- [2609.28940] Calibrated Decision Models for Autonomous Penetration-Testing
+  Harnesses: JEV and Laya as System One Decision Layers (2026-09)
+- [2609.37647] Evaluating and Benchmarking the System One Model Jev (2026-09-29)
+- [2610.20907] From Detection to Decision: Calibration and Deferral for
+  Prompt-Injection Detection (2026-10-14)
 - [2608.30661] SwarmBench: Can Large Language Models Act as Agent Swarm
   Orchestrators? (2026-08-31)
 - [2603.17111] Hidden Clones: Exposing and Fixing Family Bias in
@@ -607,6 +710,15 @@ model's bad habit to reach the others.
 - [bugbot-learning] Cursor, Bugbot now self-improves with learned rules
   (2026-04)
 - [coderabbit-changelog] CodeRabbit changelog, August to October 2026
+- [comment-and-control] Aonan Guan et al., Comment and Control: prompt
+  injection to credential theft in Claude Code, Gemini CLI and GitHub Copilot
+  Agent (2026-04-15)
+- [microsoft-claude-action] Microsoft, Securing CI/CD in an agentic world: the
+  Claude Code GitHub Action case (2026-06-05)
+- [jev-context-filter] zacharytgray/jev-context-filter-harness: screening agent
+  tool output with Jev
+- [jev-hiddenlayer] The Register, Jev and other decision models can still be
+  tricked with prompt injection (2026-10-15)
 - [dev-benchmarks] Should we trust AI code review benchmarks? (2026-10-08)
 - [sourcegraph-tools] Sourcegraph, 13 Best Automated Code Review Tools in 2026
 - [coderabbit-context] CodeRabbit, The art and science of context engineering
@@ -642,7 +754,20 @@ model's bad habit to reach the others.
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
 [2406.04692]: https://arxiv.org/abs/2406.04692
 [2512.08296]: https://arxiv.org/abs/2512.08296
+[2509.01494]: https://arxiv.org/abs/2509.01494
 [2510.05450]: https://arxiv.org/abs/2510.05450
+[2606.31159]: https://arxiv.org/abs/2606.31159
+[2608.13928]: https://arxiv.org/abs/2608.13928
+[2608.22089]: https://arxiv.org/abs/2608.22089
+[2608.25905]: https://arxiv.org/abs/2608.25905
+[2609.20812]: https://arxiv.org/abs/2609.20812
+[2609.28940]: https://arxiv.org/abs/2609.28940
+[2609.37647]: https://arxiv.org/abs/2609.37647
+[2610.20907]: https://arxiv.org/abs/2610.20907
+[comment-and-control]: https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+[microsoft-claude-action]: https://www.microsoft.com/en-us/security/blog/2026/06/05/securing-ci-cd-in-agentic-world-claude-code-github-action-case/
+[jev-context-filter]: https://github.com/zacharytgray/jev-context-filter-harness
+[jev-hiddenlayer]: https://www.theregister.com/ai-and-ml/2026/10/15/jev-and-other-decision-models-can-still-be-tricked-with-prompt-injection/5303184
 [2511.00262]: https://arxiv.org/abs/2511.00262
 [2603.23448]: https://arxiv.org/abs/2603.23448
 [2606.15689]: https://arxiv.org/abs/2606.15689
