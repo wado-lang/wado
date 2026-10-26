@@ -128,14 +128,14 @@ its contract: any bits of the type's width make a value of it. It holds:
 - the fixed-width integers `i8` to `i64` and `u8` to `u64`;
 - the floats `f16`, `bf16`, `f32` and `f64`;
 - `v128` and the `core:simd` types;
-- a newtype over any of these, since a newtype has no invariant of its own.
+- a newtype over any of these, since a newtype has no invariant of its own;
+- a `flags` type, since `as` makes one of any `u32`, undeclared bits included.
 
 The rest are left out, because some byte pattern is no value of theirs:
 
 - `bool`, whose bytes other than 0 and 1 are no `bool`.
 - `char`, where a surrogate or a number past `0x10FFFF` is no `char`.
-- An `enum` or a `flags`, where a discriminant may be out of range or bits
-  undeclared.
+- An `enum`, where a discriminant may be out of range.
 - A struct, a variant or a reference, any of which may hold a GC reference.
 - `i128` and `u128`, which are GC objects.
 - `()`, which has no width.
@@ -176,17 +176,20 @@ at the offset already filled. No byte is lifted into the GC heap. A file of
 
 ## Roadmap
 
-1. `AnyBits` and the four built-ins, written into the specification, each with
-   an e2e fixture: the loads and stores at every `AnyBits` width, and the
-   refusal of any other type argument.
-2. `core:linear` with `LinearArray` and its tests. A fixture shows the hot loop
-   of a product indexing two arrays losing every check in its fast version.
-3. `fs::read_linear`.
-4. Loam's `Cpu` backend keeps `Packed` in a `LinearArray<f32x4>` and loads
-   weights through `read_linear`. `Backend` declares `affine type Rhs<K, N>`, so
-   `Prepared<Cpu>` and `Model<Cpu>` become affine by instantiation, as
-   `Model<WebGpuBackend>` already is. Done when Gemma 3's next token is
-   measured against what it is now.
+In order:
+
+- [x] `AnyBits` and the four built-ins, written into the specification, each
+  with an e2e fixture: the loads and stores at every `AnyBits` width, and
+  the refusal of any other type argument.
+- [ ] `core:linear` with `LinearArray` and its tests. A fixture shows the hot
+  loop of a product indexing two arrays losing every check in its fast
+  version.
+- [ ] `fs::read_linear`.
+- [ ] Loam's `Cpu` backend keeps `Packed` in a `LinearArray<f32x4>` and loads
+  weights through `read_linear`. `Backend` declares
+  `affine type Rhs<K, N>`, so `Prepared<Cpu>` and `Model<Cpu>` become
+  affine by instantiation, as `Model<WebGpuBackend>` already is. Done when
+  Gemma 3's next token is measured against what it is now.
 
 ## Known gaps
 

@@ -1,0 +1,16 @@
+// `AnyBits` is stated by the compiler alone: a struct of `AnyBits` fields is no
+// `AnyBits`, and a program cannot say otherwise.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+impl AnyBits for Pair {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "cannot implement `AnyBits`: it is a sealed"
+}

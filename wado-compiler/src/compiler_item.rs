@@ -265,6 +265,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
+    /// value of, so `builtin::load` may read one from any bytes.
+    AnyBits,
     /// `Waitable` — what a `WaitableSet` holds, sealed: the standard library
     /// implements it, and a variant derives it from its cases.
     Waitable,
@@ -818,6 +821,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::AnyBits,
         Self::Waitable,
         Self::Copyable,
         Self::IndexValue,
@@ -1074,6 +1078,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::AnyBits => "any_bits",
             Self::Waitable => "waitable",
             Self::Copyable => "copyable",
             Self::IndexValue => "index_value",
@@ -1385,6 +1390,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
             | Self::IndexValue
@@ -1666,6 +1672,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
             | Self::IndexValue

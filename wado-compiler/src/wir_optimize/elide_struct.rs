@@ -288,6 +288,7 @@ fn is_effect_barrier(instr: &WirInstr) -> bool {
             | WirInstr::ArrayCopy { .. }
             | WirInstr::ArrayFill { .. }
             | WirInstr::MemoryFill { .. }
+            | WirInstr::MemoryCopy { .. }
             | WirInstr::MemoryGrow(_)
             | WirInstr::TableSet { .. }
             | WirInstr::MultiValueLocalBind { .. }

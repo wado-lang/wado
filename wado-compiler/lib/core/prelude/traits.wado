@@ -727,6 +727,14 @@ pub trait RefMut with () {
 pub trait AffineResource with () {
 }
 
+/// Marker of a type every bit pattern of its width is a value of: the
+/// fixed-width integers, the floats, `v128`, and a newtype or `flags` type over
+/// one. `builtin::load` reads one from any bytes. Sealed and compiler-stated;
+/// user impls are rejected. See WEP: Linear Arrays.
+#[compiler_item("any_bits")]
+pub trait AnyBits with () {
+}
+
 /// Marker of a type no value of which is affine, so a copy of one is sound:
 /// what an `impl`'s parameter not declared `affine` admits. The compiler
 /// states it of primitives, function values and every declaration not

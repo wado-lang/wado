@@ -2844,13 +2844,23 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            ExprKind::Call { func_id, args, .. } => {
+            ExprKind::Call {
+                func_id,
+                args,
+                type_args,
+            } => {
                 // The callee descriptor comes from the function record by
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
                 let func = &self.callee_descriptor(*func_id);
+                // Monomorphization moves a generic builtin's type arguments
+                // off a call it instantiates and onto the instance.
+                let type_args = match &func.monomorph_info {
+                    Some(mi) if type_args.is_empty() => &mi.method_type_args,
+                    _ => type_args,
+                };
                 if let Some(builtin_name) = func.intrinsic()
                     && let Some(instr) =
-                        self.translate_builtin_call(builtin_name, args, expr.type_id)
+                        self.translate_builtin_call(builtin_name, args, type_args, expr.type_id)
                 {
                     return instr;
                 }
