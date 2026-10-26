@@ -257,6 +257,11 @@ clause would turn an HTTP handler's validation into a crashed request. The
 fallible path has to be the one a program writes, so every narrowing is written
 where the reader sees it.
 
+A narrowing the compiler can prove is no exception: `let a: Age = 5;` is a type
+error, though `5` is plainly in `0..=150`. Admitting it would make whether a
+program compiles depend on what the compiler can prove, which grows release by
+release.
+
 `R::from` with a constant argument that fails a clause, such as
 `UserName::from("")`, is a warning where the compiler evaluates the clause on
 it, and the call still traps at run time. It is not yet an error, because niri
@@ -346,13 +351,6 @@ xs.clear();                                      // and now it does not
 A function value may read state it captured, so a clause calling one has the
 same problem. A resource does too, since its state lives in the host, and so a
 resource is never refined (see [What can be refined](#what-can-be-refined)).
-
-### A narrowing the compiler can prove
-
-`let a: Age = 5;` is a type error, though the compiler can prove `5` is in
-`0..=150`. Admitting it would make whether a program compiles depend on what the
-compiler can prove, which grows release by release. Nothing states yet whether
-a proven narrowing may be implicit.
 
 ### A default for an inline refined field
 
