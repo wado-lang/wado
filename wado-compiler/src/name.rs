@@ -1680,11 +1680,11 @@ impl LocalMethodName {
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
-        let args: Vec<String> = self
-            .method_type_args
-            .iter()
-            .map(FqTypeName::to_mangled)
-            .collect();
+        self.method_with_args(FqTypeName::to_mangled)
+    }
+
+    fn method_with_args(&self, spell: fn(&FqTypeName) -> String) -> String {
+        let args: Vec<String> = self.method_type_args.iter().map(spell).collect();
         MethodName::format_method_with_args(&self.method_name, &args)
     }
 
@@ -1705,8 +1705,8 @@ impl LocalMethodName {
         }
     }
 
-    /// [`Self::to_mangled_name`] as source spells it: the receiver and the
-    /// trait lose their declaring modules, the method keeps its name.
+    /// [`Self::to_mangled_name`] as source spells it: the receiver, the trait
+    /// and the method's type arguments lose their declaring modules.
     ///
     /// The display counterpart of the mangle, derived from the same fields —
     /// so a reader wanting `String::len` out of
@@ -1715,12 +1715,7 @@ impl LocalMethodName {
     #[must_use]
     pub fn to_display_name(&self) -> String {
         let receiver = self.fq_struct_name().to_display();
-        let args: Vec<String> = self
-            .method_type_args
-            .iter()
-            .map(FqTypeName::to_display)
-            .collect();
-        let method = MethodName::format_method_with_args(&self.method_name, &args);
+        let method = self.method_with_args(FqTypeName::to_display);
         match &self.trait_name {
             Some(trait_name) => format!("{receiver}^{}::{method}", trait_name.to_display()),
             None => format!("{receiver}::{method}"),

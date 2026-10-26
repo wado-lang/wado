@@ -89,7 +89,8 @@ fn index() -> String with (Preopens, Stderr, Exit) {
     return sections.join("\n\n");
 }
 
-/// The first `# ` heading outside a code fence.
+/// The first `# ` heading outside a code fence. A fence closes only on a run
+/// of its own character at least as long as its own (CommonMark 4.5).
 fn title(file: &String) -> String with (Preopens, Stderr, Exit) {
     let mut open: Option<StrSlice> = null;
     for let line of read(&`${DOCS}/${file}`).lines() {
@@ -108,14 +109,15 @@ fn title(file: &String) -> String with (Preopens, Stderr, Exit) {
 }
 
 /// The run of three or more backticks or tildes that `line` opens with, past
-/// at most three spaces, and the text after it. A fence closes only on a run of
-/// its own character at least as long as its own (CommonMark 4.5).
+/// at most three spaces, and the text after it.
 fn fence_run(line: StrSlice) -> Option<[StrSlice, StrSlice]> {
     let body = line.trim_start();
     if line.len() - body.len() > 3 {
         return null;
     }
-    let Some(mark) = body.chars().next() else { return null; };
+    let Some(mark) = body.chars().next() else {
+        return null;
+    };
     if mark != '`' && mark != '~' {
         return null;
     }
@@ -129,7 +131,10 @@ fn fence_run(line: StrSlice) -> Option<[StrSlice, StrSlice]> {
     if n < 3 {
         return null;
     }
-    return Some([body.slice(0, n), body.slice(n, body.len())]);
+    return Some([
+        body.slice(0, n),
+        body.slice(n, body.len()),
+    ]);
 }
 
 /// The overview's `## Chapters` list: the specification's reading order. It
