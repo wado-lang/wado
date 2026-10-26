@@ -418,7 +418,7 @@ test {
 Each function export becomes a free function named by its export's
 `snake_case` reading, as a component's function is: `add-one` and `addOne` are
 both `add_one`. A reading that is a Wado keyword takes a trailing `_`
-(`use { resume_ as seven } from ...`), unless a name may be that keyword:
+(`use { resume_ as seven } from ...`), unless that keyword may also be a name:
 `type` stays `type`. A call to it calls that export, whatever
 the name: an export named like a `core:builtin` intrinsic or like another
 asset's export is still its own asset's function.
