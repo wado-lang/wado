@@ -174,8 +174,8 @@ Refined types also make immutability something a program can ask for: a refined
 
 ### A value enters a refined type only by an explicit conversion
 
-The compiler provides two conversions from the base, and nothing else produces
-a refined value from an unrefined one:
+Three explicit forms produce a refined value from an unrefined one, and nothing
+else does:
 
 - `R::from(b)` returns the `R` under a contract that states the clauses. An
   unmarked call traps on a failed clause, reporting it and blaming the caller.
@@ -183,6 +183,19 @@ a refined value from an unrefined one:
   contracts checks it.
 - `R::try_from(b)` returns a `Result`. Its error names the clause that failed,
   through `Refine::describe` or the condition's text.
+- A type pattern `p: R` matches where every clause holds, and binds `p` as an
+  `R`, as it narrows a resource to a child. `let n: UserName = s else { … }`
+  is the refutable form.
+
+A newtype over a refined type has the same three, from the refined type's base:
+`UserName::try_from(s)` takes a `String`.
+
+An inline refined type has no name to call `from` or `try_from` on. Code that
+builds one from its base uses a type pattern, or names the type with a newtype.
+No syntax names an inline type for a call, and no conversion infers its target
+from the expected type, for the reason
+[Conversion Traits](./wep-2026-03-16-conversion-traits.md) gives against
+`.into()`: the target would not appear in the text.
 
 Narrowing is never implicit. A `B` where an `R` is expected is a type error, in
 an assignment, an argument, a field initializer, a `return` and a literal
@@ -261,21 +274,6 @@ because the body's `{` follows it. A type's clause is not followed by a body, so
 a value clause such as `Length { max: 3 }` needs no parentheses.
 
 ## Known gaps
-
-### Naming an inline refined type to convert into it
-
-A struct literal `CreateUser { bio: …, … }` built from `s: String` has to call
-`try_from` on the field's type, `String contract Length { max: 200 }`, and that
-type has no name. Nothing states yet how a program spells the conversion into a
-refined type it wrote inline. A derived `Deserialize` is unaffected, since the
-compiler writes its call.
-
-### Whether a type pattern narrows
-
-Resource narrowing is written as a type pattern
-(`let w: Widget = el else { … }`). Nothing states yet whether a type pattern
-narrows into a refined type as well, as a third explicit form beside `from` and
-`try_from`.
 
 ### What a type parameter is solved to, and which bounds a refined type meets
 
