@@ -28,6 +28,10 @@ them is in [the research](./research-code-review-bots.md).
   - Quarantine by model. A learning written from one model's run reaches the
     other models only after it passed the gate, since reward hacking spreads
     through shared memory.
+- [x] Code search is a tool backed by a language service, because precision
+  matters most. For Wado it is built on `wado query`. Rust, which much of the
+  repository is written in, gets a dedicated tool of its own. Plain text
+  search is not the primary way to find code.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation.
 
