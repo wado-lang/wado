@@ -216,7 +216,7 @@ Two refined types are the same type when they have the same base and the same
 clauses. `String contract Length { max: 200 }` written on two fields is one
 type, so a value moves between the fields with no check. Between two refined
 types that differ, a value widens to the base and enters the other type through
-`from` or `try_from`, as any base value does.
+one of the three forms, as any base value does.
 
 Two newtypes over one refined type are still two types, as two newtypes over
 one base are.
