@@ -1,7 +1,7 @@
 # Research: Code Review Bots, August to October 2026
 
 This survey covers how code review bots are built, what raises their quality,
-and how they trade cost against quality. It reads only work published from
+how they trade cost against quality, and how they learn over time. It reads only work published from
 2026-08-01 to 2026-10-26: the models changed enough in August 2026 that older
 results say little about current ones.
 
@@ -263,6 +263,60 @@ direction (see the table below).
 | [2609.09133]      | SWE-bench Verified, no tests vs both agents trained | 61.2% vs 72.6%            |
 | [2602.11988]      | Inference cost added by context files               | over 20%                  |
 
+## Learning
+
+Three ways of improving over time appear, differing in what is changed and
+what checks the change.
+
+### Feedback Turned Into Rules
+
+- CodeRabbit keeps "learnings": review preferences drawn from chat with it and
+  applied to later reviews. Since 2026-08-26 an API can edit, delete and export
+  them, filtered by file path, so a team can audit what was learned
+  ([coderabbit-changelog]).
+- Cursor's Bugbot turns reactions to its comments, a downvote marking a
+  finding as unhelpful, into learned rules for later runs; Cursor counts more
+  than 44,000 such rules over 110,000 repositories ([bugbot-learning],
+  published before the window).
+- A learned rule is a context-file instruction, and agents follow those
+  literally, even where it hurts ([2602.11988]). A wrong rule keeps doing harm
+  until someone deletes it.
+
+### An Evaluation Set That Grows
+
+Anthropic's Code Review does not learn from replies to its comments
+([claude-code-review]):
+
+- It keeps a set of past PRs that caused incidents and runs the reviewer over
+  it daily. A change to the reviewer's prompts, tools or model is kept only if
+  the score rises over the whole set.
+- The set grows every time something goes wrong, and `REVIEW.md` is written by
+  code owners, not learned. There is no loop from outcomes back into the gate.
+- Between June and September 2026 merged PRs more than doubled while the share
+  reverted fell by more than 40%.
+
+### Self-Evolving Agents
+
+- A survey sorts what such agents update: the framework, memory, skills and
+  tools, the workflow, and the environment and context. Its open problems are
+  feedback reliability, overfitting to the benchmark, reversibility, safety and
+  cost ([2608.03392]).
+- Ouroboros changes its own tools, prompts, context assembly and code, but
+  only as reviewed commits. Benchmarks run on frozen snapshots, and the live
+  deployment evolves on a separate lineage ([2608.08311]).
+- The Mendel Gödel Machine rewrites its own source from its failure
+  trajectories, from several tasks at once, and from other lineages
+  ([2608.07645]).
+- Reward hacking spreads between agents through shared code, shared memory
+  and plans. A small open-weight agent can induce it in a stronger closed one,
+  and it survives aggregation of candidates. Review by the agent itself or by a
+  separate verifier reduced the hacks delivered ([2610.12822]).
+
+What carries over: a learned item is safest as data a person can read, scope
+and delete, and as a change that must pass a fixed evaluation set before it
+takes effect. A memory shared by several models is also a channel for one
+model's bad habit to reach the others.
+
 ## What This Suggests for Eddy
 
 These are directions the findings point to, not decisions.
@@ -273,8 +327,11 @@ These are directions the findings point to, not decisions.
   history first.
 - Reproduce what is severe. A reproducer written apart from the finding, run
   where the code runs, turns a claim into evidence; the label says which.
-- Read `AGENTS.md` as criteria, not as a briefing: pick the rules that govern
-  the touched files, and report which were applied.
+- Give `AGENTS.md` only where it is used as written: to the agent that builds
+  and runs the project, or as the rules that govern the touched files, naming
+  which were applied.
+- Learn into what can be reviewed: an evaluation set grown from missed defects
+  and from comments people rejected, and rules a person can read and delete.
 - Make disagreement explicit and grounded. Choose models for what they find
   that the others do not, and aggregate by evidence rather than by vote count.
 - Post less. Every comment should survive a refutation step against the
@@ -293,6 +350,11 @@ These are directions the findings point to, not decisions.
   LLM Code Review (2026-08-02)
 - [2608.02693] PRWeaver: Evaluating LLM-Based Code Auditors against
   Long-Horizon Malicious Pull Requests (2026-08-03)
+- [2608.03392] Self-Evolving Coding Agents (2026-08-04, revised 2026-09-24)
+- [2608.07645] Mendel Gödel Machine: Recursive Self-Improving Coding Agents
+  via Comparative Evolution (2026-08-07)
+- [2608.08311] Ouroboros: A Self-Developing Frontier Coding Agent with
+  Reviewed Core Evolution (2026-08-08)
 - [2608.09290] OpenCodeReview: Determinism over Non-Determinism for
   Cost-Effective Agent-Based Code Review (2026-08-10)
 - [2608.18167] Adversarial Review: Structured Disagreement for Grounded Agentic
@@ -317,6 +379,8 @@ These are directions the findings point to, not decisions.
   Readout in Multi-Agent Reasoning (2026-10-03)
 - [2610.11179] Who Pays the Review Cost? Triage, Fairness, and Accountability
   in AI-authored Pull Requests (2026-10-08)
+- [2610.12822] Reward Hacking as a Transmissible Strategy in Multi-Agent
+  Coding Systems (2026-10-09)
 - [2610.21144] Plausible Is Not Enough: Trust and Evidence in AI-Authored Pull
   Request Review (2026-10-15)
 - [2610.21914] CodeHealth Predicts the Token Cost of Agentic Code Review
@@ -333,6 +397,8 @@ These are directions the findings point to, not decisions.
 - [claude-code-review] Anthropic's Claude Code team on how it does code review
   (2026-10-15), as reported by OrcaRouter
 - [claude-code-releases] Claude Code release notes, October 2026
+- [bugbot-learning] Cursor, Bugbot now self-improves with learned rules
+  (2026-04)
 - [coderabbit-changelog] CodeRabbit changelog, August to October 2026
 - [coderabbit-context] CodeRabbit, The art and science of context engineering
 - [codex-security-cloud] eesel, Codex Security Cloud: how it works
@@ -366,6 +432,11 @@ These are directions the findings point to, not decisions.
 [claude-code-review]: https://www.orcarouter.ai/blog/how-the-claude-code-team-does-code-review
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
 [2602.11988]: https://arxiv.org/abs/2602.11988
+[2608.03392]: https://arxiv.org/abs/2608.03392
+[2608.07645]: https://arxiv.org/abs/2608.07645
+[2608.08311]: https://arxiv.org/abs/2608.08311
+[2610.12822]: https://arxiv.org/abs/2610.12822
+[bugbot-learning]: https://cursor.com/blog/bugbot-learning
 [2609.09133]: https://arxiv.org/abs/2609.09133
 [coderabbit-changelog]: https://docs.coderabbit.ai/changelog
 [coderabbit-context]: https://www.coderabbit.ai/blog/the-art-and-science-of-context-engineering
