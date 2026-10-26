@@ -92,9 +92,9 @@ importList
     ;
 
 importItem
-    : name '::' '{' importList? '}'
-    | name ('as' name)?
-    | STRING_LITERAL 'as' name
+    : bindingName '::' '{' importList? '}'
+    | bindingName ('as' bindingName)?
+    | STRING_LITERAL 'as' bindingName
     ;
 
 functionDecl
