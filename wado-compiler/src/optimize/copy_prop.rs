@@ -103,6 +103,13 @@ struct LocalUsage {
     is_assigned: bool,
     has_field_mutation: bool,
     address_taken: bool,
+    mut_ref_taken: bool,
+}
+
+impl LocalUsage {
+    fn never_written(&self) -> bool {
+        !self.is_assigned && !self.has_field_mutation && !self.mut_ref_taken
+    }
 }
 
 /// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; else `expr`.
@@ -570,7 +577,9 @@ fn analyze_expr(body: &Body, id: ExprId, result: &mut AnalysisResult, ctx: &Anal
                 && let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
-                result.usage.entry(*index).or_default().address_taken = true;
+                let usage = result.usage.entry(*index).or_default();
+                usage.address_taken = true;
+                usage.mut_ref_taken |= op == NirUnaryOp::MutRef;
             }
             if let Some(ie) = inner.as_expr() {
                 analyze_expr(body, ie, result, ctx);
@@ -602,6 +611,22 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     )
 }
 
+/// Whether `let target = source` binds two locals nothing ever writes, which
+/// then name one permanent value: a reference to the target may name the
+/// source instead, since no write can tell the two places apart and `ref_eq`
+/// leaves open whether two places are one. An inlined `fn f(xs: Array<T>)`
+/// reading `&xs` leaves this shape (`core:simd`'s `lane(&lanes, k)`).
+fn names_one_value(
+    binding: &CopyBinding,
+    target_usage: &LocalUsage,
+    usage: &IndexMap<u32, LocalUsage>,
+) -> bool {
+    let CopySource::Local { index, .. } = &binding.source else {
+        return false;
+    };
+    target_usage.never_written() && usage.get(index).is_none_or(LocalUsage::never_written)
+}
+
 fn can_propagate_copy(
     binding: &CopyBinding,
     usage: &IndexMap<u32, LocalUsage>,
@@ -625,7 +650,7 @@ fn can_propagate_copy(
     if target_usage.has_field_mutation && needs_value_copy(binding.type_id, type_table) {
         return false;
     }
-    if target_usage.address_taken {
+    if target_usage.address_taken && !names_one_value(binding, target_usage, usage) {
         return false;
     }
 
