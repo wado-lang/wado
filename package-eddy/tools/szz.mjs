@@ -56,16 +56,17 @@ for (const m of fixes) {
   i++;
   if (i % 50 === 0) console.error(`${i}/${fixes.length}`);
   const base = `${m.sha}^1`;
-  const names = git("diff", "--name-status", "-M", base, m.sha).split("\n").filter(Boolean).map((l) => l.split("\t"));
-  const paths = names.map((n) => n[n.length - 1]);
-  const gen = generated(paths);
-  const addsTest = names.some((n) => !gen.has(n[n.length - 1]) && isTest(n[n.length - 1]));
-  const src = names.filter((n) => !gen.has(n[n.length - 1]) && !isTest(n[n.length - 1]) && !isDoc(n[n.length - 1]) && n[0][0] !== "A");
+  const changes = git("diff", "--name-status", "-M", base, m.sha).split("\n").filter(Boolean).map((l) => {
+    const f = l.split("\t");
+    return { status: f[0][0], oldPath: f[1], newPath: f[f.length - 1] };
+  });
+  const gen = generated(changes.map((c) => c.newPath));
+  const kept = changes.filter((c) => !gen.has(c.newPath));
+  const addsTest = kept.some((c) => isTest(c.newPath));
+  const src = kept.filter((c) => !isTest(c.newPath) && !isDoc(c.newPath) && c.status !== "A");
   const blamed = new Map(); // PR num -> lines
   let oldLines = 0;
-  for (const n of src) {
-    const oldPath = n[1];
-    const newPath = n[n.length - 1];
+  for (const { oldPath, newPath } of src) {
     const diff = git("diff", "-U0", "-w", "-M", base, m.sha, "--", oldPath, newPath);
     const ranges = [];
     for (const h of diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+/gm)) {

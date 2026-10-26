@@ -35,8 +35,9 @@ CLAUDE_API_KEY=... node package-eddy/tools/judge.mjs . package-eddy/eval/szz.jso
   relocated a function.
 - The usable yield is about the same at a 50% share as at 80%, so the share
   threshold does little; the model check is what filters.
-- The judge is not deterministic: two runs over the same pairs differed by one
-  usable entry. Its verdicts need a human sample before they count.
+- The judge is not deterministic. Two runs over the 43 pairs above an 80% share
+  found 16 and 17 usable entries, and three entries changed sides. Its verdicts
+  need a human sample before they count.
 
 ## To Do
 
