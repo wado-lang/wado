@@ -20,13 +20,7 @@
 use std::cell::{Cell, RefCell};
 
 use crate::hashmap::{IndexMap, IndexSet};
-<<<<<<< HEAD
-use crate::name::{COLD_PATH_INTRINSIC, inline_block_label};
-||||||| 3b7b8f40a
-use crate::name::inline_block_label;
-=======
-use crate::name::{inline_block_label, inline_temp_name};
->>>>>>> origin/main
+use crate::name::{COLD_PATH_INTRINSIC, inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,

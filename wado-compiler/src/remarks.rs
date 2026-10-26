@@ -14,30 +14,16 @@ use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
 use crate::name::{COLD_PATH_INTRINSIC, diagnostic_function_name};
-use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-||||||| 3b7b8f40a
-use crate::name::diagnostic_function_name;
-use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-=======
-use crate::name::diagnostic_function_name;
 use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
->>>>>>> origin/main
 use crate::nir_package::NirPackage;
 use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
 };
-<<<<<<< HEAD
 use crate::optimize::arena_query::ColdRuns;
-||||||| 3b7b8f40a
-=======
 use crate::optimize::is_constant_arg;
->>>>>>> origin/main
 use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -460,45 +446,16 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
-        let mut cold = None;
+        let cold = ColdRuns::of(body, cold_path).exprs(body);
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // Reading an outer local means no constant to miss; writing one
             // means an inner block of a template, reported through its parent.
             if region.reads_outer || region.writes_outer {
                 continue;
             }
-<<<<<<< HEAD
-            let cold = cold.get_or_insert_with(|| ColdRuns::of(body, cold_path).exprs(body));
-            let surviving = surviving_calls(body, region.expr, &names, cold);
-            let cause = match (region.refusal, surviving.is_empty()) {
-                (Some(refusal), _) => refusal.describe().to_string(),
-                (None, false) => format!(
-                    "{} still runs here",
-                    surviving
-                        .iter()
-                        .map(|n| format!("`{n}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                (None, true) => "no call on its path explains it".to_string(),
-||||||| 3b7b8f40a
-            let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
-            let cause = match (region.refusal, surviving.is_empty()) {
-                (Some(refusal), _) => refusal.describe().to_string(),
-                (None, false) => format!(
-                    "{} still runs here",
-                    surviving
-                        .iter()
-                        .map(|n| format!("`{n}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                (None, true) => "no call on its path explains it".to_string(),
-=======
             let cause = match region.refusal {
                 Some(refusal) => refusal.describe().to_string(),
-                None => surviving_cause(body, NodeRef::Expr(region.expr), &names, &ctfe_builtins),
->>>>>>> origin/main
+                None => surviving_cause(body, NodeRef::Expr(region.expr), &names, &cold),
             };
             remarks.push(Remark {
                 message: format!("this block computes a constant at run time: {cause}"),
@@ -506,7 +463,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                 span: body.exprs[region.expr].span,
             });
         }
-        for (call, func_id) in constant_calls(body, &names, &ctfe_builtins, type_table) {
+        for (call, func_id) in constant_calls(body, &names, &cold, type_table) {
             let callee = package.functions[func_id.index()].borrow();
             let callee_body = callee
                 .body
@@ -516,7 +473,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                 callee_body,
                 NodeRef::Block(callee_body.root()),
                 &names,
-                &ctfe_builtins,
+                &ColdRuns::of(callee_body, cold_path).exprs(callee_body),
             );
             remarks.push(Remark {
                 message: format!("this call computes a constant at run time: {cause}"),
@@ -533,38 +490,14 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
 fn constant_calls(
     body: &Body,
     names: &[Option<String>],
-<<<<<<< HEAD
     cold: &IndexSet<ExprId>,
-) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut stack = vec![NodeRef::Expr(region)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(e) = node
-            && !cold.contains(&e)
-            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-            && let Some(Some(name)) = names.get(func_id.index())
-            && !out.contains(name)
-||||||| 3b7b8f40a
-    ctfe_builtins: &CtfeBuiltinMap,
-) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut stack = vec![(NodeRef::Expr(region), false)];
-    while let Some((node, in_cold)) = stack.pop() {
-        let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
-        if !in_cold
-            && let NodeRef::Expr(e) = node
-            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-            && let Some(Some(name)) = names.get(func_id.index())
-            && !out.contains(name)
-=======
-    ctfe_builtins: &CtfeBuiltinMap,
     type_table: &TypeTable,
 ) -> Vec<(ExprId, FuncId)> {
     let mut out = Vec::new();
     walk_hot_calls(
         body,
         NodeRef::Block(body.root()),
-        ctfe_builtins,
+        cold,
         |e, func_id, args| {
             if names[func_id.index()].is_some()
                 && !type_table.is_stackless(body.exprs[e].type_id)
@@ -589,10 +522,10 @@ fn surviving_cause(
     body: &Body,
     root: NodeRef,
     names: &[Option<String>],
-    ctfe_builtins: &CtfeBuiltinMap,
+    cold: &IndexSet<ExprId>,
 ) -> String {
     let mut surviving: Vec<&str> = Vec::new();
-    walk_hot_calls(body, root, ctfe_builtins, |_, func_id, _| {
+    walk_hot_calls(body, root, cold, |_, func_id, _| {
         if let Some(name) = &names[func_id.index()]
             && !surviving.contains(&name.as_str())
         {
@@ -611,16 +544,14 @@ fn surviving_cause(
 fn walk_hot_calls(
     body: &Body,
     root: NodeRef,
-    ctfe_builtins: &CtfeBuiltinMap,
+    cold: &IndexSet<ExprId>,
     mut visit: impl FnMut(ExprId, FuncId, &CallArgs<ArenaCallArg>),
 ) {
-    let mut stack = vec![(root, false)];
-    while let Some((node, in_cold)) = stack.pop() {
-        let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
-        if !in_cold
-            && let NodeRef::Expr(e) = node
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && !cold.contains(&e)
             && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
->>>>>>> origin/main
         {
             visit(e, *func_id, args);
         }
